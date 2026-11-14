@@ -9,9 +9,8 @@ import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createWebApiApp } from "../src/server.mjs";
+import { AgentRunStore, createWebApiApp } from "./helpers/runLedgerFixture.mjs";
 import {
-  AgentRunStore,
   artifactCandidatesForTest,
   clinicalEvidenceRepairPromptForTest,
   consumeRepairAuthorizationForTest,
@@ -2026,7 +2025,9 @@ test("rejects every browser terminal-state mutation", async () => {
 });
 
 test("enforces bounded run count and ledger bytes without partial mutation", async () => {
-  await withApp(async ({ base, dataDir }) => {
+  await withApp(async ({ app, base, dataDir }) => {
+    // This fixture separately tests the count ceiling with a large unsegmented input.
+    app.agentRuns.maxBytes = 1024 * 1024;
     await bind(base, "ses_open", { mode: "open-domain" });
     const ledgerDir = path.join(
       dataDir,
@@ -7685,7 +7686,7 @@ for (const ending of ["succeeded", "canceled"]) test(`a full history rotates for
   });
   const store = createStore();
   const restarted = createStore();
-  const limit = 1024 * 1024;
+  const limit = store.maxBytes;
   const fill = async (file, id) => {
     const text = await readFile(file, "utf8");
     const padding = { event: "notice", id, qualityNotices: [], padding: "" };
@@ -8116,6 +8117,10 @@ for (const ledgerRotationEnabled of [false, true]) for (const tombstoneSegment o
   const base = await readFile(file(), "utf8");
   await writeFile(file(), base + (tombstoneSegment === 0 ? JSON.stringify(notice) + "\n" : ""));
   await writeFile(file(1), JSON.stringify(tombstoneSegment === 1 ? notice : { ...notice, deleted: false }) + "\n");
+  const originals = await Promise.all([file(), file(1)].map(name => readFile(name)));
+  await store.removeConversationSource(project, ["deleted-session"]);
+  const uninterrupted = await Promise.all([file(), file(1)].map(name => readFile(name)));
+  for (const [index, bytes] of originals.entries()) await writeFile(file(index), bytes);
   await store.list(project);
   const renameFile = fsPromises.rename;
   t.mock.method(fsPromises, "rename", async (source, target) => {
@@ -8128,11 +8133,16 @@ for (const ledgerRotationEnabled of [false, true]) for (const tombstoneSegment o
     .find(event => event.id === run.id && event.deleted === true);
   assert.equal(retained.at, notice.at, "the original deletion timestamp survives the interrupted rewrite");
   if (tombstoneSegment === 0) assert.doesNotMatch(await readFile(file(), "utf8"), /Private/);
+  t.mock.restoreAll();
+  await createStore({ ledgerRotationEnabled }).removeConversationSource(project, ["deleted-session"]);
+  const resumed = await Promise.all([file(), file(1)].map(name => readFile(name)));
+  assert.deepEqual(resumed, uninterrupted, "retry must rewrite the later segment and converge byte for byte");
+  assert.doesNotMatch(Buffer.concat(resumed).toString(), /Private/);
 });
 
-test("rotation is opt-in while segment readers work with rotation disabled", async t => {
+test("explicitly disabled rotation still reads continuation segments", async t => {
   const { project, binding, createStore, file, fill } = await rotationFixture(t);
-  const store = createStore({ ledgerRotationEnabled: undefined });
+  const store = createStore({ ledgerRotationEnabled: false });
   const run = (await store.reserveRun(project, binding("default-off"))).run;
   await fill(0, run.id);
   await assert.rejects(store.finishInternal(project, run.id, { status: "succeeded", artifacts: [] }), error => error.code === "agent_runs_too_large");
@@ -9871,7 +9881,7 @@ test("LG4 publication stays readable before its atomic commit and recovers aband
   assert.equal(observed, true);
   assert.equal((await store.list(project))[0].status, "succeeded");
   await writeFile(file(2), ""); // A crash after the exclusive empty claim.
-  const abandoned = path.join(project.metaDir, ".runs.000002.jsonl.123.crashed.tmp_example");
+  const abandoned = path.join(project.metaDir, `.runs.000002.jsonl.123.${Date.now() - 600_000}.tmp_example`);
   await writeFile(abandoned, "partial bytes");
   assert.equal((await createStore().list(project))[0].status, "succeeded");
   await createStore().appendQualityNotices(project, run.id, ["Recovered"]);
@@ -9892,7 +9902,7 @@ test("LG4 earliest terminal wins across segments with both conflicting outcomes 
   const row = (await store.list(project))[0];
   assert.equal(row.status, "succeeded");
   assert.equal(row.terminalConflict, true);
-  assert.deepEqual(row.terminalOutcomes.map(outcome => outcome.status), ["canceled", "succeeded"]);
+  assert.deepEqual(row.terminalOutcomes, [canceled, succeeded].map(({ status, errorCode, finishedAt }) => ({ status, errorCode, finishedAt })));
   assert.deepEqual(row.artifacts, ["report.md"]);
   assert.equal(row.canceledBy, undefined);
   assert.equal(row.deliverables[0].id, "report");
@@ -10019,4 +10029,94 @@ for (const stage of ["claim", "rename", "cleanup"]) test(`LG4 publication failur
   await createStore().appendQualityNotices(project, run.id, ["Recovered after crash"]);
   assert.equal((await readdir(project.metaDir)).some(name => name.startsWith(".runs.")), false);
   assert.equal((await createStore().list(project))[0].qualityNotices.length, 1);
+});
+
+
+for (const earlierFirst of [false, true]) for (const laterVerification of [null, "unverified", "unchecked"]) test(`LG6 terminal displacement keeps unchecked admissions and only the winning notices (earlierFirst=${earlierFirst}, laterVerification=${laterVerification})`, async t => {
+  const { project, binding, createStore, file } = await rotationFixture(t);
+  const store = createStore();
+  const run = (await store.reserveRun(project, binding("displacement"))).run;
+  await store.appendQualityNotices(project, run.id, ["Before terminal"]);
+  const base = await readFile(file(), "utf8");
+  const later = { event: "finished", id: run.id, status: "canceled", errorCode: "runtime_stopped",
+    finishedAt: "2026-11-12T02:00:00.000Z", durationMs: 2000, artifacts: [], verification: laterVerification, qualityNotices: ["Displaced finding"] };
+  const earlier = { ...later, status: "succeeded", errorCode: null, finishedAt: "2026-11-12T01:00:00.000Z",
+    verification: null, qualityNotices: ["Winning finding"] };
+  const admission = { event: "notice", id: run.id, at: "2026-11-12T03:00:00.000Z",
+    verification: "unchecked", qualityNotices: ["After first terminal"] };
+  await writeFile(file(), base + JSON.stringify(earlierFirst ? earlier : later) + "\n");
+  await writeFile(file(1), JSON.stringify(admission) + "\n");
+  await writeFile(file(2), JSON.stringify(earlierFirst ? later : earlier) + "\n");
+  // Warm the prefix, then repeat to cover the cached and uncached folds.
+  for (const reader of [store, store, createStore({ ledgerRotationEnabled: false })]) {
+    const row = (await reader.list(project))[0];
+    assert.equal(row.status, "succeeded");
+    assert.equal(row.verification, "unchecked");
+    assert.deepEqual(noticeTexts(row), ["Winning finding", "Before terminal", "After first terminal"]);
+  }
+  store.sourceDeletion = { ledger: { deletedIds: async () => [run.sessionId] } };
+  const deleted = (await store.list(project))[0];
+  assert.equal(Object.hasOwn(deleted, "terminalOutcomes"), false);
+  assert.deepEqual(deleted.qualityNotices, []);
+  store.sourceDeletion = null;
+  await store.removeConversationSource(project, [run.sessionId]);
+  assert.equal(Object.hasOwn((await store.list(project))[0], "terminalOutcomes"), false, "the durable deletion notice also strips the diagnostic");
+});
+
+test("LG6 sweeping recovers own or stale temps while preserving a recent foreign writer", async t => {
+  const { project, binding, createStore } = await rotationFixture(t);
+  const store = createStore();
+  const run = (await store.reserveRun(project, binding("temp-owners"))).run;
+  const foreignPid = process.pid + 1;
+  const names = [
+    `.runs.000001.jsonl.${process.pid}.${Date.now()}.tmp_own`,
+    `.runs.000001.jsonl.${foreignPid}.${Date.now() - 600_000}.tmp_stale`,
+    `.runs.000001.jsonl.${foreignPid}.${Date.now()}.tmp_live`,
+  ];
+  for (const name of names) await writeFile(path.join(project.metaDir, name), "partial bytes");
+  await store.appendQualityNotices(project, run.id, ["Trigger sweep"]);
+  const remaining = await readdir(project.metaDir);
+  assert.equal(remaining.includes(names[0]), false);
+  assert.equal(remaining.includes(names[1]), false);
+  assert.equal(remaining.includes(names[2]), true);
+});
+
+test("LG6 test folds freeze nested rows before and after rotation and detach public results", async t => {
+  const { project, binding, createStore, file } = await rotationFixture(t);
+  const store = createStore();
+  const run = (await store.reserveRun(project, binding("frozen"))).run;
+  await store.finishInternal(project, run.id, { status: "succeeded", artifacts: ["report.md"] });
+  for (const segmented of [false, true]) {
+    if (segmented) await writeFile(file(1), JSON.stringify({ event: "notice", id: run.id, qualityNotices: ["Tail finding"] }) + "\n");
+    const folded = (await store.readRuns(project)).get(run.id);
+    assert.throws(() => folded.artifacts.push("mutated.md"), TypeError);
+    assert.throws(() => folded.qualityNotices.push("mutation"), TypeError);
+    const visible = (await store.list(project))[0];
+    visible.artifacts.push("reader-owned.md");
+    assert.deepEqual((await store.list(project))[0].artifacts, ["report.md"]);
+  }
+});
+
+test("LG6 startup adoption settles a run stranded at the ledger ceiling by rotating", async t => {
+  const { project, binding, createStore, file, fill } = await rotationFixture(t);
+  const beforeRestart = createStore({ ledgerRotationEnabled: false });
+  const run = (await beforeRestart.reserveRun(project, binding("at-ceiling"))).run;
+  await fill(0, run.id);
+  const full = await readFile(file());
+  await assert.rejects(beforeRestart.finishInternal(project, run.id, { status: "failed", errorCode: "runtime_stopped", artifacts: [] }),
+    error => error.code === "agent_runs_too_large");
+  const completed = [];
+  const restarted = createStore({
+    readSessionHistory: async () => { throw Object.assign(new Error("gone"), { code: "runtime_not_running" }); },
+    onRunFinished: async (_project, finished) => { completed.push(finished.id); },
+  });
+  assert.deepEqual(await restarted.adoptRunningRuns([project]), { adopted: 1 });
+  await awaitBackgroundMonitor(restarted.monitors.get(run.id)?.promise);
+  const settled = (await restarted.list(project))[0];
+  assert.equal(settled.status, "failed");
+  assert.equal(settled.errorCode, "runtime_stopped");
+  assert.deepEqual(completed, [run.id]);
+  assert.deepEqual(await readFile(file()), full);
+  assert.ok((await stat(file(1))).size > 0);
+  assert.deepEqual(await restarted.adoptRunningRuns([project]), { adopted: 0 });
 });

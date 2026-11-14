@@ -128,6 +128,13 @@ function ledgerHealth(root) {
       console.error(`unreadable run ledger directory ${dir}: ${error.message}`);
       process.exit(2);
     }
+    for (const [index, name] of segments.entries()) {
+      const expected = `runs.${String(index + 1).padStart(6, "0")}.jsonl`;
+      if (name !== expected) {
+        console.error(`missing run ledger segment ${path.join(dir, expected)} before ${name}`);
+        process.exit(2);
+      }
+    }
     const texts = [];
     for (const part of [file, ...segments.map(name => path.join(dir, name))]) {
       try { texts.push(readFileSync(part, "utf8")); }

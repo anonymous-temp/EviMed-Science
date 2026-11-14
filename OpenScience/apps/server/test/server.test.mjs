@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { gunzipSync } from "node:zlib";
-import { createWebApiApp, safeModelActivity, safeModelUpstreamFailure } from "../src/server.mjs";
+import { safeModelActivity, safeModelUpstreamFailure } from "../src/server.mjs";
+import { createWebApiApp } from "./helpers/runLedgerFixture.mjs";
 import { HttpError, hashPassword } from "../src/security.mjs";
 import { dshProductionReleaseConfig, productionReleaseConfig, releaseManifestFixture } from "./releaseFixture.mjs";
 
@@ -3764,6 +3765,45 @@ test("account export returns only the current user's scoped projects", async () 
     assert.equal(accountJson.includes("passwordHash"), false);
     assert.equal(accountJson.includes("csrf"), false);
     assert.equal(accountJson.includes("sess_"), false);
+  });
+});
+
+test("LG6 account export after source erasure carries every scrubbed ledger segment", async () => {
+  await withAuthApp(async ({ app, base }) => {
+    const { auth } = await login(base);
+    const user = await app.store.userById("alice");
+    const project = await app.store.projectFor(user, "paper1", "Paper 1");
+    const store = app.agentRuns;
+    store.ledgerRotationEnabled = true;
+    store.maxBytes = 4096;
+    const run = (await store.reserveRun(project, {
+      sessionId: "erased-export", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null,
+    }, { question: "Private export question" })).run;
+    await store.finishInternal(project, run.id, { status: "succeeded", artifacts: ["report.md"] });
+    await writeFile(path.join(project.workspaceDir, "report.md"), "Retained report");
+    // Use the real writer to rotate source-bearing notices into continuations.
+    for (let index = 0; index < 24; index++) {
+      await store.appendQualityNotices(project, run.id, [`Private export notice ${index}: ${"x".repeat(900)}`]);
+    }
+    const segments = (await fsp.readdir(project.metaDir)).filter(name => /^runs(?:\.\d{6})?\.jsonl$/.test(name)).sort();
+    assert.ok(segments.length >= 3, "the erasure and archive must cross multiple real rotations");
+    await store.removeConversationSource(project, [run.sessionId]);
+    const exported = await fetch(`${base}/api/account/export`, { headers: auth });
+    assert.equal(exported.status, 200);
+    const archive = gunzipSync(Buffer.from(await exported.arrayBuffer()));
+    const entries = tarEntries(archive);
+    const events = [];
+    for (const segment of segments) {
+      const name = `projects/paper1/.openscience/${segment}`;
+      const bytes = entries.get(name);
+      assert.ok(bytes, `missing erased segment ${segment}`);
+      assert.deepEqual(bytes, await readFile(path.join(project.metaDir, segment)), "export preserves scrubbed bytes");
+      events.push(...bytes.toString("utf8").split("\n").filter(Boolean).map(JSON.parse));
+    }
+    assert.doesNotMatch(archive.toString("utf8"), /Private export/);
+    assert.equal(events.filter(event => event.deleted === true).length, 1);
+    assert.deepEqual(events.find(event => event.event === "finished").artifacts, ["report.md"]);
+    assert.equal(entries.get("projects/paper1/workspace/report.md")?.toString("utf8"), "Retained report");
   });
 });
 
