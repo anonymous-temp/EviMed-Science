@@ -159,3 +159,11 @@ test('snapshot assembly budgets and projects every capsule store before handing 
   }
   await assert.rejects(withAccountExportSnapshot(database, { id: 'owner', accountCreatedAt: at }, {}, async () => {}, { nativeMemory, maxRows: 1 }), { code: 'archive_too_large' });
 });
+
+test('AL8 raw account files omit every generated memory projection while retaining conversations and authored files', async () => {
+  const {accountMemoryProjection} = await import('../src/accountExport.mjs');
+  for (const name of ['workspace/.evimed-brief/memory.md', 'workspace/.evimed-brief/sessions/s/context.md',
+    'workspace/.evimed-capsule/profile.md', 'workspace/.evimed-run/state.json']) assert.equal(accountMemoryProjection(name), true, name);
+  assert.equal(accountMemoryProjection('workspace/report.md'), false);
+  assert.equal(accountMemoryProjection('runtime/container-runtime/dsh-home/sessions/s/session.jsonl'), false);
+});

@@ -187,3 +187,24 @@ test('an assertion witness must quote the indexed later human message', async ()
   assert.deepEqual([...(await judge.same(request())).stated], [0]);
   assert.equal((await judge.same(request({ said: ['Did I ask for tables?'] }))).stated.size, 0);
 });
+
+
+test('AL8 deferred same-fact checks keep the daily budget and signal retry when unavailable', async () => {
+  const judge = createRejectionJudge({ config: { nativeMemoryRejectionJudgeDailyCalls: 0,
+    deepseekModel: 'test', deepseekApiKey: 'test' }, callModel: async () => { assert.fail('budget forbids calls'); } });
+  await assert.rejects(judge.same({ userId: 'u', requireAvailable: true,
+    candidates: [{ text: 'A paraphrase', removed: [{ fingerprint: 'f', text: 'The fact' }] }] }), /memory_history_privacy_unavailable/);
+});
+
+test('AL8 sweep judgement requires confidence and cannot remove below threshold or truncated safety clauses', async () => {
+  const make = answer => createRejectionJudge({config:{deepseekModel:'test',deepseekApiKey:'test'},
+    callModel:async (_dependencies, requestBody) => {
+      const wire = JSON.parse(requestBody.body.messages[1].content);
+      assert.ok(wire.candidates[0].text.endsWith('allergic to penicillin.'));
+      return {choices:[{message:{content:JSON.stringify(answer)}}]};
+    }});
+  const input = {userId:'u',requireAvailable:true,candidates:[{text:'A preference. '.repeat(30)+'I am allergic to penicillin.',removed:[{fingerprint:'f',text:'A preference.'}]}]};
+  assert.equal((await make({same:[{candidate:0,removed:0,confidence:0.2}]}).same(input)).same.size, 0);
+  await assert.rejects(make({same:[{candidate:0,removed:0}]}).same(input), /memory_history_privacy_unavailable/);
+  assert.equal((await make({same:[{candidate:0,removed:0,confidence:0.99}]}).same(input)).same.get(0), 'f');
+});

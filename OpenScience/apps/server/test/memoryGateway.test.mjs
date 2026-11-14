@@ -1125,9 +1125,27 @@ test('targeted forget advertises and forwards exact lines or an unstored stateme
     const result = await f.mcp({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'forget', arguments: args } });
     assert.equal(result.status, 200); assert.ok(!result.messages[0].error);
     assert.match(result.messages[0].result.content[0].text, args.uri ? /Removed 1 line/ : /history.*rejection|rejection.*history/i);
+    assert.match(result.messages[0].result.content[0].text, /current conversation.*what was said.*[Nn]ew conversations.*not use/i);
   }
   assert.deepEqual(calls[0][3].lines, ['Use metric units.']);
   assert.equal(calls[1][2], null); assert.equal(calls[1][3].statement, 'Old project M-41633.');
+});
+
+for (const fileRemoved of [false, true]) test(`line forget reports its removal before pending copy checks (fileRemoved=${fileRemoved})`, async t => {
+  const target = `${ROOT}/memories/preferences/format.md`;
+  const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: {
+    forget: async () => ({ removed: true, removedLines: 1, fileRemoved, historyScanPending: true }),
+  } });
+  const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: {
+    uri: target, lines: ['Use metric units.'],
+  } } });
+  assert.equal(answer.status, 200);
+  const text = answer.messages[0].result.content[0].text;
+  assert.match(text, /^Removed 1 line/);
+  assert.match(text, fileRemoved ? /The empty file was deleted/ : /Other lines were kept/);
+  assert.match(text, /Earlier conversations and memory copies are still being checked; paraphrases may still be recalled/);
+  assert.match(text, /New conversations will not use the forgotten memory once these checks finish/);
+  assert.doesNotMatch(text, /rejection for the statement/);
 });
 
 test('line mismatch reports existing lines without claiming a deletion', async t => {
@@ -1288,7 +1306,7 @@ test('a recorded statement with a pending scan discloses the paraphrase gap with
   assert.equal(answer.status, 200);
   const text = answer.messages[0].result.content[0].text;
   assert.match(text, /Recorded.*exact restatements/);
-  assert.match(text, /Earlier conversations are still being checked; paraphrases may still be recalled until that check finishes/);
+  assert.match(text, /Earlier conversations and memory copies are still being checked; paraphrases may still be recalled until that check finishes/);
   assert.doesNotMatch(text, /Retry|complete|deleted/);
 });
 

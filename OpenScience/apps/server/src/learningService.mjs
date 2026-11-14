@@ -899,7 +899,7 @@ export class LearningService {
             const payload = others
               ? { ...document.payload, provenance: { ...document.payload.provenance,
                 ...(document.payload.provenance?.sourceProjectId === projectId ? { sourceProjectId: remaining[0] } : {}), sourceProjectIds: remaining } }
-              : { ...document.payload, status: "retired", statusReason: PROJECT_DELETED_REASON, statusChangedAt: this.now().toISOString() };
+              : { ...document.payload, status: "retired", sourceWithdrawn: true, statusReason: PROJECT_DELETED_REASON, statusChangedAt: this.now().toISOString() };
             try {
               // Dropping a deleted project from a method's sources is bookkeeping, not a change of the method: no history row.
               await this.documents.put(userId, "method", document.id, payload, { expectedRevision: document.revision, transactionClient, ...(others ? { telemetry: true } : {}) });

@@ -657,3 +657,26 @@ test("a harm judge that is unsure keeps the method waiting and is asked again la
   assert.deepEqual([records(h)[0].payload.status, records(h)[0].payload.harmChecked.outcome], ["active", "skipped"]);
   assert.deepEqual(h.promotion.stats().harmChecks, { clear: 0, flagged: 0, uncertain: 1, skipped: 1 });
 });
+
+test('AL8 every promoted revision gets an anonymous operator review when its private source is withdrawn', async () => {
+  const f = build();
+  const source = method('senior-withdrawn');
+  await f.documents.put(source.userId, 'method', source.method.id, source.method.payload, {expectedRevision:0});
+  await f.promotion.consider(source);
+  await f.promotion.tick();
+  const first = records(f).find(row => row.payload.status === 'active');
+  assert.ok(first);
+  source.method.payload.contentDigest = 'sha256:another';
+  await f.documents.put(source.userId, 'method', source.method.id, source.method.payload, {expectedRevision:1});
+  await f.promotion.consider(source);
+  await f.promotion.tick();
+  await f.promotion.reviewSourceWithdrawal(source.userId, source.method.id);
+  const active = records(f).filter(row => row.payload.status === 'active');
+  assert.equal(active.length, 2, 'official methods stay active until operator review');
+  for (const row of active) {
+    assert.equal(row.payload.pendingRetirements[0].reason, 'source_withdrawn');
+    assert.doesNotMatch(JSON.stringify(row.payload.pendingRetirements), /senior-withdrawn|denominator|p-senior|m-senior/);
+  }
+  await f.promotion.reviewSourceWithdrawal(source.userId, source.method.id);
+  assert.ok(records(f).every(row => row.payload.pendingRetirements.length === 1));
+});

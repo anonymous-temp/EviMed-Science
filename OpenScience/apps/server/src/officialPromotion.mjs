@@ -625,6 +625,57 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
     return promoted;
   }
 
+  /** A promoted copy is reviewed, never automatically removed. Its existing opaque id binds every
+   * historical source digest without copying the person's text or identity into the review item.
+   * @param {string} userId @param {string} methodId */
+  async function reviewSourceWithdrawal(userId, methodId) {
+    const accountCreatedAt = (await identitiesOf([userId])).get(userId);
+    if (!accountCreatedAt) return;
+    /** @type {{digest:unknown}[]} */
+    const versions = documents.database
+      ? (await documents.database.query(`SELECT DISTINCT payload->>'contentDigest' AS digest FROM evimed_product.revisions
+          WHERE user_id=$1 AND kind='method' AND id=$2
+          UNION SELECT payload->>'contentDigest' FROM evimed_product.documents WHERE user_id=$1 AND kind='method' AND id=$2`,
+        [userId,methodId])).rows
+      : (await documents.history(userId, 'method', methodId)).map((/** @type {{payload?:{contentDigest?:unknown}}} */ version) => ({digest:version.payload?.contentDigest}));
+    for (const version of versions) {
+      if (typeof version.digest !== 'string') continue;
+      const row = await get(recordId(userId, methodId, version.digest, accountCreatedAt));
+      if (!row || !['active','retired'].includes(row.payload.status)
+        || row.payload.pendingRetirements?.some((/** @type {{reason?:unknown}} */ item) => item.reason === 'source_withdrawn')) continue;
+      await update(row, {pendingRetirements:[...(row.payload.pendingRetirements ?? []),
+        {reason:'source_withdrawn',at:now().toISOString(),status:'pending',message:'来源已撤回，请复核这条公共做法。'}]});
+    }
+  }
+
+  /** Read the private lifecycle rows, including methods hidden by a statement/source withdrawal.
+   * FT12's reader fence does not persist a retirement; the same authority decides review here.
+   * No model call, source text or account identifier enters the operator record. */
+  async function reviewWithdrawnSources() {
+    if (!documents.database || !documents.memoryForgetReader) return;
+    if (!(await all()).some(row => ['active','retired'].includes(row.payload.status) && !row.payload.pendingRetirements?.length)) return;
+    let owner = '', id = '';
+    for (;;) {
+      const page = await documents.database.query(`SELECT user_id AS "userId",id,project_id AS "projectId",payload
+        FROM evimed_product.documents WHERE kind='method' AND (user_id,id)>($1,$2)
+        ORDER BY user_id,id LIMIT 100`, [owner,id]);
+      if (!page.rows.length) break;
+      for (const source of page.rows) {
+        const stoppedWithSource = source.payload?.status === 'retired'
+          && (source.payload?.sourceWithdrawn === true || source.payload?.statusReason === '它只是从已删除的项目里学到的，已停用。');
+        let withdrawn = stoppedWithSource || !await documents.memoryForgetReader(source.userId, source, source.projectId);
+        // Older promoted revisions can still depend on a source a later private revision no longer names.
+        if (!withdrawn) {
+          const versions = await documents.database.query(`SELECT payload FROM evimed_product.revisions
+            WHERE user_id=$1 AND kind='method' AND id=$2`, [source.userId,source.id]);
+          for (const version of versions.rows) if (!await documents.memoryForgetReader(source.userId, version, source.projectId)) { withdrawn = true; break; }
+        }
+        if (withdrawn) await reviewSourceWithdrawal(source.userId, source.id);
+        owner = source.userId; id = source.id;
+      }
+    }
+  }
+
   /** What the pack of everyone's holds, as one digest of its active records: a change the server did not make (an operator's withdrawal) is published. */
   let activeDigest = /** @type {string | null} */ (null);
   async function publishIfChanged() {
@@ -637,6 +688,7 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   async function tick() {
     const result = { judged: 0, rechecked: 0, corroborated: 0 };
     try {
+      await reviewWithdrawnSources();
       await voidGoneAuthors();
       // A method the harm judge was unsure of is asked again no sooner than `PROMOTION_HARM_RETRY_MS` after the last answer.
       const retryAfter = now().getTime() - PROMOTION_HARM_RETRY_MS;
@@ -664,7 +716,7 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
     return result;
   }
 
-  return { consider, tick, stats: () => ({ ...counters, outcomes: { ...counters.outcomes }, rejectedBy: { ...counters.rejectedBy }, harmChecks: { ...counters.harmChecks },
+  return { consider, tick, reviewSourceWithdrawal, reviewWithdrawnSources, stats: () => ({ ...counters, outcomes: { ...counters.outcomes }, rejectedBy: { ...counters.rejectedBy }, harmChecks: { ...counters.harmChecks },
     harmSkippedBy: { ...counters.harmSkippedBy }, perDay, reviewConfigured: Boolean(review) }) };
 }
 

@@ -9,7 +9,7 @@ import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWi
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
-import { neutralMemoryUri, removalLines, removalText, lineDecisionKey } from './nativeMemoryRejections.mjs';
+import { neutralMemoryUri, removalStatement, similarity, removalLines, removalText, lineDecisionKey } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
@@ -1331,7 +1331,7 @@ export class NativeMemoryStore {
    * Replace a file's text as `actor`, keep what it said before as a revision, and keep the rejection list in step: lines the
    * person removed are rejected (the engine writing them back verbatim removes them again), lines the person wrote are theirs.
    * `origin` is how the lines taken out are rejected (`overlay.reject`): `edit` for the person's own edit of the file, `forget` for the rest.
-   * @param {string} userId @param {any} file @param {string} next @param {{ actor: string, reason: string, change?: string, origin?: "edit" | "forget", neutralizeRemovedPath?: boolean, engineSession?: string | null }} how
+   * @param {string} userId @param {any} file @param {string} next @param {{ actor: string, reason: string, change?: string, origin?: "edit" | "forget", neutralizeRemovedPath?: boolean, engineSession?: string | null, memorySweep?: import('./memoryHistoryPersistence.mjs').MemorySweep|null }} how
    */
   async #write(userId, file, next, how) {
     return withNativeMemoryWrite(this.overlay.database,userId,async()=>{
@@ -1341,8 +1341,8 @@ export class NativeMemoryStore {
       return this.#writeOwned(userId,file,next,how);
     });
   }
-  /** @param {string} userId @param {any} file @param {string} next @param {{actor:string,reason:string,change?:string,origin?:"edit"|"forget",neutralizeRemovedPath?:boolean,engineSession?:string|null}} how */
-  async #writeOwned(userId, file, next, { actor, reason, change = "updated", origin = "forget", neutralizeRemovedPath = false, engineSession = null }) {
+  /** @param {string} userId @param {any} file @param {string} next @param {{actor:string,reason:string,change?:string,origin?:"edit"|"forget",neutralizeRemovedPath?:boolean,engineSession?:string|null,memorySweep?:import('./memoryHistoryPersistence.mjs').MemorySweep|null}} how */
+  async #writeOwned(userId, file, next, { actor, reason, change = "updated", origin = "forget", neutralizeRemovedPath = false, engineSession = null, memorySweep = null }) {
     const context = await this.#fileContext(userId, file.uri);
     const rejectionType = this.#rejectionType(context, file.type);
     this.#touch(userId);
@@ -1355,7 +1355,7 @@ export class NativeMemoryStore {
       // A deleted source already has its own history fence; recognizing its wording is not a second admission gate.
       const activate = async () => { await this.overlay.reject(userId, rejectionType, file.uri, removed, { origin }); };
       if (this.history && (actor === "user" || actor === "conversation")) {
-        await this.history.rejectRemoved(context, file, removed, this.rejectionJudge, { activate });
+        await this.history.rejectRemoved(context, file, removed, this.rejectionJudge, { activate, memorySweep, allowDeferred: Boolean(memorySweep || actOf(reason) && this.overlay.deferredSummaryRebuildEnabled === true) });
       } else await activate();
     }
     await this.history?.retireWriteSessions(context,oldOrigins,removed);
@@ -1594,16 +1594,19 @@ export class NativeMemoryStore {
   }
 
   /** Remove exactly the judged lines through the same revision/rejection/history path as the tool. */
-  async forgetLines(userId, file, lines, { act = null, engineSession = null } = {}) {
+  async forgetLines(userId, file, lines, { act = null, engineSession = null, sweep = true } = {}) {
     const prints = new Set(lines.map(removalText).map(lineFingerprint));
     const removed = removalLines(file.body).filter(text => prints.has(lineFingerprint(text)));
     if (!removed.length) return 0;
-    const aliasPlan = this.personAliasHintEnabled && file.type === 'people' ? await this.#duplicatesPlan(userId, removed, file) : new Map();
-    if (!act && aliasPlan.size) act = newAct();
+    const sweeping = sweep && this.forgetTargetsEnabled && this.overlay.deferredSummaryRebuildEnabled === true && this.history;
+    const aliasPlan = sweep && !sweeping && this.personAliasHintEnabled && file.type === 'people' ? await this.#duplicatesPlan(userId, removed, file) : new Map();
+    if (!act && (aliasPlan.size || sweeping)) act = newAct();
+    const memorySweep = sweeping && act ? { act, removed: removed.map(lineFingerprint), files: await this.#sweepInventory(userId, file.namespaceId ?? null, removed) } : null;
     const next = file.body.split('\n').filter(line => !prints.has(lineFingerprint(removalText(line)))).join('\n');
-    if (!removalLines(next).length) await this.forgetFile(userId, file, { keepText: true, actor: 'conversation', reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, engineSession });
-    else await this.#write(userId, file, next, { actor: 'conversation', reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, neutralizeRemovedPath: true, engineSession });
+    if (!removalLines(next).length) await this.forgetFile(userId, file, { keepText: true, actor: 'conversation', reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, engineSession, memorySweep });
+    else await this.#write(userId, file, next, { actor: 'conversation', reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, neutralizeRemovedPath: true, engineSession, memorySweep });
     if (aliasPlan.size) await this.#forgetDuplicates(userId, aliasPlan, { act, keepText: true, actor: 'conversation' });
+    if (memorySweep) await this.#exactSweep(userId, await this.#fileContext(userId, file.uri), removed, memorySweep.act);
     return removed.length;
   }
 
@@ -1612,7 +1615,13 @@ export class NativeMemoryStore {
     lines = [...new Map(lines.map(text => removalText(text).replace(/\s+/g, ' ')).filter(text => normalisedStatement(text))
       .map(text => [lineFingerprint(text), text])).values()];
     if (!lines.length) throw new HttpError(400, 'memory_payload_invalid', 'statement must contain text after formatting is removed.');
+    const sweeping = this.forgetTargetsEnabled && this.overlay.deferredSummaryRebuildEnabled === true && this.history;
     const uri = `${context.sessions.memoryRoot(userId)}/notes/forget-${contentHash(JSON.stringify([archiveUri, lines])).slice(0, 24)}.md`;
+    if (sweeping && !act) {
+      const previous = (await this.overlay.revisionsOf?.(userId, uri, {limit:1}))?.[0];
+      act = previous && !previous.undoneAt ? actOf(previous.reason) ?? newAct() : newAct();
+    }
+    const memorySweep = sweeping && act ? { act, removed: lines.map(lineFingerprint), files: await this.#sweepInventory(userId, context.kind === 'geo-project' ? context.namespaceId : null, lines) } : null;
     const actual = await this.#fileContext(userId, uri);
     const activate = async () => {
       const fresh = await this.overlay.claimForgetIntent(userId, this.#rejectionType(actual, 'notes'), uri, lines);
@@ -1621,10 +1630,86 @@ export class NativeMemoryStore {
     };
     let pending = false;
     if (this.history) pending = (await this.history.rejectRemoved(actual, { uri, type: 'notes' }, lines, this.rejectionJudge,
-      { archiveUri, activate, allowDeferred: this.forgetTargetsEnabled })) === true;
+      { archiveUri, activate, allowDeferred: this.forgetTargetsEnabled, memorySweep })) === true;
     else await this.overlay.database.transaction(client => this.overlay.database.withTransactionClient(client, activate));
     this.#touch(userId);
+    if (memorySweep) await this.#exactSweep(userId, actual, lines, memorySweep.act);
     return pending;
+  }
+
+  /** Freeze addresses and hashes, never text, before the withdrawal. A delayed search cannot delete later writes.
+   * @param {string} userId @param {string|null} namespaceId @param {string[]} removed */
+  async #sweepInventory(userId, namespaceId, removed) {
+    const prints = new Set(removed.map(removalStatement).map(lineFingerprint));
+    return (await this.rawFiles(userId)).filter(file => (file.namespaceId ?? null) === namespaceId)
+      .map(file => ({uri:file.uri,hash:file.hash,afterExactHash:contentHash(file.body.split('\n')
+        .filter(line => !prints.has(lineFingerprint(removalStatement(line)))).join('\n'))}));
+  }
+
+  /** Literal equality only: a longer safety statement containing these words is not the same fact.
+   * @param {string} userId @param {{namespaceId?:string,kind?:string}} context @param {string[]} removed @param {string} act */
+  async #exactSweep(userId, context, removed, act) {
+    const prints = new Set(removed.map(removalStatement).map(lineFingerprint));
+    const namespace = context.kind === 'geo-project' ? context.namespaceId : null;
+    for (const file of await this.rawFiles(userId)) {
+      if ((file.namespaceId ?? null) !== namespace) continue;
+      const lines = removalLines(file.body).filter(text => prints.has(lineFingerprint(removalStatement(text))));
+      if (lines.length) await this.forgetLines(userId, file, lines, { act, sweep: false });
+    }
+  }
+
+  /** Existing deferred loop owns discovery/retry. Candidate hashes freeze at most eight lines per withdrawal;
+   * no source edge, keyword inference or model call in the forget reply.
+   * @param {import('./memoryHistoryPersistence.mjs').ForgetScan} scan */
+  async sweepForgottenMemory(scan) {
+    if (!this.history || !this.forgetTargetsEnabled || this.overlay.deferredSummaryRebuildEnabled !== true) throw new Error('Memory sweep disabled.');
+    const ledger = this.history.ledger;
+    const sweep = scan.memory_sweep;
+    if (!sweep || !await ledger.saveMemorySweep(scan, sweep)) return;
+    const context = await this.#fileContext(scan.owner_id, `${scan.user_root}/memories/notes/forget.md`);
+    const authority = (await this.overlay.removals(scan.owner_id, context.kind === 'geo-project' ? context.namespaceId : null))
+      .filter(row => sweep.removed.includes(row.fingerprint) && row.text);
+    if (!sweep.candidates) {
+      const hits = await context.sessions.find(scan.owner_id, authority.map(row => row.text).join('\n'),
+        { target: context.sessions.memoryRoot(scan.owner_id), limit: 8 });
+      const uris = new Set(hits.map(hit => hit.uri));
+      const files = (await this.rawFiles(scan.owner_id)).filter(file => uris.has(file.uri)
+        && sweep.files?.some(original => original.uri === file.uri && (original.hash === file.hash || original.afterExactHash === file.hash))
+        && (file.namespaceId ?? null) === (context.kind === 'geo-project' ? context.namespaceId : null));
+      sweep.candidates = files.flatMap(file => removalLines(file.body).map(text => ({ uri: file.uri,
+        fingerprint: lineFingerprint(text), hash: file.hash,
+        score: Math.max(0, ...authority.map(row => similarity(text, row.text))) })))
+        .sort((left, right) => right.score - left.score).slice(0, 8)
+        .map(({uri,fingerprint,hash}) => ({uri,fingerprint,hash}));
+      if (!await ledger.saveMemorySweep(scan, sweep)) return;
+    }
+    const files = await this.rawFiles(scan.owner_id);
+    const candidates = sweep.candidates.flatMap(candidate => {
+      const file = files.find(entry => entry.uri === candidate.uri && entry.hash === candidate.hash);
+      const text = file && removalLines(file.body).find(line => lineFingerprint(line) === candidate.fingerprint);
+      return file && text ? [{file,text}] : [];
+    });
+    if (candidates.length && authority.length) {
+      if (!this.rejectionJudge) throw new Error('Memory judge unavailable.');
+      const verdict = await this.rejectionJudge.same({ userId: scan.owner_id, requireAvailable: true,
+        candidates: candidates.map(candidate => ({text:candidate.text,removed:authority})), said: [] });
+      if (!(verdict?.same instanceof Map)) throw new Error('Invalid memory judgement.');
+      // Group lines before writing: one accepted line must not invalidate a neighbour's before-image.
+      /** @type {Map<string,string[]>} */
+      const plan = new Map();
+      candidates.forEach((candidate, index) => {
+        if (authority.some(row => row.fingerprint === verdict.same.get(index)))
+          plan.set(candidate.file.uri, [...(plan.get(candidate.file.uri) ?? []), candidate.text]);
+      });
+      await withNativeMemoryWrite(this.overlay.database, scan.owner_id, async () => {
+        if (!await ledger.saveMemorySweep(scan, sweep)) return;
+        for (const [uri, lines] of plan) {
+          const file = files.find(entry => entry.uri === uri);
+          await this.forgetLines(scan.owner_id, file, lines, {act:sweep.act,sweep:false});
+        }
+      }, {exclusive:true});
+    }
+    await ledger.saveMemorySweep(scan, {...sweep,done:true});
   }
 
   /** The withdrawal and its acknowledgement can themselves repeat part of the withdrawn fact. Undo lifts their existing rejection fence too. */
@@ -1748,7 +1833,7 @@ export class NativeMemoryStore {
     return wordings;
   }
 
-  /** @param {string} userId @param {any} file @param {{ keepText?: boolean, actor?: string, reason?: string, engineSession?: string | null }} [options] */
+  /** @param {string} userId @param {any} file @param {{ keepText?: boolean, actor?: string, reason?: string, engineSession?: string | null, memorySweep?: import('./memoryHistoryPersistence.mjs').MemorySweep|null }} [options] */
   async forgetFile(userId,file,options={}) {
     return withNativeMemoryWrite(this.overlay.database,userId,async()=>{
       const context=await this.#fileContext(userId,file.uri);
@@ -1757,7 +1842,7 @@ export class NativeMemoryStore {
       return this.#forgetFileOwned(userId,file,options);
     });
   }
-  async #forgetFileOwned(userId, file, { keepText = false, actor = "user", reason = "", engineSession = null } = {}) {
+  async #forgetFileOwned(userId, file, { keepText = false, actor = "user", reason = "", engineSession = null, memorySweep = /** @type {import('./memoryHistoryPersistence.mjs').MemorySweep|null} */ (null) } = {}) {
     const context = await this.#fileContext(userId, file.uri);
     this.#touch(userId);
     const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
@@ -1765,7 +1850,7 @@ export class NativeMemoryStore {
     const removedLines = await this.#aliasRemovalLines(userId, file, [...new Set([...removalLines(file.body), ...names])]);
     const activate = async () => { await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, removedLines); };
     if (this.history && actor !== "platform") await this.history.rejectRemoved(context,file,
-      [...new Map([...statements(file.body).map(removalText), ...names].map(text => [lineFingerprint(text), text])).values()],this.rejectionJudge, { activate });
+      [...new Map([...statements(file.body).map(removalText), ...names].map(text => [lineFingerprint(text), text])).values()],this.rejectionJudge, { activate, memorySweep, allowDeferred: Boolean(memorySweep || actOf(reason) && this.overlay.deferredSummaryRebuildEnabled === true) });
     else await activate();
     await this.history?.retireWriteSessions(context,oldOrigins,statements(file.body));
     const removed = await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.remove(userId, file.uri)));
@@ -1817,7 +1902,7 @@ export class NativeMemoryStore {
       const missingLines = lines.filter(line => !available.has(lineFingerprint(removalText(line))));
       if (missingLines.length) return { removed: false, missingLines, availableLines };
       const removedLines = await this.forgetLines(String(user.id), file, lines, { engineSession });
-      return { removed: removedLines > 0, removedLines, fileRemoved: removedLines === availableLines.length };
+      return { removed: removedLines > 0, removedLines, ...(this.history && this.overlay.deferredSummaryRebuildEnabled === true ? {historyScanPending:true} : {}), fileRemoved: removedLines === availableLines.length };
     }
     const plan = await this.#duplicatesPlan(String(user.id), statements(file.body), file);
     const act = plan.size ? newAct() : null;
@@ -2029,7 +2114,7 @@ export class NativeMemoryStore {
       // A judged request may remove several lines at once. Restoring one must leave the others available to restore too.
       const originallyKept = new Set(removalLines(revision.after ?? '').map(lineFingerprint));
       const nowKept = new Set(removalLines(`${body}\n${line}`).map(lineFingerprint));
-      const stillForgotten = revision.reason === 'forgotten by conversation request'
+      const stillForgotten = ['forgotten by conversation request', 'forgotten in a conversation'].some(prefix => revision.reason.startsWith(prefix))
         && removalLines(revision.before ?? '').some(text => !originallyKept.has(lineFingerprint(text)) && !nowKept.has(lineFingerprint(text)));
       if (!stillForgotten) await this.overlay.markUndone(userId, revision.id);
     } else {
@@ -2442,7 +2527,31 @@ export class NativeMemoryStore {
     let bytes = 0;
     for (const context of views) {
       if (this.memoryContexts) await this.memoryContexts.assertKnown(context);
-      const pack = await this.#engine(() => context.sessions.exportPack(userId));
+      // Engine packs include stale summaries and raw files, outside the withdrawal readers.
+      // Export readable current bodies when those readers are composed; never export undo before-images.
+      let pack;
+      if (this.history || this.overlay.memoryForgetBody || this.overlay.deferredSummaryRebuildEnabled === true) {
+        /** @type {import('fflate').Zippable} */
+        const current = {};
+        /** @type {{path:string,type:string,sha256:string}[]} */
+        const files = [];
+        let contentBytes = 0;
+        for (const file of await this.files(userId, {context:this.memoryContexts ? context : null})) {
+          if (!file.uri.startsWith(`${context.userRoot}/memories/`)) continue;
+          const body = await fenceWithdrawnMemoryBody(this.overlay, userId, file.uri, file.body, file.namespaceId);
+          if (!body?.trim()) continue;
+          // Filenames can themselves state a removed fact. Opaque names are stable within this pack.
+          const path = `memories/${contentHash(file.uri).slice(0,24)}.md`;
+          const data = Buffer.from(body);
+          contentBytes += data.byteLength;
+          if (bytes + contentBytes > MAX_NATIVE_PACK_BYTES) throw new HttpError(413, 'memory_export_too_large', 'The native memory export exceeds the account archive limit.');
+          current[path] = data;
+          files.push({path,type:file.type,sha256:contentHash(body)});
+        }
+        current['manifest.json'] = Buffer.from(JSON.stringify({schemaVersion:1,files,
+          note:'仅包含当前可用的记忆；已撤回的内容和临时副本不在导出中。'}));
+        pack = Buffer.from(zipSync(current));
+      } else pack = await this.#engine(() => context.sessions.exportPack(userId));
       bytes += pack.byteLength;
       if (bytes > MAX_NATIVE_PACK_BYTES) throw new HttpError(413, 'memory_export_too_large', 'The native memory export exceeds the account archive limit.');
       if (views.length === 1) {
