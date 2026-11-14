@@ -38,7 +38,8 @@ export function safetyNoteLines(body, type) {
 export function safetyNoteFile(file, { memoryRoot, projectId, hiddenUris = [], peopleAcrossProjects = false }) {
   const place = nativeMemoryFile(String(file.uri ?? ''), memoryRoot);
   return !!place && ['people', 'profile', 'safety_notes'].includes(place.type) && !file.sensitive
-    && (!file.projectId || file.projectId === 'default' || file.projectId === projectId || personalMemoryTravels(file.uri, memoryRoot, peopleAcrossProjects))
+    && (!file.projectId || file.projectId === 'default' || file.projectId === projectId || personalMemoryTravels(file.uri, memoryRoot, peopleAcrossProjects)
+      || peopleAcrossProjects && place.type === 'profile')
     && !hiddenUris.some(uri => file.uri === uri || file.uri.startsWith(`${uri}/`));
 }
 

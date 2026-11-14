@@ -177,6 +177,7 @@ test('delivery digest changes with safety history, while disabled, paused and sh
 test('portable safety only crosses owned project labels, with privacy and namespace exclusions intact', () => {
   const scope = { memoryRoot, projectId: 'project-b', peopleAcrossProjects: true };
   assert.ok(safetyNoteFile(file({ projectId: 'project-a' }), scope));
+  assert.ok(safetyNoteFile(file({ projectId: 'project-a', uri: `${memoryRoot}/profile.md`, type: 'profile' }), scope));
   assert.ok(safetyNoteFile(file({ projectId: 'project-a', uri: `${memoryRoot}/safety_notes/father.md` }), scope));
   for (const excluded of [file({ projectId: 'project-a', sensitive: true }),
     file({ projectId: 'project-a', uri: 'viking://user/shared/memories/people/father.md' }),
