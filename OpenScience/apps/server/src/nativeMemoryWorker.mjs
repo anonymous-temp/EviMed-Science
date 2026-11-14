@@ -1,3 +1,4 @@
+import { keepUnexplainedLines } from './nativeMemoryKeepLines.mjs';
 import { confirmedAliasRequest, confirmedAliases, choiceRows, choiceKey } from './nativeMemoryInduction.mjs';
 import { checkForgetRequests } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
@@ -9,7 +10,7 @@ import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay
 import { HttpError } from './security.mjs';
 import {
   recordNativeCheck, recordNativeCommit, recordNativeExtraction, recordNativeExtractionFailure, recordNativeOperations, recordNativePass, recordNativeWrite,
-  recordMemoryNoteLabels, recordPolicySync, recordRejectionLines, recordResetSweep, recordVerificationLines, recordPastedInstructionCheck,
+  recordUnexplainedDeletions, recordMemoryNoteLabels, recordPolicySync, recordRejectionLines, recordResetSweep, recordVerificationLines, recordPastedInstructionCheck,
 } from "./nativeMemoryMetrics.mjs";
 import { NativeMemoryObservations } from "./nativeMemoryObservations.mjs";
 import { INSTRUCTION_ORIGIN_POLICY_HASH, instructionSourceMessage, pendingInstructionResult } from './nativeMemoryInstructionOrigin.mjs';
@@ -799,8 +800,9 @@ export class NativeMemoryWorker {
     commit = resolved.commit; context = resolved.context;
     const userId = commit.userId;
     const root = context.sessions.memoryRoot(userId);
-    const operations = diff?.operations ?? {};
     this.#assertDiffContext(commit, diff, context);
+    if (!sourceDeleted) await this.#keepUnexplainedLines(commit, diff, context);
+    const operations = diff?.operations ?? {};
     if(sourceDeleted){
       const entries=['adds','updates','deletes'];
       if(diff?.archive_uri!==commit.archiveUri||entries.some(key=>!Array.isArray(operations[key]))||entries.reduce((count,key)=>count+operations[key].length,0)>20000)throw new HttpError(409,'memory_source_lineage_unverified','The native source has no complete typed cleanup receipt.');
@@ -815,7 +817,7 @@ export class NativeMemoryWorker {
     const pastedInstructions = sourceDeleted ? new Set() : await this.#pastedInstructions(commit, operations, context).catch(() => {
       recordPastedInstructionCheck("failed"); return new Set();
     });
-    const instructionRevisions = !sourceDeleted && this.robustInstructions ? await this.#prepareInstructionWrites(commit, diff, context, pastedInstructions) : new Map();
+    const instructionRevisions = !sourceDeleted && this.robustInstructions ? await this.#prepareInstructionWrites(commit, diff, context, pastedInstructions, true) : new Map();
     for (const [list, change] of /** @type {const} */ ([["adds", "added"], ["updates", "updated"], ["deletes", "deleted"]])) {
       for (const operation of Array.isArray(operations[list]) ? operations[list] : []) {
         const uri = String(operation?.uri ?? "");
@@ -872,6 +874,72 @@ export class NativeMemoryWorker {
     }
     recordNativeOperations(counts);
     return counts.added + counts.updated + counts.deleted;
+  }
+
+  /** Accept an extraction after-image before either ingestion or instruction review records it.
+   * The engine already wrote it; only its exact live result (or our retry result) may be amended.
+   * @param {{userId:string,archiveUri:string,projectId?:string|null}} commit
+   * @param {{operations?:{adds?:{uri:string,before?:string|null,after?:string|null}[],updates?:{uri:string,before?:string|null,after?:string|null}[],deletes?:{uri:string,before?:string|null,deleted_content?:string|null}[]}}} diff
+   * @param {{kind:string,namespaceId?:string|null,sessions:import('./openVikingSessions.mjs').OpenVikingSessions}} context
+   */
+  async #keepUnexplainedLines(commit, diff, context) {
+    if (this.config.memoryKeepUnexplainedLinesEnabled !== true) return;
+    const operations = diff?.operations;
+    if (!operations) return;
+    const { userId, archiveUri } = commit, sessions = context.sessions, root = sessions.memoryRoot(userId);
+    const valid = (/** @type {string} */ uri) => Boolean(nativeMemoryFile(uri, root) ?? observationFile(uri, root));
+    const changes = [
+      ...(operations.updates ?? []).map(operation => ({ operation, before: String(operation.before ?? ''), after: String(operation.after ?? ''), deleted: false })),
+      ...(operations.deletes ?? []).map(operation => ({ operation, before: String(operation.deleted_content ?? operation.before ?? ''), after: null, deleted: true })),
+    ].filter(entry => valid(entry.operation.uri));
+    if (!changes.length) return;
+    // A replay must keep the accepted revision, including a deletion converted into an update.
+    const recorded = new Map((await this.overlay.admissionRevisions(userId, archiveUri)).filter(row => row.actor === 'engine').map(row => [row.uri, row]));
+    const messages = await this.verification.readRemovalSources(userId, [{ archiveUri, projectId: commit.projectId ?? null }], context);
+    const withdrawals = this.overlay.sourceDeletion ? await this.overlay.sourceDeletion.historyFingerprints(userId) : new Map();
+    const hidden = this.overlay.sourceDeletion ? await this.overlay.sourceDeletion.hiddenMemoryUris(userId) : [];
+    /** @type {Map<string,string|null>} */
+    const live = new Map();
+    const nodes = await sessions.tree(userId, root);
+    for (const uri of new Set([...nodes.filter(node => !node.isDir && valid(node.uri)).map(node => node.uri), ...changes.map(entry => entry.operation.uri)])) {
+      live.set(uri, await sessions.read(userId, uri));
+    }
+    for (const entry of changes) {
+      const uri = entry.operation.uri, settled = recorded.get(uri);
+      let accepted = settled ? settled.after : entry.after;
+      if (!settled) {
+        const beforeLines = memoryLines(entry.before);
+        if (beforeLines.length > 200) { recordUnexplainedDeletions('skipped_large'); continue; }
+        const present = new Set(memoryLines(entry.after).map(lineFingerprint));
+        const missing = beforeLines.filter(line => !present.has(lineFingerprint(line)));
+        if (!missing.length) continue;
+        const rejected = await removalRefusals({ userId, overlay: this.overlay, projectId: commit.projectId ?? null,
+          namespaceId: context.kind === 'geo-project' ? context.namespaceId : null,
+          candidates: missing.map(text => ({ text })), ignoreTokenWhitespace: this.config.memoryForgetRequestCheckEnabled === true });
+        const elsewhere = new Set([...live].filter(([other]) => other !== uri).flatMap(([, body]) => memoryLines(body).map(lineFingerprint)));
+        const withdrawn = hidden.some((/** @type {string} */ prefix) => uri === prefix || uri.startsWith(`${prefix}/`))
+          ? new Set(beforeLines.map(lineFingerprint)) : withdrawals.get(uri) ?? new Set();
+        const result = keepUnexplainedLines({ enabled: true, before: entry.before, after: entry.after,
+          neverKept: text => lineRefusal(text, new Set()) !== null, rejected: new Set(rejected.keys()), withdrawn, elsewhere, messages });
+        const current = await sessions.read(userId, uri);
+        // Do not resurrect an obsolete pre-image over a later engine write or a person's edit.
+        if (current !== entry.after && current !== result.after) continue;
+        accepted = result.after;
+        if (accepted !== entry.after && accepted !== null && current !== accepted) {
+          const acceptedBody = accepted;
+          await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.replace(userId, uri, acceptedBody));
+        }
+        for (const outcome of result.outcomes) recordUnexplainedDeletions(outcome);
+      }
+      if (accepted === entry.after) continue;
+      if (entry.deleted && accepted !== null) {
+        operations.deletes = (operations.deletes ?? []).filter(operation => operation !== entry.operation);
+        operations.updates = [...(operations.updates ?? []), { ...entry.operation, before: entry.before, after: accepted }];
+      } else if (!entry.deleted) {
+        // Updates retain their original before-image, so undo and origin synchronization see one revision.
+        Object.assign(entry.operation, { after: accepted });
+      }
+    }
   }
 
   /**
@@ -1213,7 +1281,8 @@ export class NativeMemoryWorker {
   }
 
   /** The engine's revision precedes its correction, so the latest Undo always restores the held line. */
-  async #prepareInstructionWrites(commit, diff, context, reviewed = null) {
+  async #prepareInstructionWrites(commit, diff, context, reviewed = null, guarded = false) {
+    if (!guarded) await this.#keepUnexplainedLines(commit, diff, context);
     const operations = diff?.operations ?? {}, root = context.sessions.memoryRoot(commit.userId);
     reviewed ??= await this.#instructionOrigins(commit, operations, context);
     const revisions = new Map();

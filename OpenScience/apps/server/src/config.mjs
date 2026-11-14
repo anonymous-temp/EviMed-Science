@@ -396,6 +396,7 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     memoryStandingInstructionsEnabled: overrides.memoryStandingInstructionsEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_STANDING_INSTRUCTIONS_ENABLED", false),
     memoryObservationInductionEnabled: overrides.memoryObservationInductionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OBSERVATION_INDUCTION_ENABLED", false),
     memoryPersonMergeEnabled: overrides.memoryPersonMergeEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PERSON_MERGE_ENABLED", false),
+    memoryKeepUnexplainedLinesEnabled: overrides.memoryKeepUnexplainedLinesEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_KEEP_UNEXPLAINED_LINES_ENABLED", false),
     memoryPersonAliasHintEnabled: overrides.memoryPersonAliasHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PERSON_ALIAS_HINT_ENABLED", false),
     memorySafetyNotesEnabled: overrides.memorySafetyNotesEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED", false),
     memoryOpeningIndexEnabled: overrides.memoryOpeningIndexEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OPENING_INDEX_ENABLED", false),

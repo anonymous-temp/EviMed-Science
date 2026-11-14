@@ -110,6 +110,9 @@ const rejectionJudge = table(NATIVE_REJECTION_JUDGE_OUTCOMES);
 const rejectionLines = table(NATIVE_REJECTION_LINE_VERDICTS);
 const consolidations = table(NATIVE_CONSOLIDATION_OUTCOMES);
 const consolidatedFiles = table(NATIVE_CONSOLIDATION_CHANGES);
+const unexplainedDeletions = table(['restored', 'kept_deleted_rejected', 'kept_deleted_replaced', 'kept_deleted_grounded', 'kept_deleted_never_kept', 'kept_deleted_moved', 'skipped_large']);
+/** @param {import('./nativeMemoryKeepLines.mjs').KeepLineOutcome} outcome */
+export function recordUnexplainedDeletions(outcome) { bump(unexplainedDeletions, outcome); }
 const checkActions = table(NATIVE_CHECK_ACTIONS);
 const pastedInstructionChecks = table(NATIVE_PASTED_INSTRUCTION_CHECK_OUTCOMES);
 const workerWrites = table(NATIVE_WORKER_WRITES);
@@ -223,7 +226,7 @@ export function recordMapReplaced(outcome) { bump(mapReplaced, outcome); }
 
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [maintenance, requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, pastedInstructionChecks, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports, mapReplaced, verificationJudge, verificationLines, noteLabels]) {
+  for (const map of [unexplainedDeletions, maintenance, requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, pastedInstructionChecks, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports, mapReplaced, verificationJudge, verificationLines, noteLabels]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -232,6 +235,7 @@ export function resetNativeMemoryMetrics() {
 export function nativeMemoryCounters() {
   const plain = (/** @type {Map<string, number>} */ map) => Object.fromEntries(map);
   return {
+    unexplainedDeletions: plain(unexplainedDeletions),
     maintenance: plain(maintenance),
     noteLabels: plain(noteLabels),
     requests: Object.fromEntries([...requests].map(([key, value]) => [key.replace("\u0000", ":"), value])),
@@ -252,6 +256,8 @@ const series = (map, label) => [...map].map(([key, value]) => ({ value, labels: 
  */
 export function nativeMemoryMetricFamilies() {
   return [
+    { name: 'open_science_native_memory_unexplained_deletions_total', type: 'counter', series: series(unexplainedDeletions, 'outcome'),
+      help: 'Extraction before-lines preserved or left deleted by deterministic acceptance checks; skipped_large counts files above 200 before-lines.' },
     { name: 'open_science_native_memory_maintenance_pending', type: 'gauge', series: series(maintenance, 'kind'),
       help: 'Durable summary rebuild and paraphrase scan obligations, including scans waiting to retry; refreshed by the native worker.' },
     { name: 'open_science_native_memory_note_labels_total', type: 'counter', series: series(noteLabels, 'outcome'),

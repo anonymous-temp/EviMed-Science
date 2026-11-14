@@ -15,6 +15,7 @@ for (const [key, property] of [
   ['OPEN_SCIENCE_MEMORY_PEOPLE_ACROSS_PROJECTS_ENABLED', 'memoryPeopleAcrossProjectsEnabled'],
   ['OPEN_SCIENCE_MEMORY_OBSERVATION_INDUCTION_ENABLED', 'memoryObservationInductionEnabled'],
   ['OPEN_SCIENCE_MEMORY_PERSON_MERGE_ENABLED', 'memoryPersonMergeEnabled'],
+  ['OPEN_SCIENCE_MEMORY_KEEP_UNEXPLAINED_LINES_ENABLED', 'memoryKeepUnexplainedLinesEnabled'],
   ['OPEN_SCIENCE_MEMORY_PERSON_ALIAS_HINT_ENABLED', 'memoryPersonAliasHintEnabled'],
   ['OPEN_SCIENCE_MEMORY_SHARED_CAPTURE_PROOF_ENABLED', 'memorySharedCaptureProofEnabled'],
   ['OPEN_SCIENCE_MEMORY_FORGET_REQUEST_CHECK_ENABLED', 'memoryForgetRequestCheckEnabled'],
