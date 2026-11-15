@@ -86,10 +86,11 @@ export async function readPinnedSkill(name) {
 export class OpenVikingEngine {
   /**
    * @param {{ client: any, config: Record<string, any>, pin: any, readSkill?: (name: string) => Promise<string>,
-   *   now?: () => Date, wait?: (ms: number) => Promise<unknown>, report?: (line: string) => void }} dependencies
+   *   now?: () => Date, wait?: (ms: number) => Promise<unknown>, report?: (line: string) => void, setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>,
+   *   clearTimer?: (timer: ReturnType<typeof setTimeout>) => void }} dependencies
    *   `pin` is `deps-version.json`'s `openviking` entry; `client` an `OpenVikingClient`.
    */
-  constructor({ client, config, pin, readSkill = readPinnedSkill, now = () => new Date(), wait = sleep, report = () => {} }) {
+  constructor({ client, config, pin, readSkill = readPinnedSkill, now = () => new Date(), wait = sleep, report = () => {}, setTimer = (fn, ms) => setTimeout(fn, ms), clearTimer = clearTimeout }) {
     this.client = client;
     this.config = config ?? {};
     this.pin = pin ?? {};
@@ -97,13 +98,20 @@ export class OpenVikingEngine {
     this.now = now;
     this.wait = wait;
     this.report = report;
+    this.setTimer = setTimer;
+    this.clearTimer = clearTimer;
+    this.started = false;
+    this.failures = 0;
+    /** Last attempted compile fact, including failures; retrying cheap facts must not submit another task.
+     * @type {{ at: number, fact: EngineFact } | null} */
+    this.compileAttempt = null;
     /** @type {{ checkedAt: string, facts: Record<string, EngineFact> } | null} */
     this.last = null;
     /** Observable counters (principle 15). */
     this.counters = { checks: 0, failedChecks: 0, skillInstalls: 0, compileProbes: 0 };
     /** The compile identity fact, once proven for an engine version. @type {{ version: unknown, fact: any } | null} */
     this.identityProven = null;
-    /** @type {ReturnType<typeof setInterval> | null} */
+    /** @type {ReturnType<typeof setTimeout> | null} */
     this.timer = null;
     /** @type {Promise<unknown> | null} */
     this.running = null;
@@ -138,14 +146,19 @@ export class OpenVikingEngine {
       for (const name of ["memoryTemplates", "skills", "compileIdentity"]) facts[name] = { ok: false, code: facts.version.code };
     } else {
       await read("memoryTemplates", () => this.#memoryTemplates());
+      this.last = { checkedAt: this.now().toISOString(), facts: { ...facts } };
       await read("skills", () => this.#skills());
       // The probe names an installed skill as its source, so it is only meaningful once the skills are there.
       // Proven once per engine version in this process: on v0.5.3 a full run of the empty source costs one planning call of about
       // 34k input tokens, and this check repeats every half hour. A pinned engine's identity handling does not change between reads.
       if (!facts.skills.ok) facts.compileIdentity = { ok: false, code: "openviking_compile_unprobed" };
       else if (this.identityProven?.version === facts.version.version) facts.compileIdentity = this.identityProven.fact;
-      else {
+      else if (this.compileAttempt && this.now().getTime() - this.compileAttempt.at < 60_000) {
+        facts.compileIdentity = this.compileAttempt.fact;
+      } else {
+        const attemptedAt = this.now().getTime();
         await read("compileIdentity", () => this.#compileIdentity());
+        this.compileAttempt = { at: attemptedAt, fact: facts.compileIdentity };
         if (facts.compileIdentity?.ok) this.identityProven = { version: facts.version.version, fact: facts.compileIdentity };
       }
     }
@@ -388,25 +401,24 @@ export class OpenVikingEngine {
 
   /** Read the facts now and again every `openVikingEngineCheckMs`; a failed read is retried sooner. */
   start() {
-    if (this.timer || !this.applicable) return;
+    if (this.started || !this.applicable) return;
+    this.started = true;
     const every = Math.max(60_000, Number(this.config.openVikingEngineCheckMs) || 1_800_000);
-    let since = 0;
-    const tick = () => {
-      since += 60_000;
-      // While something is failing the check runs every five minutes, so a restarted engine is noticed without a
-      // deploy; a healthy engine is asked on the configured cadence.
-      if (since >= (this.last && this.status().ok ? every : Math.min(every, 300_000))) {
-        since = 0;
-        void this.check();
-      }
+    const tick = async () => {
+      await this.check();
+      if (!this.started) return;
+      this.failures = this.status().ok ? 0 : this.failures + 1;
+      const delay = this.failures ? Math.min(300_000, 15_000 * 2 ** Math.min(this.failures - 1, 5)) : every;
+      this.timer = this.setTimer(() => { this.timer = null; void tick(); }, delay);
+      this.timer.unref?.();
     };
-    void this.check();
-    this.timer = setInterval(tick, 60_000);
-    this.timer.unref?.();
+    void tick();
   }
 
   close() {
-    if (this.timer) clearInterval(this.timer);
+    this.started = false;
+    this.failures = 0;
+    if (this.timer) this.clearTimer(this.timer);
     this.timer = null;
   }
 }

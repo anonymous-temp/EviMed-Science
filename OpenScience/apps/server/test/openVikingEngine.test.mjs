@@ -394,6 +394,8 @@ test("two checks asked for at once are one check, and the timer neither keeps a 
   assert.equal(seen.filter((request) => request.path === "/health").length, 1);
   assert.equal(engine.counters.checks, 1);
   engine.start();
+  await engine.running;
+  await new Promise(resolve => setImmediate(resolve));
   assert.ok(engine.timer);
   assert.equal(engine.timer.hasRef(), false, "the check's timer would hold a finished test or a draining process open");
   await engine.running;
