@@ -15,7 +15,8 @@ describe("recent change titles", () => {
     };
     render(<ChangesTable title="最近变化" rows={[row]} label="最近变化" onOpen={vi.fn()} />);
     const item = screen.getByRole("listitem");
-    expect(item).toHaveTextContent("母亲 68 岁；对头孢类过敏；使用氨氯地平");
+    expect(item).toHaveTextContent("对头孢类过敏；使用氨氯地平");
+    expect(item).not.toHaveTextContent("母亲 68 岁");
     expect(item.textContent).not.toMatch(/#|- 对头孢/);
   });
 });

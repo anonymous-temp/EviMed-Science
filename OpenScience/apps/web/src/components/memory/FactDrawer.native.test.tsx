@@ -149,15 +149,21 @@ describe("a memory kept as a file, opened from its row", () => {
     expect(document.body.textContent).not.toContain('新项目的标题');
   });
 
-  it("shows history in the browser zone used by the native conversation clock, without shifting the instant twice", () => {
-    const changedAt = "2026-11-15T04:17:00.000Z";
-    const file = nativeFile("回答结构", "- 先给结论。", { revisions: [{ version: 1, value: "- 旧说法。", summary: "", status: "active", changedAt, reason: "edited" }] });
-    show(file);
-    const expected = new Date(changedAt).toLocaleString("zh-CN", {
-      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    });
-    expect(screen.getByText(new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))).toBeInTheDocument();
+  it("shows history in Asia/Shanghai across midnight even when the browser zone is not Shanghai", () => {
+    const resolved = new Intl.DateTimeFormat().resolvedOptions();
+    const browserZone = vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockReturnValue({ ...resolved, timeZone: "America/Los_Angeles" });
+    try {
+      const changedAt = "2026-11-15T20:17:00.000Z";
+      const file = nativeFile("回答结构", "- 先给结论。", { revisions: [{ version: 1, value: "- 旧说法。", summary: "", status: "active", changedAt, reason: "edited" }] });
+      show(file);
+      const expected = new Date(changedAt).toLocaleString("zh-CN", {
+        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Shanghai",
+      });
+      expect(expected).toContain("11月16日");
+      expect(screen.getByText(new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))).toBeInTheDocument();
+    } finally {
+      browserZone.mockRestore();
+    }
   });
 
   it("shows nothing of the engine: no address, no file name, no kind of account", () => {

@@ -383,6 +383,8 @@ Verify **L/G/W**, AT51. A page MUST express one coherent current task. Overview,
 
 Verify **T/G/W/M**, AT52. Actions MUST belong to page, list, row or selection scope and appear beside the scope they affect. A page header SHOULD contain at most one primary and two common secondary actions, followed by labeled overflow for remaining actions; a read-only view may have zero primary actions. This is a header default, not permission to hide frequent actions, safety consequences, costs, permissions or unknown mutation outcomes. Preserve accessible labels and keyboard paths. Group export formats in one labeled menu using the existing export component, retaining every supported format, permission, pending/error state and actual output. Do not export invented empty data or advertise a format without its working path.
 
+In the memory section, a state mutation uses a secondary `Button` with `actionKind="set"` and `destructive` where applicable. A text `Button` must instead carry a non-mutating `actionKind` or an explicit `data-text-action="navigation|cancel|view"` exception; the source guard rejects unclassified text actions.
+
 ### DS22.3 Workflow, views and filters
 
 Verify **T/G/W/M**, AT53. Workflow progress, view navigation and query filtering MUST have distinct semantics. Do not repeat a context selector or add competing navigation for the same state. Preserve the existing eight-step workflow: every step remains reachable through the rail or an explicit labeled all-steps/overflow affordance at narrow widths. Compact presentation must preserve current step, status, dependencies and result destinations; it cannot remove real workflow stages.

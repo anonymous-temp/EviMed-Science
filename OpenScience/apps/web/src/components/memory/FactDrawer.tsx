@@ -33,7 +33,7 @@ function when(value: string | null | undefined) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return formatDateTime(date, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+  return formatDateTime(date, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function failed(error: unknown) {
@@ -282,7 +282,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
               <Textarea ref={field} disabled={busy} value={value} onChange={(event) => setValue(event.target.value)} aria-label="编辑这条记忆" rows={4} maxLength={entry ? 20_000 : undefined} />
               <div className="flex gap-2">
                 <Button actionKind="set" type="submit" size="sm" loading={busy} disabled={!value.trim()}>保存</Button>
-                <Button size="sm" variant="text" disabled={busy} onClick={editGuard.requestClose}>取消</Button>
+                <Button size="sm" variant="text" data-text-action="cancel" disabled={busy} onClick={editGuard.requestClose}>取消</Button>
               </div>
             </form>
           ) : (

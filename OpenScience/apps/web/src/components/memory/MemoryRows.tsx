@@ -118,7 +118,7 @@ function ForgetConfirmationRow({ item, onResolved, onResolve }: { item: WebPendi
         : <p>暂时无法确定是哪一条。请在对话中说明具体内容，或在记忆列表中找到后选择“忘记”。</p>}
       <div className="flex flex-wrap gap-2">
         {!!item.choices?.length && <Button size="sm" loading={busy} disabled={!onResolve || !selected.length} onClick={() => void submit("confirm")}>忘记选中的内容</Button>}
-        <Button size="sm" variant="text" disabled={busy || !onResolve} onClick={() => void submit("dismiss")}>保留记忆，关闭此项</Button>
+        <Button actionKind="set" size="sm" variant="secondary" disabled={busy || !onResolve} onClick={() => void submit("dismiss")}>保留记忆，关闭此项</Button>
       </div>
       {error && <p role="alert" className="text-error">{error}</p>}
     </div>

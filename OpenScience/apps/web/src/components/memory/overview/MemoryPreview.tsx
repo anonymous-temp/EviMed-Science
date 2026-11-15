@@ -83,7 +83,7 @@ export function MemoryPreview({ node, doc, methods, projectName, onSelect, onOpe
             {description && description !== title && <p data-prose="" className="mt-3 break-words text-ui leading-6 text-text-2">{description}</p>}
             {read?.state === "loading" && <p role="status" className="mt-3 text-caption text-text-3">正在读取内容</p>}
             {read?.state === "missing" && <p className="mt-3 text-caption text-text-3">这条内容已不存在。</p>}
-            {read?.state === "failed" && <div className="mt-3 text-caption text-text-3">暂时读不到完整内容。<Button size="sm" variant="text" onClick={() => setAttempt((value) => value + 1)}>重试</Button></div>}
+            {read?.state === "failed" && <div className="mt-3 text-caption text-text-3">暂时读不到完整内容。<Button size="sm" variant="text" data-text-action="view" onClick={() => setAttempt((value) => value + 1)}>重试</Button></div>}
           </div>
           {node.open && read?.state !== "missing" && <Button variant="secondary" onClick={() => onOpen(node)}>查看详情</Button>}
           {related.length > 0 && (

@@ -145,7 +145,7 @@ export function GraphView({ doc, narrowed, selected, actions, onHideEdge, meta }
     <ChartCard
       title={relationTitle(narrowed.nodes)}
       legend={<Legend nodes={narrowed.nodes} hidden={hidden} onToggle={toggleShape} />}
-      meta={<div className="flex items-center gap-2"><Button size="sm" variant="text" onClick={home}>回正</Button>{meta}</div>}
+      meta={<div className="flex items-center gap-2"><Button size="sm" variant="text" data-text-action="view" onClick={home}>回正</Button>{meta}</div>}
       footnote={doc.truncated.nodes > 0 ? `还有 ${doc.truncated.nodes} 个标记折叠在“一组”里，点一组可以打开它的列表。` : undefined}
     >
       <div className="space-y-2">
@@ -163,7 +163,7 @@ export function GraphView({ doc, narrowed, selected, actions, onHideEdge, meta }
             >
               这条关联不对
             </Button>
-            <Button size="sm" variant="text" onClick={() => setPickedEdge(null)}>知道了</Button>
+            <Button size="sm" variant="text" data-text-action="view" onClick={() => setPickedEdge(null)}>知道了</Button>
           </div>
         )}
       </div>

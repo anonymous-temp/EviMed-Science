@@ -33,5 +33,8 @@ it('an unresolved reference is not mislabeled as a slow write', () => {
   render(<PendingMemoryRows onResolve={api.resolveForgetRequest} items={[{ ...item, choices: [] }]} slow stalled />);
   expect(screen.queryByText('还没写完，可以稍后再看')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '忘记选中的内容' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '保留记忆，关闭此项' })).toBeEnabled();
+  const dismiss = screen.getByRole('button', { name: '保留记忆，关闭此项' });
+  expect(dismiss).toBeEnabled();
+  expect(dismiss).toHaveClass('bg-surface-2');
+  expect(dismiss).toHaveAttribute('data-action-kind', 'set');
 });

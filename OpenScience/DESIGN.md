@@ -192,9 +192,10 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   always (`NoteParts`, a drawer's 「来源对话」); (3) a row or tile that goes to one place is pressed as a whole — hover `surface-2`, a focus ring and
   its mark at the end, › opens here, ↗ leaves the section (`ListRow` `leaves`, `StatTile` `whole`) — with its title in ink, and a row that cannot
   be pressed has neither the ground nor the mark; (4) a section's way out is one labelled link at the end of its header, accent, underlined,
-  with ›; (5) an action is a `Button`, `secondary` (the grey ground) in the memory section — never bare accent text; (6) a switch is the only
-  control of a row that is also pressed as a whole, and the two do not trigger each other. The marks of a picture (● ▲ ■ ◆ ✕) are graphics in the
-  data colour, not words. `clickabilityGrammar.test.ts` holds (1), (2) and the bare accent button in the memory section's sources.
+  with ›; (5) an action is a `Button`: a state mutation is `secondary` with `actionKind="set"` (and `destructive` where applicable), while a
+  `text` Button must carry a non-mutating `actionKind` or an explicit `data-text-action="navigation|cancel|view"` exception; (6) a switch is
+  the only control of a row that is also pressed as a whole, and the two do not trigger each other. The marks of a picture (● ▲ ■ ◆ ✕) are graphics
+  in the data colour, not words. `clickabilityGrammar.test.ts` holds these rules in the memory section's sources and rejects unclassified text actions.
 - **Restraint is the default; expression has a budget.** A reading page and a list page stay quiet.
   A page may spend **one brand moment** (a gradient, a serif headline, a hero), and charts and the
   32/40 metric rungs belong to data pages. Banning every expressive device is what made 循证 GEO

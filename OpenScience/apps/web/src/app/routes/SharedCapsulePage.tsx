@@ -154,7 +154,7 @@ export function SharedCapsulePage() {
                 <Button variant="secondary" actionKind="set" disabled={busy} onClick={() => void perform(async () => {
                   await enableReceivedCapsule(imported.id); announceMemoryChanged(); navigate("/app/memory");
                 })}>启用</Button>
-                <Button variant="text" disabled={busy} onClick={() => navigate("/app/memory")}>稍后再说</Button>
+                <Button variant="text" data-text-action="navigation" disabled={busy} onClick={() => navigate("/app/memory")}>稍后再说</Button>
               </div>
             </div>
           ) : (

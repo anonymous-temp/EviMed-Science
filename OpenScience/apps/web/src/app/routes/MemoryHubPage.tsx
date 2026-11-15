@@ -320,7 +320,7 @@ function MemoryHub() {
       return <ReceivedPanel packs={data.received ?? []} onShare={() => openShare("export")} onImport={() => openShare("import")} onChanged={reload} />;
     }
     if (tab === "self") {
-      if (facts.length === 0 && reviewItems.length === 0) {
+      if (facts.length === 0 && (query.trim() || reviewItems.length === 0)) {
         return waiting ?? empty("还没有关于你的记忆", "你在对话里说过的偏好、背景和写作习惯会出现在这里。", { label: "在对话里说说你自己", onPress: speakAbout(SELF_DRAFT) });
       }
       return (

@@ -425,7 +425,8 @@ export function chosenExplore(views: readonly ExploreView[], named: ExploreView 
   if (named && views.includes(named)) return named;
   if (views.includes("star")) return "star";
   if (!views.length) return null;
-  return phone ? "topics" : defaultExplore(doc);
+  const preferred = phone ? "topics" : defaultExplore(doc);
+  return views.includes(preferred) ? preferred : views[0]!;
 }
 
 /**

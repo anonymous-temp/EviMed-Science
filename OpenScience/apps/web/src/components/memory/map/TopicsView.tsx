@@ -88,7 +88,7 @@ export function TopicsView({ topics, selected, grouping, status, onChoose, onCha
                 <form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); if (renaming.text.trim()) void edit(topic.id, { label: renaming.text.trim() }, "已改名"); }}>
                   <Input ref={renameField} aria-label="主题的新名字" maxLength={20} value={renaming.text} onChange={(event) => setRenaming({ id: topic.id, text: event.target.value })} />
                   <Button type="submit" size="sm" loading={busy} disabled={!renaming.text.trim()}>保存</Button>
-                  <Button size="sm" variant="text" onClick={() => setRenaming(null)}>取消</Button>
+                  <Button size="sm" variant="text" data-text-action="cancel" onClick={() => setRenaming(null)}>取消</Button>
                 </form>
               </li>
             ) : (

@@ -246,6 +246,7 @@ describe("the relations and topics", () => {
     expect(chosenExplore(["graph", "topics"], "star", many, { phone: false })).toBe("graph");
     expect(chosenExplore(["graph", "topics"], null, many, { phone: true })).toBe("topics");
     expect(chosenExplore(["star"], "graph", many, { phone: false })).toBe("star");
+    expect(chosenExplore(["topics"], null, many, { phone: false })).toBe("topics");
     expect(chosenExplore([], "graph", many, { phone: false })).toBeNull();
   });
 
