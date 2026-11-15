@@ -1541,7 +1541,8 @@ test('people tools require the switch, a bound conversation and a verbatim user 
   const memoryTool = { forget: async () => ({ removed: false }), people: async (...args) => { calls.push(args); return { revisionId: '1' }; } };
   const personMessages = async () => [{ role: 'user', text: confirmation }, { role: 'assistant', text: 'This is an assistant assertion.' }];
   const f = await fixture(t, { config: { memoryPersonMergeEnabled: true }, memoryTool, personMessages,
-    admission: fixedAdmission({ sessionId: SESSION.slice(4) }) });
+    admission: createMemoryAdmission({ config: {}, memorySettings: memoryDouble(),
+      conversations: { running: async () => [{ id: 'run', sessionId: SESSION.slice(4) }], runsOf: async () => [] } }) });
   const listed = await f.mcp({ id: 1, method: 'tools/list' });
   assert.ok(listed.messages[0].result.tools.some(tool => tool.name === 'merge_people'));
   assert.ok(listed.messages[0].result.tools.some(tool => tool.name === 'distinct_people'));
@@ -1616,13 +1617,13 @@ test('native composer remember uses bridge identity with no dispatched active ru
   assert.deepEqual(calls, [['named-study', 'native-composer']]);
 });
 
-test('an unbound MCP call never borrows the sole running conversation', async t => {
+test('a legacy MCP call falls back to the sole running conversation, never model arguments', async t => {
   const admission = createMemoryAdmission({ config: {}, memorySettings: { configured: true, forUser: async () => ({}), sessionState: async () => ({}) },
-    conversations: { running: async () => [{ id: 'run', sessionId: 'unrelated' }], runsOf: async () => [] } });
+    conversations: { running: async () => [{ id: 'run', sessionId: 'legacy-source' }], runsOf: async () => [] } });
   const commits = [];
   const f = await fixture(t, { admission, overlay: { configured: false, recordCommit: async row => commits.push(row) } });
-  await f.mcp({ jsonrpc: '2.0', id: 92, method: 'tools/call', params: { name: 'remember', arguments: { messages: [{ role: 'user', content: 'My own fact.' }] } } });
-  assert.equal(commits[0].sourceSession, null);
+  await f.mcp({ jsonrpc: '2.0', id: 92, method: 'tools/call', params: { name: 'remember', arguments: { messages: [{ role: 'user', content: 'My own fact.' }], sessionId: 'model-supplied', session_id: 'dsh-forged' } } });
+  assert.equal(commits[0].sourceSession, 'dsh-legacy-source');
 });
 
 test('named project remember carries trusted project context into its one-shot extraction', async t => {
@@ -1660,3 +1661,20 @@ test('unbound legacy tool admission retains trial and automated refusals without
     assert.equal(answer.learnReason, trial ? 'trial' : 'automated_run');
   }
 });
+
+for (const running of [[], [{ id: 'one', sessionId: 'neighbour' }], [{ id: 'one', sessionId: 'neighbour' }, { id: 'two', sessionId: 'another' }]]) {
+  test(`MCP bridge source wins with ${running.length} active conversations; missing bridge never guesses among several`, async t => {
+    const commits = [], asked = [];
+    const admission = createMemoryAdmission({ config: {}, memorySettings: memoryDouble(),
+      conversations: { running: async () => running, runsOf: async (_project, sessionId) => { asked.push(sessionId); return []; } } });
+    const f = await fixture(t, { admission, overlay: { configured: false, recordCommit: async row => commits.push(row) } });
+    const message = { id: 95, method: 'tools/call', params: { name: 'remember', arguments: { messages: [{ role: 'user', content: 'My own fact.' }], sessionId: 'forged' } } };
+    await f.call('POST', '/mcp', message, { 'x-evimed-memory-session': 'bridge-source', 'mcp-session-id': 'transport-only' });
+    assert.equal(commits[0].sourceSession, 'dsh-bridge-source');
+    assert.deepEqual(asked, ['bridge-source']);
+    await f.mcp(message);
+    assert.equal(commits[1].sourceSession, running.length === 1 ? 'dsh-neighbour' : null);
+    const named = await admission.admit({ user: { id: USER }, project: { id: 'p1' }, engineSessionId: 'dsh-request-source' });
+    assert.equal(named.sessionId, 'request-source', 'an explicit request session precedes the legacy running fallback');
+  });
+}

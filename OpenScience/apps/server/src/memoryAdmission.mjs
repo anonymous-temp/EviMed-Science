@@ -98,8 +98,8 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
 
     const running = conversations ? await conversations.running(project).catch(() => []) : [];
     const named = engineSessionId ? platformSessionOf(engineSessionId) : null;
-    // MCP tools name their kernel-bound conversation and never borrow a running neighbour.
-    // Sessionless legacy recall may still use the only run for its admission switches.
+    // The bridge or request's named conversation wins. Older kernels and API dispatches
+    // without a bridge binding retain the sole-running-conversation fallback.
     const sessionId = named ?? (allowRunningFallback && running.length === 1 ? running[0].sessionId : null);
     if ((sessionId || engineSessionId) && sourceDeleted && await sourceDeleted(project, sessionId, engineSessionId)) return neither("source_deleted", sessionId);
     const pause = await memoryPausedFor(memorySettings, userId, projectId, sessionId);

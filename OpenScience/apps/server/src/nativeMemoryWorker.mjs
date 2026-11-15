@@ -187,7 +187,9 @@ export class NativeMemoryWorker {
     if (this.robustInstructions) this.verification.instructionWriteCheck = async (userId, file, body, origins, context) => {
       context ??= await this.#contextForUri(userId, file.uri);
       const operations = { updates: [{ uri: file.uri, before: file.body, after: body }] };
-      const reviewed = await this.#instructionOrigins({ userId, projectId: file.projectId ?? null }, operations, context, [...origins.values()].flat());
+      // The repair is a source even without an archived predecessor; it is assistant-authored, not user adoption.
+      const reviewed = await this.#instructionOrigins({ userId, projectId: file.projectId ?? null }, operations, context, [...origins.values()].flat(),
+        [instructionSourceMessage({ role: 'assistant', content: body, action: 'memory_verification_repair' })]);
       await this.#holdInstructionLines(userId, operations, context, reviewed, file.projectId ?? null);
       return context.sessions.read(userId, file.uri);
     };

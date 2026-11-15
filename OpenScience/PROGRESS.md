@@ -1,3 +1,4 @@
+2026-11-15 06:11 · FIXMEM2: Restored legacy MCP source inference behind authenticated bridge priority, restored verification-repair origin review, and corrected the historical-hold fixture; 158 focused unit tests pass, with PostgreSQL reruns pending.
 2026-11-15 05:31 · Added a pinned native-tool-executor regression for memory source binding after strict argument validation; it requires the lab dependencies and makes no provider calls.
 2026-11-15 05:29 · Missing memory sources now defer review without removing files; bounded worker recovery releases historical no-source holds, held forgetting records visible rejections, and pending rows deduplicate; PostgreSQL coverage is ready for lab validation.
 2026-11-15 05:26 · Native MCP memory writes now carry kernel-bound conversation identity, freeze the source project, and retain source identity through the shared remember journal; gateway and bridge regression tests pass.

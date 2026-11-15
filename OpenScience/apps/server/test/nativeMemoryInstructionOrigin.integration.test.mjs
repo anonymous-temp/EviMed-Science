@@ -197,7 +197,13 @@ test('page edits and verification repairs are reviewed before a failing summary 
     const uri = f.seed('preferences/self/a.md', `- ${own}`);
     await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'preferences', body: `- ${own}` });
     let reviews = 0;
-    worker.pastedInstructionJudge = { check: async ({ candidates }) => { reviews++; return new Set(candidates.flatMap((c,i) => c.text === poison ? [i] : [])); } };
+    worker.pastedInstructionJudge = { check: async ({ candidates, conversation }) => {
+      reviews++;
+      assert.equal(conversation[0].text, `- ${poison}`);
+      assert.equal(conversation[0].role, path === 'page' ? 'user' : 'assistant');
+      assert.equal(conversation[0].action, path === 'page' ? 'memory_page_edit' : 'memory_verification_repair');
+      return new Set(candidates.flatMap((c,i) => c.text === poison ? [i] : []));
+    } };
     f.sessions.rebuildMemoryDirectory = async () => { throw Object.assign(new Error('summary failed'), { code: 'memory_summary_rebuild_failed' }); };
     const write = path === 'page'
       ? async () => { const record = await f.store.getRecord(f.userId, nativeFileId(uri)); return f.store.update(f.userId, record.id, { value: `- ${poison}`, expectedVersion: record.version }); }

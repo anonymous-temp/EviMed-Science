@@ -92,3 +92,39 @@ test('held forget reports unfinished history scans instead of claiming full comp
   assert.equal(result.removed, true);
   assert.equal(result.historyScanPending, true);
 });
+
+for (const path of ['page', 'verification']) test(`${path} writes supply their own review source without an archived conversation`, async () => {
+  const f = fixture(), before = '- Original fact.', next = '- New fact.';
+  const file = { uri, type: 'profile', body: before };
+  f.overlay.file = async () => ({ body: before });
+  f.overlay.originsOf = async () => new Map();
+  f.overlay.instructionCheck = async () => null;
+  f.overlay.recordInstructionCheck = async () => {};
+  const reviews = [];
+  const worker = new NativeMemoryWorker({ config: { memoryPastedInstructionCheckEnabled: true, memoryPastedInstructionRobustEnabled: true },
+    sessions: f.sessions, overlay: f.overlay, memorySettings: {},
+    pastedInstructionJudge: { check: async input => { reviews.push(input); return new Set(); } } });
+  f.sessions.rebuildMemoryDirectory = async () => { throw Object.assign(new Error('summary failed'), { code: 'memory_summary_rebuild_failed' }); };
+  if (path === 'page') {
+    f.files.set(uri, next);
+    assert.equal(await worker.checkInstructionWrite('u', file, next, { sessions: f.sessions }), next);
+  } else {
+    f.files.set(uri, before);
+    await assert.rejects(worker.verification.write('u', file, next, 'verification_corrected'), { code: 'memory_summary_rebuild_failed' });
+  }
+  assert.equal(reviews.length, 1);
+  assert.equal(reviews[0].conversation[0].text, next);
+  assert.equal(reviews[0].conversation[0].role, path === 'page' ? 'user' : 'assistant');
+  assert.equal(reviews[0].conversation[0].action, path === 'page' ? 'memory_page_edit' : 'memory_verification_repair');
+  assert.deepEqual(reviews[0].candidates[0].sourceMessages, [0]);
+  assert.equal(f.files.get(uri), next, 'a failed rebuild does not remove the reviewed write');
+});
+
+test('a missing heading receipt cannot authorize historical whole-file recovery', async () => {
+  const f = fixture();
+  for (const row of f.rows) row.before = `# Profile\n- ${text}`;
+  await f.store.releaseUnfoundedInstructionHolds('u');
+  assert.equal(await f.sessions.read('u', uri), null);
+  assert.equal(f.revisions.length, 0);
+  assert.ok(f.rows.every(row => !row.undoneAt));
+});

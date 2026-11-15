@@ -1386,9 +1386,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             + siblings.map(row => `- ${row.label}: ${row.uri}`).join('\n');
         },
         admit: (/** @type {string | null} */ engineSessionId, /** @type {number | null} */ at = null) => {
-          engineSessionId ??= toolSession ? `dsh-${toolSession}` : null;
+          engineSessionId = toolSession ? `dsh-${toolSession}` : engineSessionId;
           const key = `${engineSessionId ?? ""}\u0000${at ?? ""}`;
-          if (!admissions.has(key)) admissions.set(key, scopedAdmission(user, project, engineSessionId, at, memoryContext, null, route !== 'mcp'));
+          if (!admissions.has(key)) admissions.set(key, scopedAdmission(user, project, engineSessionId, at, memoryContext));
           return /** @type {Promise<import("./memoryAdmission.mjs").MemoryAdmission>} */ (admissions.get(key));
         },
         // What recall never reads: the derived index subtree and the files the person marked sensitive.

@@ -21,8 +21,9 @@ test('native composer source binding, delayed review, historical repair and held
   await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'named-study','Community follow-up',1048576),($1,'default','Default',1048576)", [f.userId]);
   const user = { id: f.userId }, project = { id: 'named-study', name: 'Community follow-up', userId: f.userId };
   const source = 'native-composer', engineSource = `dsh-${source}`, profile = `${f.root}/profile.md`, card = `${f.root}/projects/community.md`;
+  // The historical receipt below covers exactly these two lines, with no unreviewed heading.
   f.stub.extract = ({ session }) => session.startsWith('mcp-store-') ? { adds: [
-    { uri: profile, memory_type: 'profile', after: `# Profile\n- ${own}\n- ${remaining}` },
+    { uri: profile, memory_type: 'profile', after: `- ${own}\n- ${remaining}` },
     { uri: card, memory_type: 'project_context', after: '# Community follow-up\n- Measure follow-up attendance.' },
   ] } : {};
   const admission = createMemoryAdmission({ config: f.config, memorySettings: f.memorySettings,
@@ -52,7 +53,7 @@ test('native composer source binding, delayed review, historical repair and held
   assert.equal((await post('/mcp', remember, 'default-runtime')).status, 403, 'the same source cannot be relabelled by a default runtime');
   assert.equal(await worker.processCommits({ userId: f.userId }), 0);
   assert.equal((await f.overlay.commit(f.userId, tool.archiveUri)).state, 'pending');
-  assert.match(await f.sessions.read(f.userId, profile), /Wednesday/);
+  assert.match(await f.sessions.read(f.userId, profile), /Wednesday/, 'deferring the tool commit preserves the extracted profile');
   assert.equal((await f.store.pending(f.userId)).length, 0);
   assert.equal(reviewed.length, 0, 'no source means defer without a model verdict');
   assert.ok(nativeMemoryCounters().pastedInstructionChecks.source_deferred > 0);
@@ -66,7 +67,7 @@ test('native composer source binding, delayed review, historical repair and held
   assert.ok(reviewed.length > 0);
   assert.ok(reviewed.every(input => !JSON.stringify(input.conversation).includes('Model-written')));
   assert.equal((await f.overlay.file(f.userId, card)).projectId, project.id);
-  assert.match(await f.sessions.read(f.userId, profile), /Wednesday/);
+  assert.match(await f.sessions.read(f.userId, profile), /Wednesday/, 'source-backed settlement preserves the extracted profile');
 
   const before = await f.sessions.read(f.userId, profile);
   const seedHold = async () => {
@@ -81,7 +82,7 @@ test('native composer source binding, delayed review, historical repair and held
   });
   assert.equal((await f.store.pending(f.userId)).length, 2, 'two revisions show each line once');
   await worker.reviewPendingInstructionWrites(f.userId);
-  assert.match(await f.sessions.read(f.userId, profile), /Wednesday/);
+  assert.match(await f.sessions.read(f.userId, profile), /Wednesday/, 'complete historical receipts restore the missing profile');
   assert.ok((await f.overlay.revision(f.userId, first.id)).undoneAt);
   assert.ok((await f.overlay.revision(f.userId, duplicate.id)).undoneAt);
   await worker.reviewPendingInstructionWrites(f.userId);
