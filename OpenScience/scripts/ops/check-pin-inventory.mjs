@@ -202,6 +202,9 @@ export const RULES = [
   { kind: "history", where: /^(AGENTS|CLAUDE)\.md$/, why: "orientation prose; moves with a documentation pass, not with the pin" },
   { kind: "history", where: /^OpenScience\/AGENTS\.md$/, why: "orientation prose; moves with a documentation pass, not with the pin" },
 
+  { kind: "pin", where: /^OpenScience\/packages\/dsh-memory-capsule\/(package\.json|market-index\.example\.json)$/, why: "the standalone capsule plugin declares the exact kernel it was checked against; an upgrade re-checks and moves it" },
+  { kind: "pin", where: /^OpenScience\/packages\/dsh-memory-capsule\/README(\.zh)?\.md$/, why: "the plugin's install steps name the kernel its engines range allows" },
+  { kind: "pin", where: /^OpenScience\/docs\/AGENT_MEMORY_API\.md$/, line: /Use DSH `/, why: "the DSH plugin section's install step names the kernel the plugin's engines range allows" },
   { kind: "pin", where: /^OpenScience\/deps-version\.json$/, why: "the single definition" },
   { kind: "pin", where: /^OpenScience\/package\.json$/, why: "pnpm overrides that hold the whole tree on one release" },
   { kind: "pin", where: /^OpenScience\/packages\/harness-port\/package\.json$/, why: "the anti-corruption layer's own dependencies and peers" },
