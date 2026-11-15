@@ -8,9 +8,9 @@ describe("where a fact belongs", () => {
     expect(recordGroup({ scope: "project", scopeId: "default", kind: "note" })).toBe("self");
     expect(recordGroup({ scope: "project", scopeId: "prj_named", kind: "person" })).toBe("project");
     expect(recordGroup({ scope: "project", scopeId: "default", kind: "project_fact" })).toBe("project");
-    expect(recordGroup({ scope: "user", kind: "decision" })).toBe("project");
-    expect(recordGroup({ scope: "user", kind: "behavior" })).toBe("self");
-    expect(recordGroup({ scope: "user", kind: "correction" })).toBe("self");
+    expect(recordGroup({ scope: "user", scopeId: "", kind: "decision" })).toBe("project");
+    expect(recordGroup({ scope: "user", scopeId: "", kind: "behavior" })).toBe("self");
+    expect(recordGroup({ scope: "user", scopeId: "", kind: "correction" })).toBe("self");
     expect(recordProjectId({ scope: "project", scopeId: "p1" })).toBe("p1");
     expect(recordProjectId({ scope: "user", scopeId: "" })).toBeNull();
   });
