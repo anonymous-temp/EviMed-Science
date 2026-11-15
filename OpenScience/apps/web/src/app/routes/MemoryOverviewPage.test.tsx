@@ -352,11 +352,11 @@ describe("the pending-review count", () => {
     reads.fetchMemoryProfile.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     open();
     await ready();
-    expect(screen.getByRole("status")).toHaveTextContent("正在读取待核对数量…");
+    expect(screen.getByRole("status")).toHaveTextContent("正在读取待核对数量");
     expect(screen.queryByText("还没有记下关于你的事。")).toBeNull();
     await act(async () => { finish(heldProfile(1)); });
     await waitFor(() => expect(tile("关于你")).toHaveTextContent("1 条待核对"));
-    expect(screen.queryByText("正在读取待核对数量…")).toBeNull();
+    expect(screen.queryByText("正在读取待核对数量")).toBeNull();
     expect(screen.queryByText("还没有记下关于你的事。")).toBeNull();
   });
 

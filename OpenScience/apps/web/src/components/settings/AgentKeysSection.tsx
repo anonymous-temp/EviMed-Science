@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Note } from "@/components/ui/Note";
 import { createWebAgentKey, fetchWebAgentKeys, revokeWebAgentKey, WebApiError, type WebAgentKey, type WebAgentKeyScope } from "@/lib/apiClient";
 import { sessionGeneration, subscribeSessionBoundary } from "@/lib/sessionLifecycle";
 import { formatDate } from "@/lib/format";
@@ -98,7 +99,7 @@ function AgentKeysForm() {
 
   return <Panel title="外部智能体访问（API 密钥）">
     {state === "disabled" ? <PanelRow label="此部署尚未启用外部智能体访问。" />
-      : state === "loading" ? <PanelRow label="正在读取 API 密钥…" />
+      : state === "loading" ? <PanelRow label="正在读取 API 密钥" />
         : state === "error" ? <div className="p-4"><InlineAlert onRetry={() => setAttempt(value => value + 1)}>暂时无法读取 API 密钥。</InlineAlert></div>
           : <>
             <PanelRow label="供你在其他智能体中使用" description="DSH 插件只需读取权限；要提出待确认的记忆，再勾选相应权限。" control={
@@ -117,11 +118,10 @@ function AgentKeysForm() {
               </form>}
               {secret && <div className="grid gap-3">
                 <Input ref={credentialField} label="新密钥（仅显示这一次）" value={secret.value} readOnly autoComplete="off" spellCheck={false} onFocus={event => event.target.select()} />
-                <p className="max-w-measure text-caption text-text-2">请复制并保存到本机文件，在插件中将 “apiKeyFile” 指向这个文件；关闭后无法再次查看。</p>
-                <div className="flex flex-wrap gap-2">
+                <Note action={<span className="flex flex-wrap gap-2">
                   <Button variant="secondary" onClick={() => void copy()}>复制密钥</Button>
                   <Button variant="secondary" onClick={() => { setSecret(null); setCopyMessage(""); }}>我已保存，关闭</Button>
-                </div>
+                </span>}>请复制并保存到本机文件，在插件中将 “apiKeyFile” 指向这个文件；关闭后无法再次查看。</Note>
                 {copyMessage && <p role="status" className="text-caption text-text-2">{copyMessage}</p>}
               </div>}
               {error && <div className="mt-3"><InlineAlert onRetry={error.refresh ? () => setAttempt(value => value + 1) : undefined}>{error.message}</InlineAlert></div>}

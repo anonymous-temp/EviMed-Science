@@ -263,7 +263,7 @@ function Overview() {
         />
         <StatTile whole dense leaves className={tileLayout} label="知识" reading={reading(documents, loadingMap, failed, retry)} to="/app/files" />
       </StatBand>
-      {pendingReviewCount === null && !profile.failed && <p role="status" className="text-caption text-text-3">正在读取待核对数量…</p>}
+      {pendingReviewCount === null && !profile.failed && <p role="status" className="text-caption text-text-3">正在读取待核对数量</p>}
       {profile.failed && <LoadError message={profile.data ? "待核对数量没有更新，显示上次读数。" : "暂时读不到待核对数量。"} onRetry={profile.reload} />}
     </>
   );
