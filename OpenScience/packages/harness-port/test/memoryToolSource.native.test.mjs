@@ -12,8 +12,11 @@ test('the pinned tool executor supplies conversation identity after strict publi
   root.provide('systemPrompt', { tools() {} })
   const runtime = new ToolRuntime(root)
   await mountNativeExecutor(root)
-  const bindings = new Map(), received = []
-  const dispose = decorateMemoryToolSource(root, bindings)
+  /** @type {Map<string, string>} */
+  const bindings = new Map()
+  /** @type {(string | undefined)[]} */
+  const received = []
+  const dispose = decorateMemoryToolSource(/** @type {any} */ (root), bindings)
   const unregister = runtime.register({ name: 'mcp__openviking__remember', description: 'fixture',
     parameters: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false },
     output: { schema: { type: 'object' }, render: () => [] },
