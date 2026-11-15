@@ -2986,7 +2986,7 @@ test("总览's sentence is held to its tiles, the navigation to the tiles, and a
   const tile = (label, value, over = {}) => ({ label, value, note: "", href: `/app/${label}`, loading: false, ...over });
   const tiles = (over = {}) => [tile("关于你", 7), tile("做法", 2), tile("收到的", 1, { note: "共 2 个" }), tile("知识", 39, { href: "/app/files" })]
     .map((entry) => ({ ...entry, ...(over[entry.label] ?? {}) }));
-  const read = (over = {}, headline = "记住了 7 条关于你的事，学会了 2 种做法；最近一次在10月8日。") => ({
+  const read = (over = {}, headline = "记住了 7 条关于你的事，学会了 2 种做法；最近一次在 10月8日。") => ({
     headline, tabs: ["总览", "关于你7", "做法2", "收到的1"], canvases: 2, tiles: tiles(over), rows: 12, recipe: 0, recipeButtons: 0,
   });
   assert.deepEqual(memoryOverviewFindings(at, read()), { failures: [], notices: [] });

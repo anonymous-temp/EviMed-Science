@@ -159,4 +159,17 @@ describe("the memory page of an account whose memory is kept as files", () => {
     expect(await screen.findByText("还没有学到的做法")).toBeInTheDocument();
     expect(screen.queryByText(/记忆服务暂时不可用/)).not.toBeInTheDocument();
   });
+
+  it("puts held lines in their own visible source-review group, apart from writes in progress", async () => {
+    const held = { id: "held-1", text: "对青霉素过敏", at: new Date().toISOString(), state: "pending" as const, reason: "instruction_origin_uncertain" as const };
+    const writing = { id: "write-1", text: "以后先写结论", at: new Date().toISOString(), state: "pending" as const };
+    api.fetchMemoryProfile.mockResolvedValue({ ...nativeProfile, pending: [held, writing], pendingCount: 2 });
+    open();
+    const review = await screen.findByRole("list", { name: "待核对的记忆" });
+    expect(screen.getByRole("heading", { name: "待核对" })).toBeInTheDocument();
+    expect(within(review).getByText("对青霉素过敏")).toBeInTheDocument();
+    expect(within(review).getByText("暂不用于回答，等待来源核对")).toBeInTheDocument();
+    expect(within(review).queryByText(/尚未作为偏好使用/)).toBeNull();
+    expect(screen.getByRole("list", { name: "正在记住的内容" })).toHaveTextContent("以后先写结论");
+  });
 });

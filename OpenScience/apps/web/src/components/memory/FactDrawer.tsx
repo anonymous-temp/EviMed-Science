@@ -33,7 +33,7 @@ function when(value: string | null | undefined) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return formatDateTime(date, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return formatDateTime(date, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
 }
 
 function failed(error: unknown) {
@@ -362,7 +362,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
                 {formerly.map((statement) => (
                   <li key={statement.id} className="flex items-baseline justify-between gap-3">
                     <span className="min-w-0">{statement.text}{statement.until ? `（到 ${formatDay(statement.until)}）` : ""}</span>
-                    <Button actionKind="set" size="sm" variant="text" destructive disabled={busy} className="shrink-0" onClick={() => setRemovingFormer(statement)}>删掉</Button>
+                    <Button actionKind="set" size="sm" variant="secondary" destructive disabled={busy} className="shrink-0" onClick={() => setRemovingFormer(statement)}>删掉</Button>
                   </li>
                 ))}
               </ul>
@@ -385,7 +385,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
           {!editing && (
             <div className="mt-auto flex gap-2">
               <Button variant="secondary" disabled={busy} onClick={() => setEditing(true)}>编辑</Button>
-              <Button actionKind="set" variant="text" destructive disabled={busy} onClick={() => void (record ? forgetRecord() : forgetEntry())}>忘记</Button>
+              <Button actionKind="set" variant="secondary" destructive disabled={busy} onClick={() => void (record ? forgetRecord() : forgetEntry())}>忘记</Button>
             </div>
           )}
         </div>

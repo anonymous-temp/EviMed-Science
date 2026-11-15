@@ -51,11 +51,15 @@ export function ForgottenDrawer({ records, entries, projectName, onClose, onChan
 
   const recordRows = records
     .filter((record) => record.status === "archived" && record.kind !== "run_summary")
-    .map((record): ForgottenRow => ({
-      key: `record:${record.id}`, text: memoryExcerpt(record.summary || record.value),
-      kind: recordGroup(record) === "project" ? projectName(record.scope === "project" ? record.scopeId : null) ?? kindTitle(record.kind) : kindTitle(record.kind),
-      restore: () => updateStructuredMemory(record, { status: "active" }),
-    }));
+    .map((record): ForgottenRow => {
+      const statement = memoryExcerpt(record.value || record.summary);
+      const forgetIntent = record.nativeType === "notes" && record.summary.startsWith("forget-");
+      return {
+        key: `record:${record.id}`, text: forgetIntent ? `${statement}（未存为记忆，已阻止以后记住）` : statement,
+        kind: recordGroup(record) === "project" ? projectName(record.scope === "project" ? record.scopeId : null) ?? kindTitle(record.kind) : kindTitle(record.kind),
+        restore: () => updateStructuredMemory(record, { status: "active" }),
+      };
+    });
   const entryRows = entries.map((entry): ForgottenRow => ({
     key: `entry:${entry.id}`, text: memoryExcerpt(entry.payload.content),
     kind: entryGroup(entry) === "project" ? projectName(entry.projectId ?? null) ?? kindTitle(entry.payload.factKind) : kindTitle(entry.payload.factKind),

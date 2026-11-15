@@ -900,7 +900,7 @@ export class NativeMemoryStore {
     return [...scans, ...confirmations, ...writes, ...held.flatMap(revision => {
       const kept = new Set([...removalLines(revision.after ?? ''), ...removalLines(files.get(revision.uri)?.body ?? '')].map(lineFingerprint));
       return removalLines(revision.before ?? '').filter(text => !kept.has(lineFingerprint(text)) && (!revision.pendingFingerprints || revision.pendingFingerprints.has(lineFingerprint(text)))).map(text => ({
-        id: `instruction:${revision.id}:${lineFingerprint(text)}`, text, at: revision.changedAt, state: 'pending', reason: 'instruction_origin_uncertain',
+        id: `instruction:${revision.id}:${lineFingerprint(text)}`, text: text.replace(AS_OF, '').trim(), at: revision.changedAt, state: 'pending', reason: 'instruction_origin_uncertain',
       }));
     })];
   }

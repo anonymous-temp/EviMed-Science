@@ -3,7 +3,11 @@ import { SELF_SECTIONS, entryGroup, kindTitle, recordGroup, recordProjectId, sel
 
 describe("where a fact belongs", () => {
   it("files a memory by kind and scope: a project's, or the person's — and never as 做法, which is what the platform learned", () => {
-    expect(recordGroup({ scope: "project", kind: "preference" })).toBe("project");
+    expect(recordGroup({ scope: "project", scopeId: "prj_named", kind: "preference" })).toBe("project");
+    expect(recordGroup({ scope: "project", scopeId: "default", kind: "person" })).toBe("self");
+    expect(recordGroup({ scope: "project", scopeId: "default", kind: "note" })).toBe("self");
+    expect(recordGroup({ scope: "project", scopeId: "prj_named", kind: "person" })).toBe("project");
+    expect(recordGroup({ scope: "project", scopeId: "default", kind: "project_fact" })).toBe("project");
     expect(recordGroup({ scope: "user", kind: "decision" })).toBe("project");
     expect(recordGroup({ scope: "user", kind: "behavior" })).toBe("self");
     expect(recordGroup({ scope: "user", kind: "correction" })).toBe("self");
@@ -15,6 +19,8 @@ describe("where a fact belongs", () => {
     const entry = (factKind: string, projectId: string | null = null) => ({ projectId, payload: { factKind } }) as never;
     expect(entryGroup(entry("project_fact"))).toBe("project");
     expect(entryGroup(entry("preference", "p1"))).toBe("project");
+    expect(entryGroup(entry("person", "default"))).toBe("self");
+    expect(entryGroup(entry("person", "p1"))).toBe("project");
     expect(entryGroup(entry("method_preference"))).toBe("self");
     expect(entryGroup(entry("writing_style"))).toBe("self");
   });

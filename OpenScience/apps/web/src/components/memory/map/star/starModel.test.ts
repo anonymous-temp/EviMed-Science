@@ -132,6 +132,14 @@ describe("where a mark stands", () => {
     expect([...neighboursOf("memory:a", fibres)].sort()).toEqual(["memory:a", "memory:old", "project:p1"]);
   });
 
+  it("frames every hub and memory in a sparse sky, including the farthest one", () => {
+    const sparse = [you, project("far"), memory("near"), memory("project-memory", { projectId: "far" })];
+    const layout = layoutStars(sparse, []);
+    const farthest = Math.max(...[...layout.positions.values()].map((place) => Math.hypot(...place)));
+    expect(layout.reach).toBe(farthest);
+    for (const node of sparse) expect(layout.positions.has(node.id)).toBe(true);
+  });
+
   it("stands the camera back far enough for a narrow canvas too", () => {
     expect(homeDistance(400, 52, 0.5)).toBeGreaterThan(homeDistance(400, 52, 2));
     expect(homeDistance(1, 52, 2)).toBe(300);

@@ -850,6 +850,14 @@ describe("知识库", () => {
       expect(await screen.findByRole("heading", { level: 2, name: "疳证 Meta 文献检索" })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "项目" })).toHaveAttribute("href", "/app/files?kind=wiki");
     });
+
+    it("keeps the default project reachable on a phone when the project read has no groups yet", async () => {
+      context.features = { knowledgePages: true };
+      useProjectStore.setState({ projects: [], currentId: "default", loading: false, select: selectSpy as never });
+      renderPage("/app/files?kind=wiki");
+      expect(await screen.findByRole("link", { name: "我的项目" })).toHaveAttribute("href", "/app/files?scope=default&kind=wiki");
+      expect(screen.getByRole("link", { name: "我的项目" })).toHaveAttribute("aria-current", "true");
+    });
   });
 
   describe("「添加」", () => {

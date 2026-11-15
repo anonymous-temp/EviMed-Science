@@ -118,6 +118,7 @@ describe("one learned method, opened from its row", () => {
     expect(screen.queryByRole("button", { name: /编辑|保存|新建/ })).not.toBeInTheDocument();
     const footer = screen.getByRole("button", { name: "不再使用" }).parentElement!;
     expect([...footer.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["回到上一版", "不再使用"]);
+    expect(screen.getByRole("button", { name: "不再使用" })).toHaveClass("bg-surface-2");
   });
 
   it("offers 回到上一版 only when there is an earlier body, whatever the counter says", async () => {

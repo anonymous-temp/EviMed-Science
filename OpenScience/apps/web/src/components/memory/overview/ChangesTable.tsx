@@ -3,6 +3,7 @@ import { List, ListRow } from "@/components/ui/ListRow";
 import { ShowMore, useShowMore } from "@/components/ui/ShowMore";
 import { MarkGlyph } from "@/components/memory/map/MarkGlyph";
 import { memoryExcerpt } from "@/lib/memoryText";
+import { breath } from "@/components/memory/memoryNative";
 import type { ChangeRow } from "./memoryOverviewModel";
 
 /** How many rows the table opens with, and how many each 「显示更多」 adds. */
@@ -40,7 +41,7 @@ export function ChangesTable({ title, rows, label, onOpen }: {
         {visible.map((row) => (
           <ListRow
             key={row.key}
-            title={<span className="line-clamp-2 max-w-measure">{memoryExcerpt(row.title, 120)}</span>}
+            title={<span className="line-clamp-2 max-w-measure">{memoryExcerpt(breath(row.title), 120)}</span>}
             leading={<MarkGlyph node={{ type: "memory", subtype: null, state: row.state }} glyph={row.glyph} />}
             meta={row.meta}
             titleProps={{ "data-overview-row": "" }}

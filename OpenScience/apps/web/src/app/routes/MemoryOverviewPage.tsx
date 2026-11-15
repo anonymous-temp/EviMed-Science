@@ -29,7 +29,7 @@ import { Button } from "@/components/ui/Button";
 import { ChartGrid } from "@/components/ui/ChartGrid";
 import { StatBand, StatTile } from "@/components/ui/StatTile";
 import type { ToolbarFilter, ToolbarProps } from "@/components/ui/Toolbar";
-import { webErrorMessage } from "@/lib/apiClient";
+import { fetchMemoryProfile, webErrorMessage } from "@/lib/apiClient";
 import { formatDay } from "@/lib/format";
 import { knowledgeNodeAddress } from "@/lib/knowledgeNav";
 import { fetchReceivedCapsules } from "@/lib/memoryClient";
@@ -101,9 +101,10 @@ function Overview() {
   const [header, setHeader] = useState<HeaderDrawer | null>(null);
   const map = useMemoryMap({ projectId: selection.project, range: "all", focus: null, depth: 1 }, MAP_INCLUDE_DASHBOARD);
   const received = useCapsuleData(fetchReceivedCapsules);
+  const profile = useCapsuleData(fetchMemoryProfile);
   // The learned methods are their own read: the map folds its marks to a hundred and fifty and a method is among the first it folds (see `ReadPart`).
   const learned = useCapsuleData(() => listAllMethods("approved"));
-  const reloadAll = useCallback(() => { map.reload(); received.reload(); learned.reload(); }, [map, received, learned]);
+  const reloadAll = useCallback(() => { map.reload(); received.reload(); profile.reload(); learned.reload(); }, [map, received, profile, learned]);
   const doc = map.doc;
   // A project's name is the shell's, else the one the capsule's own document gives it (a project the shell's list does not hold).
   const projectName = useCallback((id: string | null) => (id ? labels.get(id) ?? doc?.facets.projects.find((project) => project.id === id)?.name ?? null : null), [labels, doc]);
@@ -114,6 +115,9 @@ function Overview() {
   const growthRead = doc ? readable(doc, "growth") : false;
   // 关于你 as its list draws it: the person's memories and, after them, the ones that carry a project.
   const about = doc && memoriesRead ? rememberedCount(doc) : null;
+  const pendingReviewCount = profile.data
+    ? profile.data.pending?.filter((item) => item.reason === "instruction_origin_uncertain").length ?? profile.data.pendingCount
+    : null;
   const methodCount = learned.data ? learned.data.length : null;
   const documents = doc && knowledgeRead ? knowledgeCount(doc) : null;
   const packs = received.data ? receivedCounts(received.data) : null;
@@ -141,11 +145,11 @@ function Overview() {
     return changeRows(shown, { projectName, formatDay: (day) => formatDay(day) });
   }, [selection.look, selection.q, look, memoryIds, shown, projectName]);
 
-  const empty = doc !== null && memoriesRead && about === 0 && methodCount === 0;
+  const empty = doc !== null && memoriesRead && about === 0 && methodCount === 0 && !pendingReviewCount;
 
   // ---- the headline ----
   const headline = overviewHeadline({
-    about, methods: methodCount,
+    about, pending: pendingReviewCount, methods: methodCount,
     last: (() => { const day = lastChangeDay(events); return day ? formatDay(day) : null; })(),
   }, { about: SELF, methods: METHODS });
 
@@ -238,12 +242,15 @@ function Overview() {
     ...((failed || (doc && !knowledgeRead)) ? [{ label: "知识", to: "/app/files" }] : []),
   ];
 
-  const tileLayout = "grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 px-3 py-2 pr-8 [&>span:first-child]:pr-0 [&>span:first-child]:text-ui [&>span:nth-of-type(4)]:col-span-2 [&_[data-stat-value]]:m-0 [&_[data-stat-value]]:text-heading [&_[data-stat-value]]:font-normal";
+  const tileLayout = "min-h-14 px-3 py-2 pr-8 [&>span:first-child]:pr-0 [&>span:first-child]:text-ui [&_[data-stat-value]]:m-0 [&_[data-stat-value]]:text-heading [&_[data-stat-value]]:font-normal";
   const tiles = (
     <StatBand label="记忆胶囊的四个数字" columns={4} dense className="[&>div]:rounded-none [&>div]:border-0 [&>div]:bg-transparent [&>div>*]:border-t-0">
       <StatTile
         whole dense className={tileLayout} label="关于你" reading={reading(about, loadingMap, failed, retry)} to={SELF}
-        note={about !== null && growthRead ? note(recent((event) => event.lane === "noted")) : undefined}
+        note={[
+          about !== null && growthRead ? note(recent((event) => event.lane === "noted")) : undefined,
+          pendingReviewCount ? `${pendingReviewCount} 条待核对` : undefined,
+        ].filter(Boolean).join(" · ") || undefined}
       />
       <StatTile
         whole dense className={tileLayout} label="做法" reading={reading(methodCount, !learned.data && !learned.failed, learned.failed, learned.reload)} to={METHODS}

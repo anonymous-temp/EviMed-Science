@@ -227,9 +227,10 @@ export function layoutStars(nodes: readonly MapNode[], edges: readonly MapEdge[]
   };
   for (const node of beside) place(node, new Set());
 
-  // How far the picture reaches, to frame it: the far edge of most of it, so one stray document does not make everything small.
+  // A sparse sky frames every hub and memory; a larger one keeps one stray document from making everything small.
   const distances = [...positions.values()].map((place) => Math.hypot(...place)).sort((left, right) => left - right);
-  const reach = Math.max(120, distances[Math.floor((distances.length - 1) * 0.92)] ?? 0);
+  const framing = distances.length < 40 ? distances.at(-1) : distances[Math.floor((distances.length - 1) * 0.92)];
+  const reach = Math.max(120, framing ?? 0);
   return { hubs, positions, homes, reach };
 }
 

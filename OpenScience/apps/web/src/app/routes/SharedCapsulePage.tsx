@@ -166,7 +166,7 @@ export function SharedCapsulePage() {
                   const result = token ? await importShareLink(token, input) : await importDelivery(deliveryId ?? "", input);
                   if (mounted.current) { setImported(result); announceMemoryChanged(); }
                 })}>收下</Button>
-                {deliveryId && <Button variant="text" actionKind="set" disabled={busy} onClick={() => void perform(async () => { await declineDelivery(deliveryId); navigate("/app/inbox"); })}>不需要</Button>}
+                {deliveryId && <Button variant="secondary" actionKind="set" disabled={busy} onClick={() => void perform(async () => { await declineDelivery(deliveryId); navigate("/app/inbox"); })}>不需要</Button>}
               </div>
             </div>
           )}

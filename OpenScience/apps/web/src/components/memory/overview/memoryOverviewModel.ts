@@ -345,6 +345,8 @@ export function lookTableRows(rows: readonly LookRow[], query: string): ChangeRo
 export interface HeadlineFacts {
   /** 关于你, a project's memories included (`rememberedCount`). */
   about: number | null;
+  /** Statements held out of answers while their source is checked; separate from the active count. */
+  pending?: number | null;
   methods: number | null;
   /** The latest day anything changed, said as a list says it (「10月24日」); null when unknown. */
   last: string | null;
@@ -355,17 +357,20 @@ export interface HeadlineLinks { about: string; methods: string }
 
 /**
  * The one sentence over the page: what the capsule holds, each number a link to the list it counts, and when it last changed. 「记住了 23 条关于你的事，
- * 学会了 8 种做法；最近一次在10月24日。」 A clause whose part could not be read or holds nothing is left out — never a 「0」 — and received packs
+ * 另有 4 条待核对，学会了 8 种做法；最近一次在 10月24日。」 A clause whose part could not be read or holds nothing is left out — never a 「0」 — and received packs
  * are never counted as memories. `null` when nothing is left to say: an account with nothing has a recipe, not a sentence of zeros.
  */
 export function overviewHeadline(facts: HeadlineFacts, links: HeadlineLinks): NotePart[] | null {
   const clauses: NotePart[][] = [];
-  if (facts.about) clauses.push(["记住了 ", { n: facts.about, to: links.about, label: `${facts.about} 条关于你的事，看全部` }, " 条关于你的事"]);
+  const about: NotePart[] = [];
+  if (facts.about) about.push("记住了 ", { n: facts.about, to: links.about, label: `${facts.about} 条关于你的事，看全部` }, " 条关于你的事");
+  if (facts.pending) about.push(facts.about ? "，另有 " : "有 ", { n: facts.pending, to: links.about, label: `${facts.pending} 条待核对，看全部` }, " 条待核对");
+  if (about.length) clauses.push(about);
   if (facts.methods) clauses.push(["学会了 ", { n: facts.methods, to: links.methods, label: `${facts.methods} 种做法，看全部` }, " 种做法"]);
   if (clauses.length === 0) return null;
   const parts: NotePart[] = [];
   clauses.forEach((clause, index) => { if (index > 0) parts.push("，"); parts.push(...clause); });
-  if (facts.last) parts.push(`；最近一次在${facts.last}`);
+  if (facts.last) parts.push(`；最近一次在 ${facts.last}`);
   parts.push("。");
   return parts;
 }
@@ -392,8 +397,8 @@ export function relationCount(doc: Pick<OverviewDoc, "edges">): number {
 }
 
 /**
- * Whether 「关系与主题」 is drawn: at least twelve memories, and at least three relations or a grouping of them into topics. Below that a graph is
- * a scatter of dots and a topic cloud one word, and the panel is not drawn at all — no empty frame.
+ * Whether the dense relation graph and its topic companion are offered: at least twelve memories, and at least three relations or a grouping.
+ * Below that the graph stays out; `exploreViews` separately keeps a readable topic fallback where the star map cannot be drawn.
  */
 export function exploreOffered(doc: Pick<OverviewDoc, "summary" | "edges" | "facets">): boolean {
   return doc.summary.memories >= EXPLORE_MEMORIES && (relationCount(doc) >= EXPLORE_RELATIONS || doc.facets.topics.length > 0);
@@ -405,11 +410,14 @@ export function defaultExplore(doc: Pick<OverviewDoc, "edges">): "graph" | "topi
 }
 
 /**
- * The pictures a reader is offered, in order. The star map asks for one memory and a browser that can draw it: a sky with three stars in it is a small sky and
- * not a broken one (sparse real records stay visible, owner ruling of 2026-10-19), which is not true of a graph of three dots. The other two ask for what `exploreOffered` asks.
+ * The pictures a reader is offered, in order. The star map asks for one memory and a browser that can draw it. Where that browser has no
+ * real GPU, less motion was requested or the screen is a phone, even one memory gets the readable topic list; the relation graph still waits for enough to see.
  */
 export function exploreViews(doc: Pick<OverviewDoc, "summary" | "edges" | "facets">, { star }: { star: boolean }): ExploreView[] {
-  return [...(star && doc.summary.memories >= 1 ? ["star" as const] : []), ...(exploreOffered(doc) ? ["graph" as const, "topics" as const] : [])];
+  return [
+    ...(star && doc.summary.memories >= 1 ? ["star" as const] : []),
+    ...(exploreOffered(doc) ? ["graph" as const, "topics" as const] : !star && doc.summary.memories >= 1 ? ["topics" as const] : []),
+  ];
 }
 
 /** The picture drawn: the one the address names when it is on offer, else the first on offer, or on a phone the topics (a list beside their words) before the graph. */

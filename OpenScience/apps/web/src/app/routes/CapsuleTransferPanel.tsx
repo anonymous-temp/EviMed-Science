@@ -313,7 +313,7 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
               <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(() => downloadCapsuleExport(capsuleId, snapshot.id))}>再次下载</Button>
               <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} aria-expanded={updating?.id === snapshot.id}
                 onClick={() => { setIncludePrivateEntries([]); setUpdating(updating?.id === snapshot.id ? null : { id: snapshot.id, password: "", changelog: "" }); }}>更新</Button>
-              <Button size="sm" variant="text" destructive disabled={busy || (snapshot.status === "revoked" && !sharing)} onClick={() => setWithdrawing(snapshot)}>撤回</Button>
+              <Button size="sm" variant="secondary" destructive disabled={busy || (snapshot.status === "revoked" && !sharing)} onClick={() => setWithdrawing(snapshot)}>撤回</Button>
             </>}
             meta={updating?.id === snapshot.id ? (
               <div className="space-y-2 pt-2">

@@ -65,4 +65,14 @@ describe("the memory section's clickability grammar", () => {
     });
     expect(offenders).toEqual([]);
   });
+
+  it("draws mutating actions as secondary Buttons, never text Buttons", () => {
+    const offenders = memory.flatMap((path) => {
+      const text = readFileSync(path, "utf8");
+      return [...text.matchAll(/<Button\b[^>]*>/g)]
+        .filter((match) => /variant="text"/.test(match[0]) && (/actionKind="set"/.test(match[0]) || /\sdestructive(?:\s|=|>)/.test(match[0])))
+        .map((match) => `${relative(src, path)}:${text.slice(0, match.index).split("\n").length}  ${match[0]}`);
+    });
+    expect(offenders).toEqual([]);
+  });
 });
