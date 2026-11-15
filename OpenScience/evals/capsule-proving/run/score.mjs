@@ -18,7 +18,7 @@ import { publicMemoryRubric, PUBLIC_OFFICIAL } from './publicJudge.mjs';
 import { OFFICIAL, rubricFacts } from './officialJudge.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const SCORER_VERSION = 'capsule-proving-run-score/8';
+export const SCORER_VERSION = 'capsule-proving-run-score/9';
 export const SUPPORTED_SETS = ['synthetic-users', 'scenarios', 'med-m1', 'med-m2', 'med-m3', 'med-m5', 'med-m10',
   ...PUBLIC_MEMORY_SETS, 'g6', 'g9', 'm6', 'm7', 'm11', 'brand-generic', 'longmemeval-s', 'medmemorybench'];
 const json = async file => JSON.parse(await readFile(file, 'utf8'));
@@ -504,13 +504,20 @@ async function adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl
   let judgeError = null;
   if (!noJudge && judgeKeyFile && packets.length) {
     const key = (await readFile(judgeKeyFile, 'utf8')).trim();
-    try {
-      results = await judgePackets(packets, { key, results, fetchImpl, concurrency: judgeConcurrency, batchSize: judgeBatchSize, retries: 3, retryDelayMs,
-        persist: rows => saveLines(path.join(out, 'judge-results.jsonl'), rows) });
-    } catch (error) {
-      if (/^judge_(?:checkpoint|resume)/.test(error.message)) throw error;
-      judgeError = /^judge_[a-z0-9_]+$/.test(error.message) ? error.message : 'judge_request_failed';
-      results = await optional(() => jsonl(path.join(out, 'judge-results.jsonl')), []);
+    // Retention and answer rubrics cannot share a request. Preserve checkpoints across the two independent groups.
+    for (const storeOnly of [false, true]) {
+      const group = packets.filter(packet => (packet.taskKind === 'store') === storeOnly);
+      if (!group.length) continue;
+      const groupIds = new Set(group.map(packet => packet.id)), otherResults = results.filter(result => !groupIds.has(result.id));
+      try {
+        const judged = await judgePackets(group, { key, results, fetchImpl, concurrency: judgeConcurrency, batchSize: judgeBatchSize, retries: 3, retryDelayMs,
+          persist: saved => saveLines(path.join(out, 'judge-results.jsonl'), [...otherResults, ...saved]) });
+        results = [...otherResults, ...judged];
+      } catch (error) {
+        if (/^judge_(?:checkpoint|resume)/.test(error.message)) throw error;
+        judgeError ??= /^judge_[a-z0-9_]+$/.test(error.message) ? error.message : 'judge_request_failed';
+        results = await optional(() => jsonl(path.join(out, 'judge-results.jsonl')), []);
+      }
     }
   }
   return { results, judgeError, completed: results.filter(r => r.verdict !== 'error').length };
@@ -661,12 +668,11 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
           if (outcome.verdict === 'fail' && cites.verdict === 'pass') outcome = { ...outcome, verdict: 'needs-judge',
             codeHint: given.checks.filter(c => c.ok === false), rubric: [...outcome.rubric, 'Judge missing given anchors by meaning.'] };
         }
-        const redLine = outcome.checks.some(c => c.name === 'citationBackCheck' && c.ok === false)
-          || variant === 'partial' && outcome.verdict === 'needs-judge' ? 'fabricated-medical-content' : null;
+        const fabricatedCitation = outcome.checks.some(c => c.name === 'citationBackCheck' && c.ok === false);
         const context = questionContext(entry, loaded, q, answer, evidence);
         context.anchors = input?.given?.flat() ?? [];
         emit(entry, q.qid, 'answer', `m7-${variant}`, answerState(answer, outcome), context,
-          { ...(redLine ? { redLine } : {}), variant });
+          { ...(fabricatedCitation ? { redLine: 'fabricated-medical-content', medicalContentError: 'fabrication' } : {}), variant });
       }
       continue;
     }
