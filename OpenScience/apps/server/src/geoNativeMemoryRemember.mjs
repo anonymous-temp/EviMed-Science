@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { canonicalJson } from './geoStore.mjs';
 import { parseEventStream } from './memoryGateway.mjs';
-import { parseArchiveUri } from './openVikingSessions.mjs';
+import { parseArchiveUri, platformSessionOf } from './openVikingSessions.mjs';
 import { HttpError } from './security.mjs';
 
 const KIND = 'geo-plan-context';
@@ -17,7 +17,8 @@ export class GeoNativeMemoryRemember {
     this.documents = contexts.documents; this.contexts = contexts; this.overlay = overlay;
   }
 
-  async begin(context, messages, runtimeGeneration) {
+  async begin(context, messages, runtimeGeneration, sourceSession = /** @type {string|null} */ (null)) {
+    if (sourceSession !== null && !platformSessionOf(sourceSession)) throw invalid();
     if (context.kind !== 'geo-project' || !Array.isArray(messages) || !messages.length || messages.length > 6
       || messages.some(item => !item || !['user', 'assistant'].includes(item.role) || typeof item.content !== 'string'
         || !item.content || Object.keys(item).some(key => !['role', 'content'].includes(key)))
@@ -27,7 +28,7 @@ export class GeoNativeMemoryRemember {
       await this.contexts.assertLive(context);
       return this.documents.put(context.ownerId, KIND, `gnmo_${randomUUID()}`, { recordType: TYPE, policyRef: context.policyRef,
         namespaceId: context.namespaceId, action: 'remember', sanitizedMessagesDigest: createHash('sha256').update(canonicalJson(messages)).digest('hex'),
-        runtimeGeneration, state: 'pending', sessionId: null, taskId: null, archiveUri: null, ledgerState: 'not_due' },
+        runtimeGeneration, sourceSession, state: 'pending', sessionId: null, taskId: null, archiveUri: null, ledgerState: 'not_due' },
       { projectId: context.projectId, expectedRevision: 0, transactionClient: client });
     });
   }
@@ -88,7 +89,7 @@ export class GeoNativeMemoryRemember {
     if (!this.overlay) return row;
     try {
       await this.overlay.recordCommit({ userId: context.ownerId, archiveUri: row.payload.archiveUri, engineSession: row.payload.sessionId,
-        projectId: context.projectId, origin: 'tool', taskId: row.payload.taskId });
+        sourceSession: row.payload.sourceSession ?? null, projectId: context.projectId, origin: 'tool', taskId: row.payload.taskId });
     } catch {
       // The accepted operation stays visibly pending for reconciliation. No
       // second remember call is made and the engine's actual answer is retained.
@@ -114,8 +115,8 @@ export class GeoNativeMemoryRemember {
   }
 
   /** `messages` already passed the gateway's capture masking/filtering. */
-  async execute(context, { messages, clientId, runtimeGeneration }) {
-    const operation = await this.begin(context, messages, runtimeGeneration);
+  async execute(context, { messages, clientId, runtimeGeneration, sourceSession = null }) {
+    const operation = await this.begin(context, messages, runtimeGeneration, sourceSession);
     try {
       const answer = await context.sessions.mcp(context.ownerId, { jsonrpc: '2.0', id: operation.id, method: 'tools/call',
         params: { name: 'remember', arguments: { messages } } });

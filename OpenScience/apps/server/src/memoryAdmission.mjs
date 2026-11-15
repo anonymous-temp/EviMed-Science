@@ -81,13 +81,13 @@ function runAt(runs, at) {
  */
 export function createMemoryAdmission({ config, memorySettings, engineReady = null, conversations = null, sourceDeleted = null, internalAgent = null, clinicalContext = null }) {
   /**
-   * @param {{ user: any, project: any, engineSessionId?: string | null, at?: number | null }} caller `engineSessionId` is the
+   * @param {{ user: any, project: any, engineSessionId?: string | null, at?: number | null, allowRunningFallback?: boolean }} caller `engineSessionId` is the
    *   engine's session (`dsh-<conversation>`) when the request names one; without it the answer is the project's running
    *   conversation's when there is exactly one, and the account's and project's own switches otherwise. `at` is the time a
    *   captured message was spoken (epoch milliseconds): it decides which turn the message belongs to.
    * @returns {Promise<MemoryAdmission>}
    */
-  async function admit({ user, project, engineSessionId = null, at = null }) {
+  async function admit({ user, project, engineSessionId = null, at = null, allowRunningFallback = true }) {
     const userId = String(user.id);
     const projectId = String(project.id);
     /** @param {string} reason @returns {MemoryAdmission} */
@@ -98,13 +98,14 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
 
     const running = conversations ? await conversations.running(project).catch(() => []) : [];
     const named = engineSessionId ? platformSessionOf(engineSessionId) : null;
-    // Which conversation this is: the one the request names, or the only one running in the project.
-    const sessionId = named ?? (running.length === 1 ? running[0].sessionId : null);
+    // MCP tools name their kernel-bound conversation and never borrow a running neighbour.
+    // Sessionless legacy recall may still use the only run for its admission switches.
+    const sessionId = named ?? (allowRunningFallback && running.length === 1 ? running[0].sessionId : null);
     if ((sessionId || engineSessionId) && sourceDeleted && await sourceDeleted(project, sessionId, engineSessionId)) return neither("source_deleted", sessionId);
     const pause = await memoryPausedFor(memorySettings, userId, projectId, sessionId);
     // With several running and none named, a trial among them protects the person: nothing is read or written.
     let trial = pause.trial;
-    if (!named && running.length > 1 && typeof memorySettings.sessionState === "function") {
+    if (!named && (running.length > 1 || !allowRunningFallback) && typeof memorySettings.sessionState === "function") {
       const states = await Promise.all(running.map((run) => memorySettings.sessionState(userId, projectId, run.sessionId).catch(() => ({ trialCapsuleId: null }))));
       trial = trial || states.some((state) => Boolean(state?.trialCapsuleId));
     }
@@ -121,10 +122,13 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
 
     // Whether the turn the message was spoken in set a research goal: its first message carries the gesture that started it.
     let researchGoal = false;
-    if (sessionId && conversations) {
+    // An unbound legacy tool cannot borrow provenance, but losing that binding must not bypass active policy refusals.
+    const policySessions = sessionId ? [sessionId] : !allowRunningFallback ? [...new Set(running.map(run => run.sessionId))] : [];
+    for (const policySession of policySessions) {
+      if (!conversations) break;
       // A subagent's session is a platform-written brief and its answer, never the person's words.
       if (named && !running.some((run) => run.sessionId === named) && conversations.parentOf?.(named, running)) return answer("subagent");
-      const runs = await conversations.runsOf(project, sessionId).catch(() => []);
+      const runs = await conversations.runsOf(project, policySession).catch(() => []);
       // The turn the message was spoken in when its time says so, else the turn in progress, else the last one.
       const current = runAt(runs, typeof at === "number" && Number.isFinite(at) ? at : null) ?? runs.find((run) => run.status === "running") ?? runs[0] ?? null;
       if (isPlatformStartedRun(current)) return answer("automated_run");
@@ -134,7 +138,7 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
       const agentId = String(current?.effectiveAgentId ?? current?.agentId ?? "");
       if (agentId && internalAgent && await internalAgent(agentId).catch(() => false)) return answer("internal_project");
       if (clinicalContext && runs.length) {
-        const read = await clinicalContext(userId, projectId, runs.slice(0, 20).map((run) => ({ sessionId, runId: String(run.id) }))).catch(() => true);
+        const read = await clinicalContext(userId, projectId, runs.slice(0, 20).map((run) => ({ sessionId: policySession, runId: String(run.id) }))).catch(() => true);
         if (read) return answer("clinical_context");
       }
     }

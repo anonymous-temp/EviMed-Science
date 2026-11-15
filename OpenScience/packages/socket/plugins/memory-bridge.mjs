@@ -20,7 +20,7 @@ const Schema = await configSchema()
 
 export const name = 'evimed-memory-bridge'
 
-export const inject = ['skills']
+export const inject = ['skills', 'tools']
 
 /**
  * @typedef {object} Config

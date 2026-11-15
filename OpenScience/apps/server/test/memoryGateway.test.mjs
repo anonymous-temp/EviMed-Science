@@ -16,6 +16,7 @@ import {
 import { MapEdgeCorrections } from '../src/memoryMapEdges.mjs';
 import { personPairId } from '../src/nativeMemoryPeople.mjs';
 import { nativeMemoryCounters, resetNativeMemoryMetrics } from "../src/nativeMemoryMetrics.mjs";
+import { HttpError } from "../src/security.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { openVikingUserId } from "../src/openVikingLayout.mjs";
 import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
@@ -218,7 +219,7 @@ test("commits are bounded per account per hour, and a held commit loses nothing:
 
 test("recall is rewritten so custom types can be found: no purpose, no quotas, no expansion, and the derived index, shared areas and sensitive files excluded", async (t) => {
   const sensitive = `${ROOT}/memories/preferences/self/私事.md`;
-  const overlay = { configured: true, account: async () => ({ registeredAt: "x" }), noteRegistered: async () => {}, recordCommit: async () => {}, sensitiveUris: async () => [sensitive] };
+  const overlay = { configured: true, account: async () => ({ registeredAt: "x" }), noteSession: async () => {}, noteRegistered: async () => {}, recordCommit: async () => {}, sensitiveUris: async () => [sensitive] };
   const { stub, call } = await fixture(t, { overlay });
   await call("POST", "/api/v1/search/search", { query: "回答的要求", mode: "context", purpose: "coding", quotas: { preferences: 3 }, score_threshold: 0.35, session_id: SESSION, dedup_turns: 5, query_expansion: "auto" });
   const sent = stub.sent("POST", "/api/v1/search/search").at(-1).body;
@@ -238,7 +239,7 @@ test("recall is rewritten so custom types can be found: no purpose, no quotas, n
 
 test("every URI stays inside the caller's own space, and the derived index and sensitive files read as not there", async (t) => {
   const sensitive = `${ROOT}/memories/preferences/self/私事.md`;
-  const overlay = { configured: true, account: async () => ({ registeredAt: "x" }), noteRegistered: async () => {}, recordCommit: async () => {}, sensitiveUris: async () => [sensitive] };
+  const overlay = { configured: true, account: async () => ({ registeredAt: "x" }), noteSession: async () => {}, noteRegistered: async () => {}, recordCommit: async () => {}, sensitiveUris: async () => [sensitive] };
   const { stub, call } = await fixture(t, { overlay });
   stub.seedMemory(OV_USER, "profile.md", "# 用户\n- 结构工程师 (as of 2026-10-12)", { type: "profile" });
   stub.seedMemory(OV_USER, "preferences/self/回答结构.md", "- 先给结论。", { type: "preferences" });
@@ -375,7 +376,7 @@ test("tool arguments are held to the caller's own memories: pinned targets, no r
 
 test("remember passes the same door as a captured message and its commit enters the ledger", async (t) => {
   const recorded = [];
-  const overlay = { configured: true, account: async () => ({ registeredAt: "x" }), noteRegistered: async () => {}, recordCommit: async (commit) => { recorded.push(commit); }, sensitiveUris: async () => [] };
+  const overlay = { configured: true, account: async () => ({ registeredAt: "x" }), noteSession: async () => {}, noteRegistered: async () => {}, recordCommit: async (commit) => { recorded.push(commit); }, sensitiveUris: async () => [] };
   const { stub, mcp } = await fixture(t, { overlay, admission: fixedAdmission({sessionId: "conversation_source"}) });
   const answer = await mcp({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "remember", arguments: { messages: [
     { role: "user", content: "记住：图纸尺寸单位一律用毫米，联系电话 13900139000，邮箱 drawings@example.org，身份证 110101199001011237。" },
@@ -1602,4 +1603,60 @@ test('engine startup never masks clinical or platform admission refusals', async
   const admission = createMemoryAdmission({ config: {}, memorySettings, conversations, engineReady: () => ({ ok: false, code: 'starting' }),
     clinicalContext: async () => true });
   assert.equal((await admission.admit({ user: { id: USER }, project: { id: 'p1' }, engineSessionId: SESSION })).learnReason, 'clinical_context');
+});
+
+test('native composer remember uses bridge identity with no dispatched active run and keeps the named project', async t => {
+  const commits = [], calls = [];
+  const admission = createMemoryAdmission({ config: {}, memorySettings: { configured: true, forUser: async () => ({}), sessionState: async () => ({}) },
+    conversations: { running: async () => [], runsOf: async (project, session) => { calls.push([project.id, session]); return []; } } });
+  const f = await fixture(t, { admission, project: { id: 'named-study' }, overlay: { configured: false, recordCommit: async row => commits.push(row) } });
+  await f.call('POST', '/mcp', { jsonrpc: '2.0', id: 91, method: 'tools/call', params: { name: 'remember', arguments: { messages: [{ role: 'user', content: 'My study is community follow-up.' }], sessionId: 'victim' } } }, { 'x-evimed-memory-session': 'native-composer' });
+  assert.equal(commits[0].sourceSession, 'dsh-native-composer');
+  assert.equal(commits[0].projectId, 'named-study');
+  assert.deepEqual(calls, [['named-study', 'native-composer']]);
+});
+
+test('an unbound MCP call never borrows the sole running conversation', async t => {
+  const admission = createMemoryAdmission({ config: {}, memorySettings: { configured: true, forUser: async () => ({}), sessionState: async () => ({}) },
+    conversations: { running: async () => [{ id: 'run', sessionId: 'unrelated' }], runsOf: async () => [] } });
+  const commits = [];
+  const f = await fixture(t, { admission, overlay: { configured: false, recordCommit: async row => commits.push(row) } });
+  await f.mcp({ jsonrpc: '2.0', id: 92, method: 'tools/call', params: { name: 'remember', arguments: { messages: [{ role: 'user', content: 'My own fact.' }] } } });
+  assert.equal(commits[0].sourceSession, null);
+});
+
+test('named project remember carries trusted project context into its one-shot extraction', async t => {
+  const f = await fixture(t, { project: { id: 'named-study', name: 'Community follow-up' } });
+  await f.mcp({ jsonrpc: '2.0', id: 93, method: 'tools/call', params: { name: 'remember', arguments: { messages: [{ role: 'user', content: 'The primary endpoint is follow-up attendance.' }] } } });
+  const forwarded = f.stub.sent('POST', '/mcp').find(row => row.body?.params?.name === 'remember');
+  assert.ok(JSON.stringify(forwarded).includes('Community follow-up'));
+});
+
+
+test('a native tool freezes its named project before a later default-runtime commit can misfile the conversation', async t => {
+  const bindings = new Map();
+  const overlay = { configured: true, account: async () => ({ registeredAt: 'yes' }), sensitiveUris: async () => [], recordCommit: async () => {},
+    noteSession: async (_user, session, projectId) => {
+      if (bindings.has(session) && bindings.get(session) !== projectId) throw new HttpError(403, 'memory_scope_denied', 'Different project');
+      bindings.set(session, projectId);
+    } };
+  const named = await fixture(t, { project: { id: 'named-study' }, overlay, admission: fixedAdmission({ sessionId: 'native-composer' }) });
+  const other = await fixture(t, { project: { id: 'default' }, overlay, admission: fixedAdmission({ sessionId: 'native-composer' }) });
+  const message = { jsonrpc: '2.0', id: 94, method: 'tools/call', params: { name: 'remember', arguments: { messages: [{ role: 'user', content: 'The study endpoint is attendance.' }] } } };
+  assert.equal((await named.mcp(message)).status, 200);
+  assert.equal(bindings.get('dsh-native-composer'), 'named-study');
+  assert.equal((await other.mcp(message)).status, 403);
+  assert.equal((await other.call('POST', '/api/v1/sessions/dsh-native-composer/commit', {})).status, 403);
+  assert.equal(other.stub.sent('POST', '/mcp').length, 0);
+});
+
+test('unbound legacy tool admission retains trial and automated refusals without assigning the active conversation', async () => {
+  for (const trial of [false, true]) {
+    const admission = createMemoryAdmission({ config: {}, memorySettings: { configured: true, settings: async () => ({ pausedProjects: [] }), sessionState: async () => ({ trialCapsuleId: trial ? 'trial' : null }) },
+      conversations: { running: async () => [{ id: 'automated', sessionId: 'other' }], runsOf: async () => [{ status: 'running', automated: true }] } });
+    const answer = await admission.admit({ user: { id: USER }, project: { id: 'p1' }, allowRunningFallback: false });
+    assert.equal(answer.sessionId, null);
+    assert.equal(answer.learn, false);
+    assert.equal(answer.learnReason, trial ? 'trial' : 'automated_run');
+  }
 });

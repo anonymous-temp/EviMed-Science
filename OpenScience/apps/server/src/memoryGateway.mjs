@@ -384,7 +384,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   sessions: import("./openVikingSessions.mjs").OpenVikingSessions | null,
  *   memoryContexts?: import("./geoNativeMemoryContext.mjs").GeoNativeMemoryContext | null,
  *   rememberJournal?: import("./geoNativeMemoryRemember.mjs").GeoNativeMemoryRemember | null,
- *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
+ *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null, allowRunningFallback?: boolean }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
  *   sourceDeletion?: any,
  *   sourceReceipt?: ((request:any)=>Promise<void>) | null,
  *   sourceReceiptFailed?: ((request:any)=>Promise<void>) | null,
@@ -713,8 +713,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     return safe;
   }
 
-  async function scopedAdmission(user, project, engineSessionId, at, context, given = null) {
-    const decision = given ?? await admission.admit({ user, project, engineSessionId, at });
+  async function scopedAdmission(user, project, engineSessionId, at, context, given = null, allowRunningFallback = true) {
+    const decision = given ?? await admission.admit({ user, project, engineSessionId, at, allowRunningFallback });
     // Current MemoryAdmission decisions have no legacy `native` discriminator.
     // With shared capture proof enabled every named shared capture needs its live proof;
     // session-free recall and explicit remember still use workload authority.
@@ -1165,11 +1165,16 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           if (ctx.shared) {
             if (!rememberJournal || !runtimeManager.runtimeGeneration) throw new HttpError(503, 'memory_scope_denied', 'The project memory journal is unavailable.');
             const result = await rememberJournal.execute(ctx.memoryContext, { messages: kept, clientId: message.id,
+              sourceSession: admitted.sessionId ? `dsh-${admitted.sessionId}` : null,
               runtimeGeneration: runtimeManager.runtimeGeneration(ctx.project) });
             if (result.state === 'accepted') recordGatewayCommit('accepted');
             local.push(result.reply);
             continue;
           }
+          if (admitted.sessionId) await noteSession(ctx.user.id, `dsh-${admitted.sessionId}`, ctx.project.id, ctx.memoryContext?.projectCreatedAt ?? ctx.project.projectCreatedAt);
+          // Remember uses a one-shot engine session, so it does not inherit the captured conversation's project preamble.
+          const projectLine = ctx.project.id !== CATCH_ALL_PROJECT_ID ? projectContextLine(ctx.project.name) : null;
+          if (projectLine) kept.unshift({ role: 'assistant', content: projectLine });
           forward.push({ ...message, params: { ...message.params, arguments: { messages: kept } } });
           // The engine answers in prose that names the one-shot session and the task: read them into the ledger.
           afterCall.set(message.id, async (answer) => {
@@ -1317,6 +1322,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       let hiddenList = null;
       /** @type {Promise<{uri:string,label:string,aliases:string[]}[]> | null} */
       let people = null;
+      // Only the authenticated bridge can set this header; model arguments and Mcp-Session-Id never bind a conversation.
+      const toolSession = route === 'mcp' && typeof req.headers['x-evimed-memory-session'] === 'string'
+        && /^[A-Za-z0-9_.@-]{1,180}$/.test(req.headers['x-evimed-memory-session']) ? req.headers['x-evimed-memory-session'] : null;
       const ctx = {
         memoryFileSearchMinScore: config.memoryFileSearchMinScore,
         user, project, json, query: url.searchParams, match: found.match, engineUser, userRoot, sessions: view, memoryContext, shared,
@@ -1378,8 +1386,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             + siblings.map(row => `- ${row.label}: ${row.uri}`).join('\n');
         },
         admit: (/** @type {string | null} */ engineSessionId, /** @type {number | null} */ at = null) => {
+          engineSessionId ??= toolSession ? `dsh-${toolSession}` : null;
           const key = `${engineSessionId ?? ""}\u0000${at ?? ""}`;
-          if (!admissions.has(key)) admissions.set(key, scopedAdmission(user, project, engineSessionId, at, memoryContext));
+          if (!admissions.has(key)) admissions.set(key, scopedAdmission(user, project, engineSessionId, at, memoryContext, null, route !== 'mcp'));
           return /** @type {Promise<import("./memoryAdmission.mjs").MemoryAdmission>} */ (admissions.get(key));
         },
         // What recall never reads: the derived index subtree and the files the person marked sensitive.
