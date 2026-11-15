@@ -110,6 +110,7 @@ interface Choosing { sources: SourceRecord[] }
 function KnowledgeBase({ sourceId }: { sourceId: string | null }) {
   const navigate = useNavigate();
   const selectProject = useProjectStore((state) => state.select);
+  const projectsLoading = useProjectStore((state) => state.loading);
   const location = useLocation();
   const navigationType = useNavigationType();
   const currentProjectId = getWebProjectId();
@@ -439,7 +440,7 @@ function KnowledgeBase({ sourceId }: { sourceId: string | null }) {
 
   const readerBack = view === "graph" ? "图谱" : view === "pages" ? "知识页" : "知识库";
   const projectHref = (projectId: string) => listPath({ ...listState, scope: projectId, focus: null, depth: null });
-  const projectLabel = scopeProjectId ? groups.labels.get(scopeProjectId) ?? "当前项目" : "";
+  const projectLabel = scopeProjectId ? groups.labels.get(scopeProjectId) ?? (scopeProjectId === "default" ? "我的项目" : "当前项目") : "";
 
   const list = ({ split }: MasterDetailState) => {
     beside.current = split;
@@ -451,7 +452,12 @@ function KnowledgeBase({ sourceId }: { sourceId: string | null }) {
         {view === "documents" && toolbar && <div className={cn("shrink-0 pb-2", split && "px-4")}><Toolbar {...toolbar} /></div>}
         <div ref={setListScroller} className={cn("min-h-0 flex-1 overflow-y-auto pb-6", split && "px-2")}>
           {view === "documents" && error && <LoadError message={error} onRetry={() => void load()} className="mb-4" />}
-          {view === "documents" ? documentRows(split, current) : <ProjectList groups={groups} chosen={scopeProjectId} hrefFor={projectHref} />}
+          {view === "documents" ? documentRows(split, current) : (
+            <ProjectList
+              groups={groups} chosen={scopeProjectId} hrefFor={projectHref} loading={projectsLoading}
+              current={scopeProjectId ? { id: scopeProjectId, label: projectLabel } : null}
+            />
+          )}
         </div>
       </div>
     );

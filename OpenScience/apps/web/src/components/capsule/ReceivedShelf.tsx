@@ -92,7 +92,7 @@ function PendingDeliveries() {
               <>
                 <Button variant="secondary" size="sm" disabled={busy !== null} loading={busy === delivery.id} aria-label={`收下“${delivery.card?.title || delivery.sender.name}”`}
                   onClick={() => void take(delivery)}>收下</Button>
-                <Button variant="text" size="sm" disabled={busy !== null} aria-label={`不需要“${delivery.card?.title || delivery.sender.name}”`}
+                <Button actionKind="set" variant="secondary" size="sm" disabled={busy !== null} aria-label={`不需要“${delivery.card?.title || delivery.sender.name}”`}
                   onClick={() => void turnDown(delivery)}>不需要</Button>
               </>
             )}

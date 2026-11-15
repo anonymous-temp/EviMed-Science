@@ -260,7 +260,10 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
       share.listPendingDeliveries.mockResolvedValueOnce([delivery]).mockResolvedValue([]);
       share.declineDelivery.mockResolvedValue({});
       shelf();
-      await userEvent.click(await screen.findByRole("button", { name: "不需要“李主任的工作方式”" }));
+      const decline = await screen.findByRole("button", { name: "不需要“李主任的工作方式”" });
+      expect(decline).toHaveClass("bg-surface-2");
+      expect(decline).toHaveAttribute("data-action-kind", "set");
+      await userEvent.click(decline);
       await waitFor(() => expect(share.declineDelivery).toHaveBeenCalledWith("dlv_1"));
       await waitFor(() => expect(screen.queryByRole("list", { name: "待收下的分享" })).toBeNull());
     });

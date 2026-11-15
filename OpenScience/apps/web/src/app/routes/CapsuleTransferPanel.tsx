@@ -310,10 +310,10 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
           {history.map(snapshot => <ListRow key={snapshot.id}
             title={`${stamp(snapshot.createdAt)} · ${snapshot.entryCount} 条 · ${snapshot.scopes.map(scope => labelFor(SCOPE_LABELS, scope, "其他范围")).join("、")}${snapshot.status === "revoked" ? " · 已撤回" : ""}`}
             actions={<>
-              <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(() => downloadCapsuleExport(capsuleId, snapshot.id))}>再次下载</Button>
-              <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} aria-expanded={updating?.id === snapshot.id}
+              <Button size="sm" variant="text" data-text-action="view" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(() => downloadCapsuleExport(capsuleId, snapshot.id))}>再次下载</Button>
+              <Button size="sm" variant="text" data-text-action="view" disabled={busy || snapshot.status === "revoked"} aria-expanded={updating?.id === snapshot.id}
                 onClick={() => { setIncludePrivateEntries([]); setUpdating(updating?.id === snapshot.id ? null : { id: snapshot.id, password: "", changelog: "" }); }}>更新</Button>
-              <Button size="sm" variant="text" destructive disabled={busy || (snapshot.status === "revoked" && !sharing)} onClick={() => setWithdrawing(snapshot)}>撤回</Button>
+              <Button size="sm" variant="secondary" destructive disabled={busy || (snapshot.status === "revoked" && !sharing)} onClick={() => setWithdrawing(snapshot)}>撤回</Button>
             </>}
             meta={updating?.id === snapshot.id ? (
               <div className="space-y-2 pt-2">

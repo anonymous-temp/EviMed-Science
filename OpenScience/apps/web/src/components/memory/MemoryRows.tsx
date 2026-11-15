@@ -67,13 +67,13 @@ type ResolveForget = (id: string, action: "confirm" | "dismiss", choices: number
 
 export function PendingMemoryRows({ items, slow, stalled = false, onResolved, onResolve }: { onResolve?: ResolveForget; onResolved?: () => void; items: readonly WebPendingMemory[]; slow: boolean; /** The page has stopped reading: it says the memory is not finished and can be looked at later. */ stalled?: boolean }) {
   return (
-    <List label={items.some(item => item.state === "confirmation" || item.reason === "instruction_origin_uncertain") ? "待处理的记忆" : "正在记住的内容"}>
+    <List label={items.some(item => item.reason === "instruction_origin_uncertain") ? "待核对的记忆" : items.some(item => item.state === "confirmation") ? "待处理的记忆" : "正在记住的内容"}>
       {items.map((item) => item.state === "confirmation" ? <ForgetConfirmationRow key={item.id} item={item} onResolved={onResolved} onResolve={onResolve} /> : (
         <ListRow
           key={item.id}
           chevron={false}
           title={<span className="line-clamp-2 max-w-measure">{item.text}</span>}
-          trailing={<span role="status" className="text-caption text-text-3">{item.reason === "instruction_origin_uncertain" ? "待核对，尚未作为偏好使用" : stalled ? "还没写完，可以稍后再看" : slow ? "还在记，比平时慢一些" : "正在记住"}</span>}
+          trailing={<span role="status" className="text-caption text-text-3">{item.reason === "instruction_origin_uncertain" ? "暂不用于回答，等待来源核对" : stalled ? "还没写完，可以稍后再看" : slow ? "还在记，比平时慢一些" : "正在记住"}</span>}
         />
       ))}
     </List>
@@ -118,7 +118,7 @@ function ForgetConfirmationRow({ item, onResolved, onResolve }: { item: WebPendi
         : <p>暂时无法确定是哪一条。请在对话中说明具体内容，或在记忆列表中找到后选择“忘记”。</p>}
       <div className="flex flex-wrap gap-2">
         {!!item.choices?.length && <Button size="sm" loading={busy} disabled={!onResolve || !selected.length} onClick={() => void submit("confirm")}>忘记选中的内容</Button>}
-        <Button size="sm" variant="text" disabled={busy || !onResolve} onClick={() => void submit("dismiss")}>保留记忆，关闭此项</Button>
+        <Button actionKind="set" size="sm" variant="secondary" disabled={busy || !onResolve} onClick={() => void submit("dismiss")}>保留记忆，关闭此项</Button>
       </div>
       {error && <p role="alert" className="text-error">{error}</p>}
     </div>

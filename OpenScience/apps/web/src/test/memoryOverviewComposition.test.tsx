@@ -17,7 +17,7 @@ import { expectComposed } from "./expectComposed";
  *
  *  - **type pairs ≤ 5.** Read off the classes the components set, climbing to the nearest ancestor that names a size and a weight, which is
  *    what the browser's cascade does for the rungs (`TYPE_SCALE`: 12 / 14 / 18 …, weights 400 and 600).
- *  - **two canvases and the rest DOM.** The change chart and, when there is enough to see, the relation graph are the page's `[data-chart]`s;
+ *  - **two canvases and the rest DOM.** The change chart and the offered relation graph or topic cloud are the page's `[data-chart]`s;
  *    the tiles, the sentence and the table are words and rows.
  *  - **colours from the map's palette only.** No inline colour, no arbitrary-value class, no hex in a class or a style on the page.
  *  - **at most two kinds of section** (`shapes` in the page table), counted as the walk counts them: an element and its first two kinds of child.
@@ -31,7 +31,7 @@ const table = JSON.parse(readFileSync(join(here, "../../../../scripts/ops/page-t
 };
 const entry = table.views.find((view) => view.view === "memory-overview")!;
 
-const reads = vi.hoisted(() => ({ map: vi.fn(), received: vi.fn(), mine: vi.fn(), methods: vi.fn() }));
+const reads = vi.hoisted(() => ({ map: vi.fn(), received: vi.fn(), mine: vi.fn(), methods: vi.fn(), profile: vi.fn() }));
 vi.mock("@/lib/methodsClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient")), listAllMethods: reads.methods }));
 vi.mock("@/lib/memoryMapClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/memoryMapClient")>("@/lib/memoryMapClient")), fetchMemoryMap: reads.map }));
 vi.mock("@/lib/memoryClient", async () => ({
@@ -40,6 +40,7 @@ vi.mock("@/lib/memoryClient", async () => ({
 vi.mock("@/lib/apiClient", async () => ({
   ...(await vi.importActual<typeof import("@/lib/apiClient")>("@/lib/apiClient")),
   fetchMemorySettings: () => Promise.resolve({ learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null }),
+  fetchMemoryProfile: reads.profile,
 }));
 vi.mock("@/lib/memoryMapFeature", () => ({ useMemoryMapFeature: () => "on" }));
 vi.mock("@/components/memory/useMemoryWritePrompt", () => ({ useMemoryWritePrompt: () => {} }));
@@ -161,6 +162,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(TODAY);
   reads.mine.mockResolvedValue({ capsule: { id: "cap_1" }, capsules: [], entries: [], forgotten: [] });
+  reads.profile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0 });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.clearAllMocks(); });
 
@@ -192,7 +194,7 @@ describe.each(ACCOUNTS)("总览 of %s", (_name, arrange, tablists, toolbars) => 
     await loaded();
     const charts = [...container.querySelectorAll("[data-chart]")].map((chart) => chart.getAttribute("data-chart"));
     expect(charts.length).toBeLessThanOrEqual(2);
-    expect(charts.every((kind) => kind === "growth" || kind === "relations")).toBe(true);
+    expect(charts.every((kind) => kind === "growth" || kind === "relations" || kind === "topic-cloud")).toBe(true);
     expect(container.querySelectorAll("canvas").length).toBeLessThanOrEqual(2);
   });
 

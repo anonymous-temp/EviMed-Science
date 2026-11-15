@@ -77,6 +77,7 @@ describe("a memory kept as a file, opened from its row", () => {
     client.archiveMemoryRecord.mockResolvedValue({ ...file, status: "archived", version: 99 });
     client.undoMemoryRecord.mockResolvedValue({ undone: "restored", record: file, restored: [] });
     const { onClose } = show(file);
+    expect(screen.getByRole("button", { name: "忘记" })).toHaveClass("bg-surface-2");
     await userEvent.click(screen.getByRole("button", { name: "忘记" }));
     await waitFor(() => expect(client.archiveMemoryRecord).toHaveBeenCalledWith(file.id, file.version));
     expect(onClose).toHaveBeenCalled();
@@ -146,6 +147,23 @@ describe("a memory kept as a file, opened from its row", () => {
     expect(memorySource(file)).toEqual(expect.objectContaining({ projectId: 'historical', sessionId: 'shared' }));
     expect(document.body.textContent).not.toContain('另一项目的标题');
     expect(document.body.textContent).not.toContain('新项目的标题');
+  });
+
+  it("shows history in Asia/Shanghai across midnight even when the browser zone is not Shanghai", () => {
+    const resolved = new Intl.DateTimeFormat().resolvedOptions();
+    const browserZone = vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockReturnValue({ ...resolved, timeZone: "America/Los_Angeles" });
+    try {
+      const changedAt = "2026-11-15T20:17:00.000Z";
+      const file = nativeFile("回答结构", "- 先给结论。", { revisions: [{ version: 1, value: "- 旧说法。", summary: "", status: "active", changedAt, reason: "edited" }] });
+      show(file);
+      const expected = new Date(changedAt).toLocaleString("zh-CN", {
+        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Shanghai",
+      });
+      expect(expected).toContain("11月16日");
+      expect(screen.getByText(new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))).toBeInTheDocument();
+    } finally {
+      browserZone.mockRestore();
+    }
   });
 
   it("shows nothing of the engine: no address, no file name, no kind of account", () => {

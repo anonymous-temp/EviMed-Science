@@ -20,12 +20,14 @@ export type MemoryGroup = "self" | "project";
 /** The kinds that are a project's facts rather than the researcher's. */
 const PROJECT_KINDS: ReadonlySet<string> = new Set(["project_fact", "analysis", "decision", "follow_up", "run_summary"]);
 
-export function recordGroup(record: Pick<WebStructuredMemory, "scope" | "kind">): MemoryGroup {
-  return record.scope === "project" || PROJECT_KINDS.has(record.kind) ? "project" : "self";
+export function recordGroup(record: Pick<WebStructuredMemory, "scope" | "scopeId" | "kind">): MemoryGroup {
+  const namedProject = record.scope === "project" && Boolean(record.scopeId) && record.scopeId !== "default";
+  return namedProject || PROJECT_KINDS.has(record.kind) ? "project" : "self";
 }
 
 export function entryGroup(entry: Pick<OwnCapsuleEntry, "projectId" | "payload">): MemoryGroup {
-  return entry.projectId || PROJECT_KINDS.has(entry.payload.factKind) ? "project" : "self";
+  const namedProject = Boolean(entry.projectId) && entry.projectId !== "default";
+  return namedProject || PROJECT_KINDS.has(entry.payload.factKind) ? "project" : "self";
 }
 
 /** The project a row belongs to, when it names one. */

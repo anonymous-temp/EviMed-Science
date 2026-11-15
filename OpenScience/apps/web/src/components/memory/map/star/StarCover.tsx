@@ -35,7 +35,7 @@ export function StarCover({ entries, sender }: { entries: ReadonlyArray<{ id: st
         </Suspense>
       </StarBoundary>
       <div className="absolute right-2 top-2 rounded-card border border-faint bg-star-panel p-1 backdrop-blur-md">
-        <Button size="sm" variant="text" aria-pressed={rotating} onClick={() => setRotating((value) => !value)}>
+        <Button size="sm" variant="text" data-text-action="view" aria-pressed={rotating} onClick={() => setRotating((value) => !value)}>
           {rotating ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}{rotating ? "暂停转动" : "缓慢转动"}
         </Button>
       </div>

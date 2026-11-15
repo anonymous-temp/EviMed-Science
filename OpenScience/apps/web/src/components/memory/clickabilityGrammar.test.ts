@@ -35,6 +35,15 @@ function classStrings(text: string): Array<{ line: number; classes: string }> {
   return found;
 }
 
+function textActionOffenders(text: string): RegExpMatchArray[] {
+  return [...text.matchAll(/<Button\b[^>]*>/g)].filter((match) => {
+    const tag = match[0];
+    if (!/variant="text"/.test(tag)) return false;
+    if (/actionKind="set"/.test(tag) || /\sdestructive(?:\s|=|>)/.test(tag)) return true;
+    return !/actionKind="(?:draft|start|external)"/.test(tag) && !/data-text-action="(?:navigation|cancel|view)"/.test(tag);
+  });
+}
+
 describe("the memory section's clickability grammar", () => {
   it("reads the section's sources", () => {
     expect(memory.length).toBeGreaterThan(20);
@@ -64,5 +73,26 @@ describe("the memory section's clickability grammar", () => {
         .map((match) => `${relative(src, path)}:${text.slice(0, match.index).split("\n").length}`);
     });
     expect(offenders).toEqual([]);
+  });
+
+  it("classifies every text Button and draws state mutations as secondary Buttons", () => {
+    const offenders = memory.flatMap((path) => {
+      const text = readFileSync(path, "utf8");
+      return textActionOffenders(text)
+        .map((match) => `${relative(src, path)}:${text.slice(0, match.index).split("\n").length}  ${match[0]}`);
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it("rejects an unclassified text action and permits only classified or explicit navigation, cancel and view exceptions", () => {
+    expect(textActionOffenders('<Button variant="text" onClick={save}>保存</Button>')).toHaveLength(1);
+    expect(textActionOffenders('<Button variant="text" actionKind="set">保存</Button>')).toHaveLength(1);
+    expect(textActionOffenders('<Button variant="text" destructive>删除</Button>')).toHaveLength(1);
+    expect(textActionOffenders(`
+      <Button variant="text" actionKind="start">开始</Button>
+      <Button variant="text" data-text-action="navigation">返回</Button>
+      <Button variant="text" data-text-action="cancel">取消</Button>
+      <Button variant="text" data-text-action="view">查看</Button>
+    `)).toEqual([]);
   });
 });

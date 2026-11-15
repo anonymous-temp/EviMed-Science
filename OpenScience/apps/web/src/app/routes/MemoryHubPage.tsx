@@ -292,8 +292,15 @@ function MemoryHub() {
       ))}
     </List>
   );
-  // Waiting words head the list of memories, but not a search: that is a list of hits.
-  const waiting = pending.length > 0 && !query.trim() ? <PendingMemoryRows onResolve={resolveForgetRequest} onResolved={reload} items={pending} slow={pendingState.slow} stalled={pendingState.stalled} /> : null;
+  // Source-review holds are a visible group of their own, not writes in progress. Neither appears in a search's hits.
+  const reviewItems = pending.filter((item) => item.reason === "instruction_origin_uncertain");
+  const writingItems = pending.filter((item) => item.reason !== "instruction_origin_uncertain");
+  const waiting = writingItems.length > 0 && !query.trim() ? <PendingMemoryRows onResolve={resolveForgetRequest} onResolved={reload} items={writingItems} slow={pendingState.slow} stalled={pendingState.stalled} /> : null;
+  const reviewing = reviewItems.length > 0 && !query.trim() ? (
+    <GroupSection title="待核对">
+      <PendingMemoryRows onResolve={resolveForgetRequest} onResolved={reload} items={reviewItems} slow={pendingState.slow} stalled={pendingState.stalled} />
+    </GroupSection>
+  ) : null;
   // An empty list says what will be here and gives the one thing to do about it — or, where nothing can be done (a practice is learned,
   // never typed), why there is no button. A search with no hit has the box's own 「清除搜索」 over it, and says only that.
   const empty = (title: string, description: string, action?: { label: string; onPress: (() => void) | undefined }) => (
@@ -313,12 +320,13 @@ function MemoryHub() {
       return <ReceivedPanel packs={data.received ?? []} onShare={() => openShare("export")} onImport={() => openShare("import")} onChanged={reload} />;
     }
     if (tab === "self") {
-      if (facts.length === 0) {
+      if (facts.length === 0 && (query.trim() || reviewItems.length === 0)) {
         return waiting ?? empty("还没有关于你的记忆", "你在对话里说过的偏好、背景和写作习惯会出现在这里。", { label: "在对话里说说你自己", onPress: speakAbout(SELF_DRAFT) });
       }
       return (
         <div className="space-y-6">
           {waiting}
+          {reviewing}
           {SELF_SECTIONS.map((section) => {
             const rows = self.filter((fact) => fact.section === section.key);
             return rows.length === 0 ? null : (

@@ -129,7 +129,7 @@ export function CapsuleSharePanel({ capsuleId, card, scopes, excludeEntryIds, in
         <List label="分享链接" divided>
           {links.map((link) => <ListRow key={link.id}
             title={`${LINK_STATE_LABELS[link.state]} · 已用 ${link.uses} / ${link.maxUses} 次 · 已收下 ${link.importedCount} 人 · ${when(link.expiresAt)} 到期`}
-            actions={link.state === "active" ? <Button size="sm" variant="text" destructive disabled={busy} onClick={() => setRevoking(link)}>撤回</Button> : undefined} />)}
+            actions={link.state === "active" ? <Button size="sm" variant="secondary" destructive disabled={busy} onClick={() => setRevoking(link)}>撤回</Button> : undefined} />)}
         </List>
       </Disclosure>}
     </div>

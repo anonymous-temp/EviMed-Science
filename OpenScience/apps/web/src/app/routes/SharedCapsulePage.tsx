@@ -154,7 +154,7 @@ export function SharedCapsulePage() {
                 <Button variant="secondary" actionKind="set" disabled={busy} onClick={() => void perform(async () => {
                   await enableReceivedCapsule(imported.id); announceMemoryChanged(); navigate("/app/memory");
                 })}>启用</Button>
-                <Button variant="text" disabled={busy} onClick={() => navigate("/app/memory")}>稍后再说</Button>
+                <Button variant="text" data-text-action="navigation" disabled={busy} onClick={() => navigate("/app/memory")}>稍后再说</Button>
               </div>
             </div>
           ) : (
@@ -166,7 +166,7 @@ export function SharedCapsulePage() {
                   const result = token ? await importShareLink(token, input) : await importDelivery(deliveryId ?? "", input);
                   if (mounted.current) { setImported(result); announceMemoryChanged(); }
                 })}>收下</Button>
-                {deliveryId && <Button variant="text" actionKind="set" disabled={busy} onClick={() => void perform(async () => { await declineDelivery(deliveryId); navigate("/app/inbox"); })}>不需要</Button>}
+                {deliveryId && <Button variant="secondary" actionKind="set" disabled={busy} onClick={() => void perform(async () => { await declineDelivery(deliveryId); navigate("/app/inbox"); })}>不需要</Button>}
               </div>
             </div>
           )}

@@ -156,7 +156,7 @@ export function ImportDialog({ onClose, onSaved }: {
               {text.length} / {IMPORT_MAX_CHARS}
             </span>
             <div className="flex gap-2">
-              <Button type="button" variant="text" disabled={busy} onClick={() => setStep("prompt")}>上一步</Button>
+              <Button type="button" variant="text" data-text-action="navigation" disabled={busy} onClick={() => setStep("prompt")}>上一步</Button>
               <Button actionKind="start" type="submit" loading={busy} disabled={!text.trim()}>读取</Button>
             </div>
           </div>
@@ -179,7 +179,7 @@ export function ImportDialog({ onClose, onSaved }: {
           </ul>
           {error && <p role="alert" className="text-ui text-error">{error}</p>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="text" disabled={busy} onClick={() => setStep("paste")}>返回修改</Button>
+            <Button type="button" variant="text" data-text-action="navigation" disabled={busy} onClick={() => setStep("paste")}>返回修改</Button>
             <Button actionKind="set" type="button" loading={busy} disabled={kept.size === 0} onClick={() => void save(markSaved)}>保存所选</Button>
           </div>
         </div>

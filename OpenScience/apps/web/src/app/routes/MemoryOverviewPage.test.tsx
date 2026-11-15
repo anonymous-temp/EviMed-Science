@@ -1,10 +1,11 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { plainRecord } from "@/components/memory/__fixtures__/memoryProfiles";
 import { livedIn, memoryMark, ownerFirstDay, receivedPack, TODAY } from "@/components/memory/overview/__fixtures__/overviewDocs";
 import type { MapEdge, MapNode, MemoryMap } from "@/lib/memoryMapClient";
+import { MEMORY_CHANGED_EVENT } from "@/lib/memoryClient";
 import type { WebMethod } from "@/lib/methodsClient";
 import { MemoryOverviewPage } from "./MemoryOverviewPage";
 
@@ -111,13 +112,20 @@ describe("总览 as a data page", () => {
   });
 
   it("says in one sentence what is the tiles' numbers, each number a link to the list it counts, with no package in it counted as a memory", async () => {
+    reads.fetchMemoryProfile.mockResolvedValue({
+      records: [], groups: {}, activeCount: 7, pendingCount: 4,
+      pending: Array.from({ length: 4 }, (_unused, index) => ({ id: `held-${index}`, text: `待核对 ${index}`, at: "2026-10-12T02:00:00.000Z", state: "pending", reason: "instruction_origin_uncertain" })),
+    });
     open();
     await ready();
     const text = await sentence();
-    expect(text).toHaveTextContent("记住了 7 条关于你的事，学会了 2 种做法；最近一次在10月8日。");
+    expect(text).toHaveTextContent("记住了 7 条关于你的事，另有 4 条待核对，学会了 2 种做法；最近一次在 10月8日。");
     expect(within(text).getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
-      ["7", "/app/memory?tab=self"], ["2", "/app/memory?tab=methods"],
+      ["7", "/app/memory?tab=self"], ["4", "/app/memory?tab=self"], ["2", "/app/memory?tab=methods"],
     ]);
+    expect(tile("关于你")).toHaveTextContent("4 条待核对");
+    expect(tile("关于你").className).not.toMatch(/grid-cols/);
+    expect(tile("关于你")).toHaveClass("pr-8");
     // The headline's numbers are the tiles': nothing on the page counts the received packs as something remembered.
     expect([tileValue("关于你"), tileValue("做法")]).toEqual(["7", "2"]);
     for (const link of within(text).getAllByRole("link")) expect(link).toHaveClass("underline");
@@ -242,20 +250,22 @@ describe("总览 as a data page", () => {
 describe("the relations and topics", () => {
   const panel = () => screen.queryByRole("tablist", { name: "关系与主题" });
 
-  it("are not drawn below twelve memories: there is no empty frame for them", async () => {
+  it("keeps a readable sparse topic list without a GPU, even below twelve memories", async () => {
     reads.fetchMemoryMap.mockResolvedValue(manyMemories(11, 5));
     open();
     await ready();
     await screen.findByRole("list", { name: "最近变化" });
     expect(panel()).toBeNull();
+    expect(await screen.findByRole("list", { name: "主题排行" })).toBeInTheDocument();
   });
 
-  it("are not drawn from twelve memories with fewer than three relations and no topics", async () => {
+  it("does not draw a sparse relation graph from twelve memories with fewer than three relations, and keeps the topic list", async () => {
     reads.fetchMemoryMap.mockResolvedValue(manyMemories(12, 2));
     open();
     await ready();
     await screen.findByRole("list", { name: "最近变化" });
     expect(panel()).toBeNull();
+    expect(await screen.findByRole("list", { name: "主题排行" })).toBeInTheDocument();
   });
 
   it("are drawn from twelve memories with three relations, the relations first, and switched to the topics by the card's own two-way switch kept in the address", async () => {
@@ -300,7 +310,7 @@ describe("a part that could not be read", () => {
     open();
     await waitFor(() => expect(within(band()).getAllByText("暂时读不到")).toHaveLength(1));
     expect(tileValue("关于你")).toBe("7");
-    expect(await sentence()).toHaveTextContent("记住了 7 条关于你的事；最近一次在10月8日。");
+    expect(await sentence()).toHaveTextContent("记住了 7 条关于你的事；最近一次在 10月8日。");
     expect(within(band()).queryByRole("link", { name: /^做法 / })).toBeNull();
   });
 
@@ -324,6 +334,57 @@ describe("a part that could not be read", () => {
     expect(screen.getByRole("link", { name: "查看知识" })).toHaveAttribute("href", "/app/files");
     expect(document.querySelector("[data-headline]")).not.toBeNull();
     expect(await sentence()).toHaveTextContent("学会了 2 种做法");
+  });
+});
+
+describe("the pending-review count", () => {
+  const heldProfile = (count: number) => ({
+    records: [], groups: {}, activeCount: 0, pendingCount: count,
+    pending: Array.from({ length: count }, (_unused, index) => ({
+      id: `held-${index}`, text: `待核对 ${index}`, at: "2026-10-12T02:00:00.000Z", state: "pending" as const, reason: "instruction_origin_uncertain" as const,
+    })),
+  });
+
+  it("treats a delayed read as unknown, then shows the held count when it succeeds", async () => {
+    let finish!: (value: unknown) => void;
+    reads.fetchMemoryMap.mockResolvedValue(ownerFirstDay());
+    reads.listAllMethods.mockResolvedValue([]);
+    reads.fetchMemoryProfile.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    open();
+    await ready();
+    expect(screen.getByRole("status")).toHaveTextContent("正在读取待核对数量…");
+    expect(screen.queryByText("还没有记下关于你的事。")).toBeNull();
+    await act(async () => { finish(heldProfile(1)); });
+    await waitFor(() => expect(tile("关于你")).toHaveTextContent("1 条待核对"));
+    expect(screen.queryByText("正在读取待核对数量…")).toBeNull();
+    expect(screen.queryByText("还没有记下关于你的事。")).toBeNull();
+  });
+
+  it("shows an initial failure instead of an empty recipe and retries the profile read", async () => {
+    const user = userEvent.setup();
+    reads.fetchMemoryMap.mockResolvedValue(ownerFirstDay());
+    reads.listAllMethods.mockResolvedValue([]);
+    reads.fetchMemoryProfile.mockRejectedValueOnce(new Error("down")).mockResolvedValueOnce(heldProfile(2));
+    open();
+    expect(await screen.findByText("暂时读不到待核对数量。")).toBeInTheDocument();
+    expect(screen.queryByText("还没有记下关于你的事。")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(tile("关于你")).toHaveTextContent("2 条待核对"));
+    expect(screen.queryByText("暂时读不到待核对数量。")).toBeNull();
+  });
+
+  it("keeps a prior count visible with a stale warning when its refresh fails, then retries", async () => {
+    const user = userEvent.setup();
+    reads.fetchMemoryProfile.mockResolvedValueOnce(heldProfile(2));
+    open();
+    await waitFor(() => expect(tile("关于你")).toHaveTextContent("2 条待核对"));
+    reads.fetchMemoryProfile.mockRejectedValueOnce(new Error("down")).mockResolvedValueOnce(heldProfile(3));
+    act(() => { window.dispatchEvent(new Event(MEMORY_CHANGED_EVENT)); });
+    expect(await screen.findByText("待核对数量没有更新，显示上次读数。")).toBeInTheDocument();
+    expect(tile("关于你")).toHaveTextContent("2 条待核对");
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(tile("关于你")).toHaveTextContent("3 条待核对"));
+    expect(screen.queryByText("待核对数量没有更新，显示上次读数。")).toBeNull();
   });
 });
 

@@ -192,9 +192,10 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   always (`NoteParts`, a drawer's 「来源对话」); (3) a row or tile that goes to one place is pressed as a whole — hover `surface-2`, a focus ring and
   its mark at the end, › opens here, ↗ leaves the section (`ListRow` `leaves`, `StatTile` `whole`) — with its title in ink, and a row that cannot
   be pressed has neither the ground nor the mark; (4) a section's way out is one labelled link at the end of its header, accent, underlined,
-  with ›; (5) an action is a `Button`, `secondary` (the grey ground) in the memory section — never bare accent text; (6) a switch is the only
-  control of a row that is also pressed as a whole, and the two do not trigger each other. The marks of a picture (● ▲ ■ ◆ ✕) are graphics in the
-  data colour, not words. `clickabilityGrammar.test.ts` holds (1), (2) and the bare accent button in the memory section's sources.
+  with ›; (5) an action is a `Button`: a state mutation is `secondary` with `actionKind="set"` (and `destructive` where applicable), while a
+  `text` Button must carry a non-mutating `actionKind` or an explicit `data-text-action="navigation|cancel|view"` exception; (6) a switch is
+  the only control of a row that is also pressed as a whole, and the two do not trigger each other. The marks of a picture (● ▲ ■ ◆ ✕) are graphics
+  in the data colour, not words. `clickabilityGrammar.test.ts` holds these rules in the memory section's sources and rejects unclassified text actions.
 - **Restraint is the default; expression has a budget.** A reading page and a list page stay quiet.
   A page may spend **one brand moment** (a gradient, a serif headline, a hero), and charts and the
   32/40 metric rungs belong to data pages. Banning every expressive device is what made 循证 GEO
@@ -221,7 +222,7 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   the usual 3D graph gets wrong it does not do: no force layout, because a mark's place depends only on its own id and weight and its hub, so nothing moves when a mark is added and the sky is the
   same at the next visit; no line that only says “belongs” is the picture's point, and the lines that say something are drawn above them; a press is taken on the screen within 14 px and not along a ray, and the
   turning stops under a mark and on a button (WCAG 2.2.2); the wheel stays the page's and zooms only with Ctrl or ⌘ or full-screen; every mark opens its own drawer; and a listbox over the same marks is
-  the picture's one tab stop. No real GPU, a phone's width, a wish for less motion or a lost context all get the relation graph or the topics, as before: 3D has no claim on reading (Munzner, “no
+  the picture's one tab stop. No real GPU, a phone's width, a wish for less motion or a lost context all get the relation graph or the topics, as before; even one memory gets the readable topic list there, while the relation graph keeps its density threshold. Sparse skies frame every hub and memory by the farthest one rather than a percentile. 3D has no claim on reading (Munzner, “no
   unjustified 3D”; 2D beats it on spatial memory), and this one is there because the owner wants the memory to be felt, so reading stays with the table and the two flat pictures beside it.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
   in a Chinese market chart, and one reader in twelve cannot tell them apart at all.
@@ -542,6 +543,7 @@ pages after every release.
    spend: its tiles are cards of the one frame the charts are (`StatBand separate`), not cells with hairlines (a fourth kind of border); the table behind the charts and the relation graph are cards of the kind the chart is (`ChartCard`),
    not sections that hold cards (two more shapes); the switch between 关系 and 主题 is the underlined `Toolbar` `views` the band has (not a second look); and the relation graph has no replay slider. The count in a sentence wears the chips' look and is not a kind of its own.
    **Person information in the capsule (2026-11-05).** The existing lists and animated sky remain the reading surface. Account-level person files use 人物 and notes use 其他记忆; project-labelled entries keep 项目记忆 and their project name. Person/note marks and drawer titles identify the underlying record, and people are excluded from the account owner's identity category. Reuse the current entity/document palette and shapes. Default-private egress is separate from the existing suppression-from-recall control. The share preview starts each person entry unchecked; file, delivery and link use the same exact current preview and per-entry selection. A successful share, capsule change or opening an update clears that selection. A historical snapshot's scope never broadens the current preview, and a changed source requires a fresh choice. Source digests are protocol data, not controls shown to the person. Component and integration checks are scoped evidence; real-engine, real-GPU, narrow-width and assistive-technology checks retain their own receipts (DS23, AT52/AT56/AT58).
+   **Source-review holds (2026-11-15).** 关于你 gives them a visible 「待核对」 group before the kind groups, with one status for every kind: 「暂不用于回答，等待来源核对」. They are not writes in progress or forget confirmations. The overview's headline and 关于你 tile show their number beside the active one, never as one undifferentiated total. A default project's people and notes are account-level; only a named project's scope is labelled 项目记忆.
 
 2. **A row opens by the nature of what it is** (long configuration/mapping uses the main area under the October 20 correction below) (adopted 2026-10-08 with release 13, from the owner's
    screenshots of the scheduled-task and knowledge-base pages):

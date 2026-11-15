@@ -142,10 +142,10 @@ export function StarMapView({ layoutDoc, narrowed, selected, actions, meta, onUn
         <div className="pointer-events-auto ml-auto flex max-w-full flex-col items-end gap-2">
           {meta && <div className="rounded-card border border-faint bg-star-panel px-2 backdrop-blur-md">{meta}</div>}
           <div className="flex flex-wrap justify-end gap-1 rounded-card border border-faint bg-star-panel p-1 backdrop-blur-md">
-            {canReplay && <Button size="sm" variant="text" onClick={replay}>{replaying !== null ? <Square size={16} aria-hidden="true" /> : <Sparkles size={16} aria-hidden="true" />}{replaying !== null ? "停止回放" : "回放成长"}</Button>}
-            <Button size="sm" variant="text" aria-pressed={rotating} onClick={() => setRotating((value) => !value)}>{rotating ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}{rotating ? "暂停转动" : "缓慢转动"}</Button>
-            <Button size="sm" variant="text" onClick={() => canvas.current?.home()}><RotateCcw size={16} aria-hidden="true" />回正</Button>
-            <Button size="sm" variant="text" onClick={toggleFull}>{full ? <Minimize size={16} aria-hidden="true" /> : <Maximize size={16} aria-hidden="true" />}{full ? "退出全屏" : "全屏"}</Button>
+            {canReplay && <Button size="sm" variant="text" data-text-action="view" onClick={replay}>{replaying !== null ? <Square size={16} aria-hidden="true" /> : <Sparkles size={16} aria-hidden="true" />}{replaying !== null ? "停止回放" : "回放成长"}</Button>}
+            <Button size="sm" variant="text" data-text-action="view" aria-pressed={rotating} onClick={() => setRotating((value) => !value)}>{rotating ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}{rotating ? "暂停转动" : "缓慢转动"}</Button>
+            <Button size="sm" variant="text" data-text-action="view" onClick={() => canvas.current?.home()}><RotateCcw size={16} aria-hidden="true" />回正</Button>
+            <Button size="sm" variant="text" data-text-action="view" onClick={toggleFull}>{full ? <Minimize size={16} aria-hidden="true" /> : <Maximize size={16} aria-hidden="true" />}{full ? "退出全屏" : "全屏"}</Button>
           </div>
         </div>
       </div>

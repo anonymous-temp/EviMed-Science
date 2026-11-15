@@ -212,7 +212,9 @@ Scientific viewers need keyboard equivalents for pan/rotate/zoom and value inspe
 
 Make saved content, source, scope and later use understandable. Distinguish personal facts/preferences, project facts, reusable methods and imported capsules without forcing users to learn engine terminology. Enablement is separate from editing or deleting a record. Existing rights/retention govern import/export/withdrawal.
 
-The map must reveal records, not merely display nodes. Give sparse graphs meaningful labels or a persistent selected-record summary and a linked list within reach. Label membership edges as membership, not semantic inference. One real node is sufficient; missing dimensions use honest sparse representations rather than invented links or blank decoration. Current source/live control differences must be checked before reporting a missing button.
+The map must reveal records, not merely display nodes. Give sparse graphs meaningful labels or a persistent selected-record summary and a linked list within reach. Label membership edges as membership, not semantic inference. One real node is sufficient; missing dimensions use honest sparse representations rather than invented links or blank decoration. On a phone, with reduced motion or without a real GPU, even one memory keeps a readable topic list; a sparse 3D sky frames every hub and memory by the farthest one. Current source/live control differences must be checked before reporting a missing button.
+
+Source-review holds form a visible 「待核对」 group in 关于你, with the single honest status 「暂不用于回答，等待来源核对」. They stay separate from writes in progress and forget confirmations. The overview shows their count beside, never folded into, the active-memory count. Default-project people and notes are account-level content; only named-project scope is labelled 项目记忆.
 
 Import/sharing explains what is included, recipient scope, activation and revocation limits. Capsules are context, not permission. Memory uses the native OpenViking engine; an unavailable engine is an explicit off/unavailable state, not a fallback to the retired records engine. A person has one capsule and project labels organize its entries. Failed/partial read and genuinely empty remain distinct.
 
@@ -380,6 +382,8 @@ Verify **L/G/W**, AT51. A page MUST express one coherent current task. Overview,
 ### DS22.2 Action ownership and budgets
 
 Verify **T/G/W/M**, AT52. Actions MUST belong to page, list, row or selection scope and appear beside the scope they affect. A page header SHOULD contain at most one primary and two common secondary actions, followed by labeled overflow for remaining actions; a read-only view may have zero primary actions. This is a header default, not permission to hide frequent actions, safety consequences, costs, permissions or unknown mutation outcomes. Preserve accessible labels and keyboard paths. Group export formats in one labeled menu using the existing export component, retaining every supported format, permission, pending/error state and actual output. Do not export invented empty data or advertise a format without its working path.
+
+In the memory section, a state mutation uses a secondary `Button` with `actionKind="set"` and `destructive` where applicable. A text `Button` must instead carry a non-mutating `actionKind` or an explicit `data-text-action="navigation|cancel|view"` exception; the source guard rejects unclassified text actions.
 
 ### DS22.3 Workflow, views and filters
 

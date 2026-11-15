@@ -195,14 +195,15 @@ describe("the sentence over the page", () => {
   const text = (parts: ReturnType<typeof overviewHeadline>) => parts?.map((part) => (typeof part === "string" ? part : String(part.n))).join("");
 
   it("says what was remembered and learned, each number a link to the list it counts, and when it last changed", () => {
-    const parts = overviewHeadline({ about: 23, methods: 8, last: "10月24日" }, links)!;
-    expect(text(parts)).toBe("记住了 23 条关于你的事，学会了 8 种做法；最近一次在10月24日。");
-    expect(parts.filter((part) => typeof part !== "string").map((part) => [(part as { n: number }).n, (part as { to: string }).to])).toEqual([[23, "/a"], [8, "/m"]]);
+    const parts = overviewHeadline({ about: 23, pending: 4, methods: 8, last: "10月24日" }, links)!;
+    expect(text(parts)).toBe("记住了 23 条关于你的事，另有 4 条待核对，学会了 8 种做法；最近一次在 10月24日。");
+    expect(parts.filter((part) => typeof part !== "string").map((part) => [(part as { n: number }).n, (part as { to: string }).to])).toEqual([[23, "/a"], [4, "/a"], [8, "/m"]]);
   });
 
   it("leaves out a clause whose part could not be read or holds nothing — never a 「0」 — and says nothing for a capsule that is empty", () => {
-    expect(text(overviewHeadline({ about: null, methods: 3, last: "10月1日" }, links))).toBe("学会了 3 种做法；最近一次在10月1日。");
+    expect(text(overviewHeadline({ about: null, methods: 3, last: "10月1日" }, links))).toBe("学会了 3 种做法；最近一次在 10月1日。");
     expect(text(overviewHeadline({ about: 10, methods: 0, last: null }, links))).toBe("记住了 10 条关于你的事。");
+    expect(text(overviewHeadline({ about: 0, pending: 4, methods: 0, last: null }, links))).toBe("有 4 条待核对。");
     expect(overviewHeadline({ about: 0, methods: 0, last: null }, links)).toBeNull();
     expect(overviewHeadline({ about: null, methods: null, last: null }, links)).toBeNull();
   });
@@ -226,7 +227,7 @@ describe("the relations and topics", () => {
     expect(defaultExplore({ edges: edges(2) })).toBe("topics");
   });
 
-  it("offers the star map from one memory where it can be drawn, and leads with it wherever it is on offer", () => {
+  it("offers the star map from one memory where it can be drawn, and a sparse topic fallback where it cannot", () => {
     const many = { summary: summary(12), edges: edges(3), facets: doc().facets };
     const few = { summary: summary(3), edges: [], facets: doc().facets };
     const none = { summary: summary(0), edges: [], facets: doc().facets };
@@ -234,7 +235,8 @@ describe("the relations and topics", () => {
     expect(exploreViews(few, { star: true })).toEqual(["star"]);
     expect(exploreViews(none, { star: true })).toEqual([]);
     expect(exploreViews(many, { star: false })).toEqual(["graph", "topics"]);
-    expect(exploreViews(few, { star: false })).toEqual([]);
+    expect(exploreViews(few, { star: false })).toEqual(["topics"]);
+    expect(exploreViews(none, { star: false })).toEqual([]);
     expect(chosenExplore(["star", "graph", "topics"], null, many, { phone: false })).toBe("star");
     expect(chosenExplore(["star", "graph", "topics"], "topics", many, { phone: false })).toBe("topics");
   });
@@ -244,6 +246,7 @@ describe("the relations and topics", () => {
     expect(chosenExplore(["graph", "topics"], "star", many, { phone: false })).toBe("graph");
     expect(chosenExplore(["graph", "topics"], null, many, { phone: true })).toBe("topics");
     expect(chosenExplore(["star"], "graph", many, { phone: false })).toBe("star");
+    expect(chosenExplore(["topics"], null, many, { phone: false })).toBe("topics");
     expect(chosenExplore([], "graph", many, { phone: false })).toBeNull();
   });
 
