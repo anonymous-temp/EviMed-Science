@@ -44,6 +44,18 @@ class AdapterTests(unittest.TestCase):
         # HTTP endpoint of their own.
         self.assertEqual([tool["name"] for tool in server.TOOLS], ["memory_recall", "memory_note"])
 
+    def test_descriptions_support_general_work_without_mandatory_recall(self):
+        recall = server.TOOLS[0]["description"]
+        self.assertIn("personal context matters", recall)
+        self.assertIn("self-contained task needs no recall", recall)
+        self.assertNotIn("before the literature", recall)
+        self.assertNotIn("researcher", recall)
+
+    def test_proposal_description_requires_the_person_to_confirm(self):
+        proposal = server.TOOLS[1]["description"]
+        self.assertIn("pending until the person confirms", proposal)
+        self.assertNotIn("independently observed again", proposal)
+
     def test_a_note_never_carries_an_origin(self):
         seen = {}
 

@@ -6,6 +6,7 @@ import { AccountSection } from "./AccountSection";
 
 const mocks = vi.hoisted(() => ({
   fetchWebMe: vi.fn(),
+  fetchWebAgentKeys: vi.fn(),
   exportWebAccount: vi.fn(),
   deleteWebAccount: vi.fn(),
   logoutWeb: vi.fn(),
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   fetchWebMe: mocks.fetchWebMe,
+  fetchWebAgentKeys: mocks.fetchWebAgentKeys,
   exportWebAccount: mocks.exportWebAccount,
   deleteWebAccount: mocks.deleteWebAccount,
   logoutWeb: mocks.logoutWeb,
@@ -46,6 +48,7 @@ describe("账户", () => {
       project: { id: "default", name: "我的研究" },
       projects: [{ id: "default", name: "我的研究" }],
     });
+    mocks.fetchWebAgentKeys.mockResolvedValue({ keys: [], scopes: ["memory.read", "memory.write"] });
     mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local" });
     mocks.exportWebAccount.mockResolvedValue(new Blob(["account-archive"]));
     mocks.deleteWebAccount.mockResolvedValue(undefined);

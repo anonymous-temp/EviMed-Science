@@ -626,7 +626,7 @@ fills them. `compositionFixtures.tsx` holds a sample of each, `pageComposition.t
 | T3 模块页 | 循证 GEO (including its addressed answer); VCR uses the conversation/result variant below | GEO: header · active work when present · result tabs · scoped controls · current result, with the native conversation beside it when opened. The earlier rail and dock are superseded by the GEO workspace below. | a chart and details, an object list, or project work | as T1 |
 | T4 数据页 | 记忆总览, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · 记忆总览 only: 记忆星图 · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
 | T5 阅读页 | a knowledge-base document, a report, an evidence card, an event | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
-| T6 设置页 | account, appearance, notifications, allowance, data sources, projects | header · a left rail of **settings sections only** · `Panel` groups | `Panel` | — |
+| T6 设置页 | account (including external agent API keys), appearance, notifications, allowance, data sources, projects | header · a left rail of **settings sections only** · `Panel` groups | `Panel` | — |
 
 The specification names the same six templates List (T1), Master detail (T2), Workflow (T3), Data
 map (T4), Reader (T5) and Settings (T6), and adds the **connected workbench** — the October 20
@@ -1211,3 +1211,22 @@ The owner's ruling of 2026-11-08 aligns every module to the nested sidebar direc
 - A module whose page has peer views shows them as a second-level directory under its sidebar row, only while that module is current: 前沿动态 (精选 全部 关注 热榜 追踪 简报 证据专区, at `/app/frontier?view=`), 医学检索 (搜文献 查指南 找药品 临床试验, at `/app/search/<category>`, the keyword carried), 知识库 (资料 知识页 图谱 对话产出, the page's own `listPath` addresses; the two compiled views only where offered) and 记忆胶囊 (总览 关于你 做法 收到的). Each row is a native link to the view's existing address, the open one marked `aria-current`, in the shared `ModuleDirectoryNav` (`pl-7 pr-3`, `navItemClasses`). The in-page view switchers these replace (the frontier toolbar's views, the search category tabs and the composer's, the knowledge list's view links, the memory frame's section column) are removed; every other control stays and every old address (`?view=`, `?tab=`) still lands on the same view. A narrow screen reaches the directory through the sidebar overlay.
 - 科研工具 is retired: no sidebar row, `/app/capabilities` redirects to `/app/home` (the VCR method and calculation deep links under it stay). Professional workflows are reached by asking in the conversation (the classifier routes) or by `/<capability-id>`. This supersedes the October 14 and October 20 sentences that made Research Tools a catalogue and the shared discovery surface.
 - 插件与技能 as a market is retired: no sidebar row and no 发现 view. 「技能与插件」 (`/app/extensions/installed`) shows only what is added (project skill switches, personal skills with 导入技能 / 创建技能, added and built-in plugins) and is entered from 设置; the gear is current on it. `/app/extensions` and `/app/extensions/discover` redirect there. This supersedes the October 14 sentences naming 插件与技能 as a sidebar entry and as a discovery page.
+
+
+### External agent access in account settings (2026-11-15)
+
+“外部智能体访问（API 密钥）” is a Panel within 设置 → 账户 (`/app/account`).
+List the key's name, Chinese permission labels, created date and last-use date;
+keep raw key/account/project ids out of the surface. Use secondary Buttons for
+create, copy, dismiss and revoke, with a destructive treatment on revoke. The
+inline form offers only known scopes returned by the service and initially
+selects memory read; write is explicitly “提出待确认的记忆”, and management is
+never selected by default. After create, focus the readonly selectable secret,
+show it once with a copy action and a local-file instruction, and clear it when
+dismissed, revoked, unmounted or the browser session changes. Never persist the
+secret in browser storage. A failed copy keeps manual selection available; an
+unknown create outcome offers a list refresh rather than automatic mutation
+retry. `503 agent_memory_disabled` leaves only “此部署尚未启用外部智能体访问。”
+inside this group, without key controls. Preserve loading, empty and recoverable
+failure states. These are local component contracts; viewport and assistive-
+technology acceptance still need browser verification.

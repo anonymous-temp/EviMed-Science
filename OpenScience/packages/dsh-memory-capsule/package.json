@@ -1,0 +1,18 @@
+{
+  "name": "@evimed/dsh-memory-capsule",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal memory and methods for DSH through the EviMed public API.",
+  "license": "MIT",
+  "files": ["index.mjs", "cordis.patch.yml", "locale", "README.md", "README.zh.md"],
+  "exports": {
+    ".": "./index.mjs",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "engines": { "node": ">=24.9.0", "dsh": "0.2.2-rc.1" },
+  "dsh": { "manifestVersion": 1, "bundle": { "patch": "./cordis.patch.yml" } },
+  "scripts": { "test": "node --test test/plugin.test.mjs", "check:index": "node scripts/check-index.mjs", "check:bundle": "node scripts/check-bundle.mjs" }
+}
