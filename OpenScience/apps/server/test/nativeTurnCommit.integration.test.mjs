@@ -168,3 +168,75 @@ test("an account deleted while its turn's commit waited commits nothing, writes 
   const rows = await database.query("SELECT 1 FROM evimed_memory.settings WHERE user_id=$1", [userId]);
   assert.equal(rows.rowCount, 0, "and nothing is written for it");
 });
+
+test('startup defers a completed turn durably, rechecks all admission, and commits after recovery', options, async t => {
+  resetNativeMemoryMetrics();
+  const userId = `eng_${randomUUID().slice(0, 8)}`; users.push(userId);
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Engine startup test','development')", [userId]);
+  const project = { id: 'p_startup', userId };
+  let ready = false, clinical = false, deleted = false, now = new Date();
+  const run = { id: 'run-startup', sessionId: CONVERSATION, status: 'succeeded', startedAt: new Date(now.getTime() - 60_000).toISOString(), finishedAt: now.toISOString() };
+  const memorySettings = new MemorySettingsStore(config, { database });
+  const conversations = { running: async () => [], runsOf: async () => [run] };
+  const admission = createMemoryAdmission({ config, memorySettings, conversations, engineReady: () => ({ ok: ready, code: null }),
+    clinicalContext: async () => clinical, sourceDeleted: async () => deleted });
+  const stub = await startOpenVikingStub(t);
+  const sessions = new OpenVikingSessions(new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: 'evimed' }));
+  const overlay = new NativeMemoryOverlay({ database });
+  const gateway = createMemoryGatewayHandler({ config, sessions, admission, overlay,
+    runtimeManager: {}, store: {} });
+  const { NativeMemoryEngineDeferred } = await import('../src/nativeMemoryEngineDeferred.mjs');
+  const deferred = new NativeMemoryEngineDeferred({ config, overlay, sessions, admission, memorySettings, commit: gateway.commitSession,
+    project: async () => project, now: () => now,
+    transcript: async () => ({ exhausted: true, messages: [
+      { role: 'user', source: 'user', time: Date.parse(run.startedAt) + 1, parts: [{ type: 'text', text: 'I prefer concise replies.' }] },
+      { role: 'user', source: 'schedule', time: Date.parse(run.startedAt) + 2, parts: [{ type: 'text', text: 'PLATFORM MUST NOT BE LEARNED' }] },
+      { role: 'user', source: 'user', time: Date.parse(run.finishedAt) + 1, parts: [{ type: 'text', text: 'LATER TURN MUST NOT BE LEARNED' }] },
+    ] }) });
+  const timers = [];
+  const committer = new NativeTurnCommit({ config, sessions, admission, memorySettings, conversations, commit: gateway.commitSession,
+    deferEngine: entry => deferred.defer(entry), setTimer: fn => { timers.push(fn); return fn; }, clearTimer: () => {}, wait: async () => {} });
+  const worker = new NativeMemoryWorker({ config, sessions, overlay, memorySettings }); worker.engineDeferred = deferred;
+  const finish = async id => {
+    run.id = id;
+    await committer.noteRunFinished(project, run);
+    timers.splice(0).forEach(fn => fn()); await committer.idle();
+    return (await overlay.openCommits({ userId }))[0];
+  };
+  const held = await finish('recover');
+  assert.ok(held.extraction.engineDeferred);
+  assert.equal(stub.sent('POST', '/api/v1/sessions').length, 0);
+  await worker.processCommits({ userId });
+  assert.equal((await overlay.commit(userId, held.archiveUri)).state, 'failed');
+  ready = true;
+  await database.query("UPDATE evimed_memory.native_commits SET next_attempt_at=now()-interval '1 second' WHERE user_id=$1", [userId]);
+  await worker.processCommits({ userId });
+  const recovered = await overlay.commit(userId, held.archiveUri);
+  assert.equal(recovered.state, 'replayed');
+  const originals = await overlay.removalOrigins(userId, [recovered.replayedAs]);
+  assert.deepEqual(originals.map(source => source.archiveUri), [recovered.replayedAs], 'the startup obligation is metadata; verification reads the recovered real archive');
+  const forwarded = stub.sent('POST', `/api/v1/sessions/evimed-replay-${deferred.key(held.archiveUri)}/messages`);
+  assert.equal(forwarded.length, 1); assert.match(JSON.stringify(forwarded), /concise replies/);
+  assert.equal(nativeMemoryCounters().turnCommits.engine_committed, 1);
+  // Recovery after a process restart uses only durable rows, not the original committer or its timers.
+  committer.close();
+  for (const reason of ['paused', 'trial', 'clinical_context', 'source_deleted', 'before_reset', 'timeout']) {
+    ready = false;
+    const row = await deferred.defer({ userId, project, engineSessionId: ENGINE_SESSION, sessionId: CONVERSATION, run: { ...run, id: reason }, context: null });
+    assert.ok(row);
+    ready = true;
+    if (reason === 'paused') await memorySettings.updateSettings(userId, { learningPaused: true });
+    if (reason === 'trial') await memorySettings.updateSessionState(userId, project.id, CONVERSATION, { trialCapsuleId: 'capsule-test' });
+    clinical = reason === 'clinical_context'; deleted = reason === 'source_deleted';
+    if (reason === 'before_reset') await database.query('UPDATE evimed_memory.settings SET reset_at=$2 WHERE user_id=$1', [userId, new Date(Date.parse(run.finishedAt) + 60_000).toISOString()]);
+    if (reason === 'timeout') now = new Date(Date.now() + 31 * 60_000);
+    const before = stub.sent('POST', '/api/v1/sessions').length;
+    await worker.processCommits({ userId });
+    assert.equal(stub.sent('POST', '/api/v1/sessions').length, before, reason);
+    await memorySettings.updateSettings(userId, { learningPaused: false });
+    await memorySettings.updateSessionState(userId, project.id, CONVERSATION, { trialCapsuleId: null });
+    await database.query('UPDATE evimed_memory.settings SET reset_at=NULL WHERE user_id=$1', [userId]);
+    clinical = false; deleted = false;
+  }
+  assert.equal(nativeMemoryCounters().turnCommits.engine_given_up, 6);
+});

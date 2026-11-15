@@ -90,13 +90,13 @@ test('remember tool arguments are not human authority: the bound original conver
   assert.ok(requests.every(r => r.conversation.every(m => !m.parts.some(part => part.text.includes('I explicitly adopt:')))));
 });
 
-test('unbound remember tool writes are pending rather than accepted as a person speaking', options, async t => {
+test('unbound remember tool writes fail open without treating model arguments as source evidence', options, async t => {
   const f = await fixture(t, { config: enabled, extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/preferences/self/a.md`, after: `- ${poison}` }] }) });
   const worker = workerFor(f);
   await f.commitConversation('unbound', [{ role: 'user', text: poison }], { origin: 'tool', engineSession: 'mcp-store-unbound' });
   await worker.processCommits({ userId: f.userId });
-  assert.equal(await f.sessions.read(f.userId, `${f.root}/preferences/self/a.md`), null);
-  assert.equal((await f.store.pending(f.userId))[0].text, poison);
+  assert.equal(await f.sessions.read(f.userId, `${f.root}/preferences/self/a.md`), `- ${poison}`);
+  assert.equal((await f.store.pending(f.userId)).length, 0);
 });
 
 test('page remember and selected imports pass through the same structured review with their explicit action intact', options, async t => {
@@ -197,7 +197,13 @@ test('page edits and verification repairs are reviewed before a failing summary 
     const uri = f.seed('preferences/self/a.md', `- ${own}`);
     await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'preferences', body: `- ${own}` });
     let reviews = 0;
-    worker.pastedInstructionJudge = { check: async ({ candidates }) => { reviews++; return new Set(candidates.flatMap((c,i) => c.text === poison ? [i] : [])); } };
+    worker.pastedInstructionJudge = { check: async ({ candidates, conversation }) => {
+      reviews++;
+      assert.equal(conversation[0].text, `- ${poison}`);
+      assert.equal(conversation[0].role, path === 'page' ? 'user' : 'assistant');
+      assert.equal(conversation[0].action, path === 'page' ? 'memory_page_edit' : 'memory_verification_repair');
+      return new Set(candidates.flatMap((c,i) => c.text === poison ? [i] : []));
+    } };
     f.sessions.rebuildMemoryDirectory = async () => { throw Object.assign(new Error('summary failed'), { code: 'memory_summary_rebuild_failed' }); };
     const write = path === 'page'
       ? async () => { const record = await f.store.getRecord(f.userId, nativeFileId(uri)); return f.store.update(f.userId, record.id, { value: `- ${poison}`, expectedVersion: record.version }); }

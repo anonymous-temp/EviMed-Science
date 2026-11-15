@@ -1,3 +1,4 @@
+import { NativeMemoryEngineDeferred } from './nativeMemoryEngineDeferred.mjs';
 import { MethodCorrectionJudge, correctionSources, judgeCorrection } from './methodCorrectionJudge.mjs';
 import { createForgetRequestJudge } from './nativeMemoryForgetRequests.mjs';
 import { finished } from 'node:stream/promises';
@@ -5404,10 +5405,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // An attended turn of a native account is committed to the engine a few seconds after it ends (`nativeTurnCommit.mjs`):
   // the plugin commits only at a token threshold an ordinary conversation never reaches and when its session is disposed.
   // It goes through the gateway's own commit path, so the admission rule, the hourly bound and the ledger are the same.
+  const engineDeferred = new NativeMemoryEngineDeferred({ config, overlay: nativeMemoryOverlay, sessions: openVikingSessions,
+    admission: memoryAdmission, memorySettings, memoryContexts: nativeMemoryContexts, commit: memoryGatewayHandler.commitSession,
+    project: async (userId, projectId) => {
+      const user = await store.userById(userId);
+      if (!user) return null;
+      try { return await store.requireProject(user, projectId); }
+      catch (error) { if (error instanceof HttpError && error.status === 404) return null; throw error; }
+    },
+    transcript: (project, sessionId) => runtimeManager.sessionTranscript(project, sessionId, { wake: false }),
+  });
+  nativeMemoryWorker.engineDeferred = engineDeferred;
   const nativeTurnCommit = new NativeTurnCommit({
     config, memorySettings, sessions: openVikingSessions, admission: memoryAdmission, memoryContexts: nativeMemoryContexts,
     conversations: { runsOf: (project, sessionId) => agentRuns.conversationRuns(project, sessionId) },
     commit: memoryGatewayHandler.commitSession,
+    deferEngine: entry => engineDeferred.defer(entry),
     report: (line) => process.stderr.write(`${line}\n`),
   });
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ contextPolicies: sharedContextPolicies, contextItems, runtimeManager, store, service: capsuleService,

@@ -168,12 +168,14 @@ const MCP_EMPTY_LISTS = Object.freeze({ "prompts/list": { prompts: [] }, "resour
 
 /** What a read tool answers a caller whose memory is not read, by why. Said to the model, in the words the recall tool uses. */
 const NOT_READ = Object.freeze({
+  engine_unavailable: "记忆正在启动，暂时还无法读取；请稍后再试，这不代表没有相关记忆。",
   paused: "用户已暂停记忆（整个账号或本项目）：这里不读取，也不代表没有相关记忆。",
   trial: "这是一段试用别人胶囊的对话：只读这个胶囊，不读用户自己的记忆。",
   other: "这段对话不读取长期记忆。",
 });
 /** What `remember` answers a caller whose conversation is not learned from. */
 const NOT_KEPT = Object.freeze({
+  engine_unavailable: "记忆正在启动，这条暂时还没有保存；请稍后再试。",
   paused: "用户已暂停记忆（整个账号或本项目）：这条没有记下。需要记住的话，请用户先在记忆设置里恢复记忆。",
   trial: "这是一段试用别人胶囊的对话：这条没有记下。需要记住的话，请用户在普通对话里再说一次。",
   clinical_context: "本次对话读取了受试者资料，内容保留在该研究中，不写入长期记忆。",
@@ -343,7 +345,7 @@ export function parseEventStream(text) {
 }
 
 /**
- * @typedef {(request: { user: any, project: any, engineSessionId: string, context?: any, admitted?: import("./memoryAdmission.mjs").MemoryAdmission | null, keepRecentCount?: number }) =>
+ * @typedef {(request: { user: any, project: any, engineSessionId: string, sourceEngineSessionId?: string, context?: any, admitted?: import("./memoryAdmission.mjs").MemoryAdmission | null, keepRecentCount?: number }) =>
  *   Promise<{ status: number, json: any, outcome: string, commit: "accepted" | "nothing_pending" | "not_learning" | "rate_limited" }>} MemoryGatewayCommitSession
  */
 
@@ -382,7 +384,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   sessions: import("./openVikingSessions.mjs").OpenVikingSessions | null,
  *   memoryContexts?: import("./geoNativeMemoryContext.mjs").GeoNativeMemoryContext | null,
  *   rememberJournal?: import("./geoNativeMemoryRemember.mjs").GeoNativeMemoryRemember | null,
- *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
+ *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null, allowRunningFallback?: boolean }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
  *   sourceDeletion?: any,
  *   sourceReceipt?: ((request:any)=>Promise<void>) | null,
  *   sourceReceiptFailed?: ((request:any)=>Promise<void>) | null,
@@ -711,8 +713,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     return safe;
   }
 
-  async function scopedAdmission(user, project, engineSessionId, at, context, given = null) {
-    const decision = given ?? await admission.admit({ user, project, engineSessionId, at });
+  async function scopedAdmission(user, project, engineSessionId, at, context, given = null, allowRunningFallback = true) {
+    const decision = given ?? await admission.admit({ user, project, engineSessionId, at, allowRunningFallback });
     // Current MemoryAdmission decisions have no legacy `native` discriminator.
     // With shared capture proof enabled every named shared capture needs its live proof;
     // session-free recall and explicit remember still use workload authority.
@@ -1163,11 +1165,16 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           if (ctx.shared) {
             if (!rememberJournal || !runtimeManager.runtimeGeneration) throw new HttpError(503, 'memory_scope_denied', 'The project memory journal is unavailable.');
             const result = await rememberJournal.execute(ctx.memoryContext, { messages: kept, clientId: message.id,
+              sourceSession: admitted.sessionId ? `dsh-${admitted.sessionId}` : null,
               runtimeGeneration: runtimeManager.runtimeGeneration(ctx.project) });
             if (result.state === 'accepted') recordGatewayCommit('accepted');
             local.push(result.reply);
             continue;
           }
+          if (admitted.sessionId) await noteSession(ctx.user.id, `dsh-${admitted.sessionId}`, ctx.project.id, ctx.memoryContext?.projectCreatedAt ?? ctx.project.projectCreatedAt);
+          // Remember uses a one-shot engine session, so it does not inherit the captured conversation's project preamble.
+          const projectLine = ctx.project.id !== CATCH_ALL_PROJECT_ID ? projectContextLine(ctx.project.name) : null;
+          if (projectLine) kept.unshift({ role: 'assistant', content: projectLine });
           forward.push({ ...message, params: { ...message.params, arguments: { messages: kept } } });
           // The engine answers in prose that names the one-shot session and the task: read them into the ledger.
           afterCall.set(message.id, async (answer) => {
@@ -1315,6 +1322,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       let hiddenList = null;
       /** @type {Promise<{uri:string,label:string,aliases:string[]}[]> | null} */
       let people = null;
+      // Only the authenticated bridge can set this header; model arguments and Mcp-Session-Id never bind a conversation.
+      const toolSession = route === 'mcp' && typeof req.headers['x-evimed-memory-session'] === 'string'
+        && /^[A-Za-z0-9_.@-]{1,180}$/.test(req.headers['x-evimed-memory-session']) ? req.headers['x-evimed-memory-session'] : null;
       const ctx = {
         memoryFileSearchMinScore: config.memoryFileSearchMinScore,
         user, project, json, query: url.searchParams, match: found.match, engineUser, userRoot, sessions: view, memoryContext, shared,
@@ -1376,6 +1386,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             + siblings.map(row => `- ${row.label}: ${row.uri}`).join('\n');
         },
         admit: (/** @type {string | null} */ engineSessionId, /** @type {number | null} */ at = null) => {
+          engineSessionId = toolSession ? `dsh-${toolSession}` : engineSessionId;
           const key = `${engineSessionId ?? ""}\u0000${at ?? ""}`;
           if (!admissions.has(key)) admissions.set(key, scopedAdmission(user, project, engineSessionId, at, memoryContext));
           return /** @type {Promise<import("./memoryAdmission.mjs").MemoryAdmission>} */ (admissions.get(key));
@@ -1502,12 +1513,14 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
    * `admitted` is the decision the caller already has; without it the admission is asked here.
    * @type {MemoryGatewayCommitSession}
    */
-  const commitSession = async ({ user, project, engineSessionId, admitted = null, keepRecentCount = 0, context = null }) => {
+  const commitSession = async ({ user, project, engineSessionId, sourceEngineSessionId = engineSessionId, admitted = null, keepRecentCount = 0, context = null }) => {
     if (!enabled) return { status: 404, json: null, outcome: "refused", commit: /** @type {const} */ ("not_learning") };
     if (!new RegExp(`^${SESSION}$`).test(String(engineSessionId))) throw new HttpError(400, "memory_gateway_body_invalid", "A session id is required.");
     return withNativeMemoryWrite(overlay?.database,user.id,async()=>{
       const resolved = await resolveContext(user, project, context);
-      const decision = await scopedAdmission(user, project, engineSessionId, null, resolved, admitted);
+      // A control-plane startup materialization commits a fresh session, with capture authority from its original turn.
+      // This argument is internal only; HTTP commit requests always prove the session they name.
+      const decision = await scopedAdmission(user, project, sourceEngineSessionId, null, resolved, admitted);
       return commitEngineSession({ user, project, sessionId: engineSessionId, admitted: decision, keepRecentCount, context: resolved });
     });
   };

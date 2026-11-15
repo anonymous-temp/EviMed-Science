@@ -130,23 +130,50 @@ function publicFile(row) {
   };
 }
 
-/** Query-only original-authorship resolver, shared by the worker ledger and read-only archive replay. */
+/** Query-only original-authorship resolver, shared by the worker ledger and read-only archive replay.
+ * Startup obligations are references, not archives: their recovered gateway archive is the original text source. */
 export async function readNativeMemoryOriginalSources(query, userId, archiveUris) {
     if (!archiveUris.length) return [];
     const result = await query(`WITH RECURSIVE edges AS (
       SELECT replayed_as AS child,archive_uri AS parent FROM evimed_memory.native_commits WHERE user_id=$1 AND replayed_as IS NOT NULL
-      UNION SELECT copy_archive_uri,source_archive_uri FROM evimed_memory.native_source_copies WHERE user_id=$1
+        AND NOT (extraction ? 'engineDeferred')
+      UNION SELECT x.copy_archive_uri,x.source_archive_uri FROM evimed_memory.native_source_copies x
+        LEFT JOIN evimed_memory.native_commits p ON p.user_id=x.user_id AND p.archive_uri=x.source_archive_uri
+        WHERE x.user_id=$1 AND NOT (COALESCE(p.extraction,'{}'::jsonb) ? 'engineDeferred')
     ), lineage(uri) AS (
       SELECT unnest($2::text[]) UNION SELECT e.parent FROM edges e JOIN lineage l ON e.child=l.uri
     ) SELECT l.uri AS archive_uri,c.engine_session,c.project_id,c.project_created_at FROM lineage l
       LEFT JOIN evimed_memory.native_commits c ON c.user_id=$1 AND c.archive_uri=l.uri
       WHERE NOT EXISTS(SELECT 1 FROM edges e WHERE e.child=l.uri)
+      AND NOT (COALESCE(c.extraction,'{}'::jsonb) ? 'engineDeferred')
       AND COALESCE(c.origin,'') NOT IN ('promotion','replay','tool')
       AND COALESCE(c.engine_session,'') NOT LIKE 'mcp-store-%'
       AND NOT EXISTS(SELECT 1 FROM evimed_memory.native_admissions a WHERE a.user_id=$1
         AND (a.archive_uri=l.uri OR a.engine_session=c.engine_session))`, [owner(userId), archiveUris]);
     return result.rows.map(row => ({ archiveUri: row.archive_uri, engineSession: row.engine_session,
       projectId: row.project_id, projectCreatedAt: row.project_created_at }));
+}
+
+/** @typedef {{pendingKeys?:{uri:string,fingerprint:string}[],receipts?:{sources?:unknown[],reviews?:({decision:string,message:number|null}[]|null)[]}[]}} InstructionCheckReceipt */
+/** @param {InstructionCheckReceipt[]} checks @returns {Map<string,Set<string>>} */
+export function unfoundedInstructionKeys(checks) {
+  /** @type {Map<string,Set<string>>} */
+  const eligible = new Map();
+  /** @type {Set<string>} */
+  const refused = new Set();
+  for (const check of checks) {
+    const receipts = check.receipts ?? [];
+    const noSourceKeep = receipts.length > 0 && receipts.every(receipt => Array.isArray(receipt.sources) && !receipt.sources.length
+      && receipt.reviews?.length === 2 && receipt.reviews.every(review => review?.length && review.every(row => row.decision === 'keep' && row.message === null)));
+    for (const key of check.pendingKeys ?? []) {
+      const identity = `${key.uri}\0${key.fingerprint}`;
+      if (!noSourceKeep) { refused.add(identity); continue; }
+      const prints = eligible.get(key.uri) ?? new Set();
+      prints.add(key.fingerprint); eligible.set(key.uri, prints);
+    }
+  }
+  for (const [uri, prints] of eligible) for (const print of prints) if (refused.has(`${uri}\0${print}`)) prints.delete(print);
+  return eligible;
 }
 
 export class NativeMemoryOverlay {
@@ -392,13 +419,13 @@ export class NativeMemoryOverlay {
   /**
    * One commit the engine accepted. Written once per archive: a second sighting (the scan finding what the gateway
    * recorded) fills what the first did not know and never moves the state back.
-   * @param {{ userId: string, archiveUri: string, engineSession: string, sourceSession?: string | null, projectId?: string | null, projectCreatedAt?: string | null, origin: string, taskId?: string | null, state?: string, error?: string, pendingText?: string | null, attempts?: number }} commit `attempts`: how many replays the conversation behind this commit has had already (a replay's own commit carries the count on, so the cap bounds the chain)
+   * @param {{ userId: string, archiveUri: string, engineSession: string, sourceSession?: string | null, projectId?: string | null, projectCreatedAt?: string | null, origin: string, taskId?: string | null, state?: string, error?: string, pendingText?: string | null, attempts?: number, extraction?: Record<string, unknown> }} commit `attempts`: how many replays the conversation behind this commit has had already (a replay's own commit carries the count on, so the cap bounds the chain)
    */
-  async recordCommit({ userId, archiveUri, engineSession, sourceSession = null, projectId = null, projectCreatedAt=undefined, origin, taskId = null, state = "pending", error = "", pendingText = null, attempts = 0 }) {
+  async recordCommit({ userId, archiveUri, engineSession, sourceSession = null, projectId = null, projectCreatedAt=undefined, origin, taskId = null, state = "pending", error = "", pendingText = null, attempts = 0, extraction = {} }) {
     if (!NATIVE_COMMIT_ORIGINS.includes(origin)) throw new HttpError(500, "memory_commit_invalid", "Unknown commit origin.");
     if(projectCreatedAt===undefined)projectCreatedAt=projectId?(await this.#query('SELECT created_at::text AS created FROM evimed_control.projects WHERE user_id=$1 AND id=$2',[owner(userId),projectId])).rows[0]?.created??null:null;
-    const result = await this.#query(`INSERT INTO evimed_memory.native_commits AS c (user_id, archive_uri, engine_session, project_id, origin, task_id, state, error, next_attempt_at, pending_text, attempts,project_created_at,source_session)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $9, $10,$11,$12)
+    const result = await this.#query(`INSERT INTO evimed_memory.native_commits AS c (user_id, archive_uri, engine_session, project_id, origin, task_id, state, error, next_attempt_at, pending_text, attempts,project_created_at,source_session,extraction)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $9, $10,$11,$12,$13::jsonb)
       ON CONFLICT (user_id, archive_uri) DO UPDATE SET
         task_id = COALESCE(c.task_id, EXCLUDED.task_id), project_id = COALESCE(c.project_id, EXCLUDED.project_id),
         project_created_at = CASE WHEN EXCLUDED.source_session IS NOT NULL AND (c.project_id IS NULL OR c.project_id=EXCLUDED.project_id)
@@ -406,7 +433,7 @@ export class NativeMemoryOverlay {
         source_session = COALESCE(c.source_session, EXCLUDED.source_session), updated_at = clock_timestamp()
       RETURNING *, (xmax = 0) AS inserted`,
     [owner(userId), String(archiveUri), String(engineSession), projectId, origin, taskId, state, String(error ?? "").slice(0, 400),
-      pendingText == null ? null : String(pendingText).slice(0, 2_000), Math.max(0, Math.min(100, Math.trunc(Number(attempts)) || 0)),projectCreatedAt,sourceSession]);
+      pendingText == null ? null : String(pendingText).slice(0, 2_000), Math.max(0, Math.min(100, Math.trunc(Number(attempts)) || 0)),projectCreatedAt,sourceSession,JSON.stringify(extraction)]);
     await this.linkSourceCopies(userId,archiveUri);
     return { ...publicCommit(result.rows[0]), inserted: result.rows[0].inserted === true };
   }
@@ -648,6 +675,41 @@ export class NativeMemoryOverlay {
       const held = prints.get(key.uri) ?? new Set(); held.add(key.fingerprint); prints.set(key.uri, held);
     }
     return (await this.protectRevisions(userId, rows.rows.map(publicRevision))).map(row => ({ ...row, pendingFingerprints: prints.get(row.uri) ?? null }));
+  }
+
+  /** The historical defect wrote pending keys despite two keep decisions and no source messages.
+   * Require that exact receipt shape; a later positive finding for the same key prevents automatic release.
+   * @param {string} userId
+   */
+  async unfoundedInstructionRevisions(userId) {
+    const held = await this.#query(`SELECT r.* FROM evimed_memory.native_revisions r WHERE user_id=$1 AND actor='platform'
+      AND reason LIKE '%pasted_instruction_pending%' AND undone_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM evimed_memory.native_revisions newer WHERE newer.user_id=r.user_id AND newer.uri=r.uri
+        AND newer.id>r.id AND (newer.actor='user' OR (newer.reason LIKE '%pasted_instruction%' AND newer.reason NOT LIKE '%pasted_instruction_pending%')))
+      ORDER BY id DESC LIMIT 100`, [owner(userId)]);
+    const revisions = await this.protectRevisions(userId, held.rows.map(publicRevision));
+    if (!revisions.length) return [];
+    const checks = await this.#query(`SELECT result FROM evimed_memory.native_instruction_checks
+      WHERE user_id=$1 AND EXISTS (SELECT 1 FROM jsonb_array_elements(result->'pendingKeys') k WHERE k->>'uri'=ANY($2::text[]))
+      ORDER BY checked_at DESC LIMIT 1001`, [owner(userId), [...new Set(revisions.map(row => row.uri))]]);
+    if (checks.rows.length > 1000) return [];
+    const eligible = unfoundedInstructionKeys(checks.rows.map(row => row.result));
+    return revisions.map(row => ({ ...row, unfoundedFingerprints: eligible.get(row.uri) ?? new Set() }));
+  }
+
+  /** Complete only selected held lines, keeping unrelated pending lines available. The new restore/forget revision owns
+   * the resolved text; this hold's before-image must no longer offer it for confirmation.
+   * @param {string} userId @param {string} id @param {string[]} lines
+   */
+  async resolveInstructionRevision(userId, id, lines) {
+    const row = await this.revision(userId, id);
+    if (!row || row.undoneAt || row.actor !== 'platform' || !row.reason.includes('pasted_instruction_pending')) return;
+    const prints = new Set(lines.map(lineFingerprint));
+    const before = String(row.before ?? '').split('\n').filter(line => !prints.has(lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, '')))).join('\n');
+    const after = new Set(memoryLines(row.after ?? '').map(lineFingerprint));
+    const done = before.split('\n').filter(line => line.trim() && !/^#{1,6}\s/.test(line.trim())).every(line => after.has(lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, ''))));
+    await this.#query(`UPDATE evimed_memory.native_revisions SET before=$3,undone_at=CASE WHEN $4 THEN clock_timestamp() ELSE undone_at END
+      WHERE user_id=$1 AND id=$2 AND undone_at IS NULL`, [owner(userId), id, before, done]);
   }
 
   /**

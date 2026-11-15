@@ -133,6 +133,45 @@ function presentsLocalKey(presented, localKey) {
   return actual.length === expected.length && timingSafeEqual(actual, expected)
 }
 
+/** The kernel execution context is authoritative; MCP arguments and transport session ids are not.
+ * The random reference survives the plugin's stdio MCP hop and is consumed only by this bridge.
+ * @param {{tools?:{get:(name:string)=>{name:string,execute:Function}|null},on?:(event:string,callback:()=>void)=>(()=>void)}} ctx
+ * @param {Map<string,string>} bindings
+ */
+export function decorateMemoryToolSource(ctx, bindings) {
+  /** @type {Map<{name:string,execute:Function},{original:Function,wrapped:Function}>} */
+  const decorated = new Map()
+  const refresh = () => {
+    for (const name of ['remember', 'forget', 'read', 'search', 'list', 'merge_people', 'distinct_people']) {
+      const definition = ctx.tools?.get(`mcp__openviking__${name}`)
+      if (!definition || decorated.has(definition)) continue
+      const original = definition.execute
+      /** @param {Record<string,unknown>} args @param {{agent?:{session?:{id?:string,header?:{id?:string}}}}} execution */
+      const wrapped = async function (args, execution) {
+        const forwarded = { ...args }
+        delete forwarded.__evimed_memory_invocation
+        const session = execution.agent?.session
+        const reference = randomBytes(32).toString('base64url')
+        if (session?.id && session.header?.id === session.id) {
+          bindings.set(reference, session.id)
+          forwarded.__evimed_memory_invocation = reference
+        }
+        try { return await original.call(definition, forwarded, execution) }
+        finally { bindings.delete(reference) }
+      }
+      definition.execute = wrapped
+      decorated.set(definition, { original, wrapped })
+    }
+  }
+  const unsubscribe = ctx.on?.('tools/change', refresh)
+  refresh()
+  return () => {
+    unsubscribe?.()
+    for (const [definition, entry] of decorated) if (definition.execute === entry.wrapped) definition.execute = entry.original
+    bindings.clear()
+  }
+}
+
 /** What crosses towards the gateway: content negotiation and the MCP session headers. Identity never does. */
 const FORWARDED_REQUEST_HEADERS = Object.freeze(['content-type', 'accept', 'mcp-session-id', 'mcp-protocol-version', 'last-event-id', 'user-agent'])
 const FORWARDED_RESPONSE_HEADERS = Object.freeze(['content-type', 'mcp-session-id', 'retry-after'])
@@ -184,6 +223,7 @@ function isToolCall(pathname, body) {
 
 /**
  * @typedef {object} MemoryBridgeOptions
+ * @property {Map<string,string>} [toolSources] kernel-owned invocation references
  * @property {string} gatewayUrl the control plane's memory gateway, without a trailing slash
  * @property {string} localKey the key the plugin presents ({@link createLocalBridgeKey}); a caller without it is refused
  * @property {string} [tokenFile] the workload token file the other gateway clients read; empty sends no credential
@@ -272,7 +312,20 @@ export function createMemoryBridge(options) {
       }
       chunks.push(chunk)
     }
-    const body = Buffer.concat(chunks)
+    let body = Buffer.concat(chunks)
+    let sourceSession = ''
+    if (url.pathname === '/mcp' && body.length) {
+      try {
+        const message = JSON.parse(body.toString('utf8'))
+        // The plugin issues one invocation per request. Never bind a mixed batch to one conversation.
+        if (!Array.isArray(message) && message?.method === 'tools/call' && message.params?.arguments) {
+          const args = message.params.arguments
+          sourceSession = options.toolSources?.get(args.__evimed_memory_invocation) ?? ''
+          delete args.__evimed_memory_invocation
+          body = Buffer.from(JSON.stringify(message))
+        }
+      } catch { /* The gateway owns invalid JSON responses. */ }
+    }
     if (!gateway) { unavailable(res, 'not configured'); return }
     if (now() < closedUntil) { unavailable(res, 'unreachable'); return }
 
@@ -301,6 +354,7 @@ export function createMemoryBridge(options) {
         const value = req.headers[name]
         if (typeof value === 'string' && value) headers[name] = value
       }
+      if (sourceSession) headers['x-evimed-memory-session'] = sourceSession
       if (bearer) headers.authorization = `Bearer ${bearer}`
       return send(`${gateway}${url.pathname}${url.search}`, { method: req.method, headers, ...(body.length ? { body } : {}), signal: abort.signal, redirect: 'error' })
     }
@@ -393,7 +447,11 @@ export async function registerMemoryBridge(ctx, config) {
   pinOpenVikingPluginEnvironment(localKey)
   const gatewayUrl = String(config.gatewayUrl ?? '').trim()
   if (!gatewayUrl) diagnostics()?.degrade?.('memory bridge: no memory gateway is configured for this runtime')
+  /** @type {Map<string,string>} */
+  const toolSources = new Map()
+  ctx.effect(() => decorateMemoryToolSource(ctx, toolSources))
   const bridge = createMemoryBridge({
+    toolSources,
     gatewayUrl,
     localKey,
     tokenFile: config.tokenFile,

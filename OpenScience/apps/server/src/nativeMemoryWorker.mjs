@@ -172,6 +172,9 @@ export class NativeMemoryWorker {
     this.nativeMemory = nativeMemory;
     /** Private history indexing; composed after the authoritative run ledger. */
     this.history = null;
+    /** Durable startup turn obligations, composed after the gateway and run ledger.
+     * @type {import("./nativeMemoryEngineDeferred.mjs").NativeMemoryEngineDeferred | null} */
+    this.engineDeferred = null;
     this.projectOfSession = projectOfSession;
     this.memoryContexts = memoryContexts;
     this.verification = new NativeMemoryVerification({ config: this.config, sessions, overlay, memoryContexts, rejectionJudge });
@@ -184,7 +187,9 @@ export class NativeMemoryWorker {
     if (this.robustInstructions) this.verification.instructionWriteCheck = async (userId, file, body, origins, context) => {
       context ??= await this.#contextForUri(userId, file.uri);
       const operations = { updates: [{ uri: file.uri, before: file.body, after: body }] };
-      const reviewed = await this.#instructionOrigins({ userId, projectId: file.projectId ?? null }, operations, context, [...origins.values()].flat());
+      // The repair is a source even without an archived predecessor; it is assistant-authored, not user adoption.
+      const reviewed = await this.#instructionOrigins({ userId, projectId: file.projectId ?? null }, operations, context, [...origins.values()].flat(),
+        [instructionSourceMessage({ role: 'assistant', content: body, action: 'memory_verification_repair' })]);
       await this.#holdInstructionLines(userId, operations, context, reviewed, file.projectId ?? null);
       return context.sessions.read(userId, file.uri);
     };
@@ -282,7 +287,7 @@ export class NativeMemoryWorker {
 
   /** Maintenance waits for active writers, including a crashed writer's expiring lease. */
   async drainSummaryInvalidations(userId) {
-    if (this.robustInstructions) await this.reviewPendingInstructionWrites(userId);
+    await this.reviewPendingInstructionWrites(userId);
     if (!(await this.overlay.pendingSummaryInvalidations(userId)).length) return 0;
     return withNativeMemoryWrite(this.overlay.database, userId, () => drainMemorySummaryInvalidations(this.sessions, this.overlay, userId,
       this.memoryContexts ? async uri => (await this.memoryContexts.forUri(userId, uri)).sessions : null), { exclusive: true });
@@ -523,7 +528,9 @@ export class NativeMemoryWorker {
     let settled = 0;
     for (const commit of await this.overlay.openCommits({ userId, limit, now: this.commitClock ? this.commitClock() : null })) {
       try {
-        if (commit.state === "pending") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#settle(commit)) ? 1 : 0;
+        if (commit.extraction.engineDeferred) {
+          if (this.engineDeferred) settled += await withNativeMemoryWrite(this.overlay.database, commit.userId, () => this.engineDeferred.process(commit)) ? 1 : 0;
+        } else if (commit.state === "pending") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#settle(commit)) ? 1 : 0;
         else if (commit.state === "failed") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#replay(commit)) ? 1 : 0;
       } catch (error) {
         this.report(`native memory commit: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
@@ -594,7 +601,10 @@ export class NativeMemoryWorker {
         // that found this very archive running wrote it down, and then no message needs to be readable to know.
         const tombstone = await this.overlay.tombstone(commit.userId, commit.archiveUri);
         const removed = tombstone ? await this.#removeWrittenBy(commit.userId, diff, sessions) : await this.#undoBeforeReset(commit, diff, context);
-        if (removed === null && this.robustInstructions) await this.#prepareInstructionWrites(commit, diff, context);
+        if (removed === null && this.robustInstructions) {
+          if (!await this.instructionSourceReady(commit, context)) return false;
+          await this.#prepareInstructionWrites(commit, diff, context);
+        }
         await this.#assertSummariesSettled(commit.userId);
         if (tombstone && tombstone.state === "open") await this.overlay.closeTombstone(commit.userId, commit.archiveUri, "swept", removed ?? 0);
         if (removed !== null) {
@@ -1267,6 +1277,7 @@ export class NativeMemoryWorker {
    * writes unchecked. Namespace, deletion and reset authority still precede reading any source as learning.
    */
   async reviewPendingInstructionWrites(userId) {
+    await this.nativeMemory?.releaseUnfoundedInstructionHolds?.(userId);
     if (!this.robustInstructions) return;
     for (const pending of await this.overlay.instructionCommits(userId)) {
       try {
@@ -1275,9 +1286,22 @@ export class NativeMemoryWorker {
         const raw = await context.sessions.read(userId, `${commit.archiveUri}/memory_diff.json`); if (!raw) continue;
         const diff = JSON.parse(raw); this.#assertDiffContext(commit, diff, context);
         if (await this.#undoBeforeReset(commit, diff, context) !== null) continue;
-        await this.#prepareInstructionWrites(commit, diff, context);
+        if (await this.instructionSourceReady(commit, context)) await this.#prepareInstructionWrites(commit, diff, context);
       } catch (error) { this.report(`native instruction review: ${String(error?.code ?? 'unavailable')}`); }
     }
+  }
+
+  /** A native remember can finish before the human conversation is archived. Keep the existing commit pending;
+   * its next worker pass retries after the gateway records that archive. Missing authority never deletes memory.
+   * @param {{userId:string,origin?:string,engineSession?:string,sourceSession?:string|null}} commit
+   * @param {{sessions:import('./openVikingSessions.mjs').OpenVikingSessions}} context
+   */
+  async instructionSourceReady(commit, context) {
+    if (!(commit.origin === 'tool' || commit.engineSession?.startsWith('mcp-store-')) || !commit.sourceSession) return true;
+    const sources = await this.overlay.commitsOfSession(commit.userId, commit.sourceSession, { userRoot: context.sessions.userRoot(commit.userId) });
+    if ((await this.verification.readInstructionSources(commit.userId, sources, context)).length) return true;
+    recordPastedInstructionCheck('source_deferred');
+    return false;
   }
 
   /** The engine's revision precedes its correction, so the latest Undo always restores the held line. */
@@ -1315,7 +1339,7 @@ export class NativeMemoryWorker {
     const entries = [...(operations.adds ?? []), ...(operations.updates ?? [])];
     const origins = await this.overlay.originsOf(userId, entries.map(e => e.uri));
     // A remember tool's user-role arguments were authored by the model. Its bound human conversation, not that
-    // manufactured one-shot session, is evidence of adoption. Without a committed source, leave the item pending.
+    // manufactured one-shot session, is evidence of adoption. Settlement waits for its committed source.
     const toolWrite = commit.origin === 'tool' || String(commit.engineSession ?? '').startsWith('mcp-store-');
     const toolSources = toolWrite && commit.sourceSession ? await this.overlay.commitsOfSession(userId, commit.sourceSession, { userRoot: context.sessions.userRoot(userId) }) : [];
     // Extraction can promote a choice from another changed file into a new preference file. Its earlier
@@ -1352,6 +1376,10 @@ export class NativeMemoryWorker {
     }
     const result = Object.assign(new Set(), { pending: new Set(), checked: new Set(), bodies });
     if (!candidates.length) return result;
+    if (!conversation.length) {
+      recordPastedInstructionCheck(commit.sourceSession ? 'source_deferred' : 'source_unbound');
+      return result;
+    }
     const fingerprint = createHash('sha256').update(INSTRUCTION_ORIGIN_POLICY_HASH+'\0'+String(this.config.memoryExtractionModel || this.config.deepseekModel)+'\0'+JSON.stringify({ candidates, conversation })).digest('hex');
     const held = await this.overlay.instructionCheck(userId, fingerprint);
     /** @type {Set<number> & {pending?: Set<number>, receipts?: any[]}} */

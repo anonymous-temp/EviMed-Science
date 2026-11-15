@@ -27,7 +27,7 @@ test('two independent judgments hold disagreement outside memory; agreement remo
   const calls = [];
   const judge = createInstructionOriginJudge({ config, callModel: async (_deps, call) => { calls.push(call); const own = JSON.parse(call.body.messages[1].content).candidates[0].text.includes('paragraphs'); return answer([row(0, own ? calls.length % 2 ? 'keep' : 'uncertain' : 'material_instruction')]); } });
   const result = await judge.check({ userId: 'u', candidates, conversation });
-  assert.deepEqual([...result], [0]); assert.deepEqual([...result.pending], [1]);
+  assert.deepEqual([...result], [0]); assert.deepEqual([...result.pending], []);
   assert.equal(calls.length, 4); assert.deepEqual(calls[0].body.response_format, { type: 'json_object' });
   assert.ok(!calls[1].body.messages[1].content.includes('material_instruction'));
   assert.equal(result.receipts[0].reviews.length, 2);
@@ -47,14 +47,14 @@ test('more than 64 equivalent candidates are all checked; identical source-bound
   assert.equal(offered, 140); assert.equal(distinct.checked.size, 70); assert.equal(distinct.pending.size, 0);
 });
 
-test('unavailable, oversized and invalid judgments produce recoverable pending entries, never silent admission', async () => {
+test('missing source and unavailable judgments keep memories without destructive pending entries', async () => {
   for (const callModel of [async () => { throw Error('offline'); }, async () => answer([])]) {
     const judge = createInstructionOriginJudge({ config, callModel });
     const result = await judge.check({ userId: 'u', candidates, conversation });
-    assert.deepEqual([...result.pending], [0,1]); assert.equal(result.size, 0);
+    assert.deepEqual([...result.pending], []); assert.equal(result.size, 0);
   }
   const result = await createInstructionOriginJudge({ config, callModel: async () => answer(candidates.map((_, i) => row(i, 'keep'))) }).check({ userId: 'u', candidates, conversation: [] });
-  assert.equal(result.pending.size, 2);
+  assert.equal(result.pending.size, 0);
 });
 
 test('the robust experiment requires both default-off switches', async () => {
@@ -78,7 +78,7 @@ test('source archives are losslessly referenced once, with shared context before
   assert.equal(calls, 2); assert.equal(result.pending.size, 0); assert.ok(result.receipts[0].inputChars > 200000);
   const oversized = instructionSourceMessage({ role: 'user', content: 'A simple paragraph. '.repeat(60000) }, large.archiveUri);
   const limited = await judge.check({ userId: 'u', candidates: [candidate], conversation: [oversized, conversation[0]] });
-  assert.equal(calls, 2); assert.deepEqual([...limited.pending], [0]); assert.equal(limited.receipts[0].limited, true);
+  assert.equal(calls, 2); assert.deepEqual([...limited.pending], []); assert.equal(limited.receipts[0].limited, true);
 });
 
 test('a transport failure retries inside one review without retrying a valid semantic disagreement', async () => {
@@ -87,4 +87,12 @@ test('a transport failure retries inside one review without retrying a valid sem
   const result = await judge.check({ userId: 'u', candidates: [candidates[1]], conversation });
   assert.equal(calls, 3); assert.equal(result.pending.size, 0);
   assert.deepEqual(result.receipts[0].attempts, [2, 1]); assert.equal(result.receipts[0].reviews.length, 2);
+});
+
+test('only a positively quoted material finding can produce a disputed hold', async () => {
+  let calls = 0;
+  const judge = createInstructionOriginJudge({ config, callModel: async () => answer([row(0, ++calls === 1 ? 'material_instruction' : 'keep')]) });
+  const result = await judge.check({ userId: 'u', candidates: [candidates[0]], conversation });
+  assert.equal(result.size, 0);
+  assert.deepEqual([...result.pending], [0]);
 });

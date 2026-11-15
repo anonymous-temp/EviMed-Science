@@ -430,3 +430,18 @@ test('a second health timeout in a row brings the cooldown back, and an answer f
     assert.equal((await call('/health')).status, 200)
   } finally { await bridge.close(); await gateway.close() }
 })
+
+test('only an active kernel invocation reference becomes the source header; model and transport identity are stripped', async () => {
+  const gateway = await fakeGateway(() => ({}))
+  const toolSources = new Map([['opaque-kernel-reference', 'native-composer']])
+  const { bridge, call } = await startBridge({ gatewayUrl: gateway.url, toolSources })
+  try {
+    for (const reference of ['opaque-kernel-reference', 'forged']) {
+      await call('/mcp', { method: 'POST', headers: { 'content-type': 'application/json', 'x-evimed-memory-session': 'victim', 'mcp-session-id': 'transport-not-conversation' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'remember', arguments: { messages: [], __evimed_memory_invocation: reference } } }) })
+    }
+    assert.equal(gateway.seen[0].headers['x-evimed-memory-session'], 'native-composer')
+    assert.equal(gateway.seen[1].headers['x-evimed-memory-session'], undefined)
+    assert.ok(gateway.seen.every(row => !row.body.includes('__evimed_memory_invocation')))
+  } finally { await bridge.close(); await gateway.close() }
+})

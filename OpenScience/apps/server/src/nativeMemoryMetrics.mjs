@@ -30,6 +30,7 @@ export const MEMORY_GATEWAY_REFUSALS = Object.freeze([
  *  commit did. */
 export const NATIVE_TURN_COMMIT_OUTCOMES = Object.freeze([
   "scheduled", "debounced", "dropped", "platform_started", "conversation_running",
+  "engine_unavailable", "engine_deferred", "engine_committed", "engine_given_up",
   "committed", "nothing_pending", "not_learning", "before_reset", "rate_limited", "failed", "account_deleted",
 ]);
 /** What the worker did with a commit. */
@@ -56,7 +57,7 @@ export const NATIVE_CONSOLIDATION_CHANGES = Object.freeze(["added", "updated", "
 export const NATIVE_CHECK_ACTIONS = Object.freeze(["identifier_shape", "platform_text", "rejected_line", "rejected_reworded", "rejected_judged", "recent_work_default_project",
   "pasted_instruction"]);
 /** Outcomes of the optional personal-line attribution check; an unsuccessful check keeps the line. */
-export const NATIVE_PASTED_INSTRUCTION_CHECK_OUTCOMES = Object.freeze(["asked", "failed", "unavailable", "limited", "stale"]);
+export const NATIVE_PASTED_INSTRUCTION_CHECK_OUTCOMES = Object.freeze(["asked", "failed", "unavailable", "limited", "stale", "source_unbound", "source_deferred", "source_released"]);
 /** What became of a call to the model that judges whether a line repeats one the person removed: asked, failed (unreachable, or not the one shape), over the account's day, or no model here. */
 export const NATIVE_REJECTION_JUDGE_OUTCOMES = Object.freeze(["asked", "failed", "over_budget", "unavailable"]);
 /** What became of the lines that were near a removed one: held by containment (code), judged the same or not (the model), or kept because the judge could not say. */
@@ -284,7 +285,7 @@ export function nativeMemoryMetricFamilies() {
     { name: "open_science_memory_gateway_ledger_failures_total", type: "counter", series: series(ledgerFailures, "what"),
       help: "Commits the engine accepted that the commit ledger could not record at the gateway; the archive scan finds them." },
     { name: "open_science_native_memory_turn_commits_total", type: "counter", series: series(turnCommits, "outcome"),
-      help: "Ends of an attended turn at the turn committer, which commits the conversation's engine session a few seconds after the turn so that a short conversation is learned from without waiting for the plugin's token threshold: scheduled, folded into a later turn (debounced), dropped at the bound, ignored because the platform started the turn or the person is already typing again, and what the commit did (committed, nothing pending, not learning, held by the hourly limit, failed). committed is one extraction call." },
+      help: "Ends of an attended turn at the turn committer, which commits the conversation's engine session a few seconds after the turn so that a short conversation is learned from without waiting for the plugin's token threshold: scheduled, folded into a later turn (debounced), dropped at the bound, ignored because the platform started the turn or the person is already typing again, and what the commit did (committed, nothing pending, not learning, held by the hourly limit, failed). committed is one extraction call. Engine startup outcomes count readiness refusals, durable deferrals, recovered commits and obligations abandoned at the time or policy boundary." },
     { name: "open_science_native_memory_commits_total", type: "counter", series: series(workerCommits, "outcome"),
       help: "What the native memory worker did with commits: ingested a diff, read an empty diff, found a failed extraction, replayed one, abandoned one after the replay cap, or found an archive only the scan could see." },
     { name: "open_science_native_memory_operations_total", type: "counter", series: series(workerOperations, "change"),
