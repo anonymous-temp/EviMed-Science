@@ -1,6 +1,6 @@
-# Research memory for other agents
+# Personal memory for other agents
 
-An account's research memory — its notes, facts, preferences and earlier
+An account's memory — its notes, facts, preferences and earlier
 conclusions — can be read and added to by an agent running somewhere else: a
 local DSH or Claude profile, a script, another product. Two ways in, one set of
 rules: an HTTP API, and an MCP adapter that speaks that API for agents that only
@@ -8,8 +8,13 @@ speak MCP. Neither holds memory of its own; both reach the same memory the
 workbench's memory page shows: OpenViking's memory engine (see "The engine" below).
 
 
-This page is the operator's and the integrator's reference. There is no
-management page for keys yet; everything below is an HTTP call.
+This page is the operator's and the integrator's reference. People create, copy
+once and revoke keys under 设置 → 账户 → 外部智能体访问（API 密钥）
+(`/app/account`); no curl is needed. The section lists names, permissions, creation
+and last-use dates. It offers only scopes the service advertises, defaults to
+read-only, and shows one sentence without controls when the memory API answers
+`503 agent_memory_disabled`. The existing browser session and CSRF protect key
+management; a secret is kept only in the open one-time display, never browser storage.
 
 ## Turning it on
 
@@ -173,6 +178,61 @@ deployment knows that key the pack shows as 「发布者未验证」. A card tha
 dose, carries an identifier or credential, is retired, or is not yet reviewed
 (without `--allow-unreviewed`) is refused before anything is written. The
 password is read from a file, never from the command line.
+
+## DSH plugin
+
+`packages/dsh-memory-capsule` is the standalone thin connector (English and Chinese
+READMEs included), independent of the hosted runtime's socket/universal preset.
+It is a **private, unpublished candidate**; publication and index hosting are the
+owner's decision, not a prerequisite claimed to have been completed here.
+
+1. Use DSH `0.2.2-rc.1` on Node `>=24.9.0`. Its exact compatibility range is the
+   approved DSH pin; another preview version needs a new contract check.
+2. On `/app/account`, create a named key with “读取记忆与做法” (`memory.read`),
+   optionally “提出待确认的记忆” (`memory.write`). Copy the one-time secret into
+   a local file outside repositories, readable only by your OS account; do not
+   paste it into plugin configuration or a shell command.
+3. Once released, install with
+   `dsh plugin --profile web add @evimed/dsh-memory-capsule@0.1.0`; before release,
+   a supplied local package directory/tarball can be reviewed with `add <local-path>`.
+4. Override the bundle's single row in `$DSH_HOME/profiles/web/cordis.patch.yml`:
+
+   ```yaml
+   - id: evimed-memory-capsule
+     config:
+       baseUrl: 'https://your-evimed-deployment.example'
+       apiKeyFile: '/absolute/path/evimed-key.txt'
+   ```
+
+5. Restart/reload that profile, ask for `capsule_status`, then a concrete
+   `capsule_recall` about earlier work. Status reports key scope/project binding
+   and that the key speaks for its creating account; the API does not disclose
+   that account's name or ID. Missing configuration points back to the key page.
+
+`capsule_recall` returns memories/facts and method cards, preserving `whenToUse`
+when supplied. `capsule_method` re-reads the current bounded recall catalog and
+returns one body by digest or exact ID/title/name, so bodies enter context only
+on demand. The API currently sends those bodies in recall itself; no new
+body-by-digest server route or stale plugin cache is introduced. A method outside
+that catalog's selection/budget cannot be loaded this way.
+`capsule_propose` calls `/note`; it always waits for the person's confirmation.
+The connector has no confirm, forget or share tools, and needs no `memory.manage`.
+
+**No raw-history recall or automatic external-work learning is provided. Forget
+and share stay on the web memory page** (`/app/memory`), as does proposal
+confirmation. This is a remote connector, not a local memory engine, transcript
+collector, method mount or capsule-isolation mechanism. Ordinary work requires
+no recall and continues if memory is unavailable.
+
+The credential is read from its file on every request (never inline or logged),
+so replacing the file rotates it. Requests use the public API only, never
+`/internal/memory/v1`; no redirects or automatic write retries. Errors for an
+unreachable service, 401/403/429 and a disabled/unavailable 503 are plain
+sentences. Disposal releases the Cordis registrations and aborts pending calls.
+The optional `market-index.example.json` is format 1 and names an **unpublished**
+npm target with an illustrative timestamp; it is not a hosted listing. The
+package's check scripts use DSH's own validator and boot readers without
+installing or publishing anything.
 
 ## The MCP adapter
 

@@ -2737,3 +2737,35 @@ export async function stageVcrConversationReference(sessionId: string, projectId
   const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/vcr-reference`), { method: "POST", headers: { "Content-Type": "application/json", "X-Open-Science-Project": projectId }, body: JSON.stringify(reference) });
   return parseApiResponse<import("./runtimeUiNavigation").VcrObjectSelection>(res);
 }
+
+/** Account credentials for external agents; secrets exist only in the create response. */
+export type WebAgentKeyScope = "memory.read" | "memory.write" | "memory.manage" | "memory.observe" | "analysis.read" | "analysis.write";
+export interface WebAgentKey {
+  id: string;
+  name: string;
+  scopes: string[];
+  projectId: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+}
+export interface WebAgentKeyList { keys: WebAgentKey[]; scopes: string[] }
+export async function fetchWebAgentKeys(): Promise<WebAgentKeyList> {
+  // Key-management routes remain available even when recall is off. Read the public switch first so the settings group tells the
+  // person this deployment cannot serve an external agent, rather than offering a key they cannot use for memory.
+  const availability = await fetchWithWebAuth(apiUrl("/agent-memory/v1/openapi.json"), { cache: "no-store" });
+  await parseApiResponse<unknown>(availability);
+  const res = await fetchWithWebAuth(apiUrl("/agent-keys"), { cache: "no-store" });
+  return parseApiResponse<WebAgentKeyList>(res);
+}
+export async function createWebAgentKey(input: { name: string; scopes: WebAgentKeyScope[] }): Promise<WebAgentKey & { key: string }> {
+  const res = await fetchWithWebAuth(apiUrl("/agent-keys"), {
+    method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+  });
+  return parseApiResponse<WebAgentKey & { key: string }>(res);
+}
+export async function revokeWebAgentKey(id: string): Promise<WebAgentKey> {
+  const res = await fetchWithWebAuth(apiUrl(`/agent-keys/${encodeURIComponent(id)}`), { method: "DELETE", cache: "no-store" });
+  return parseApiResponse<WebAgentKey>(res);
+}

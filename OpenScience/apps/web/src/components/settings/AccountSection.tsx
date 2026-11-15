@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Panel, PanelRow } from "@/components/ui/Panel";
 import { PasswordRow } from "./PasswordRow";
+import { AgentKeysSection } from "./AgentKeysSection";
 
 interface WebAccount {
   id: string;
@@ -158,6 +159,8 @@ export function AccountSection() {
           )}
         </PanelRow>
       </Panel>
+
+      <AgentKeysSection />
 
       <Panel title="记忆">
         <PanelRow
