@@ -172,6 +172,9 @@ export class NativeMemoryWorker {
     this.nativeMemory = nativeMemory;
     /** Private history indexing; composed after the authoritative run ledger. */
     this.history = null;
+    /** Durable startup turn obligations, composed after the gateway and run ledger.
+     * @type {import("./nativeMemoryEngineDeferred.mjs").NativeMemoryEngineDeferred | null} */
+    this.engineDeferred = null;
     this.projectOfSession = projectOfSession;
     this.memoryContexts = memoryContexts;
     this.verification = new NativeMemoryVerification({ config: this.config, sessions, overlay, memoryContexts, rejectionJudge });
@@ -523,7 +526,9 @@ export class NativeMemoryWorker {
     let settled = 0;
     for (const commit of await this.overlay.openCommits({ userId, limit, now: this.commitClock ? this.commitClock() : null })) {
       try {
-        if (commit.state === "pending") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#settle(commit)) ? 1 : 0;
+        if (commit.extraction.engineDeferred) {
+          if (this.engineDeferred) settled += await withNativeMemoryWrite(this.overlay.database, commit.userId, () => this.engineDeferred.process(commit)) ? 1 : 0;
+        } else if (commit.state === "pending") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#settle(commit)) ? 1 : 0;
         else if (commit.state === "failed") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#replay(commit)) ? 1 : 0;
       } catch (error) {
         this.report(`native memory commit: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);

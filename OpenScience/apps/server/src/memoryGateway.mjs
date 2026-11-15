@@ -168,12 +168,14 @@ const MCP_EMPTY_LISTS = Object.freeze({ "prompts/list": { prompts: [] }, "resour
 
 /** What a read tool answers a caller whose memory is not read, by why. Said to the model, in the words the recall tool uses. */
 const NOT_READ = Object.freeze({
+  engine_unavailable: "记忆正在启动，暂时还无法读取；请稍后再试，这不代表没有相关记忆。",
   paused: "用户已暂停记忆（整个账号或本项目）：这里不读取，也不代表没有相关记忆。",
   trial: "这是一段试用别人胶囊的对话：只读这个胶囊，不读用户自己的记忆。",
   other: "这段对话不读取长期记忆。",
 });
 /** What `remember` answers a caller whose conversation is not learned from. */
 const NOT_KEPT = Object.freeze({
+  engine_unavailable: "记忆正在启动，这条暂时还没有保存；请稍后再试。",
   paused: "用户已暂停记忆（整个账号或本项目）：这条没有记下。需要记住的话，请用户先在记忆设置里恢复记忆。",
   trial: "这是一段试用别人胶囊的对话：这条没有记下。需要记住的话，请用户在普通对话里再说一次。",
   clinical_context: "本次对话读取了受试者资料，内容保留在该研究中，不写入长期记忆。",
@@ -343,7 +345,7 @@ export function parseEventStream(text) {
 }
 
 /**
- * @typedef {(request: { user: any, project: any, engineSessionId: string, context?: any, admitted?: import("./memoryAdmission.mjs").MemoryAdmission | null, keepRecentCount?: number }) =>
+ * @typedef {(request: { user: any, project: any, engineSessionId: string, sourceEngineSessionId?: string, context?: any, admitted?: import("./memoryAdmission.mjs").MemoryAdmission | null, keepRecentCount?: number }) =>
  *   Promise<{ status: number, json: any, outcome: string, commit: "accepted" | "nothing_pending" | "not_learning" | "rate_limited" }>} MemoryGatewayCommitSession
  */
 
@@ -1502,12 +1504,14 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
    * `admitted` is the decision the caller already has; without it the admission is asked here.
    * @type {MemoryGatewayCommitSession}
    */
-  const commitSession = async ({ user, project, engineSessionId, admitted = null, keepRecentCount = 0, context = null }) => {
+  const commitSession = async ({ user, project, engineSessionId, sourceEngineSessionId = engineSessionId, admitted = null, keepRecentCount = 0, context = null }) => {
     if (!enabled) return { status: 404, json: null, outcome: "refused", commit: /** @type {const} */ ("not_learning") };
     if (!new RegExp(`^${SESSION}$`).test(String(engineSessionId))) throw new HttpError(400, "memory_gateway_body_invalid", "A session id is required.");
     return withNativeMemoryWrite(overlay?.database,user.id,async()=>{
       const resolved = await resolveContext(user, project, context);
-      const decision = await scopedAdmission(user, project, engineSessionId, null, resolved, admitted);
+      // A control-plane startup materialization commits a fresh session, with capture authority from its original turn.
+      // This argument is internal only; HTTP commit requests always prove the session they name.
+      const decision = await scopedAdmission(user, project, sourceEngineSessionId, null, resolved, admitted);
       return commitEngineSession({ user, project, sessionId: engineSessionId, admitted: decision, keepRecentCount, context: resolved });
     });
   };

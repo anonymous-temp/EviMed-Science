@@ -30,6 +30,7 @@ export const MEMORY_GATEWAY_REFUSALS = Object.freeze([
  *  commit did. */
 export const NATIVE_TURN_COMMIT_OUTCOMES = Object.freeze([
   "scheduled", "debounced", "dropped", "platform_started", "conversation_running",
+  "engine_unavailable", "engine_deferred", "engine_committed", "engine_given_up",
   "committed", "nothing_pending", "not_learning", "before_reset", "rate_limited", "failed", "account_deleted",
 ]);
 /** What the worker did with a commit. */
@@ -284,7 +285,7 @@ export function nativeMemoryMetricFamilies() {
     { name: "open_science_memory_gateway_ledger_failures_total", type: "counter", series: series(ledgerFailures, "what"),
       help: "Commits the engine accepted that the commit ledger could not record at the gateway; the archive scan finds them." },
     { name: "open_science_native_memory_turn_commits_total", type: "counter", series: series(turnCommits, "outcome"),
-      help: "Ends of an attended turn at the turn committer, which commits the conversation's engine session a few seconds after the turn so that a short conversation is learned from without waiting for the plugin's token threshold: scheduled, folded into a later turn (debounced), dropped at the bound, ignored because the platform started the turn or the person is already typing again, and what the commit did (committed, nothing pending, not learning, held by the hourly limit, failed). committed is one extraction call." },
+      help: "Ends of an attended turn at the turn committer, which commits the conversation's engine session a few seconds after the turn so that a short conversation is learned from without waiting for the plugin's token threshold: scheduled, folded into a later turn (debounced), dropped at the bound, ignored because the platform started the turn or the person is already typing again, and what the commit did (committed, nothing pending, not learning, held by the hourly limit, failed). committed is one extraction call. Engine startup outcomes count readiness refusals, durable deferrals, recovered commits and obligations abandoned at the time or policy boundary." },
     { name: "open_science_native_memory_commits_total", type: "counter", series: series(workerCommits, "outcome"),
       help: "What the native memory worker did with commits: ingested a diff, read an empty diff, found a failed extraction, replayed one, abandoned one after the replay cap, or found an archive only the scan could see." },
     { name: "open_science_native_memory_operations_total", type: "counter", series: series(workerOperations, "change"),

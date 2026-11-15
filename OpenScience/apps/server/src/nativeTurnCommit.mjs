@@ -38,7 +38,8 @@ import { HttpError } from './security.mjs';
  *  - **Bounded.** Commits in flight at once, conversations waiting for their quiet, and the reads are each a key in
  *    `config.mjs` with a counter (`open_science_native_memory_turn_commits_total`).
  *
- * An engine that does not answer is a counted `failed`, never a fake commit and never a reason for the conversation to wait: the messages stay
+ * Engine readiness refusals persist a bounded startup obligation through `deferEngine`; the worker retries the original turn
+ * after full admission. An engine request that does not answer is a counted `failed`: the messages stay
  * pending in the engine's session, and the next turn's commit, the plugin's disposal commit or the engine's idle commit
  * archives them. A restart of the control plane forgets what was armed, and the idle commit is the net for that too.
  *
@@ -58,7 +59,7 @@ const CONVERSATION = /^[A-Za-z0-9_-]{1,160}$/;
 
 /**
  * @typedef {{
- *   userId: string, project: any, engineSessionId: string, sessionId: string, timer: any, context: any, namespaceId: string, endedAt: string | null,
+ *   userId: string, project: any, engineSessionId: string, sessionId: string, timer: any, context: any, namespaceId: string, endedAt: string | null, run: { id: string, startedAt: string, finishedAt: string },
  * }} Armed
  */
 
@@ -73,11 +74,12 @@ export class NativeTurnCommit {
    *   commit: import("./memoryGateway.mjs").MemoryGatewayCommitSession,
    *   memoryContexts?: import("./geoNativeMemoryContext.mjs").GeoNativeMemoryContext | null,
    *   setTimer?: (fn: () => void, ms: number) => any, clearTimer?: (timer: any) => void, wait?: (ms: number) => Promise<void>,
+   *   deferEngine?: ((entry: Armed) => Promise<boolean>) | null,
    *   report?: (line: string) => void,
    * }} dependencies
    *   `setTimer`, `clearTimer` and `wait` are the clock, replaceable by a test.
    */
-  constructor({ config, memorySettings, sessions, admission, conversations, commit, memoryContexts = null, setTimer = null, clearTimer = null, wait = null, report = () => {} }) {
+  constructor({ config, memorySettings, sessions, admission, conversations, commit, memoryContexts = null, setTimer = null, clearTimer = null, wait = null, deferEngine = null, report = () => {} }) {
     this.config = config ?? {};
     this.memorySettings = memorySettings;
     this.sessions = sessions;
@@ -89,6 +91,7 @@ export class NativeTurnCommit {
     this.clearTimer = clearTimer ?? ((timer) => clearTimeout(timer));
     this.wait = wait ?? ((ms) => new Promise((resolve) => { const timer = setTimeout(resolve, ms); timer.unref?.(); }));
     this.report = report;
+    this.deferEngine = deferEngine;
     this.debounceMs = Math.max(0, Number(this.config.nativeMemoryTurnCommitDebounceMs ?? 8_000));
     this.settleMs = Math.max(0, Number(this.config.nativeMemoryTurnCommitSettleMs ?? 2_000));
     this.attempts = Math.max(1, Math.trunc(Number(this.config.nativeMemoryTurnCommitAttempts ?? 4)));
@@ -135,14 +138,27 @@ export class NativeTurnCommit {
         throw new HttpError(403, 'memory_scope_denied', 'The conversation memory context is unavailable.');
       }
       if (this.closed) return;
-      this.#arm(project, sessionId, context, String(run?.finishedAt ?? run?.startedAt ?? "") || null);
+      // Persist startup obligations before the debounce: readiness may recover before the timer fires,
+      // but the gateway already acknowledged and withheld this turn's messages.
+      if (this.deferEngine) {
+        const decision = await this.admission.admit({ user: { id: project.userId }, project, engineSessionId: `${PLUGIN_SESSION_PREFIX}${sessionId}` });
+        if (decision.learnReason === "engine_unavailable") {
+          recordTurnCommit("engine_unavailable");
+          const deferred = await this.deferEngine({ userId: project.userId, project, sessionId, engineSessionId: `${PLUGIN_SESSION_PREFIX}${sessionId}`,
+            run, context, namespaceId: context?.namespaceId ?? openVikingUserId(project.userId), endedAt: run.finishedAt, timer: null });
+          if (deferred) return;
+        }
+      }
+      if (this.closed) return;
+      this.#arm(project, sessionId, context, run);
     } catch (error) {
       this.report(`native turn commit: ${this.#codeOf(error)}`);
     }
   }
 
-  /** @param {any} project @param {string} sessionId @param {any} context @param {string | null} endedAt */
-  #arm(project, sessionId, context, endedAt) {
+  /** @param {any} project @param {string} sessionId @param {any} context @param {Armed["run"]} run */
+  #arm(project, sessionId, context, run) {
+    const endedAt = run.finishedAt || run.startedAt || null;
     const userId = String(project.userId);
     const namespaceId = context?.namespaceId ?? openVikingUserId(userId);
     const key = JSON.stringify([userId, namespaceId, sessionId]);
@@ -157,7 +173,7 @@ export class NativeTurnCommit {
       return;
     }
     /** @type {Armed} */
-    const entry = { userId, project, sessionId, engineSessionId: `${PLUGIN_SESSION_PREFIX}${sessionId}`, timer: null, namespaceId, context, endedAt };
+    const entry = { userId, project, sessionId, engineSessionId: `${PLUGIN_SESSION_PREFIX}${sessionId}`, timer: null, namespaceId, context, endedAt, run: { id: run.id, startedAt: run.startedAt, finishedAt: run.finishedAt } };
     entry.timer = this.setTimer(() => { this.armed.delete(key); this.queue.push(entry); this.#pump(); }, this.debounceMs);
     this.armed.set(key, entry);
     recordTurnCommit("scheduled");
@@ -212,7 +228,13 @@ export class NativeTurnCommit {
     // conversation that read a patient record and the platform's own projects cost the engine nothing; the gateway's commit
     // asks again at the moment it commits.
     const admitted = await this.admission.admit({ user, project: entry.project, engineSessionId: entry.engineSessionId });
-    if (!admitted.learn && admitted.learnReason !== "automated_run") { recordTurnCommit("not_learning"); return; }
+    if (!admitted.learn && admitted.learnReason !== "automated_run") {
+      if (admitted.learnReason === "engine_unavailable") {
+        recordTurnCommit("engine_unavailable");
+        if (this.deferEngine && await this.deferEngine(entry)) return;
+      }
+      recordTurnCommit("not_learning"); return;
+    }
     if (entry.context?.kind === 'geo-project' && !await this.memoryContexts.noteCapture(entry.context, entry.engineSessionId)) {
       recordTurnCommit('not_learning'); return;
     }

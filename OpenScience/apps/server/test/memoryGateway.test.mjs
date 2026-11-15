@@ -1582,3 +1582,24 @@ test('a confirmed distinct pair suppresses only its alias hint while switch-off 
     assert.doesNotMatch(answer.json.result, /Likes coffee/);
   }
 });
+
+test('engine startup has its own remember and recall text with a recovery action', async t => {
+  const f = await fixture(t, { admission: fixedAdmission({ learn: false, recall: false, learnReason: 'engine_unavailable', recallReason: 'engine_unavailable' }) });
+  for (const name of ['remember', 'search']) {
+    const response = await f.mcp({ jsonrpc: '2.0', id: name, method: 'tools/call', params: { name,
+      arguments: name === 'remember' ? { messages: [{ role: 'user', content: 'Please remember my preferred layout.' }] } : { query: 'layout' } } });
+    assert.match(response.text, /记忆正在启动/);
+    assert.match(response.text, /稍后.*再试/);
+    assert.doesNotMatch(response.text, /这段对话不[写读]/);
+  }
+  assert.equal(nativeMemoryCounters().withheld.engine_unavailable, 2);
+});
+
+test('engine startup never masks clinical or platform admission refusals', async () => {
+  const conversations = { running: async () => [], runsOf: async () => [{ status: 'succeeded', agentId: 'ordinary' }] };
+  const memorySettings = { configured: true, settings: async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [] }),
+    sessionState: async () => ({ trialCapsuleId: null }) };
+  const admission = createMemoryAdmission({ config: {}, memorySettings, conversations, engineReady: () => ({ ok: false, code: 'starting' }),
+    clinicalContext: async () => true });
+  assert.equal((await admission.admit({ user: { id: USER }, project: { id: 'p1' }, engineSessionId: SESSION })).learnReason, 'clinical_context');
+});

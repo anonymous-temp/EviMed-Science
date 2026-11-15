@@ -118,9 +118,6 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
     // What was said before the account reset its memory is not learned from again, whenever it reaches the engine.
     const resetAt = typeof memorySettings.resetInstant === "function" ? await memorySettings.resetInstant(userId).catch(() => null) : null;
     if (resetAt && typeof at === "number" && Number.isFinite(at) && at < Date.parse(resetAt)) return answer("before_reset");
-    // The engine's templates are where "what is never kept" lives. While they cannot be confirmed loaded, the engine would
-    // extract by its built-in types, which copy quoted messages into memory: nothing is sent to it.
-    if (engineReady && !engineReady().ok) return answer("engine_unavailable");
 
     // Whether the turn the message was spoken in set a research goal: its first message carries the gesture that started it.
     let researchGoal = false;
@@ -141,6 +138,9 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
         if (read) return answer("clinical_context");
       }
     }
+    // Check every policy refusal first: only a caller otherwise eligible may wait for engine startup.
+    // Compile and knowledge facts are deliberately absent from this feature's readiness.
+    if (engineReady && !engineReady().ok) return { ...answer("engine_unavailable"), ...(researchGoal ? { researchGoal } : {}) };
     return { ...answer(null), ...(researchGoal ? { researchGoal } : {}) };
   }
 
