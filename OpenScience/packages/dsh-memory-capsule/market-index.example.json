@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "title": { "en": "EviMed example index (unpublished)", "zh": "EviMed 示例索引（尚未发布）" },
+  "plugins": [{
+    "name": "@evimed/dsh-memory-capsule",
+    "title": { "en": "Memory capsule", "zh": "记忆胶囊" },
+    "description": { "en": "Personal context and methods through the EviMed public API.", "zh": "通过 EviMed 公共 API 取回个人背景和做法。" },
+    "versions": [{
+      "version": "0.1.0",
+      "publishTimestamp": 1794700800,
+      "source": { "type": "npm" },
+      "engines": { "dsh": "0.2.2-rc.1" }
+    }]
+  }]
+}

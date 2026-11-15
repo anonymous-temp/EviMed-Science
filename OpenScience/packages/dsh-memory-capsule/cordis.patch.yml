@@ -1,0 +1,3 @@
+- insert:
+    - id: evimed-memory-capsule
+      name: '@evimed/dsh-memory-capsule'
