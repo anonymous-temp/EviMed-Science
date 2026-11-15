@@ -19,7 +19,7 @@ export function stepMatches(gold, call) {
  * @param {{ steps: object[], askedAboutKnown?: string[] } | object[]} gold  `askedAboutKnown`: parameter names whose value
  *   the arm supplied; asking the user for one of them is a TellOnce failure.
  * @param {object[]} calls the trajectory the assistant produced, in order
- * @returns {{ perStep: boolean[], firstFail: number|null, pass: boolean, tellOnceFailure: boolean, extraCalls: number, unexpectedAsks: number }}
+ * @returns {{ perStep: boolean[], firstFail: number|null, pass: boolean, finalTaskCorrect: boolean, tellOnceFailure: boolean, extraCalls: number, unexpectedAsks: number }}
  */
 export function scoreTrajectory(gold, calls) {
   const steps = Array.isArray(gold) ? gold : gold.steps;
@@ -33,5 +33,8 @@ export function scoreTrajectory(gold, calls) {
   const perStep = steps.map((s, i) => stepMatches(s, aligned[i]));
   const firstFail = perStep.indexOf(false);
   const extraCalls = Math.max(0, aligned.length - steps.length);
-  return { perStep, firstFail: firstFail < 0 ? null : firstFail, pass: firstFail < 0 && extraCalls === 0 && !tellOnceFailure, tellOnceFailure, extraCalls, unexpectedAsks };
+  // Terminal-operation correctness permits a recovered path; it does not grade the assistant's final prose.
+  const finalTask = steps.filter(step => !isAsk(step)).at(-1), finalCall = made.filter(step => !isAsk(step)).at(-1);
+  const finalTaskCorrect = Boolean(finalTask && stepMatches(finalTask, finalCall));
+  return { perStep, firstFail: firstFail < 0 ? null : firstFail, pass: firstFail < 0 && extraCalls === 0 && !tellOnceFailure, finalTaskCorrect, tellOnceFailure, extraCalls, unexpectedAsks };
 }
