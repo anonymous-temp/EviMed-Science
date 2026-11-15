@@ -40,4 +40,4 @@ it("creates and revokes through the actual browser client with session cookies a
   expect(mutations).toHaveLength(2);
   for (const mutation of mutations) expect(new Headers(mutation.headers).get("X-Open-Science-CSRF")).toBe("csrf-capsule-test");
   expect(screen.queryByText("agk_local")).not.toBeInTheDocument();
-});
+}, 20_000); // create, copy and revoke through real user events: about 5.4 s on the lab runner, over the 5 s default
