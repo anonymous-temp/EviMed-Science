@@ -160,3 +160,56 @@ test('scoreTrajectory: exact, reordered keys, wrong arg, missing step, asks', ()
   assert.deepEqual([told.tellOnceFailure, told.pass, told.perStep], [true, false, [true]]);
   assert.equal(scoreTrajectory(direct, [{ tool: 'a', args: { cur: 'USD' } }]).pass, true);
 });
+
+// Deterministic contract fixtures for the simulator defects restated in the dispatch; no recorded L8 rows were supplied.
+/** @param {string[]} names */
+const materializedGeneral = names => {
+  for (let i = 0; i < 1000; i++) {
+    const task = materialize(G.general, names, makeRng(`evalfix-${names.join('-')}-${i}`));
+    if (task) return task;
+  }
+  assert.fail('No admissible deterministic fixture');
+};
+
+test('L8 simulator derives conversions and calendar dates from their literal inputs', () => {
+  for (const name of ['convert_temperature', 'convert_currency', 'add_days', 'convert_length', 'convert_mass']) {
+    const task = materializedGeneral([name]), step = task.steps[0];
+    if (name === 'convert_temperature') assert.equal(step.output.fahrenheit, step.args.celsius * 9 / 5 + 32);
+    else if (name === 'convert_currency') assert.equal(step.output.converted, step.args.amount * step.args.rate);
+    else if (name === 'add_days') assert.equal(step.output.result, new Date(Date.parse(`${step.args.date}T00:00:00Z`) + step.args.days * 86400000).toISOString().slice(0, 10));
+    else {
+      const factors = name === 'convert_length' ? { cm: 0.01, inch: 0.0254, m: 1, ft: 0.3048, km: 1000, mile: 1609.344 } : { kg: 1, lb: 0.45359237, g: 0.001, oz: 0.028349523125 };
+      assert.equal(step.output.converted, step.args.value * factors[step.args.from] / factors[step.args.to]);
+    }
+    assert.deepEqual(materializedGeneral([name]), task, 'identical seeds reproduce identical outputs');
+  }
+});
+
+test('L8 created events, sent mail and written files read back their original fields', () => {
+  const event = materializedGeneral(['create_event', 'get_event']);
+  assert.equal(event.steps[1].output.title, event.steps[0].args.title);
+  assert.equal(event.steps[1].output.date, event.steps[0].args.date);
+  const mail = materializedGeneral(['send_email', 'get_message']);
+  assert.equal(mail.steps[1].output.body, mail.steps[0].args.body);
+  assert.equal(mail.steps[1].output.recipient, mail.steps[0].args.to);
+  const file = materializedGeneral(['write_file', 'read_file']);
+  assert.equal(file.steps[0].output.writtenPath, file.steps[0].args.path);
+  assert.equal(file.steps[1].output.content, file.steps[0].args.content);
+  assert.equal(simulate(file, { tool: 'read_file', args: { path: file.steps[0].args.path } }).output.content, file.steps[0].args.content);
+  assert.equal(requestProblems(file, `Please write ${file.steps[0].args.content} to ${file.steps[0].args.path}.`, { lang: 'en' }).length, 0, 'echoing a known user input is not an intermediate-value leak');
+  const copied = materializedGeneral(['write_file', 'copy_file', 'read_file', 'file_stat']);
+  assert.equal(copied.steps[1].output.newPath, `${copied.steps[1].args.dir}/${copied.steps[0].args.path.split('/').at(-1)}`);
+  assert.equal(copied.steps[2].output.content, copied.steps[0].args.content);
+  assert.equal(copied.steps[3].output.size, new TextEncoder().encode(copied.steps[0].args.content).length);
+  const calendar = materializedGeneral(['create_event', 'list_events', 'get_event']);
+  const [created, listed, read] = calendar.steps;
+  assert.equal(read.output.date, read.args.eventId === listed.output.firstEventId ? listed.args.date : created.args.date);
+});
+
+test('L8 final task correctness is separate from strict path adherence', () => {
+  const gold = { steps: [{ tool: 'find', args: { query: 'city' } }, { tool: 'get_forecast', args: { lat: 30, lon: 110 } }] };
+  const score = scoreTrajectory(gold, [{ tool: 'find', args: { query: 'wrong' } }, ...gold.steps]);
+  assert.equal(score.pass, false);
+  assert.equal(score.finalTaskCorrect, true);
+  assert.equal(scoreTrajectory(gold, [{ tool: 'find', args: { query: 'city' } }]).finalTaskCorrect, false);
+});

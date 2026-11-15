@@ -97,3 +97,13 @@ test('multi-gap fallback does not spill later facts; drug/term alias preserves a
   const reply=askAnswer(aliases,{params:['drug']});
   assert.deepEqual(reply.result.values,{term:'amlodipine'});assert.deepEqual(reply.params,['drug']);
 });
+
+test('L8 summary reports terminal task correctness separately and keeps legacy rows unknown for that metric', () => {
+  const recovered = scoreCalls(direct, [{ kind: 'task', scoringCall: { tool: step.tool, args: {} } }, { kind: 'task', scoringCall: direct.steps[0] }]);
+  const rows = [{ armLabel: 'memory', level: 1, length: 1, source: 'sessions', score: recovered },
+    { armLabel: 'memory', level: 1, length: 1, source: 'sessions', score: { pass: false } }];
+  const summary = summarize(rows);
+  assert.equal(summary.arms.memory.passRate, 0, 'strict metric stays unchanged');
+  assert.deepEqual(summary.arms.memory.finalTask, { n: 1, pass: 1, unknown: 1, passRate: 1 });
+  assert.equal(summary.scorer, 'l8-v2');
+});

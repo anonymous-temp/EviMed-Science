@@ -10,7 +10,7 @@ import { createDeepSeekClient, firstLine } from '../run/deepseek.mjs';
 import { openStatus } from '../run/status.mjs';
 import { directoryDigest } from '../run/run.mjs';
 import { answerTask } from './answer_l8.mjs';
-import { summarize, scoreCalls } from './score_l8.mjs';
+import { summarize, scoreCalls, L8_SCORER_VERSION } from './score_l8.mjs';
 
 export const BOTH = {memorySearchHintEnabled:true,memoryOpeningIndexEnabled:true};
 const ARMS = ['no-memory','memory','memory+method'];
@@ -135,7 +135,7 @@ export async function runL8(options, dependencies = {}) {
     // Extraction is charged once for each arm's base, not again for its read-only answer variant.
     const rs=rows.filter(r=>r.armLabel===arm), extraction=rs.filter(r=>!r.variant).flatMap(r=>r.ingest ?? []);
     const ledger={runId,commit:meta.commit,engine:{version:meta.engine.version,templatesDigest:meta.engine.templatesDigest},arm,flags:{variant:arm.endsWith(':both') ? BOTH : {},thinking:'enabled',reasoningEffort:'high',historySearch:true},set:'l8',split:'dev',metric:'accuracy',n:s.n,value:s.passRate,ci95:s.ci95,
-      judged:{code:s.n-s.errors,judge:0,unknown:0,error:s.errors},tokens:{...s.tokens,extractionPrompt:extraction.reduce((n,r)=>n+(r.usage?.promptTokens||0),0),extractionCompletion:extraction.reduce((n,r)=>n+(r.usage?.completionTokens||0),0)},costCny:null,wallSeconds:s.seconds,scorer:'l8-v1',rawPath:o.out,notes:'Strict ordered scoreTrajectory; development only. Variants share per-arm ingested memory. Synthetic undated sessions stamped 2026-10-01 onward.'};
+      judged:{code:s.n-s.errors,judge:0,unknown:0,error:s.errors},tokens:{...s.tokens,extractionPrompt:extraction.reduce((n,r)=>n+(r.usage?.promptTokens||0),0),extractionCompletion:extraction.reduce((n,r)=>n+(r.usage?.completionTokens||0),0)},costCny:null,wallSeconds:s.seconds,scorer:L8_SCORER_VERSION,rawPath:o.out,notes:'Strict ordered scoreTrajectory; separate terminal-operation correctness is in summary.finalTask. Development only. Variants share per-arm ingested memory. Synthetic undated sessions stamped 2026-10-01 onward.'};
     const file=join(o.out,`ledger.${arm}.json`); await atomic(file,ledger);
     if (!dependencies.skipLedger) execFileSync('node',['evals/capsule-proving/run/ledger.mjs','add','--json',file,'--ledger',o.ledger],{stdio:'pipe',cwd:'/srv/evimed/repo/OpenScience'});
   }

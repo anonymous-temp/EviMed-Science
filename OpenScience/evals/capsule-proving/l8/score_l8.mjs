@@ -6,6 +6,8 @@ import { pathToFileURL } from 'node:url';
 import { scoreTrajectory } from '../synthetic/toolverse/score.mjs';
 import { wilson } from '../run/ledger.mjs';
 
+export const L8_SCORER_VERSION = 'l8-v2';
+
 export function scoreCalls(gold, toolCalls, error = null) {
   const calls = toolCalls.filter(c => c.kind === 'task' || c.kind === 'ask').map(c => c.scoringCall);
   const score = scoreTrajectory(gold, calls);
@@ -24,12 +26,15 @@ export function scoreCalls(gold, toolCalls, error = null) {
 const mean = (rows, fn) => rows.reduce((n, r) => n + Number(fn(r) || 0), 0) / (rows.length || 1);
 function group(rows) {
   const pass = rows.filter(r => r.score.pass).length;
+  const finalRows = rows.filter(r => typeof r.score.finalTaskCorrect === 'boolean');
+  const finalPass = finalRows.filter(r => r.score.finalTaskCorrect).length;
   const failures = {};
   for (const r of rows) {
     const key = r.error ? 'error' : r.score.firstFail !== null ? `step-${r.score.firstFail + 1}` : r.score.tellOnceFailure ? 'TellOnce-only' : r.score.extraCalls ? 'extra-calls' : r.score.pass ? 'pass' : 'other';
     failures[key] = (failures[key] || 0) + 1;
   }
   return { n: rows.length, pass, passRate: pass / (rows.length || 1), ci95: wilson(pass, rows.length),
+    finalTask: { n: finalRows.length, pass: finalPass, unknown: rows.length - finalRows.length, passRate: finalRows.length ? finalPass / finalRows.length : null },
     meanStepCredit: mean(rows, r => r.score.stepCredit), meanPrefixCredit: mean(rows, r => r.score.prefixCredit),
     tellOnceRate: mean(rows, r => r.score.tellOnceFailure), askedUserRate: mean(rows, r => r.score.askedUser),
     memorySearchBeforeTaskRate: mean(rows, r => r.score.memorySearchBeforeTask), memoryReadBeforeTaskRate: mean(rows, r => r.score.memoryReadBeforeTask),
@@ -46,7 +51,7 @@ export function summarize(rows) {
       for (const value of [...new Set(rs.map(r => r[field]))]) arms[arm][target][value] = group(rs.filter(r => r[field] === value));
     }
   }
-  return { scorer: 'l8-v1', rows: rows.length, arms };
+  return { scorer: L8_SCORER_VERSION, rows: rows.length, arms };
 }
 export async function scoreRun(out, data) {
   const text = await readFile(resolve(out, 'rows.jsonl'), 'utf8');

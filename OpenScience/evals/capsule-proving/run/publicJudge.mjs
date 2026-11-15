@@ -22,7 +22,14 @@ export function publicOfficialPacket(set, gold, reply) {
     const memories = (gold.memory_used ?? []).map(m => m.content).filter(Boolean).join('\n') || 'No specific memory annotation found.';
     prompt = `${pin.template}\n### Input Data\n1. Query: ${gold.question}\n2. User-related Memory: ${memories}\n3. Reference Answer: ${gold.reference_answer}\n4. Candidate Answer: ${reply}\n`;
   }
-  return { set, prompt, pin: { ...pin, template: undefined } };
+  return { set, prompt, pin: { ...pin, template: undefined }, audit: publicSourceAudit(set) };
+}
+
+/** Official prompts see annotated memory excerpts, never the complete source conversation or tool returns.
+ * @param {string} set */
+export function publicSourceAudit(set) {
+  if (!PUBLIC_OFFICIAL[set]) return null;
+  return { sourceStatus: 'judge_partial_source', fullSourceSeen: false, fabricationEvidenceEligible: false };
 }
 
 export async function judgePublicOfficial(batch, { key, fetchImpl = globalThis.fetch }) {
@@ -43,7 +50,8 @@ export async function judgePublicOfficial(batch, { key, fetchImpl = globalThis.f
     const correct = halu ? result.evaluation_result === 'Correct' : result.score === 3;
     return { id: packet.id, verdict: correct ? 'correct' : 'incorrect', reason: result.reasoning ?? result.reason,
       failureStep: correct ? null : result.evaluation_result === 'Hallucination' ? 'fabricated' : 'other',
-      officialResult: result, model: data.model, requestId: response.headers.get('x-request-id') ?? data.id, usage: data.usage };
+      officialResult: result, audit: publicSourceAudit(packet.publicOfficial.set),
+      model: data.model, requestId: response.headers.get('x-request-id') ?? data.id, usage: data.usage };
   }));
   return { judgements };
 }

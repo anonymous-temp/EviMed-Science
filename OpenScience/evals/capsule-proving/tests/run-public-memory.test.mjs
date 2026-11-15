@@ -116,3 +116,27 @@ test('LoCoMo preserves named speakers and original shared captions like the pinn
     });
   }
 });
+
+test('HaluMem partial-source hallucination verdict retains its official score and carries a separate audit through row merging', async () => {
+  const { buildJudgePacket, mergeJudgeResults } = await import('../run/judgePackets.mjs');
+  // Reduced recorded case: 8ece194a-885c-8e0c-359e-93a97220252c:s15:q2.
+  const gold = { question: 'How did Johnson Joseph plan to maintain his presence in the hospitality industry during his layoff?',
+    answer: 'Using AI-generated content for social media.', evidence: [{ memory_content: 'Johnson Joseph plans to use AI-generated content to maintain his social media presence and signal his commitment to the hospitality industry during his career transition.' }] };
+  const raw = { runId: 'e0-halumem-dev-product-1', set: 'halumem', split: 'dev', caseId: '8ece194a-885c-8e0c-359e-93a97220252c',
+    kind: 'answer', id: '8ece194a-885c-8e0c-359e-93a97220252c:s15:q2', verdict: 'needs-judge', checks: [] };
+  const packet = buildJudgePacket(raw, { publicSet: 'halumem', gold, answer: { answer: "During his layoff, Johnson's plan for staying visible in the industry centred on **using AI-generated content to keep up a social media presence** — explicitly as a signal of his ongoing commitment to hospitality rather than as a revenue stream (he settled on this around September 2027)." }, rubric: ['Official rubric'] });
+  const officialResult = { evaluation_result: 'Hallucination', reasoning: 'The response introduces unsupported details not present in the Key Memory Points, including around September 2027.' };
+  const judged = await judgePublicOfficial([packet], { key: 'fake', fetchImpl: async (_url, init) => {
+    const sent = JSON.parse(init.body);
+    assert.equal(sent.messages[0].content, packet.publicOfficial.prompt, 'official request stays unchanged');
+    return { ok: true, headers: new Headers(), json: async () => ({ model: 'qwen3.8-max', choices: [{ message: { content: JSON.stringify(officialResult) } }] }) };
+  } });
+  const result = judged.judgements[0];
+  assert.equal(result.verdict, 'incorrect');
+  assert.equal(result.failureStep, 'fabricated');
+  assert.deepEqual(result.officialResult, officialResult);
+  assert.deepEqual(result.audit, { sourceStatus: 'judge_partial_source', fullSourceSeen: false, fabricationEvidenceEligible: false });
+  const merged = mergeJudgeResults([raw], [packet], [{ ...result, hash: packet.hash }])[0];
+  assert.deepEqual(merged.judge.audit, result.audit);
+  assert.deepEqual(merged.judge.officialResult, officialResult);
+});

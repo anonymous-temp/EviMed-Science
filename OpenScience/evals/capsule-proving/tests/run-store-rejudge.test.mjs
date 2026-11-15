@@ -3,13 +3,21 @@ import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { buildJudgePacket, memoryStoreJudgePacket, judgePackets, mergeJudgeResults, JUDGE_SYSTEM, STORE_JUDGE_SYSTEM, STORE_JUDGE_CLIENT_SHA256 } from '../run/judgePackets.mjs';
+import { buildJudgePacket, memoryStoreJudgePacket, judgePackets, mergeJudgeResults, JUDGE_SYSTEM, STORE_JUDGE_SYSTEM, STORE_JUDGE_CLIENT_SHA256, sha256, stableJson } from '../run/judgePackets.mjs';
 import { rejudgeStores } from '../run/rejudge-stores.mjs';
 
 const row = runId => ({ runId, set: 'synthetic-users', split: 'dev', caseId: 'invented', id: 'store:choice', kind: 'store', category: 'preference_repeated',
   verdict: 'needs-judge', stored: false, expectedStored: true, checks: [{ name: 'stored-current', ok: false, detail: 'comparison tables' }] });
 const packet = item => buildJudgePacket(item, { snapshot: { files: { 'preferences/self/format.md': '- Use tabular comparisons.' } },
   anchors: ['comparison tables'], rubric: ['Retain the user preference by meaning.'], transcriptEvidence: [{ role: 'user', text: 'Compare options in a table.' }] });
+// Historical scores remain readable; only new packets select the store rubric automatically.
+/** @param {ReturnType<typeof row>} item */
+const legacyPacket = item => {
+  const { id: _id, hash: _hash, taskKind: _taskKind, ...payload } = packet(item);
+  Object.assign(payload, { schema: 'capsule-proving-run-judge/4', rubricVersion: 'capsule-proving-run-judge/4', judgeClientSha256: 'legacy-answer-prompt' });
+  const hash = sha256(stableJson(payload));
+  return { id: `run-score:${hash}`, hash, ...payload };
+};
 
 function fakeJudge(calls) {
   return async (_url, init) => {
@@ -21,7 +29,7 @@ function fakeJudge(calls) {
 }
 
 test('explicit store review changes prompt identity, preserves evidence and does not grade an intentionally empty reply', async () => {
-  const raw = row('before'), legacy = packet(raw), typed = memoryStoreJudgePacket(legacy);
+  const raw = row('before'), legacy = legacyPacket(raw), typed = memoryStoreJudgePacket(legacy);
   assert.equal(legacy.reply, '');
   assert.equal(typed.reply, '');
   assert.notEqual(typed.hash, legacy.hash);
@@ -36,14 +44,15 @@ test('explicit store review changes prompt identity, preserves evidence and does
   assert.equal(calls[0].messages[0].content, STORE_JUDGE_SYSTEM);
   assert.equal(mergeJudgeResults([raw], [typed], results)[0].stored, true, 'semantic retention can override a failed literal anchor');
   await judgePackets([legacy], { key: 'synthetic-test-value', fetchImpl: fakeJudge(calls) });
-  assert.equal(calls[1].messages[0].content, JUDGE_SYSTEM, 'the existing evaluator remains the default');
+  assert.equal(calls[1].messages[0].content, JUDGE_SYSTEM, 'explicit legacy packets remain readable');
+  assert.equal(packet(raw).taskKind, 'store', 'new scores use the retention rubric by default');
 });
 
 test('the opt-in rubric cannot be silently applied to answer packets or mixed batches', async () => {
   const answer = packet(row('before'));
   answer.rowKey = JSON.stringify(['before', 'synthetic-users', 'dev', 'invented', 'answer', 'q']);
   assert.throws(() => memoryStoreJudgePacket(answer), /store_packet_required/);
-  const legacy = packet(row('before'));
+  const legacy = legacyPacket(row('before'));
   await assert.rejects(judgePackets([legacy, memoryStoreJudgePacket(legacy)], { key: 'synthetic-test-value', fetchImpl: fakeJudge([]) }), /judge_mixed_task_rubrics/);
 });
 
@@ -57,7 +66,7 @@ test('paired store review preserves both original score sets, denominators, and 
     await writeFile(path.join(dir, 'run.json'), JSON.stringify({ runId: id, split: 'dev' }));
     await writeFile(path.join(dir, 'scores/summary.json'), 'original scores stay intact');
     const other = { ...row(id), id: 'store:other', category: 'stable' };
-    await writeFile(path.join(dir, 'scores/score-cache.json'), JSON.stringify({ rows: [row(id), other], packets: [packet(row(id)), packet(other)] }));
+    await writeFile(path.join(dir, 'scores/score-cache.json'), JSON.stringify({ rows: [row(id), other], packets: [legacyPacket(row(id)), legacyPacket(other)] }));
   }
   const keyFile = path.join(root, 'synthetic-key');
   await writeFile(keyFile, 'synthetic-test-value');
