@@ -57,7 +57,7 @@ export const NATIVE_CONSOLIDATION_CHANGES = Object.freeze(["added", "updated", "
 export const NATIVE_CHECK_ACTIONS = Object.freeze(["identifier_shape", "platform_text", "rejected_line", "rejected_reworded", "rejected_judged", "recent_work_default_project",
   "pasted_instruction"]);
 /** Outcomes of the optional personal-line attribution check; an unsuccessful check keeps the line. */
-export const NATIVE_PASTED_INSTRUCTION_CHECK_OUTCOMES = Object.freeze(["asked", "failed", "unavailable", "limited", "stale"]);
+export const NATIVE_PASTED_INSTRUCTION_CHECK_OUTCOMES = Object.freeze(["asked", "failed", "unavailable", "limited", "stale", "source_unbound", "source_deferred", "source_released"]);
 /** What became of a call to the model that judges whether a line repeats one the person removed: asked, failed (unreachable, or not the one shape), over the account's day, or no model here. */
 export const NATIVE_REJECTION_JUDGE_OUTCOMES = Object.freeze(["asked", "failed", "over_budget", "unavailable"]);
 /** What became of the lines that were near a removed one: held by containment (code), judged the same or not (the model), or kept because the judge could not say. */

@@ -9,13 +9,13 @@ import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWi
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
-import { neutralMemoryUri, removalStatement, similarity, removalLines, removalText, lineDecisionKey } from './nativeMemoryRejections.mjs';
+import { neutralMemoryUri, removalStatement, similarity, removalRefusals, removalLines, removalText, lineDecisionKey } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
 import { memoryHistoryLine, carriesPlatformContext, identifierShapesIn, maskIdentifiers, platformIdentifiersIn, projectContextLine, sourcePrivacyOf, MEMORY_SAFETY_NOTES_ANCHOR } from "@evimed/domain";
 import { actOf, duplicatesOf, withoutJudged } from "./nativeMemoryForgetEverywhere.mjs";
-import { recordForgetDuplicates, recordMapReplaced } from "./nativeMemoryMetrics.mjs";
+import { recordForgetDuplicates, recordMapReplaced, recordPastedInstructionCheck } from "./nativeMemoryMetrics.mjs";
 import { freshnessOf } from "./memoryMapSources/common.mjs";
 import { replacedStatements, statementForgotten } from "./memoryMapSources/replacedStatements.mjs";
 import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType, normalisedStatement, originalSources } from "./nativeMemoryOverlay.mjs";
@@ -897,12 +897,90 @@ export class NativeMemoryStore {
     if (!this.instructionWriteCheck) return [...scans, ...confirmations, ...writes];
     const held = await this.overlay.pendingInstructionRevisions(userId);
     const files = await this.overlay.files(userId);
+    /** @type {Set<string>} */
+    const seen = new Set();
     return [...scans, ...confirmations, ...writes, ...held.flatMap(revision => {
       const kept = new Set([...removalLines(revision.after ?? ''), ...removalLines(files.get(revision.uri)?.body ?? '')].map(lineFingerprint));
-      return removalLines(revision.before ?? '').filter(text => !kept.has(lineFingerprint(text)) && (!revision.pendingFingerprints || revision.pendingFingerprints.has(lineFingerprint(text)))).map(text => ({
+      return removalLines(revision.before ?? '').filter(text => {
+        const print = lineFingerprint(text), key = `${revision.uri}\0${print}`;
+        if (kept.has(print) || seen.has(key) || revision.pendingFingerprints && !revision.pendingFingerprints.has(print)) return false;
+        seen.add(key); return true;
+      }).map(text => ({
         id: `instruction:${revision.id}:${lineFingerprint(text)}`, text, at: revision.changedAt, state: 'pending', reason: 'instruction_origin_uncertain',
       }));
     })];
+  }
+
+  /** Release only fully evidenced historical no-source holds, grouped per file and bounded by the overlay's page.
+   * Reuse restore's engine/summary/provenance path, but never turn this automatic repair into a person's adoption or unforget.
+   * @param {string} userId
+   */
+  async releaseUnfoundedInstructionHolds(userId) {
+    if (typeof this.overlay.unfoundedInstructionRevisions !== 'function') return;
+    return withNativeMemoryWrite(this.overlay.database, userId, async () => {
+      const revisions = await this.overlay.unfoundedInstructionRevisions(userId);
+      /** @type {Map<string, typeof revisions>} */
+      const groups = new Map();
+      for (const revision of revisions) {
+        const after = new Set(removalLines(revision.after ?? '').map(lineFingerprint));
+        const missing = removalLines(revision.before ?? '').filter(line => !after.has(lineFingerprint(line)));
+        if (!missing.length || !missing.every(line => revision.unfoundedFingerprints.has(lineFingerprint(line)))) continue;
+        groups.set(revision.uri, [...(groups.get(revision.uri) ?? []), revision]);
+      }
+      for (const [uri, holds] of groups) {
+        const context = await this.#fileContext(userId, uri);
+        const latest = holds[0];
+        const current = await context.sessions.read(userId, uri);
+        const already = new Set(removalLines(current ?? '').map(lineFingerprint));
+        const lines = [...new Map(holds.flatMap(row => {
+          const kept = new Set(removalLines(row.after ?? '').map(lineFingerprint));
+          return removalLines(row.before ?? '').filter(line => !kept.has(lineFingerprint(line)));
+        }).map(line => [lineFingerprint(line), line])).values()];
+        const rejected = await removalRefusals({ userId, overlay: this.overlay, namespaceId: context.kind === 'geo-project' ? context.namespaceId : null,
+          candidates: lines.map(text => ({ text, sources: [] })), judge: this.rejectionJudge });
+        const restore = lines.filter(line => !already.has(lineFingerprint(line)) && !rejected.has(lineFingerprint(line)));
+        if (restore.length) await this.#restoreText(userId, { uri, text: [current ?? '', ...restore.map(line => `- ${line}`)].filter(Boolean).join('\n'),
+          memoryType: latest.memoryType, projectId: latest.projectId, revisionId: latest.id, reason: 'instruction_source_released', automatic: true });
+        for (const hold of holds) {
+          await this.overlay.markUndone(userId, hold.id);
+          recordPastedInstructionCheck('source_released');
+        }
+      }
+      this.#touch(userId);
+    }, { exclusive: true });
+  }
+
+  /** Targeted forgetting includes held before-images; use the existing exact/semantic duplicate comparison.
+   * @param {string} userId @param {{sessions:import('./openVikingSessions.mjs').OpenVikingSessions}} context
+   * @param {string|null} uri @param {string[]} lines @param {string|null} engineSession
+   */
+  async #forgetHeldLines(userId, context, uri, lines, engineSession) {
+    const empty = { lines: /** @type {string[]} */ ([]), historyScanPending: false };
+    if (typeof this.overlay.pendingInstructionRevisions !== 'function') return empty;
+    const root = context.sessions.memoryRoot(userId);
+    const holds = (await this.overlay.pendingInstructionRevisions(userId)).filter(row => row.uri.startsWith(`${root}/`) && (!uri || row.uri === uri));
+    const files = holds.map(row => {
+      const after = new Set(removalLines(row.after ?? '').map(lineFingerprint));
+      return { uri: row.uri, type: row.memoryType, statements: removalLines(row.before ?? '').filter(line => !after.has(lineFingerprint(line))
+        && (!row.pendingFingerprints || row.pendingFingerprints.has(lineFingerprint(line)))) };
+    });
+    const requested = new Set(lines.map(removalText).map(lineFingerprint));
+    if (uri) {
+      const available = new Set([...files.flatMap(file => file.statements), ...removalLines(await context.sessions.read(userId, uri) ?? '')].map(lineFingerprint));
+      if ([...requested].some(print => !available.has(print))) return empty;
+    }
+    const plan = uri ? new Map(files.map(file => [file.uri, file.statements.filter(line => requested.has(lineFingerprint(line)))]))
+      : await duplicatesOf({ userId, files, removed: lines, judge: this.rejectionJudge });
+    const removed = [...new Map([...plan.values()].flat().map(line => [lineFingerprint(line), line])).values()];
+    if (!removed.length) return empty;
+    // Persist rejection plus the visible forgotten text before retiring any hold. A crash retries idempotently.
+    const historyScanPending = await this.recordForgetIntent(userId, context, null, removed, { engineSession });
+    for (const row of holds) {
+      const selected = plan.get(row.uri);
+      if (selected?.length) await this.overlay.resolveInstructionRevision(userId, row.id, selected);
+    }
+    this.#touch(userId);
+    return { lines: removed, historyScanPending };
   }
 
   /** Confirm only the exact offered lines; stale or foreign candidates never broaden the removal. */
@@ -1887,7 +1965,12 @@ export class NativeMemoryStore {
       const selected = await this.#projectContext(String(user.id), project?.id);
       if (selected.namespaceId !== actual.namespaceId) throw new HttpError(403, 'memory_scope_denied', 'The file is outside this conversation.');
     }
+    const heldResult = targeted ? await withNativeMemoryWrite(this.overlay.database, String(user.id), () =>
+      this.#forgetHeldLines(String(user.id), actual, uri, lines ?? [removalText(statement).replace(/\s+/g, ' ')], engineSession)) : { lines: [], historyScanPending: false };
+    const heldLines = heldResult.lines;
+    const heldScan = heldResult.historyScanPending ? { historyScanPending: true } : {};
     if (!uri) {
+      if (heldLines.length) return { removed: true, removedLines: heldLines.length, historyRejected: true, ...heldScan };
       if (!this.history) throw new HttpError(503, 'memory_engine_unavailable', 'History rejection is unavailable.');
       const historyScanPending = await withNativeMemoryWrite(this.overlay.database, String(user.id), () =>
         this.recordForgetIntent(String(user.id), actual, null, [removalText(statement).replace(/\s+/g, ' ')], { engineSession }));
@@ -1895,14 +1978,15 @@ export class NativeMemoryStore {
     }
     const files = await this.files(String(user.id), { context: this.memoryContexts ? actual : null });
     const file = files.find((candidate) => candidate.uri === uri);
-    if (!file) return { removed: false };
+    if (!file) return { removed: heldLines.length > 0, ...(heldLines.length ? { removedLines: heldLines.length } : {}), ...heldScan };
     if (lines?.length) {
       const availableLines = removalLines(file.body);
-      const available = new Set(availableLines.map(lineFingerprint));
+      const available = new Set([...availableLines, ...heldLines].map(lineFingerprint));
       const missingLines = lines.filter(line => !available.has(lineFingerprint(removalText(line))));
       if (missingLines.length) return { removed: false, missingLines, availableLines };
-      const removedLines = await this.forgetLines(String(user.id), file, lines, { engineSession });
-      return { removed: removedLines > 0, removedLines, ...(this.history && this.overlay.deferredSummaryRebuildEnabled === true ? {historyScanPending:true} : {}), fileRemoved: removedLines === availableLines.length };
+      const liveRemoved = await this.forgetLines(String(user.id), file, lines, { engineSession });
+      const removedLines = heldLines.length + liveRemoved;
+      return { removed: removedLines > 0, removedLines, ...heldScan, ...(this.history && this.overlay.deferredSummaryRebuildEnabled === true ? {historyScanPending:true} : {}), fileRemoved: liveRemoved === availableLines.length };
     }
     const plan = await this.#duplicatesPlan(String(user.id), statements(file.body), file);
     const act = plan.size ? newAct() : null;
@@ -1986,21 +2070,21 @@ export class NativeMemoryStore {
    * What a restore can give back is the text: the engine's own fields (its type) are not restored with it, and its later
    * extraction writes beside the file rather than into it.
    * @param {string} userId
-   * @param {{ uri: string, text: string, memoryType: string, projectId?: string | null, revisionId: string, reason: string }} restore
+   * @param {{ uri: string, text: string, memoryType: string, projectId?: string | null, revisionId: string, reason: string, automatic?: boolean }} restore
    */
-  async #restoreText(userId, { uri, text, memoryType, projectId = null, revisionId, reason }) {
+  async #restoreText(userId, { uri, text, memoryType, projectId = null, revisionId, reason, automatic = false }) {
     const context = await this.#fileContext(userId, uri);
     if (context.kind === 'geo-project') projectId = context.projectId;
-    const review = this.instructionWriteCheck ? async () => { text = await this.instructionWriteCheck(userId, { uri, body: '', type: memoryType, projectId }, text, context); } : null;
+    const review = !automatic && this.instructionWriteCheck ? async () => { text = await this.instructionWriteCheck(userId, { uri, body: '', type: memoryType, projectId }, text, context); } : null;
     await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, text), review));
     if (text === null) return;
-    await this.overlay.unreject(userId, this.#rejectionType(context, memoryType), await this.#aliasRemovalLines(userId,
+    if (!automatic) await this.overlay.unreject(userId, this.#rejectionType(context, memoryType), await this.#aliasRemovalLines(userId,
       { uri, body: text, type: memoryType, namespaceId: context.kind === 'geo-project' ? context.namespaceId : null },
       [...removalLines(text), titleOf(memoryType, uri, text), ...memoryNameVariants(uri)]));
     await this.overlay.upsertFile({ userId, uri, memoryType, body: text, projectId: projectId ?? undefined });
     if (projectId) await this.#engine(() => context.sessions.setTags(userId, uri, [`project=${projectId}`])).catch(() => {});
     const sourceRevision=await this.overlay.revision(userId,revisionId);
-    await this.overlay.addRevision({ userId, uri, memoryType, change: "restored", actor: "user", reason, before: null, after: text, projectId,sourceProjectId:sourceRevision?.sourceProjectId??sourceRevision?.projectId??null,sourceProjectCreatedAt:sourceRevision?.sourceProjectCreatedAt??null });
+    await this.overlay.addRevision({ userId, uri, memoryType, change: "restored", actor: automatic ? "platform" : "user", engineSession: automatic ? sourceRevision?.engineSession ?? null : null, reason, before: null, after: text, projectId,sourceProjectId:sourceRevision?.sourceProjectId??sourceRevision?.projectId??null,sourceProjectCreatedAt:sourceRevision?.sourceProjectCreatedAt??null });
     await this.overlay.markUndone(userId, revisionId);
   }
 

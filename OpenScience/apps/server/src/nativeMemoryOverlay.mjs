@@ -154,6 +154,28 @@ export async function readNativeMemoryOriginalSources(query, userId, archiveUris
       projectId: row.project_id, projectCreatedAt: row.project_created_at }));
 }
 
+/** @typedef {{pendingKeys?:{uri:string,fingerprint:string}[],receipts?:{sources?:unknown[],reviews?:({decision:string,message:number|null}[]|null)[]}[]}} InstructionCheckReceipt */
+/** @param {InstructionCheckReceipt[]} checks @returns {Map<string,Set<string>>} */
+export function unfoundedInstructionKeys(checks) {
+  /** @type {Map<string,Set<string>>} */
+  const eligible = new Map();
+  /** @type {Set<string>} */
+  const refused = new Set();
+  for (const check of checks) {
+    const receipts = check.receipts ?? [];
+    const noSourceKeep = receipts.length > 0 && receipts.every(receipt => Array.isArray(receipt.sources) && !receipt.sources.length
+      && receipt.reviews?.length === 2 && receipt.reviews.every(review => review?.length && review.every(row => row.decision === 'keep' && row.message === null)));
+    for (const key of check.pendingKeys ?? []) {
+      const identity = `${key.uri}\0${key.fingerprint}`;
+      if (!noSourceKeep) { refused.add(identity); continue; }
+      const prints = eligible.get(key.uri) ?? new Set();
+      prints.add(key.fingerprint); eligible.set(key.uri, prints);
+    }
+  }
+  for (const [uri, prints] of eligible) for (const print of prints) if (refused.has(`${uri}\0${print}`)) prints.delete(print);
+  return eligible;
+}
+
 export class NativeMemoryOverlay {
   /** @param {{ database?: any, deferredSummaryRebuildEnabled?: boolean }} dependencies */
   constructor({ database = null, deferredSummaryRebuildEnabled = false } = {}) {
@@ -653,6 +675,41 @@ export class NativeMemoryOverlay {
       const held = prints.get(key.uri) ?? new Set(); held.add(key.fingerprint); prints.set(key.uri, held);
     }
     return (await this.protectRevisions(userId, rows.rows.map(publicRevision))).map(row => ({ ...row, pendingFingerprints: prints.get(row.uri) ?? null }));
+  }
+
+  /** The historical defect wrote pending keys despite two keep decisions and no source messages.
+   * Require that exact receipt shape; a later positive finding for the same key prevents automatic release.
+   * @param {string} userId
+   */
+  async unfoundedInstructionRevisions(userId) {
+    const held = await this.#query(`SELECT r.* FROM evimed_memory.native_revisions r WHERE user_id=$1 AND actor='platform'
+      AND reason LIKE '%pasted_instruction_pending%' AND undone_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM evimed_memory.native_revisions newer WHERE newer.user_id=r.user_id AND newer.uri=r.uri
+        AND newer.id>r.id AND (newer.actor='user' OR (newer.reason LIKE '%pasted_instruction%' AND newer.reason NOT LIKE '%pasted_instruction_pending%')))
+      ORDER BY id DESC LIMIT 100`, [owner(userId)]);
+    const revisions = await this.protectRevisions(userId, held.rows.map(publicRevision));
+    if (!revisions.length) return [];
+    const checks = await this.#query(`SELECT result FROM evimed_memory.native_instruction_checks
+      WHERE user_id=$1 AND EXISTS (SELECT 1 FROM jsonb_array_elements(result->'pendingKeys') k WHERE k->>'uri'=ANY($2::text[]))
+      ORDER BY checked_at DESC LIMIT 1001`, [owner(userId), [...new Set(revisions.map(row => row.uri))]]);
+    if (checks.rows.length > 1000) return [];
+    const eligible = unfoundedInstructionKeys(checks.rows.map(row => row.result));
+    return revisions.map(row => ({ ...row, unfoundedFingerprints: eligible.get(row.uri) ?? new Set() }));
+  }
+
+  /** Complete only selected held lines, keeping unrelated pending lines available. The new restore/forget revision owns
+   * the resolved text; this hold's before-image must no longer offer it for confirmation.
+   * @param {string} userId @param {string} id @param {string[]} lines
+   */
+  async resolveInstructionRevision(userId, id, lines) {
+    const row = await this.revision(userId, id);
+    if (!row || row.undoneAt || row.actor !== 'platform' || !row.reason.includes('pasted_instruction_pending')) return;
+    const prints = new Set(lines.map(lineFingerprint));
+    const before = String(row.before ?? '').split('\n').filter(line => !prints.has(lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, '')))).join('\n');
+    const after = new Set(memoryLines(row.after ?? '').map(lineFingerprint));
+    const done = before.split('\n').filter(line => line.trim() && !/^#{1,6}\s/.test(line.trim())).every(line => after.has(lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, ''))));
+    await this.#query(`UPDATE evimed_memory.native_revisions SET before=$3,undone_at=CASE WHEN $4 THEN clock_timestamp() ELSE undone_at END
+      WHERE user_id=$1 AND id=$2 AND undone_at IS NULL`, [owner(userId), id, before, done]);
   }
 
   /**
