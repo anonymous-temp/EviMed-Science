@@ -116,6 +116,11 @@ Distinguish title, lead, added context and source. Each expanded block must answ
 
 Preserve the shared scale: 4/8/12/16/20/24/32/40/48/64px. Use tighter spacing inside groups and more space between distinct tasks. Default page gutters are 16px below 768px and 24px from there. Align a page title and its main content to the same structural edge.
 
+In the knowledge library's split project views, the list's content block uses the
+title's 16px gutter; an inner row container bleeds 8px into it for highlights while
+row text keeps the title's edge. The document list and non-split layout retain
+their existing gutters.
+
 Use the established width roles: read 720px, page 1040px, wide 1200px with the existing larger-screen expansion, full for a genuinely full work surface. User-resized sidebars and panels are allowed; do not label a valid saved width as a defect because it differs from the default. Related input/configuration/progress/results can share one workbench when they serve the current task and mode under DS22.1. This does not authorize default stacking of complete overview, list, edit and analysis workbenches.
 
 Radii remain tag 6, control/row 8, card 12, panel/dialog 16, composer 24px. Static surfaces do not acquire shadows merely because the palette is warm. Keep elevation for real overlays and the composer, using existing levels.
@@ -209,6 +214,11 @@ Office/PDF/code/table/scientific viewers must expose the same information hierar
 Scientific viewers need keyboard equivalents for pan/rotate/zoom and value inspection, readable instructions, and touch cancellation/lost-capture handling. Fixed scientific canvases may keep their palette, but their labels still meet contrast. Initialize size observation only when the drawing element exists; resize the actual coordinate system. No-features text cannot stand in for initial setup. Provide decoded values in a reachable structured alternative where appropriate.
 
 ## DS14 Memory and capsules
+
+Account settings offers external-agent keys only when `/api/me` explicitly offers
+`features.agentMemoryApi: true`. Otherwise the entire group is absent and makes no
+key or OpenAPI request. A key-route `503 agent_memory_disabled` while the group is
+open clears credentials and controls and keeps the local disabled notice.
 
 Make saved content, source, scope and later use understandable. Distinguish personal facts/preferences, project facts, reusable methods and imported capsules without forcing users to learn engine terminology. Enablement is separate from editing or deleting a record. Existing rights/retention govern import/export/withdrawal.
 

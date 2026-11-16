@@ -12,8 +12,11 @@ This page is the operator's and the integrator's reference. People create, copy
 once and revoke keys under 设置 → 账户 → 外部智能体访问（API 密钥）
 (`/app/account`); no curl is needed. The section lists names, permissions, creation
 and last-use dates. It offers only scopes the service advertises, defaults to
-read-only, and shows one sentence without controls when the memory API answers
-`503 agent_memory_disabled`. The existing browser session and CSRF protect key
+read-only, and is drawn only when `GET /api/me` offers `features.agentMemoryApi: true`
+(the deployment's `OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED` switch). A missing or false
+feature hides the whole section without requesting key routes or `openapi.json`.
+If a key route answers `503 agent_memory_disabled` while the page is open, the
+section clears its controls and shows a disabled notice. The existing browser session and CSRF protect key
 management; a secret is kept only in the open one-time display, never browser storage.
 
 ## Turning it on

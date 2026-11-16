@@ -396,6 +396,11 @@ first, then a quiet ground, and draw a line last.
 
 **Three columns, and a page uses exactly one for its title and its body both.**
 
+The knowledge library's split project column aligns its measured content block with
+the title using the 16px gutter and an inner `-mx-2` row container. Highlights keep
+their 8px bleed; row text, document-list gutters and non-split layouts stay as before
+(DS05; `SourcesPage.test.tsx`).
+
 | Name | Width | For |
 |---|---|---|
 | `max-w-read` | **720** | an answer, a report, an article, an evidence card |
@@ -1217,7 +1222,9 @@ The owner's ruling of 2026-11-08 aligns every module to the nested sidebar direc
 
 ### External agent access in account settings (2026-11-15)
 
-“外部智能体访问（API 密钥）” is a Panel within 设置 → 账户 (`/app/account`).
+“外部智能体访问（API 密钥）” is a Panel within 设置 → 账户 (`/app/account`),
+drawn only when `/api/me` offers `features.agentMemoryApi: true`. An off or missing
+feature omits the entire group and its requests; the browser never probes `openapi.json`.
 List the key's name, Chinese permission labels, created date and last-use date;
 keep raw key/account/project ids out of the surface. Use secondary Buttons for
 create, copy, dismiss and revoke, with a destructive treatment on revoke. The
@@ -1228,7 +1235,7 @@ show it once with a copy action and a local-file instruction, and clear it when
 dismissed, revoked, unmounted or the browser session changes. Never persist the
 secret in browser storage. A failed copy keeps manual selection available; an
 unknown create outcome offers a list refresh rather than automatic mutation
-retry. `503 agent_memory_disabled` leaves only “此部署尚未启用外部智能体访问。”
+retry. A key-route `503 agent_memory_disabled` after the group was offered leaves only “此部署尚未启用外部智能体访问。”
 inside this group, without key controls. Preserve loading, empty and recoverable
 failure states. These are local component contracts; viewport and assistive-
 technology acceptance still need browser verification.

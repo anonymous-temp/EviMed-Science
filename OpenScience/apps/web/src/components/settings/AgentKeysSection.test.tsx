@@ -82,12 +82,20 @@ describe("external agent keys", () => {
     expect(within(row as HTMLElement).getByText("已撤销")).toBeInTheDocument();
     expect(within(row as HTMLElement).queryByRole("button")).not.toBeInTheDocument();
   });
-  it("shows one sentence and no controls when the deployment disables the API", async () => {
+  it("handles a key-list refusal if the API is disabled after the panel was offered", async () => {
     mocks.list.mockRejectedValue(new WebApiError("disabled", { status: 503, code: "agent_memory_disabled" }));
     render(<AgentKeysSection />);
     expect(await screen.findByText("此部署尚未启用外部智能体访问。")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+  it("clears the displayed secret and controls if the key route is disabled while the page is open", async () => {
+    const user = userEvent.setup(); render(<AgentKeysSection />); await create(user);
+    mocks.revoke.mockRejectedValue(new WebApiError("disabled", { status: 503, code: "agent_memory_disabled" }));
+    await user.click(screen.getByRole("button", { name: "撤销密钥“My DSH”" }));
+    expect(await screen.findByText("此部署尚未启用外部智能体访问。")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue(secret)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
   it("distinguishes a read failure from disabled and can retry", async () => {
     mocks.list.mockRejectedValueOnce(new Error("offline")); render(<AgentKeysSection />);

@@ -86,6 +86,15 @@ function useDebounced<T>(value: T, delay: number): T {
  *
  * A row says a state only while the document cannot be used yet (「正在读取」, a few seconds) or when it could not be read (「没能读取 ·
  * 重试」). Reading state is not a filter: nobody comes to the knowledge base to look for documents by the pipeline's progress.
+ * Anatomy: List header, scrolling documents/projects and addressed detail.
+ * Variants: Documents, knowledge pages, graph and conversation outputs.
+ * States: Loading, empty, read failure, selected item and upload progress.
+ * Hit area: Shared rows, buttons and menus own their targets.
+ * Keyboard: Native links and shared controls retain their keyboard behavior.
+ * Long content: Rows truncate titles; addressed readers own full content.
+ * Theme: Existing semantic text, surface and selection roles.
+ * Responsive: MasterDetail splits by available width; narrow views swap list/detail.
+ * Verification: SourcesPage tests pin split project gutters and unchanged document/phone structure (DS05/DS13); live geometry remains separate.
  */
 export function SourcesPage() {
   // A project switch in the sidebar repaints the page: the project views start from the sidebar's project.
@@ -445,19 +454,21 @@ function KnowledgeBase({ sourceId }: { sourceId: string | null }) {
   const list = ({ split }: MasterDetailState) => {
     beside.current = split;
     const current = sourceId ?? (split && view === "documents" ? items?.[0]?.id ?? null : null);
+    const projects = <ProjectList
+      groups={groups} chosen={scopeProjectId} hrefFor={projectHref} loading={projectsLoading}
+      current={scopeProjectId ? { id: scopeProjectId, label: projectLabel } : null}
+    />;
     return (
       // Where the list is the page it keeps the page's column and gutter (`PageShell`'s); beside the pane it is a column of its own.
       <div className={cn("flex min-h-0 flex-1 flex-col", !split && "mx-auto w-full max-w-page px-4 md:px-6")}>
         <PageHeader title="知识库" actionPlan={firstRun ? undefined : { primary: { id: "add", label: "添加", items: addItems, disabled: !hasWebApi || uploading, loading: uploading } }} className={cn("shrink-0 pb-2 pt-5", split && "px-4")} />
         {view === "documents" && toolbar && <div className={cn("shrink-0 pb-2", split && "px-4")}><Toolbar {...toolbar} /></div>}
-        <div ref={setListScroller} className={cn("min-h-0 flex-1 overflow-y-auto pb-6", split && "px-2")}>
+        <div ref={setListScroller} className={cn("min-h-0 flex-1 overflow-y-auto pb-6", split && (view === "documents" ? "px-2" : "px-4"))}>
           {view === "documents" && error && <LoadError message={error} onRetry={() => void load()} className="mb-4" />}
-          {view === "documents" ? documentRows(split, current) : (
-            <ProjectList
-              groups={groups} chosen={scopeProjectId} hrefFor={projectHref} loading={projectsLoading}
-              current={scopeProjectId ? { id: scopeProjectId, label: projectLabel } : null}
-            />
-          )}
+          {view === "documents" ? documentRows(split, current) : split ? (
+            // Keep the content block at the title's edge; row highlights bleed into the gutter.
+            <div><div className="-mx-2">{projects}</div></div>
+          ) : projects}
         </div>
       </div>
     );

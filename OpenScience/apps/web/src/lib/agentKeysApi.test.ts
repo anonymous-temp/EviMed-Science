@@ -6,16 +6,17 @@ async function client() {
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 describe("agent key browser client", () => {
-  it("checks the public enable switch before listing session-authenticated keys", async () => {
-    const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response({ openapi: "3.1.0" })).mockResolvedValueOnce(response({ data: { keys: [], scopes: ["memory.read"] } }));
+  it("lists session-authenticated keys without probing the OpenAPI description", async () => {
+    const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response({ data: { keys: [], scopes: ["memory.read"] } }));
     const api = await client(); expect(await api.fetchWebAgentKeys()).toEqual({ keys: [], scopes: ["memory.read"] });
-    expect(fetcher.mock.calls.map(([url]) => url)).toEqual(["/api/agent-memory/v1/openapi.json", "/api/agent-keys"]);
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual(["/api/agent-keys"]);
     for (const [, init] of fetcher.mock.calls) expect(init).toMatchObject({ credentials: "include", cache: "no-store" });
   });
-  it("propagates the named disabled state without listing or creating keys", async () => {
+  it("propagates the key route's named disabled state without an OpenAPI probe", async () => {
     const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(response({ code: "agent_memory_disabled", error: "disabled" }, 503));
     const api = await client(); await expect(api.fetchWebAgentKeys()).rejects.toMatchObject({ code: "agent_memory_disabled", status: 503 });
     expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][0]).toBe("/api/agent-keys");
   });
   it("creates and revokes with browser session and CSRF, keeps the one-time secret out of storage", async () => {
     const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response({ data: { csrfToken: "csrf-fixture" } })).mockResolvedValueOnce(response({ data: { id: "agk/a", key: "evk_once" } }, 201)).mockResolvedValueOnce(response({ data: { id: "agk/a", revokedAt: "today" } }));

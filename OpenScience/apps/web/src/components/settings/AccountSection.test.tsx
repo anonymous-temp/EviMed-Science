@@ -60,6 +60,28 @@ describe("账户", () => {
   });
   afterEach(() => { vi.restoreAllMocks(); });
 
+  it.each([undefined, {}, { agentMemoryApi: false }])("omits external agent access and its requests when the feature is not offered (%j)", async (features) => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "cdss-access", authType: "local" }, features });
+    open();
+    await screen.findByText("cdss-access");
+    expect(screen.queryByRole("heading", { name: "外部智能体访问（API 密钥）" })).not.toBeInTheDocument();
+    expect(screen.queryByText("此部署尚未启用外部智能体访问。")).not.toBeInTheDocument();
+    expect(mocks.fetchWebAgentKeys).not.toHaveBeenCalled();
+  });
+
+  it("offers external agent keys only after the account response explicitly enables the API", async () => {
+    let resolve: (value: unknown) => void = () => {};
+    const pending = new Promise(settle => { resolve = settle; });
+    mocks.fetchWebMe.mockReturnValue(pending);
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "oidc" });
+    open();
+    expect(screen.queryByRole("heading", { name: "外部智能体访问（API 密钥）" })).not.toBeInTheDocument();
+    expect(mocks.fetchWebAgentKeys).not.toHaveBeenCalled();
+    resolve({ user: { id: "alice", name: "cdss-access", authType: "oidc" }, features: { agentMemoryApi: true } });
+    expect(await screen.findByRole("button", { name: "创建密钥" })).toBeInTheDocument();
+    expect(mocks.fetchWebAgentKeys).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps account read failure visible and retries without losing the page", async () => {
     mocks.fetchWebMe.mockRejectedValue(new Error("offline"));
     open();

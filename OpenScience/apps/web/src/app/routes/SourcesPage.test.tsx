@@ -698,6 +698,28 @@ describe("知识库", () => {
   describe("beside the pane", () => {
     beforeEach(() => stubLayout(1200));
 
+    it.each(["/app/files?kind=wiki", "/app/files?kind=wiki&view=graph"])("aligns the project content block with the title while its row highlight bleeds at %s", async (entry) => {
+      context.features = { knowledgePages: true };
+      useProjectStore.setState({ projects: [], currentId: "default", loading: false, select: selectSpy as never });
+      renderPage(entry);
+      const list = screen.getByRole("region", { name: "资料列表" });
+      const row = await within(list).findByRole("link", { name: "我的项目" });
+      const projects = row.closest("[data-project-list]")!;
+      const bleed = projects.parentElement!;
+      const block = bleed.parentElement!;
+      const scroller = block.parentElement!;
+      const header = within(list).getByRole("heading", { level: 1, name: "知识库" }).closest("header")!;
+      expect(header).toHaveClass("px-4");
+      expect(header.nextElementSibling).toBe(scroller);
+      expect(scroller).toHaveClass("px-4", "overflow-y-auto");
+      expect(scroller).not.toHaveClass("px-2");
+      expect(scroller.children).toHaveLength(1);
+      expect(block.tagName).toBe("DIV");
+      expect(block).not.toHaveClass("-mx-2", "contents");
+      expect(bleed).toHaveClass("-mx-2");
+      expect(bleed.children).toHaveLength(1);
+    });
+
     it("shows the first document in the pane when none is chosen — without writing it into the address — and marks its row", async () => {
       renderPage();
       const heading = await screen.findByRole("heading", { level: 2, name: guideline.display.title });
@@ -708,6 +730,7 @@ describe("知识库", () => {
       expect(within(listRowOf(sheet.display.title)).getByRole("link", { name: sheet.display.title })).not.toHaveAttribute("aria-current");
       // The list is on the left and the document on the right: two regions of one page, which has one title and no tab list.
       const list = screen.getByRole("region", { name: "资料列表" });
+      expect(within(list).getByRole("list", { name: "资料" }).parentElement!.parentElement).toHaveClass("px-2", "overflow-y-auto");
       const pane = screen.getByRole("region", { name: "资料阅读" });
       expect(list.compareDocumentPosition(pane) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(pane).toContainElement(heading);
@@ -857,6 +880,9 @@ describe("知识库", () => {
       renderPage("/app/files?kind=wiki");
       expect(await screen.findByRole("link", { name: "我的项目" })).toHaveAttribute("href", "/app/files?scope=default&kind=wiki");
       expect(screen.getByRole("link", { name: "我的项目" })).toHaveAttribute("aria-current", "true");
+      const projects = screen.getByRole("link", { name: "我的项目" }).closest("[data-project-list]")!;
+      expect(projects.parentElement).toHaveClass("overflow-y-auto");
+      expect(projects.parentElement).not.toHaveClass("px-2", "px-4", "-mx-2");
     });
   });
 

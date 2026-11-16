@@ -7314,6 +7314,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               // Sharing a capsule with other accounts, and subscribing a project to an evidence zone: each its own switch, and the
               // second the frontier's audience too. The panels are drawn only where the server says so.
               capsuleShare: Boolean(capsuleSharing),
+              agentMemoryApi: config.agentMemoryApiEnabled === true,
               zoneSubscription: Boolean(zoneSubscriptions?.enabled) && Boolean(frontier) && frontierAudienceAllows(config, user),
               geo: Boolean(geo) && geoAudienceAllows(config, user),
               vcr: Boolean(vcr) && vcrAudienceAllows(config, user),

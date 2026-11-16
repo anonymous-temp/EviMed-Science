@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Panel, PanelRow } from "@/components/ui/Panel";
 import { PasswordRow } from "./PasswordRow";
 import { AgentKeysSection } from "./AgentKeysSection";
+import { featureOffered } from "@/lib/meFeature";
 
 interface WebAccount {
   id: string;
@@ -33,12 +34,22 @@ interface WebAccount {
  * switch and reset are its own), and that it is not used to train a model.
  * The words follow the policy in `memoryNeverKept.mjs`; when the policy
  * moves, this moves with it.
+ * Anatomy: Account, data, optional external-agent keys and memory panels.
+ * Variants: External-agent keys appear only when /api/me offers agentMemoryApi.
+ * States: Account loading/error/retry, busy mutations and deletion confirmation.
+ * Hit area: Shared PanelRow, Button and Input controls own their targets.
+ * Keyboard: Native controls; the deletion confirmation focuses its first input.
+ * Long content: Panel rows wrap account names and explanatory copy.
+ * Theme: Shared semantic panel, text, control and destructive roles.
+ * Responsive: Panel rows stack their controls on narrow screens.
+ * Verification: AccountSection and agent-key tests; DS14; live viewport acceptance remains separate.
  */
 export function AccountSection() {
   const navigate = useNavigate();
   const [readError, setReadError] = useState<string | null>(null);
   const [readAttempt, setReadAttempt] = useState(0);
   const [account, setAccount] = useState<WebAccount | null>(null);
+  const [agentMemoryApi, setAgentMemoryApi] = useState(false);
   const [busy, setBusy] = useState<"export" | "logout" | "delete" | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmId, setConfirmId] = useState("");
@@ -50,7 +61,7 @@ export function AccountSection() {
   useEffect(() => {
     let active = true;
     fetchWebMe()
-      .then((me) => { if (active) { setAccount(me?.user ?? null); setReadError(null); } })
+      .then((me) => { if (active) { setAccount(me?.user ?? null); setAgentMemoryApi(featureOffered(me, "agentMemoryApi")); setReadError(null); } })
       .catch((error) => { if (active) setReadError(`无法读取账户：${webErrorMessage(error)}`); });
     return () => { active = false; };
   }, [readAttempt]);
@@ -160,7 +171,7 @@ export function AccountSection() {
         </PanelRow>
       </Panel>
 
-      <AgentKeysSection />
+      {agentMemoryApi && <AgentKeysSection />}
 
       <Panel title="记忆">
         <PanelRow

@@ -2752,10 +2752,6 @@ export interface WebAgentKey {
 }
 export interface WebAgentKeyList { keys: WebAgentKey[]; scopes: string[] }
 export async function fetchWebAgentKeys(): Promise<WebAgentKeyList> {
-  // Key-management routes remain available even when recall is off. Read the public switch first so the settings group tells the
-  // person this deployment cannot serve an external agent, rather than offering a key they cannot use for memory.
-  const availability = await fetchWithWebAuth(apiUrl("/agent-memory/v1/openapi.json"), { cache: "no-store" });
-  await parseApiResponse<unknown>(availability);
   const res = await fetchWithWebAuth(apiUrl("/agent-keys"), { cache: "no-store" });
   return parseApiResponse<WebAgentKeyList>(res);
 }
