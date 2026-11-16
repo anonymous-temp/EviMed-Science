@@ -1,3 +1,4 @@
+2026-11-16 06:35 · Release candidate codex/release-1116: live 0944a884f plus the two UI-walk fixes (knowledge column block on the title's edge; the API-key panel drawn only when /api/me offers agentMemoryApi, no openapi.json probe).
 2026-11-16 06:28 · WALKFIX: Align split knowledge project blocks without moving rows and offer agent-key settings only through /api/me features; 369 web and 30 server tests pass, 37 PostgreSQL integration cases skip without a test database, and web TypeScript/changed-file ESLint pass; production walk remains unrun.
 2026-11-16 02:25 · Release candidate codex/release-1115d: 1115c plus the copy and layout rule fixes on the API-key page and the overview's pending count (1115c failed the copyRules and layoutRules tests).
 2026-11-15 07:26 · Release candidate codex/release-1115c: 1115b plus the plugin's tests behind the localhost probe guard (1115b failed that guard test; modelGateway timed out as on 11-14).
