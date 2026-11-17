@@ -269,9 +269,10 @@ export function removalStatement(text) {
 
 /** Distinctive alphanumeric identifiers survive rewording without a subject-word gate.
  * Generic values still need their subject; provenance and dates alone never withdraw another fact.
- * @param {string} written @param {string} removed @param {{ignoreWhitespace?:boolean,shortContainment?:boolean}} [options] */
+ * @param {string} written @param {string} removed @param {{ignoreWhitespace?:boolean,shortContainment?:boolean,hardTokenMatch?:boolean}} [options] */
 export function removalContentMatch(written, removed, options = {}) {
   if (containsRemoved(written, removed, options)) return true;
+  if (options.hardTokenMatch === false) return false;
   const statement = removalStatement(removed), candidate = removalStatement(written);
   const tokens = hardTokens(statement);
   if (!tokens.length || !tokens.some(token => !/^\d{4}(?:[-/.年]\d{1,2}(?:[-/.月]\d{1,2}日?)?)?$/.test(token))

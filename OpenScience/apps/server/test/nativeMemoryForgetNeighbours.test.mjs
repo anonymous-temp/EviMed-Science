@@ -175,3 +175,17 @@ test('content identifiers fence paraphrases without a judge, but provenance iden
   assert.equal(removalStatement('Parked at M-31025 (2026-11-11 03:30).'), 'parked at m-31025 .');
   assert.match(removalStatement('Appointment date (2026-11-11)'), /2026-11-11/);
 });
+
+
+test('settled history scans retain unrelated statements with the same identifier', async () => {
+  const removed = 'The locker code is F-25429.';
+  const context = { ownerId: 'u', kind: 'owned', namespaceId: 'u' };
+  for (const scan_pending of [true, false]) {
+    const ledger = new MemoryHistoryLedger({ overlay: overlayFor(removed), database: { query: async () => ({ rows: [{
+      memory_type: 'notes', fingerprint: row(removed).fingerprint, text: removed, scan_pending,
+    }] }) } });
+    ledger.migrate = async () => {};
+    assert.equal(await ledger.rejected(context, ['The unrelated invoice is F-25429.']), scan_pending);
+    assert.equal(await ledger.rejected(context, [removed]), true);
+  }
+});

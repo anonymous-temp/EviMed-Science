@@ -247,7 +247,9 @@ export class MemoryHistoryLedger {
       for (const row of result.rows) {
         if (++count > 10000) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
         for (const text of texts) {
-          const matched = row.text ? removalContentMatch(text, row.text, { shortContainment: true })
+          // A pending scan needs an immediate identifier fence. Once settled, exact
+          // message receipts decide which conversation stated that fact.
+          const matched = row.text ? removalContentMatch(text, row.text, { shortContainment: true, hardTokenMatch: row.scan_pending === true })
             : text.split('\n').some(line => lineFingerprint(normalisedStatement(line)) === row.fingerprint);
           if (matched && !await freshlyStated(text,row)) return true;
         }
