@@ -5,7 +5,8 @@ import { test } from "node:test";
 
 import { unzipSync } from 'fflate';
 import { NativeMemoryStore } from "../src/nativeMemoryStore.mjs";
-import { NativeMemoryOverlay, lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
+import { NativeMemoryOverlay, contentHash, lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
+import { reconcileMemoryNames } from '../src/nativeMemoryNames.mjs';
 
 const ROOT = "viking://user/u1/memories";
 
@@ -162,6 +163,38 @@ test('a file heading is its visible title, rather than a stale filename after co
   assert.equal(record.summary, 'Current name');
   assert.match(record.value, /Independent fact/);
 });
+
+for (const name of ['Edited_note', 'edited_note']) for (const first of ['edit', 'reconcile']) {
+  test(`safe page rename with ${name} runs ${first} first without restoring a withdrawn path`, async () => {
+    const { files, store } = engine({ count: 0, delay: 0 });
+    const uri = `${ROOT}/preferences/${name}.md`, sibling = `${ROOT}/preferences/EDITED NOTE.md`;
+    const rejectedName = contentHash(`${uri}:0`).slice(0, 24);
+    const safe = `${ROOT}/preferences/${contentHash(`${uri}:1`).slice(0, 24)}.md`;
+    const removals = [{ text: `Project identifier "${rejectedName}".`, fingerprint: 'prior' }];
+    const metadata = new Map();
+    for (const [index, path] of [uri, sibling].entries()) {
+      files.set(path, { body: 'Project "Edited".', modTime: '2026-11-17' });
+      metadata.set(path, { uri: path, body: 'Project "Edited".', createdAt: String(index) });
+    }
+    const overlay = store.overlay;
+    overlay.files = async () => new Map(metadata);
+    overlay.removals = async () => removals;
+    overlay.reject = async (_user, _type, _uri, lines) => removals.push(...lines.map(text => ({ text, fingerprint: lineFingerprint(text) })));
+    overlay.upsertFile = async row => metadata.set(row.uri, row);
+    overlay.removeFile = async (_user, path) => metadata.delete(path);
+    overlay.inheritOrigins = async () => {};
+    const reconcile = () => reconcileMemoryNames({ userId: 'u1', context: { sessions: store.sessions }, overlay });
+    const edit = async () => {
+      const record = (await store.records('u1')).find(row => row.uri === uri);
+      await store.update('u1', record.id, { value: '- Independent replacement.', expectedVersion: record.version });
+    };
+    if (first === 'edit') { await edit(); await reconcile(); }
+    else { await reconcile(); await edit(); }
+    assert.equal(files.has(uri), false);
+    assert.equal(files.has(`${ROOT}/preferences/${rejectedName}.md`), false);
+    assert.equal(files.get(safe)?.body, '- Independent replacement.');
+  });
+}
 
 
 test('neutral profile headings never become records or targets, including title-only files and old forgets', async () => {

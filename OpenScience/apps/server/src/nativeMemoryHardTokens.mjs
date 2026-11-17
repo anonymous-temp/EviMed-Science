@@ -22,14 +22,19 @@ export function memoryNameVariants(uri) {
   return [...new Set([name, name.normalize('NFKC').replace(/_/g, ' ')])];
 }
 
+/** Complete quoted names/values, including opaque identifiers beginning with a digit.
+ * @param {string} text @returns {string[]} */
+export function quotedHardTokens(text) {
+  return [...String(text).matchAll(QUOTED)].map(match => hardText(match[1] ?? match[2]));
+}
+
 /** All literal hard tokens; typography is normalised by the platform's existing quotation comparator.
  * @param {string} text @returns {string[]} */
 export function hardTokens(text) {
   const normal = hardText(text);
   return [...new Set([
     ...normal.matchAll(TOKEN_SHAPES),
-    ...String(text).matchAll(QUOTED),
-  ].map(match => hardText(match[1] ?? match[2] ?? match[0])).filter(Boolean))];
+  ].map(match => hardText(match[0])).concat(quotedHardTokens(text)).filter(Boolean))];
 }
 
 /** A token must stand on its own: 12 mg is not supported by 112 mg, and a date is not a substring of another identifier.

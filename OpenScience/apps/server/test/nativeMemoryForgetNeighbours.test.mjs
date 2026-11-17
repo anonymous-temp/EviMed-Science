@@ -194,3 +194,17 @@ test('settled history scans retain unrelated statements with the same identifier
     assert.equal(await ledger.rejected(context, [removed]), true);
   }
 });
+
+test('complete quoted filenames are withdrawn independently of digest prefix and removal row order', async () => {
+  for (const name of ['b1f451362d0d41c63661c044', '1c389473a2e9dd215586c660']) {
+    for (const texts of [[`Project identifier "${name}".`, 'Project "Edited".'], ['Project "Edited".', `Project identifier "${name}".`]]) {
+      const refused = await removalRefusals({ userId: 'u', overlay: overlayFor(...texts), candidates: [
+        { text: name }, { text: `${name}-4` }, { text: `${name.slice(0, -1)}9` }, { text: '- Independent replacement.' },
+      ] });
+      assert.deepEqual([...refused.keys()], [lineFingerprint(name)]);
+    }
+  }
+  assert.equal(removalContentMatch('2026-11-17', 'Date "2026-11-17".'), false);
+  assert.equal(removalContentMatch('132', 'Creatinine "132".'), false);
+  assert.equal(removalContentMatch('Sodium 132', 'Creatinine "132".'), false);
+});

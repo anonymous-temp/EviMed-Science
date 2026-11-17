@@ -1,5 +1,5 @@
 import { memoryHistoryLine } from '@evimed/domain';
-import { hardTokens, tokenPresent, sourceHasToken } from './nativeMemoryHardTokens.mjs';
+import { hardTokens, quotedHardTokens, tokenPresent, sourceHasToken } from './nativeMemoryHardTokens.mjs';
 import { contentHash, lineFingerprint, normalisedStatement } from './nativeMemoryOverlay.mjs';
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { recordRejectionJudge, recordRejectionLines } from "./nativeMemoryMetrics.mjs";
@@ -274,6 +274,12 @@ export function removalContentMatch(written, removed, options = {}) {
   if (containsRemoved(written, removed, options)) return true;
   if (options.hardTokenMatch === false) return false;
   const statement = removalStatement(removed), candidate = removalStatement(written);
+  // A filename can be exactly the quoted value of a removed statement. Its first
+  // character is not evidence: digit-leading opaque names are as withdrawn as
+  // letter-leading ones. Keep this exact, so a shared dose/date or a longer name
+  // cannot remove a neighbouring fact with different content.
+  if (quotedHardTokens(statement).some(value => compact(candidate) === compact(value)
+    && containsRemoved(candidate, value))) return true;
   const tokens = hardTokens(statement);
   if (!tokens.length || !tokens.some(token => !/^\d{4}(?:[-/.年]\d{1,2}(?:[-/.月]\d{1,2}日?)?)?$/.test(token) && tokenPresent(token, candidate, options))
     || !tokens.every(token => sourceHasToken(token, { text: candidate, created_at: options.createdAt }, options))) return false;

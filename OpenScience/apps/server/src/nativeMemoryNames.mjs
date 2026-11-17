@@ -3,6 +3,7 @@ import { nativeMemoryFile } from './openVikingSessions.mjs';
 import { keepUnexplainedLines } from './nativeMemoryKeepLines.mjs';
 import { fenceWithdrawnMemoryBody, withMemorySummaryInvalidation } from './nativeMemorySummaries.mjs';
 import { removalRefusals } from './nativeMemoryRejections.mjs';
+import { memoryNameVariants } from './nativeMemoryHardTokens.mjs';
 import { NATIVE_TEXT_LIMIT } from './nativeMemoryPersistence.mjs';
 
 /** Formatting equality only, never transliteration, spelling repair or inferred identity.
@@ -66,7 +67,8 @@ export async function reconcileMemoryNames({ userId, context, overlay }) {
       if (await fenceWithdrawnMemoryBody(overlay, userId, keep.uri, before, namespaceId) !== before
         || await fenceWithdrawnMemoryBody(overlay, userId, sibling.uri, incoming, namespaceId) !== incoming) continue;
       if ((await removalRefusals({ userId, overlay, projectId: keep.projectId ?? null, namespaceId,
-        candidates: memoryLines(before + '\n' + incoming).map(text => ({ text })) })).size) continue;
+        candidates: [...memoryLines(before + '\n' + incoming), ...memoryNameVariants(keep.uri),
+          ...memoryNameVariants(sibling.uri)].map(text => ({ text })) })).size) continue;
       const latestDate = body => [...body.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)].map(match => match[0]).sort().at(-1) ?? '';
       const incomingNewer = latestDate(incoming) > latestDate(before)
         || latestDate(incoming) === latestDate(before) && String(sibling.updatedAt ?? '') > String(keep.updatedAt ?? '');

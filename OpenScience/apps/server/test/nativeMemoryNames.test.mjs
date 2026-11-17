@@ -49,3 +49,11 @@ for (const options of [{ project: 'p2' }, { sensitive: true }, { withdrawn: true
   assert.equal(await reconcileMemoryNames({ userId: 'u', ...f }), 0);
   assert.equal(f.bodies.get(f.a), f.before); assert.equal(f.bodies.get(f.b), f.after);
 });
+
+test('reconciliation never writes a destination whose name alone is withdrawn', async () => {
+  const f = fixture();
+  f.overlay.removals = async () => [{ text: 'Project "BI-RADS 4".', fingerprint: 'removed-name' }];
+  assert.equal(await reconcileMemoryNames({ userId: 'u', ...f }), 0);
+  assert.equal(f.revisions.length, 0);
+  assert.equal(f.bodies.get(f.a), f.before);
+});
