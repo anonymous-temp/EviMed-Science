@@ -440,6 +440,8 @@ services:
       # Publishes an account's memory to whoever holds one of its API keys;
       # off unless a deployment decides otherwise (docs/AGENT_MEMORY_API.md).
       OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED:
+      OPEN_SCIENCE_AGENT_MEMORY_API_INTERNAL_ENABLED:
+      OPEN_SCIENCE_AGENT_MEMORY_API_INTERNAL_USERS:
       # How many times the control plane sends a finished package back to the
       # run after its own gate has read it. Unset is 0: findings are attached to
       # the delivery instead (config.mjs `gateRepairRounds`).

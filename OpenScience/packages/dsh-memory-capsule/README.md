@@ -69,6 +69,10 @@ file to restore access. Revoked keys cannot be shown or recovered.
 | `capsule_propose` | Posts `factKind`, `content`, optional `projectId` to `/note`; pending until the person confirms it on the web memory page. It never confirms or activates anything. |
 | `capsule_method` | Fetches the **current** recall catalog and returns one method body by `digest` or exact `name` (ID/title/name). Duplicate names require a digest. |
 | `capsule_status` | Checks configuration and the API's key-capability endpoint. |
+| `capsule_context` | Once at session start, only when status offers openingContext. |
+| `capsule_remember` | Sends verbatim words and external source only when explicitRemember is offered with memory.remember. |
+| `capsule_forget` | Withdraws a statement or record lines when offered; requires an account-scoped manage key and preserves pending-check outcomes. |
+| `capsule_forgotten` | Lists withdrawn original text and available restore actions as a management view. |
 
 The public recall API currently returns bodies within its bounded method
 catalog. The connector strips them from recall and re-requests the current
@@ -76,10 +80,9 @@ catalog for a method read; it does not cache stale bodies or invent a body-by-
 digest HTTP route. Methods outside that current catalog/budget are unavailable.
 When both selectors are supplied, the digest selects the method.
 
-There is **no raw conversation-history recall**, automatic transcript upload,
+Raw conversation history is opt-in with `include: ["history"]` and both read scopes. There is no automatic transcript upload,
 external-work learning, method mounting, capsule selection/isolation or local
-memory engine here. **Forget and share stay on the web memory page**
-(`/app/memory`); proposals are confirmed there too. Memory and methods are
+memory engine here. Share and proposal confirmation stay on the web memory page (`/app/memory`). New tools check the server capability table before acting; they never probe unavailable endpoints. Memory and methods are
 context, not authority. General writing, documents, code and everyday work do
 not require a recall; unavailable memory never blocks them.
 

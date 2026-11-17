@@ -1,3 +1,6 @@
+import { rememberSource, rememberAdmission } from './agentMemoryRemember.mjs';
+import { contextForAgent } from './agentMemoryContext.mjs';
+import { agentMemoryAvailable, agentMemoryDisabled } from './agentMemoryAvailability.mjs';
 import { createHash } from "node:crypto";
 import { CAPSULE_FACT_KINDS, privateByDefault } from "@evimed/domain";
 import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES, nativeRecallSource, recallForAgent } from "./agentMemoryRecall.mjs";
@@ -7,6 +10,7 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
 import { assertAgentSubject } from "./agentApiKeys.mjs";
 import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
 import { isPlatformAccount } from "./platformAccount.mjs";
+import { forgetForAgent, forgottenForAgent } from './agentMemoryForget.mjs';
 
 /**
  * The memory API an agent that is not ours calls.
@@ -24,12 +28,12 @@ import { isPlatformAccount } from "./platformAccount.mjs";
  * Three rules that are properties of this surface rather than of the services
  * underneath it, and each one is here because the caller is not ours:
  *
- *  1. **Nothing written here takes effect by itself.** A note arrives as an
+ *  1. **Proposals require confirmation.** A note arrives as an
  *     `inferred` candidate and an episode as a pending candidate note; the
  *     parameter that would say otherwise does not exist. A model's claim that its
  *     user said something outright is not the user saying it, and an external
  *     agent's claim is one more step removed. The account owner confirms, or does
- *     not.
+ *     not. Directly stated memory has its own memory.remember scope and source receipt.
  *  2. **Scope comes from the key.** A key bound to a project cannot read or
  *     write outside it, and no request field can widen that. An integration
  *     key may name the person a request is for (`X-Subject`), and then every
@@ -38,9 +42,8 @@ import { isPlatformAccount } from "./platformAccount.mjs";
  *  3. **`episodes` is an input, not an import.** An external agent posts what
  *     happened — the turns — and what, if anything, is worth remembering is
  *     decided by the engine's own extraction after the owner confirms (see
- *     below). An endpoint that let a caller insert memory directly would be a way
- *     to write memory with no conversation behind it, which is the one thing the
- *     engine's design refuses.
+ *     below). Directly stated memories use the page's real one-message engine
+ *     session; that source is not an imported external conversation.
  *
  * An account's memory is the engine's own files (`nativeMemory`, the store the memory page uses): `/recall` reads them, `/records`,
  * `/dashboard` and every record act go to them (a forget removes the file from the engine, with the page's undo), and `/episodes` stages
@@ -66,6 +69,7 @@ const MAX_TRACKED_KEYS = 10_000;
  *  holds the OpenAPI description's paths to exactly this list. */
 export const AGENT_MEMORY_ENDPOINTS = Object.freeze([
   "POST /recall", "POST /note", "GET /records", "POST /episodes",
+  "POST /forget", "GET /forgotten", "GET /context", "POST /remember",
   "POST /observations", "GET /dashboard", "PUT /settings",
   "PATCH /records/{id}", "POST /records/{id}/confirm", "POST /records/{id}/forget", "POST /records/{id}/restore", "POST /records/{id}/undo",
   "GET /methods/{id}", "POST /methods/{id}/retire", "POST /methods/{id}/restore", "POST /methods/{id}/rollback",
@@ -76,9 +80,11 @@ export const AGENT_MEMORY_ENDPOINTS = Object.freeze([
 /** The fields each request body may carry, by operation. A contract test holds
  *  the OpenAPI description's request schemas to exactly these lists. */
 export const AGENT_MEMORY_REQUEST_FIELDS = Object.freeze({
-  recall: Object.freeze(["query", "projectId", "limit", "factKinds", "since", "scope", "capsuleIds", "methods"]),
+  recall: Object.freeze(["query", "projectId", "limit", "factKinds", "since", "scope", "capsuleIds", "methods", "include"]),
   note: Object.freeze(["factKind", "content", "projectId"]),
   episodes: Object.freeze(["projectId", "sessionId", "messages"]),
+  remember: Object.freeze(["statement", "source", "projectId"]),
+  forget: Object.freeze(["recordId", "lines", "statement", "projectId"]),
   observations: OBSERVATION_FIELDS,
 });
 
@@ -104,7 +110,7 @@ function fields(body, allowed) {
 /**
  * @param {{
  *   config: any, apiKeys: any, store: any, memorySettings: any, capsules: any,
- *   learning?: any, observations?: any, nativeMemory?: any,
+ *   learning?: any, observations?: any, nativeMemory?: any, admission?: any, openingContext?: any, historySearch?: ((input: any) => Promise<any[]>) | null,
  *   deleteSubject?: ((ownerId: string, subjectAccountId: string) => Promise<number>) | null,
  *   audit?: ((event: string, status: string, details: Record<string, unknown>) => unknown) | null,
  * }} dependencies
@@ -112,9 +118,8 @@ function fields(body, allowed) {
  */
 export function createAgentMemoryRoutes({
   config, apiKeys, store, memorySettings, capsules, learning = null,
-  observations = null, nativeMemory = null, deleteSubject = null, audit = null,
+  observations = null, nativeMemory = null, admission = null, openingContext = null, historySearch = null, deleteSubject = null, audit = null,
 }) {
-  const enabled = config.agentMemoryApiEnabled === true;
   /** @type {Map<string, {until: number, count: number}>} */
   const windows = new Map();
 
@@ -123,21 +128,32 @@ export function createAgentMemoryRoutes({
     if (url.pathname !== AGENT_MEMORY_PATH && !url.pathname.startsWith(`${AGENT_MEMORY_PATH}/`)) return false;
     // Off by default and named when off. This publishes an account's memory to
     // whoever holds a key; a deployment turns it on deliberately.
-    if (!enabled) throw new HttpError(503, "agent_memory_disabled", "The agent memory API is not enabled in this deployment.");
+    if (!agentMemoryAvailable(config)) throw agentMemoryDisabled();
     if (!apiKeys) throw new HttpError(503, "product_state_unavailable", "The agent memory API requires durable storage.");
 
     // Before the key check: the description is not a secret, and an integrator
     // reading it is how they find out what a key would let them do. Still
     // behind the enable switch, so a deployment that has not turned this on
     // does not advertise it either.
-    if (url.pathname === `${AGENT_MEMORY_PATH}/openapi.json` && (req.method ?? "GET") === "GET") {
+    const openapi = url.pathname === `${AGENT_MEMORY_PATH}/openapi.json` && (req.method ?? "GET") === "GET";
+    if (openapi && config.agentMemoryApiEnabled === true) {
       sendJson(res, 200, agentMemoryOpenApi({ basePath: AGENT_MEMORY_PATH, rateLimitPerMinute: RATE_LIMIT_PER_MINUTE }));
       return true;
     }
 
     const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
-    const identity = await apiKeys.resolve(token);
+    let identity;
+    try { identity = await apiKeys.resolve(token); }
+    catch (error) {
+      if (config.agentMemoryApiEnabled !== true) throw agentMemoryDisabled();
+      throw error;
+    }
     const keyAccount = await store.userById(identity.userId);
+    if (!agentMemoryAvailable(config, keyAccount) && config.agentMemoryApiEnabled !== true) throw agentMemoryDisabled();
+    if (openapi && agentMemoryAvailable(config, keyAccount)) {
+      sendJson(res, 200, agentMemoryOpenApi({ basePath: AGENT_MEMORY_PATH, rateLimitPerMinute: RATE_LIMIT_PER_MINUTE }));
+      return true;
+    }
     // A key that resolves to the platform's publishing account is no key: nothing speaks for that account.
     if (!keyAccount || isPlatformAccount(keyAccount)) throw new HttpError(401, "agent_key_invalid", "The API key is not valid.");
 
@@ -238,9 +254,70 @@ export function createAgentMemoryRoutes({
       return { id, act: match[2] ?? "" };
     };
 
+    if (action === 'remember' && method === 'POST') {
+      requireScope('memory.remember');
+      const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.remember);
+      const source = rememberSource(input);
+      const user = await accountFor({ create: false });
+      if (!user) throw new HttpError(404, 'memory_not_found', 'No such memory account.');
+      const projectId = await projectOf(user, input.projectId);
+      const project = await store.requireProject(user, projectId ?? 'default');
+      const native = await nativeFor(user);
+      if (!native?.externalRememberEnabled) throw new HttpError(503, 'memory_engine_unavailable', 'External remember admission is unavailable.');
+      await rememberAdmission({ native, admission }, { user, project, at: Date.parse(source.saidAt) });
+      const result = await native.remember(user.id, { text: input.statement, projectId: project.id, projectName: project.name ?? null, externalSource: source });
+      await trail('remember', user);
+      sendJson(res, 200, { data: result });
+      return true;
+    }
+
+    if (action === 'context' && method === 'GET') {
+      requireScope('memory.read');
+      const user = await accountFor({ create: false });
+      if (!user) throw new HttpError(404, 'memory_not_found', 'No such memory.');
+      const projectId = await projectOf(user, url.searchParams.get('projectId'));
+      const project = await store.requireProject(user, projectId ?? 'default');
+      const native = await nativeFor(user);
+      const result = await contextForAgent({ config, native, admission, ...openingContext }, { user, project });
+      sendJson(res, 200, { data: result });
+      return true;
+    }
+
+    if (action === 'forget' && method === 'POST') {
+      requireScope('memory.manage');
+      const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.forget);
+      const user = await accountFor({ create: false });
+      if (!user) throw new HttpError(404, 'memory_not_found', 'No such memory.');
+      const projectId = await projectOf(user, input.projectId);
+      const project = await store.requireProject(user, projectId ?? 'default');
+      const native = await nativeFor(user);
+      const outcome = await forgetForAgent({ config, native, admission }, { user, project, boundProject: identity.projectId, input });
+      await trail('forget', user);
+      sendJson(res, 200, { data: outcome });
+      return true;
+    }
+
+    if (action === 'forgotten' && method === 'GET') {
+      requireScope('memory.read');
+      const user = await accountFor({ create: false });
+      const projectId = await projectOf(user, url.searchParams.get('projectId'));
+      const native = await nativeFor(user);
+      const items = user ? await forgottenForAgent(native, user, { projectId, canRestore: identity.scopes.includes('memory.manage') && !identity.projectId }) : [];
+      sendJson(res, 200, { data: { items } });
+      return true;
+    }
+
     if (action === "recall" && method === "POST") {
       requireScope("memory.read");
       const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.recall);
+      if (input.include !== undefined && (!Array.isArray(input.include) || input.include.length > 1 || input.include.some(value => value !== 'history'))) {
+        throw new HttpError(400, 'agent_memory_payload_invalid', 'include may contain only history.');
+      }
+      const withHistory = input.include?.includes('history') === true;
+      if (withHistory) {
+        requireScope('memory.history.read');
+        if (!historySearch || config.memoryHistorySearchEnabled !== true) throw new HttpError(503, 'memory_engine_unavailable', 'Conversation recall is unavailable.');
+      }
       if (!capsules) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
       if (input.factKinds !== undefined && (!Array.isArray(input.factKinds)
         || input.factKinds.length > CAPSULE_FACT_KINDS.length
@@ -270,10 +347,11 @@ export function createAgentMemoryRoutes({
       const native = await nativeFor(user);
       // A subject never seen has no memory and no methods of its own; it may
       // still read its institution's named capsules.
+      const projectId = await projectOf(user, input.projectId);
       const result = await recallForAgent({ capsules, memory: native ? nativeRecallSource(native, { recallEnabled: config.memoryRecallEnabled !== false }) : null, learning },
         { user, institution: subject ? keyAccount : null }, {
           query,
-          projectId: await projectOf(user, input.projectId),
+          projectId,
           limit: input.limit ?? 10,
           factKinds: input.factKinds ?? [],
           since: input.since ?? null,
@@ -281,7 +359,17 @@ export function createAgentMemoryRoutes({
           ...(input.capsuleIds ? { capsuleIds: input.capsuleIds } : {}),
           methods: input.methods ?? "all",
         });
-      sendJson(res, 200, { data: result });
+      if (withHistory) {
+        // The same history reader used by the gateway owns archive review, source
+        // revalidation, withdrawals and shared-namespace refusal. No raw archive fallback.
+        const project = user ? await store.requireProject(user, projectId ?? 'default') : null;
+        let timer;
+        const history = user && project ? await Promise.race([
+          historySearch({ user, project, query, accountScope: identity.projectId == null && input.projectId == null, limit: Math.min(20, Math.max(1, Math.trunc(Number(input.limit)) || 5)) }),
+          new Promise(resolve => { timer = setTimeout(() => resolve([]), Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4000)); }),
+        ]).finally(() => clearTimeout(timer)) : [];
+        sendJson(res, 200, { data: { ...result, history } });
+      } else sendJson(res, 200, { data: result });
       return true;
     }
 
@@ -417,6 +505,9 @@ export function createAgentMemoryRoutes({
       if (!user) throw new HttpError(404, "memory_not_found", "Memory not found.");
       const act = record.act || "edit";
       const native = await nativeFor(user);
+      if (identity.projectId && act === 'restore') {
+        throw new HttpError(403, 'agent_key_project_denied', 'Restoring a withdrawal requires an account-scoped key.');
+      }
       if (identity.projectId) {
         const existing = await /** @type {any} */ (native).getRecord(user.id, record.id);
         if (privateByDefault(existing)) throw new HttpError(404, "memory_not_found", "No such memory.");
@@ -480,6 +571,24 @@ export function createAgentMemoryRoutes({
       sendJson(res, 200, { data: {
         version: 1,
         scopes: identity.scopes,
+        capabilities: {
+          rawConversationRecall: {
+            available: config.memoryHistorySearchEnabled === true && Boolean(historySearch) && nativeMemory?.configured === true
+              && ['memory.read', 'memory.history.read'].every(scope => identity.scopes.includes(scope)),
+            requiredScopes: ['memory.read', 'memory.history.read'],
+          },
+          // Availability follows the wired producers and the scopes this key actually holds.
+          openingContext: { available: Boolean(openingContext && admission && nativeMemory?.configured && nativeMemory?.memoryContexts) && identity.scopes.includes('memory.read'), requiredScopes: ['memory.read'], path: '/context' },
+          explicitRemember: { available: Boolean(nativeMemory?.externalRememberEnabled && admission) && identity.scopes.includes('memory.remember'), requiredScopes: ['memory.remember'], path: '/remember', storage: 'directly_stated' },
+          statementForget: { available: config.memoryForgetTargetsEnabled === true && nativeMemory?.configured === true && nativeMemory?.forgetTargetsEnabled === true && Boolean(nativeMemory?.memoryContexts) && Boolean(admission)
+            && !identity.projectId && identity.scopes.includes('memory.manage'), requiredScopes: ['memory.manage'], path: '/forget',
+            ...(identity.projectId ? { reason: 'withdrawal_requires_account_scope' } : {}) },
+          forgottenList: { available: nativeMemory?.configured === true && Boolean(nativeMemory?.memoryContexts) && typeof nativeMemory?.forgotten === 'function' && identity.scopes.includes('memory.read'), requiredScopes: ['memory.read'], path: '/forgotten' },
+          conversationIngest: { available: false, requiredScopes: ['memory.ingest'], internalOnly: true, reason: 'external_conversation_history_authority_unavailable' },
+          workSignals: { available: false, requiredScopes: ['learning.signal'], internalOnly: true, reason: 'external_run_evidence_unproven' },
+          capsuleSharing: { available: false },
+          selectedCapsuleOnly: { available: false },
+        },
         projectId: identity.projectId,
         // An integration key, and whether this request named a subject.
         subjects: identity.subjects === true,

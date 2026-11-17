@@ -1,3 +1,6 @@
+import { rememberAdmission } from './agentMemoryRemember.mjs';
+import { recallHistoryForAgent } from './agentMemoryRecall.mjs';
+import { agentMemoryAvailable } from './agentMemoryAvailability.mjs';
 import { NativeMemoryEngineDeferred } from './nativeMemoryEngineDeferred.mjs';
 import { MethodCorrectionJudge, correctionSources, judgeCorrection } from './methodCorrectionJudge.mjs';
 import { createForgetRequestJudge } from './nativeMemoryForgetRequests.mjs';
@@ -3594,7 +3597,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The external agent-memory API (`/api/agent-memory/v1`): reads and acts on an account's memory through the store the memory page
   // uses, and stages an episode as a pending candidate that the owner confirms (`agentMemoryRoutes.mjs`).
   const agentMemoryRoutes = createAgentMemoryRoutes({
+    openingContext: { resident: residentProfiles, opening: input => memoryGatewayHandler.opening(input), get sourceDeletion() { return sourceDeletion; } },
+    admission: { admit: input => memoryAdmission.admit(input) },
     config, apiKeys: agentApiKeys, store, memorySettings, capsules: capsuleService,
+    historySearch: input => recallHistoryForAgent({ config, history: memoryHistory, admission: memoryAdmission, sourceDeletion }, input),
     // The account's memory, read and acted on through the store the memory page uses (`agentMemoryRoutes.mjs`).
     nativeMemory: config.memoryEngineEnabled ? nativeMemory : null,
     // The methods recall returns: the account's own learned library.
@@ -5235,6 +5241,20 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
   }
   if (feedbackEvents && productDocuments) feedbackEvents.memoryForgetReader = productDocuments.memoryForgetReader;
+  nativeMemoryOverlay.externalAdmissionPolicy = async (userId, row) => {
+    if (row.externalSource?.operation !== 'remember') return { allowed: false, state: 'cancelled', reason: 'external_operation_unknown' };
+    try {
+      const user = await store.userById(userId);
+      if (!user) return { allowed: false, state: 'cancelled', reason: 'account_unavailable' };
+      const project = await store.requireProject(user, row.projectId ?? 'default');
+      const rememberContext = await rememberAdmission({ native: nativeMemory, admission: memoryAdmission },
+        { user, project, at: Date.parse(row.externalSource.saidAt) });
+      if ((rememberContext.projectCreatedAt ?? null) !== row.externalSource.projectCreatedAt) return { allowed: false, state: 'cancelled', reason: 'project_changed' };
+      return { allowed: true, state: null, reason: null };
+    } catch (error) {
+      return { allowed: false, state: 'suspended', reason: error.details?.reason ?? error.code ?? 'memory_scope_denied' };
+    }
+  };
   nativeMemory.history = memoryHistory;
   if (memoryHistory) {
     memoryHistory.sweepMemory = scan => nativeMemory.sweepForgottenMemory(scan);
@@ -7317,7 +7337,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               // Sharing a capsule with other accounts, and subscribing a project to an evidence zone: each its own switch, and the
               // second the frontier's audience too. The panels are drawn only where the server says so.
               capsuleShare: Boolean(capsuleSharing),
-              agentMemoryApi: config.agentMemoryApiEnabled === true,
+              agentMemoryApi: agentMemoryAvailable(config, user),
               zoneSubscription: Boolean(zoneSubscriptions?.enabled) && Boolean(frontier) && frontierAudienceAllows(config, user),
               geo: Boolean(geo) && geoAudienceAllows(config, user),
               vcr: Boolean(vcr) && vcrAudienceAllows(config, user),

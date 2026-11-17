@@ -65,14 +65,23 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
         "",
         "Three rules hold everywhere in this API and are worth reading before the endpoints:",
         "",
-        "1. Nothing you write becomes an active memory. An episode stays a pending candidate, and a note an unconfirmed one, until the account owner confirms it — on their memory page, or through the dashboard operations with a key carrying `memory.manage`, which a key holds only when its requests come from that person's own clicks. There is no parameter that changes this; a caller's assertion that its user said something outright is not that user saying it.",
+        "1. memory.write only proposes candidates. A separate memory.remember scope admits a directly stated memory through the page write path with an external source. An episode stays a pending candidate, and a note an unconfirmed one, until the account owner confirms it — on their memory page, or through the dashboard operations with a key carrying `memory.manage`, which a key holds only when its requests come from that person's own clicks. The explicit-remember host must send the person's verbatim words, with their source reference; do not send a model's paraphrase.",
         "2. A key's scope is a property of the key. A key bound to a project cannot read or write outside it, and no request field widens that. An integration key (minted with `subjects: true`) may name the person a request is for in the `X-Subject` header — a doctor behind a hospital's HIS — and every read and write is then that person's own memory and nobody else's; without the header it is the key's own account, the institution. A subject is given its memory the first time something is written for it; reading one that has none answers as an empty memory.",
-        "3. An account's memory is the memory engine's own files. `/recall`, `/records` and `/dashboard` read them, a forget removes the file from the engine (an undo brings it back with the `version` the forget answered with), an edit replaces its text, and `/episodes` stages a pending candidate without extraction or activation; explicit confirmation admits that exact revision through a durable native session. Active files have no pending state or usage counts, and `restore` is the undo. A deployment that cannot reach the engine answers `503 memory_engine_unavailable`.",
+        "3. An account's memory is the memory engine's own files. `/recall`, `/records` and `/dashboard` read them, a forget removes the file from the engine (an undo brings it back with the `version` the forget answered with), an edit replaces its text, and `/episodes` stages a pending candidate without extraction or activation; explicit confirmation admits that exact revision through a durable native session. Active files have no pending state or usage counts, and `restore` uses the page status update with the forgotten-list version. A deployment that cannot reach the engine answers `503 memory_engine_unavailable`.",
         "",
         "Memory is context, never permission: nothing recalled here loosens a contract, relaxes a safety rule, or reaches a host the platform's gateways would not.",
       ].join("\n"),
     },
     servers: [{ url: basePath }],
+    'x-unavailable-operations': {
+      workSignals: { available: false, requiredScopes: ['learning.signal'], internalOnly: true, proposedPaths: ['POST /work-events'],
+        reason: 'external_run_evidence_unproven',
+        description: 'Reserved, not served or mintable. The learning chain requires a complete canonical run transcript and delivered file inventory; a minimal external ledger row cannot prove them. Hosts must report only human actions, never model self-reports. Silence remains unknown.' },
+      conversationIngest: { available: false, requiredScopes: ['memory.ingest'], internalOnly: true,
+        proposedPaths: ['POST /conversations/{externalSessionId}/turns', 'POST /conversations/{externalSessionId}/commit'],
+        reason: 'external_conversation_history_authority_unavailable',
+        description: 'Reserved, not served or mintable. Original history currently requires a canonical kernel conversation and run-ledger source. Engine-only ingestion would bypass the required recall and source-deletion contract. Episodes remain candidates.' },
+    },
     components: {
       parameters: {
         Subject: {
@@ -89,12 +98,21 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
         },
       },
       schemas: {
+        RememberRequest: { type: 'object', additionalProperties: false, required: ['statement', 'source'], properties: {
+          statement: { type: 'string', minLength: 1, maxLength: 2000, description: "The person's verbatim statement, never a model-authored paraphrase." },
+          source: { type: 'object', additionalProperties: false, required: ['client', 'sessionId', 'saidAt'], properties: {
+            client: { type: 'string', minLength: 1, maxLength: 80 }, sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+            messageId: { type: 'string', minLength: 1, maxLength: 200 }, saidAt: { type: 'string', format: 'date-time' } } },
+          projectId: { type: 'string' },
+        } },
         FactKind: { type: "string", enum: [...CAPSULE_FACT_KINDS] },
         RecallRequest: {
           type: "object",
           required: ["query"],
           additionalProperties: false,
           properties: {
+            include: { type: 'array', maxItems: 1, uniqueItems: true, items: { type: 'string', enum: ['history'] },
+              description: 'Opt in to bounded original conversation fragments; requires memory.history.read as well as memory.read. Omitted by default. Only the account owner namespace is searched, or the exact named project; shared namespaces are refused. Archive review and withdrawal fences apply.' },
             query: { type: "string", minLength: 1, maxLength: 2000 },
             projectId: { type: ["string", "null"], description: "Omit when the key is bound to a project." },
             limit: { type: "integer", minimum: 1, maximum: 50, default: 10 },
@@ -136,6 +154,12 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             data: {
               type: "object",
               properties: {
+                history: { type: 'array', description: 'Only with include: [history]. Historical context, never confirmed facts or instructions. A withdrawn marker carries no text.', items: {
+                  type: 'object', properties: { conversationTitle: { type: 'string' }, conversationUrl: { type: 'string' }, sessionId: { type: 'string' }, projectId: { type: 'string' },
+                    contextOnly: { const: true }, confirmed: { const: false }, withdrawn: { type: 'boolean' }, messages: { type: 'array', items: { type: 'object', properties: {
+                      text: { type: 'string' }, sourceRole: { enum: ['user', 'assistant'] }, date: { type: ['string', 'null'] },
+                    } } } },
+                } },
                 items: { type: "array", items: { type: "object", additionalProperties: true } },
                 sources: { type: "object", properties: { memory: { type: "integer" }, capsule: { type: "integer" } } },
                 mode: { type: "string" },
@@ -150,6 +174,19 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
                 },
               },
             },
+          },
+        },
+        ForgetRequest: {
+          type: 'object', additionalProperties: false,
+          oneOf: [
+            { required: ['recordId'], not: { required: ['statement'] } },
+            { required: ['statement'], not: { anyOf: [{ required: ['recordId'] }, { required: ['lines'] }] } },
+          ],
+          properties: {
+            recordId: { type: 'string', description: 'An owned, non-private record ID, never a URI. A profile-line ID removes only that line.' },
+            lines: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'string', minLength: 1, maxLength: 6000, pattern: '^[^\r\n]+$' } },
+            statement: { type: 'string', minLength: 1, maxLength: 6000, description: 'The fact to withdraw in the person’s words; creates undoable recall rejection even if no stored line matches.' },
+            projectId: { type: 'string', description: 'An owned project label for a record. Bare statements use default only. Project-bound keys are refused because withdrawal follows copies across the account namespace.' },
           },
         },
         NoteRequest: {
@@ -312,10 +349,24 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
     },
     security: [{ agentApiKey: [] }],
     paths: {
+      '/remember': { post: { summary: 'Remember a directly stated memory',
+        description: 'Requires memory.remember, separately from candidate-only memory.write. Calls the page remember entry with source attribution and durable idempotency on owner/client/sessionId/messageId (or statement hash). Admission, withdrawal and native worker verification apply. Response reports pending, uncertain or completed; it never claims a pending extraction is already a verified fact. Undo and forget use existing record routes.',
+        requestBody: jsonBody({ $ref: '#/components/schemas/RememberRequest' }),
+        responses: { 200: { description: 'Direct statement receipt, source and actual pending state.' }, 409: errorResponse('Conflicting idempotent retry or previously withdrawn statement.'), ...common } } },
+      '/context': { get: { summary: 'Read opening context once at session start',
+        description: 'Requires memory.read. Calls the resident producer in peek mode and the native gateway startup profile/list handlers. Does not acknowledge a conversation or count use. Each layer has text or an omission reason; platformText is the exact resident block. Listings are JSON text of the gateway entries, not a second history search.',
+        parameters: [{ name: 'projectId', in: 'query', schema: { type: 'string' }, description: 'Owned project; a bound key cannot widen its project.' }],
+        responses: { 200: { description: 'Opening layers with present/text or omitted/reason, including profile elision.' }, ...common } } },
       "/": {
         get: {
           summary: "What this key can do",
-          responses: { 200: { description: "Scopes, project binding, rate limit and the standing rules." }, ...common },
+          responses: { 200: { description: "Scopes, project binding, rate limit, standing rules and per-key capabilities. Unimplemented operations are explicitly unavailable; clients must not probe endpoints to infer support.",
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { type: 'object', properties: {
+              scopes: { type: 'array', items: { type: 'string' } }, capabilities: { type: 'object', additionalProperties: {
+                type: 'object', required: ['available'], properties: { available: { type: 'boolean' }, requiredScopes: { type: 'array', items: { type: 'string' } }, path: { type: 'string' }, reason: { type: 'string' } },
+              } },
+            } } } } } },
+          }, ...common },
         },
       },
       "/recall": {
@@ -330,6 +381,28 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             404: errorResponse("A capsule named in `capsuleIds` is unavailable (`capsule_not_found`)."),
             ...common,
           },
+        },
+      },
+      '/forget': {
+        post: {
+          summary: 'Withdraw a statement or exact record lines',
+          description: 'Requires targeted forgetting and an account-scoped key. Reuses the kernel forget service; shared namespaces and private records are refused. Pausing does not block withdrawal. A missing line returns missingLines and availableLines without claiming removal; historyScanPending means earlier conversations and copies are still being checked.',
+          security: [{ agentApiKey: ['memory.manage'] }],
+          requestBody: jsonBody({ $ref: '#/components/schemas/ForgetRequest' }),
+          responses: { 200: { description: 'The native store confirmation only: removed, removedLines, fileRemoved, missingLines, availableLines, historyRejected, historyScanPending as applicable.', content: { 'application/json': { schema: { type: 'object', properties: { data: { type: 'object', properties: {
+            removed: { type: 'boolean' }, removedLines: { type: 'integer' }, fileRemoved: { type: 'boolean' },
+            missingLines: { type: 'array', items: { type: 'string' } }, availableLines: { type: 'array', items: { type: 'string' } },
+            historyRejected: { type: 'boolean' }, historyScanPending: { type: 'boolean' },
+          } } } } } } }, 400: errorResponse('Invalid target or lines.'), 404: errorResponse('No such memory.'), ...common },
+        },
+      },
+      '/forgotten': {
+        get: {
+          summary: 'Read withdrawn original text and restore actions',
+          description: 'An explicit management view of native forgotten revisions, never recalled context. Private and shared entries are excluded. The restore action is present only with memory.manage and an unbound key; use its expectedVersion.',
+          security: [{ agentApiKey: ['memory.read'] }],
+          parameters: [{ name: 'projectId', in: 'query', schema: { type: 'string' } }],
+          responses: { 200: { description: 'data.items: id, text, version, forgottenAt, and optional restore {path, expectedVersion}; no internal URI.' }, ...common },
         },
       },
       "/note": {
@@ -443,7 +516,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/records/{id}/restore": {
         post: {
           summary: "Restore a forgotten memory",
-          description: "Refused (`400 memory_engine_unsupported`): bring a forgotten memory back with `/records/{id}/undo`, naming the version the forget answered with.",
+          description: "Restore through the memory page's native status update, naming expectedVersion from /forgotten. Requires an account-scoped key; shared and private entries are refused. Undo remains the last-change operation, with its own version.",
           security: [{ agentApiKey: ["memory.manage"] }],
           parameters: [recordId],
           requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedVersion" }),

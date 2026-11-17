@@ -183,6 +183,8 @@ export class NativeMemoryOverlay {
     this.memoryForgetBody = null;
     this.deferredSummaryRebuildEnabled = deferredSummaryRebuildEnabled === true;
     this.database = database ?? null;
+    /** Revalidated for external statements and every worker retry. @type {((userId: string, row: any) => Promise<any>) | null} */
+    this.externalAdmissionPolicy = null;
     /** @type {any} */ this.sourceDeletion = null;
   }
 
@@ -227,12 +229,16 @@ export class NativeMemoryOverlay {
    * @param {string} userId @param {any} input */
   async queueAdmission(userId, input) {
     const result = await this.#query(`INSERT INTO evimed_memory.native_admissions
-      (user_id,candidate_id,candidate_revision,engine_session,project_id,pending_text,account_created_at)
-      SELECT id,$2,$3,$4,$5,$6,created_at FROM evimed_control.users WHERE id=$1
+      (user_id,candidate_id,candidate_revision,engine_session,project_id,pending_text,account_created_at,external_source)
+      SELECT id,$2,$3,$4,$5,$6,created_at,$7::jsonb FROM evimed_control.users WHERE id=$1
       ON CONFLICT (user_id,candidate_id,candidate_revision) DO UPDATE SET candidate_id=EXCLUDED.candidate_id
-      RETURNING *`, [owner(userId), input.candidateId, input.revision, input.engineSession, input.projectId ?? null, input.text]);
+      RETURNING *`, [owner(userId), input.candidateId, input.revision, input.engineSession, input.projectId ?? null, input.text, input.externalSource ? JSON.stringify(input.externalSource) : null]);
     if (!result.rows[0]) throw new HttpError(404, "memory_admission_gone", "The account no longer exists.");
-    return admissionRow(result.rows[0]);
+    const saved = admissionRow(result.rows[0]);
+    if (input.externalSource && (saved.externalSource?.digest !== input.externalSource.digest || saved.projectId !== (input.projectId ?? null))) {
+      throw new HttpError(409, 'memory_conflict', 'This external message was already submitted with different content or scope.');
+    }
+    return saved;
   }
 
   /** @param {string} userId @param {string} candidateId @param {number} revision */
@@ -290,6 +296,10 @@ export class NativeMemoryOverlay {
       const project = await this.#query("SELECT 1 FROM evimed_control.projects WHERE user_id=$1 AND id=$2", [userId, admission.projectId]);
       if (!project.rows.length) return { allowed: false, state: "cancelled", reason: "project_unavailable" };
     }
+    if (admission.externalSource) {
+      return this.externalAdmissionPolicy ? this.externalAdmissionPolicy(userId, admission)
+        : { allowed: false, state: 'suspended', reason: 'external_admission_unavailable' };
+    }
     // A candidate is a note of the capsule that an outside agent proposed; it is admitted only as the revision that was read.
     const found = await this.#query("SELECT revision,project_id,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND id=$2 AND deleted_at IS NULL", [userId, admission.candidateId]);
     const candidate = found.rows[0];
@@ -309,6 +319,17 @@ export class NativeMemoryOverlay {
     ) SELECT a.* FROM evimed_memory.native_admissions a JOIN lineage l ON a.engine_session=l.engine_session OR a.archive_uri=l.archive_uri
       WHERE a.user_id=$1 LIMIT 1`, [owner(userId), commit.archiveUri]);
     return result.rows[0] ? admissionRow(result.rows[0]) : null;
+  }
+
+  /** Original external source references, including native replay descendants. */
+  async externalSources(userId, archives) {
+    if (!archives.length) return new Map();
+    const result = await this.#query(`WITH RECURSIVE lineage AS (
+      SELECT archive_uri AS requested, archive_uri, engine_session FROM evimed_memory.native_commits WHERE user_id=$1 AND archive_uri=ANY($2::text[])
+      UNION SELECT l.requested,c.archive_uri,c.engine_session FROM evimed_memory.native_commits c JOIN lineage l ON c.replayed_as=l.archive_uri WHERE c.user_id=$1
+    ) SELECT l.requested,a.external_source FROM lineage l JOIN evimed_memory.native_admissions a ON a.user_id=$1 AND a.engine_session=l.engine_session
+      WHERE a.external_source IS NOT NULL`, [owner(userId), archives]);
+    return new Map(result.rows.map(row => [row.requested, row.external_source]));
   }
 
   // ---------------------------------------------------------------- accounts
@@ -1523,7 +1544,7 @@ export class NativeMemoryOverlay {
 /** @param {any} row */
 function admissionRow(row) {
   return { userId: row.user_id, candidateId: row.candidate_id, revision: row.candidate_revision,
-    engineSession: row.engine_session, projectId: row.project_id, text: row.pending_text,
+    engineSession: row.engine_session, projectId: row.project_id, text: row.pending_text, externalSource: row.external_source ?? null,
     state: row.state, phase: row.phase, archiveUri: row.archive_uri, taskId: row.task_id,
     recordIds: row.record_ids ?? [], error: row.error, createdAt: instant(row.created_at), updatedAt: instant(row.updated_at) };
 }

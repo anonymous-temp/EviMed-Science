@@ -629,6 +629,7 @@ export interface WebStructuredMemory {
     /** What a memory the platform itself wrote was written from, in the person's words (「从其他 AI 导入」, 「你在两次对话里都这样做」): the
      *  control plane names it for an import and for a choice two conversations made, where there is no conversation to link to. */
     label?: string;
+    externalSource?: { client: string; sessionId: string; messageId?: string; saidAt: string };
   }>;
   revisions: Array<{
     version: number;
@@ -2739,7 +2740,7 @@ export async function stageVcrConversationReference(sessionId: string, projectId
 }
 
 /** Account credentials for external agents; secrets exist only in the create response. */
-export type WebAgentKeyScope = "memory.read" | "memory.write" | "memory.manage" | "memory.observe" | "analysis.read" | "analysis.write";
+export type WebAgentKeyScope = "memory.read" | "memory.history.read" | "memory.write" | "memory.remember" | "memory.manage" | "memory.observe" | "analysis.read" | "analysis.write";
 export interface WebAgentKey {
   id: string;
   name: string;

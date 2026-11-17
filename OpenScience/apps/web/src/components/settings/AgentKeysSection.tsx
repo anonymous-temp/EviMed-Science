@@ -11,8 +11,10 @@ import { Panel, PanelRow } from "@/components/ui/Panel";
 
 const SCOPE_LABELS: Record<WebAgentKeyScope, string> = {
   "memory.read": "读取记忆与做法",
+  "memory.history.read": "读取原始对话（需同时允许读取记忆）",
   "memory.write": "提出待确认的记忆",
-  "memory.manage": "管理记忆（确认、修改和忘记）",
+  "memory.remember": "记住本人明确说过的话",
+  "memory.manage": "管理记忆（确认、修改、忘记和恢复）",
   "memory.observe": "记录处方修改",
   "analysis.read": "读取分析结果",
   "analysis.write": "提交分析任务",

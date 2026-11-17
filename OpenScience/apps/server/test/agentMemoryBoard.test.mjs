@@ -32,6 +32,7 @@ function memoryDouble(records) {
     configured: true,
     async getRecord(_userId, id) { return records.find(item => item.id === id) ?? record({ id }); },
     async listRecords(userId, input) { calls.push(["listRecords", userId, input]); return records; },
+    async forgotten() { return records.filter(record => record.status === 'archived'); },
     async changes(userId, input) {
       calls.push(["changes", userId, input]);
       return [{ id: "r3", kind: "preference", change: "created", summary: "新记下的", changedAt: "2026-09-26T00:00:00.000Z", version: 1 }];
@@ -130,7 +131,9 @@ test("an act on a memory file is the page's act on the file: forget and edit wri
   const { nativeMemory } = memoryDouble([record({ id })]);
   const user = { id: "u1" };
   await assert.rejects(() => recordAction({ nativeMemory }, user, id, "confirm", { expectedVersion: 1 }), (error) => error.code === "memory_not_pending");
-  await assert.rejects(() => recordAction({ nativeMemory }, user, id, "restore", { expectedVersion: 1 }), (error) => error.code === "memory_engine_unsupported");
+  const restored = await recordAction({ nativeMemory }, user, id, "restore", { expectedVersion: 1 });
+  assert.equal(restored.event, "memory.record.restore");
+  assert.deepEqual(nativeMemory.calls.at(-1), ["update", "u1", id, { status: "active", expectedVersion: 1 }]);
 
   const forgotten = await recordAction({ nativeMemory }, user, id, "forget", { expectedVersion: 1 });
   assert.deepEqual(nativeMemory.calls.at(-1), ["update", "u1", id, { status: "archived", expectedVersion: 1 }]);
@@ -205,4 +208,13 @@ test("the external board omits people from active, forgotten, recent changes and
   const board = await memoryBoard({ ...fixtures, capsules, now: () => NOW }, { id: "u1" });
   assert.deepEqual(board.records.map(item => item.id), ["ordinary"]);
   assert.deepEqual(board.forgotten, []); assert.deepEqual(board.recentChanges, []); assert.deepEqual(board.pending, []);
+});
+
+test('the dashboard reads forgotten revisions instead of asking active files for archived status', async () => {
+  const id = `nm_${'b'.repeat(24)}`;
+  const { nativeMemory } = memoryDouble([]);
+  nativeMemory.forgotten = async () => [record({ id, status: 'archived', value: 'Use metric units.' })];
+  const board = await memoryBoard({ nativeMemory, memorySettings: { settings: async () => ({}) } }, { id: 'u1' });
+  assert.equal(board.forgotten[0]?.id, id);
+  assert.equal(board.forgotten[0]?.value, 'Use metric units.');
 });

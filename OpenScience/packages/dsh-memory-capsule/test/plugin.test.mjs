@@ -154,7 +154,7 @@ test('dispose aborts pending HTTP and unregisters Cordis tools and prompt sectio
     effect(effect) { disposers.push(effect()); },
   };
   apply(ctx, f.config);
-  assert.equal(definitions.size, 4);
+  assert.equal(definitions.size, 8);
   assert.equal(section.interpolate, false);
   assert.equal(section.text, SYSTEM_PROMPT);
   for (const definition of definitions.values()) {
@@ -170,4 +170,38 @@ test('dispose aborts pending HTTP and unregisters Cordis tools and prompt sectio
   assert.equal((await pending).ok, false);
   assert.equal(definitions.size, 0);
   assert.equal(section, null);
+});
+
+test('status preserves per-key server capabilities and recall opts into history only when requested', async t => {
+  const f = await fixture(t);
+  f.state.body = { capabilities: { rawConversationRecall: { available: true, requiredScopes: ['memory.read', 'memory.history.read'] }, openingContext: { available: false } } };
+  const status = await f.client.call('capsule_status');
+  assert.deepEqual(status.data.capabilities, f.state.body.capabilities);
+  await f.client.call('capsule_recall', { query: 'sensors', include: ['history'] });
+  assert.deepEqual(f.calls.at(-1).body.include, ['history']);
+});
+
+
+test('new tools consult capabilities before acting and preserve native forget outcomes', async t => {
+  const f = await fixture(t);
+  f.state.body = { capabilities: { openingContext: { available: false, reason: 'complete_opening_composition_unavailable' }, explicitRemember: { available: false }, statementForget: { available: true } }, removed: false, historyRejected: true };
+  for (const tool of ['capsule_context', 'capsule_remember']) {
+    assert.equal((await f.client.call(tool, { statement: 'Use metric units.' })).code, 'capability_unavailable');
+    assert.equal(f.calls.at(-1).path, '/api/agent-memory/v1');
+  }
+  const result = await f.client.call('capsule_forget', { statement: 'Use metric units.', uri: 'must-not-forward' });
+  assert.equal(result.data.removed, false); assert.equal(result.data.historyRejected, true);
+  assert.equal(f.calls.at(-1).path, '/api/agent-memory/v1/forget');
+  assert.deepEqual(f.calls.at(-1).body, { statement: 'Use metric units.' });
+  assert.match(SYSTEM_PROMPT, /session start/);
+});
+
+test('offered opening and remember forward only the public source contract', async t => {
+  const f = await fixture(t);
+  f.state.body = { capabilities: { openingContext: { available: true }, explicitRemember: { available: true, requiredScopes: ['memory.remember'] } } };
+  await f.client.call('capsule_context', { projectId: 'p1', attended: false });
+  assert.equal(f.calls.at(-1).path, '/api/agent-memory/v1/context?projectId=p1');
+  const input = { statement: 'Use metric units.', source: { client: 'Editor', sessionId: 'one', messageId: 'msg', saidAt: '2026-11-17T01:00:00Z' } };
+  await f.client.call('capsule_remember', { ...input, used: true });
+  assert.deepEqual(f.calls.at(-1).body, input);
 });

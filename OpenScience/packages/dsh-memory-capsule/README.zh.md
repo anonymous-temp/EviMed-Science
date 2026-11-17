@@ -62,10 +62,13 @@
 一个做法时重新取当前目录，没有缓存旧正文，也没有虚构按摘要取正文的 HTTP 路由。
 不在当前目录或预算内的做法暂时不可读。
 
-**不支持原始对话历史回忆**、自动上传对话、从外部工作自动学习、挂载方法、胶囊选择及
-试用隔离，也不包含独立记忆引擎。**忘记和分享留在网页记忆页** `/app/memory`，
-提议的确认也在那里。记忆和做法是背景，不是权限；写作、文档、代码等普通工作无需
-先回忆，记忆不可用不阻止当前工作。
+Raw history is opt-in with `include: ["history"]` and both read scopes.
+`capsule_forget` and `capsule_forgotten` use the public API; withdrawal requires
+an account-scoped manage key. `capsule_context` and `capsule_remember` check
+server capabilities first and remain unavailable on the current server.
+Automatic transcript upload, external-work learning, method mounting, capsule
+isolation and a local engine remain unavailable. Share and proposal confirmation
+stay on the web memory page `/app/memory`.
 
 未配置时说明配置步骤并指向密钥页。断网、401、403、429、关闭或不可用的 503 都用
 一句话说明，不显示服务端错误正文和堆栈。请求 15 秒超时，不跟随重定向，不自动重试

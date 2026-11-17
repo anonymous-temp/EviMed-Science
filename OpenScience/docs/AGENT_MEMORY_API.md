@@ -13,25 +13,49 @@ once and revoke keys under 设置 → 账户 → 外部智能体访问（API 密
 (`/app/account`); no curl is needed. The section lists names, permissions, creation
 and last-use dates. It offers only scopes the service advertises, defaults to
 read-only, and is drawn only when `GET /api/me` offers `features.agentMemoryApi: true`
-(the deployment's `OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED` switch). A missing or false
+(the account-specific audience decision described below). A missing or false
 feature hides the whole section without requesting key routes or `openapi.json`.
 If a key route answers `503 agent_memory_disabled` while the page is open, the
 section clears its controls and shows a disabled notice. The existing browser session and CSRF protect key
 management; a secret is kept only in the open one-time display, never browser storage.
 
-## Turning it on
+## Internal access first
 
-Off by default: it publishes an account's memory to whoever holds one of its
-keys, and that is a deployment's decision.
+The public switch stays off. Internal access reuses the existing operator account
+IDs and an explicit list of additional account IDs; it creates no new role.
 
 ```bash
-# deploy/web/.env
-OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED=true
+OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED=false
+# Opt in existing OPEN_SCIENCE_OPERATOR_USERS accounts (default false).
+OPEN_SCIENCE_AGENT_MEMORY_API_INTERNAL_ENABLED=true
+# Optional additional exact account IDs, comma-separated (default empty).
+OPEN_SCIENCE_AGENT_MEMORY_API_INTERNAL_USERS=internal-account-id
 ```
 
-Recreate `open-science-web` after changing it. While it is off every route under
-`/api/agent-memory/v1` answers `503 agent_memory_disabled`, including the
-OpenAPI description.
+An additional listed account is allowed even when `INTERNAL_ENABLED=false`;
+that switch grants access only to the existing operators. Listing an account
+does not give it operator privileges. With both internal settings at their
+defaults, operators do not acquire API access automatically.
+
+An operator changes these environment values, then recreates `open-science-web`
+through the normal release procedure. This documentation does not authorize a
+release. Sign in as the allowed account; `/api/me` offers
+`features.agentMemoryApi: true`, and the existing account key panel appears.
+Create a key with only the required scopes and save it to a local credential
+file. Read `GET /api/agent-memory/v1` capabilities before optional operations.
+
+Key creation, listing, revocation, every bearer operation and the feature flag
+use one audience decision. Removing the account from the list (and from operator
+eligibility, if applicable) disables existing keys on their next request.
+In internal-only mode, invalid, unknown, revoked, missing-owner and excluded-owner
+keys all receive `503 agent_memory_disabled`; no account/key existence is
+disclosed. OpenAPI then also requires an eligible account's key. With the public
+switch on, OpenAPI retains anonymous access and ordinary keys remain allowed.
+The public switch is not enabled by this change.
+
+Key management previously had no feature gate even while the web panel and
+bearer API were off. It now returns the same disabled response when the account
+is not eligible, as required by the unified audience policy.
 
 ## Keys
 
@@ -44,8 +68,9 @@ Keys belong to an account and are managed with that account's browser session
 | `POST /api/agent-keys` `{ "name", "scopes", "projectId"?, "expiresInDays"?, "subjects"? }` | Creates a key and returns its secret **once**; it is stored as a digest. `subjects: true` makes it an integration key (below). |
 | `DELETE /api/agent-keys/<id>` | Revokes it. |
 
-- **Scopes:** `memory.read` (recall, list records, the dashboard), `memory.write` (note,
-  episodes), `memory.manage` (the dashboard's acts) and `memory.observe`
+- **Scopes:** `memory.read` (recall, list records, the dashboard), `memory.history.read`
+  (opt-in raw conversation recall, also requires `memory.read`), `memory.write` (note,
+  episodes), `memory.remember` (direct statements with source), `memory.manage` (the dashboard's acts) and `memory.observe`
   (prescription edits) — see below. Give a key
   only what its agent needs.
 - **Project binding:** a key created with `projectId` can read and write that
@@ -82,12 +107,153 @@ per key per minute (`429 agent_memory_rate_limited` beyond that).
 
 | Call | Scope | What it does |
 |---|---|---|
-| `GET /openapi.json` | none | The machine-readable description (no key needed, still behind the enable switch). |
-| `GET /` | any | What this key can do: its scopes, its project, the rate limit, the endpoints. An integrator's first call. |
-| `POST /recall` `{ "query", "projectId"?, "limit"? (1–50), "factKinds"?, "since"?, "scope"?, "capsuleIds"? (1–8), "methods"? }` | `memory.read` | Searches the account's memory and returns hits with their source: the engine's memory files (the account's own and the project's asked for, never a sensitive one) and the capsule's facts, each item saying which. A caveat on a hit is a label, never a reason to withhold it. `scope` is `all`, `capsule`, `conversation` or `agenda`. `capsuleIds` reads the named capsules instead of the ones in force (a subject may name its institution's). Also returns `methods` — the account's own learned methods first, then the capsules' work-style methods, within the same budget a run mounts (32 methods, 32 KiB); `methods` is `all`, `own`, `capsules` or `none`. |
+| `GET /openapi.json` | any eligible key in internal mode | The machine-readable description. Anonymous access only while the public switch is on. |
+| `GET /` | any | What this key can do: its scopes, its project, the rate limit, the endpoints and per-key `capabilities`. An integrator's first call. |
+| `POST /recall` `{ "query", "projectId"?, "limit"? (1–50), "factKinds"?, "since"?, "scope"?, "capsuleIds"? (1–8), "methods"?, "include"? }` | `memory.read` | Searches the account's memory and returns hits with their source: the engine's memory files (the account's own and the project's asked for, never a sensitive one) and the capsule's facts, each item saying which. A caveat on a hit is a label, never a reason to withhold it. `scope` is `all`, `capsule`, `conversation` or `agenda`. `capsuleIds` reads the named capsules instead of the ones in force (a subject may name its institution's). Also returns `methods` — the account's own learned methods first, then the capsules' work-style methods, within the same budget a run mounts (32 methods, 32 KiB); `methods` is `all`, `own`, `capsules` or `none`. |
 | `POST /note` `{ "factKind", "content", "projectId"? }` | `memory.write` | Adds one note. It arrives as an **inferred, unconfirmed candidate** whatever the caller says, and takes effect only when the account owner confirms it: on their memory page, where it is listed with 待确认 and the choice 确认 or 不要, or through the dashboard's note operations. Notes are the capsule store's. |
 | `GET /records?scope=&kind=&status=&scopeId=&query=&pageSize=` | `memory.read` | Lists the engine's memory files as records, filtered (comma-separated values; `pageSize` up to 200, default 50). Every one is in force (a file is written by the person or by the engine's extraction and takes effect at once), so a `status` that excludes `active` finds none: a proposal is a staged note, never a record. |
 | `POST /episodes` `{ "projectId", "sessionId"?, "messages": [{ "role": "user"\|"assistant", "text" }] }` | `memory.write` | Hands over a conversation (1–200 turns). It is **staged as a pending candidate note** (`202`, `state: "pending_confirmation"`, `extracted: 0`, `activated: 0`, `candidateId`, `confirm.path`) and nothing is extracted or written until the account owner confirms it at `POST /notes/{id}/confirm`; a memory already in force is never changed by an episode. |
+
+### Original conversation recall
+
+`POST /recall` with `"include": ["history"]` appends a separate `history` array;
+the default response and memory/method selection are unchanged. The key needs
+**both `memory.read` and `memory.history.read`**. The existing
+`OPEN_SCIENCE_MEMORY_HISTORY_SEARCH_ENABLED` switch must be on, and the native
+memory service must be configured. The server uses `MemoryHistory.search`, the
+kernel gateway's reader, with the same admission, deletion and secret services.
+
+Hits name `sessionId`, `conversationTitle`, `conversationUrl`, `projectId` and
+messages with `sourceRole` and `date` (null when unknown). They carry
+`contextOnly: true`, `confirmed: false`: assistant text is not promoted to the
+person's statement. Withdrawal notices contain no original text. Recall pause,
+deleted/changed sources, withdrawn statements, shared namespaces and unreviewed
+archives under the secret-review switch remain excluded. Learning pause alone
+does not disable recall. Failed privacy checks never read unfiltered archives.
+
+An unbound key without `projectId` searches its owner's ordinary account history.
+An explicit project or project-bound key searches only that project, including
+`default`. No request can choose another owner, raw URI, review override or
+removal-search mode. History retains the reader's bounds (8 hits in V1, up to 20
+in V2) and the gateway timeout; timeout returns no history and does not imply
+complete coverage. `factKinds`, `since` and `scope` continue to filter stored
+memory/capsules, not optional history.
+
+The standalone DSH connector forwards `include`; `capsule_status` returns server
+`capabilities`. Its credential stays file-only. The MCP adapter has not yet been
+extended for history or status.
+
+### Capability parity status
+
+The root response reports `available` per key, with `requiredScopes` for offered
+operations. Availability describes the service/key offer; pause and privacy
+fences can still return no context. Clients must read this status rather than
+infer capabilities from error responses.
+
+| Capability | Current API coverage |
+|---|---|
+| Raw conversation recall | `POST /recall`, `include: ["history"]`, separately scoped. |
+| Opening context | `GET /context` (`memory.read`), the resident supplement plus the gateway startup profile and listings. |
+| Direct explicit remember | `POST /remember` (`memory.remember`), page-origin direct statement with external source and durable idempotency. `/note` remains a candidate. |
+| Statement forget and forgotten list | `POST /forget` uses native statement/line withdrawal; `GET /forgotten` returns original text and the web-equivalent restore action. Requires account-scoped manage authority for withdrawal/restore; see below. |
+| Trusted conversation ingest | Unavailable: `external_conversation_history_authority_unavailable`; `/episodes` still waits for confirmation. |
+| General work signals | Unavailable: `external_run_evidence_unproven`; existing prescription observations are unchanged. |
+| Capsule sharing / selected-capsule-only recall | Unavailable; `capsuleIds` retains additive semantics. Trials stay web-only. |
+| Clients | DSH and MCP provide status, history recall, forget and forgotten tools. Context/remember adapters consult status; context and directly stated remember are offered. |
+
+### Opening context
+
+Call `GET /context?projectId=<owned-project>` once at session start with
+`memory.read`. Project binding is identical to recall. `platformText` is the
+existing resident producer's exact block, read in peek mode: no conversation
+acknowledgement or delivery digest is stored. `layers` identifies profile,
+listings, projectCard, standingPreferences, index, safetyNotes, capsules and the
+optional mostUsed layer. Present layers carry text; absent ones carry a reason
+(`paused`, `trial`, `switch_off`, `budget`, `empty_or_filtered`). A cut native
+profile has `omissionReason: "elided"`. `omittedEntries` counts resident entries
+that did not fit. `listings.text` is JSON of the two filtered gateway arrays;
+it is not the plugin's presentation markup. The native profile text is the
+startup read result before the host formats it. These are the same inputs the
+kernel receives, not raw history. Shared namespaces are refused. Privacy,
+withdrawal and project exclusions are enforced by the gateway, including a
+source-version check. These reads never count as explicit use.
+
+```sh
+curl -H 'Authorization: Bearer <KEY>' https://example.invalid/api/agent-memory/v1/context
+```
+
+### Targeted withdrawal and recovery
+
+`POST /forget` requires `memory.manage`, an **unbound account key**, and
+`OPEN_SCIENCE_MEMORY_FORGET_TARGETS_ENABLED=true`. It takes either
+`{"statement":"Use metric units."}` or
+`{"recordId":"nm_…","lines":["Use metric units."]}`. Omit `lines` to remove
+that record; a profile-line record removes only its own line. Empty `lines` is
+refused. A raw URI is never accepted. An optional owned `projectId` can label a
+record request; a bare statement accepts only the default namespace. The native
+withdrawal follows copies across that namespace, so project-bound keys cannot
+safely authorize it. Shared namespaces, private records and trial contexts are
+refused; learning/recall pause does **not** prevent the owner withdrawing text.
+
+The response is the native store's confirmation, without a synthetic success
+message: `removed`, `removedLines`, `fileRemoved`, `historyRejected`, and
+`historyScanPending` when present. A statement may record history rejection
+without removing a file. Pending means paraphrases/copies may still be recalled.
+Missing exact lines return `missingLines`; available-line hints are omitted for
+profile-line records so neighbouring profile text cannot leak. Errors leave no
+claim that forgetting completed. Clinical/automated admission does not prohibit
+withdrawal (the kernel has the same deletion rule); these are write-learning
+refusals, not reasons to deny the person's deletion request.
+
+`GET /forgotten` (`memory.read`) returns `data.items` with original `text`, `id`,
+`version`, `forgottenAt` and an optional `restore: {path, expectedVersion}`.
+Only an unbound key with `memory.manage` receives a restore action. Private and
+shared entries remain web-only. This is a deliberate management read of withdrawn
+text, never an opening or recall supplement. The optional `projectId` and key
+binding filter the list; a project-bound key cannot restore a cross-copy act.
+The list inherits the native store's 100-item bound and is not a full export.
+
+`POST /records/{id}/restore` with the returned `expectedVersion` uses exactly the
+web page's native status update. `/undo` remains last-change undo; an absent file
+now checks the kept before-image version too, returning 409 for a stale version.
+The dashboard reads forgotten revisions directly instead of filtering active
+files for an archived status they cannot have.
+
+`POST /remember` requires the separate `memory.remember` scope. `memory.write`
+continues to authorize proposals only. Send `{statement, source: {client,
+sessionId, messageId?, saidAt}, projectId?}` with the person's verbatim words
+(maximum 2000 characters), client label (80), session/message reference (200)
+and original ISO timestamp. The host must preserve actual human authorship;
+this endpoint is not permission for a model to invent a source.
+
+The page's `NativeMemoryStore.remember` entry records the statement as a direct
+page-origin request. Its existing native admission ledger stores the external
+reference and a digest before contacting the engine. Retries share one owner /
+client / session / message key (statement hash when messageId is absent).
+Changed words or scope under the same key conflict. An uncertain append is
+inspected, never blindly repeated. The engine creates a real one-message
+source, with the named project's existing context preamble when needed. It is
+not a fabricated conversation import. The native worker performs the same
+instruction, forget-request, rejection and verification checks as page writes.
+Pending and uncertain states are not completed writes. The page labels the
+result with its external client and original date; existing record undo and
+forget routes apply. External source metadata is included in account export.
+
+Admission refuses learning pause, trial, automated/clinical context, engine
+unreadiness and pre-reset statements using the existing admission reasons
+(`error.details.reason` on `memory_scope_denied`). The public path additionally
+refuses shared namespaces and does not reintroduce withdrawn statements; the
+person can restore one through its existing record action. These checks are
+repeated before durable retries. Unknown or changed project generations refuse.
+
+```sh
+curl -X POST -H 'Authorization: Bearer <KEY>' -H 'Content-Type: application/json' \
+  --data '{"statement":"Use metric units.","source":{"client":"Editor","sessionId":"chat-1","messageId":"msg-1","saidAt":"2026-11-17T01:00:00Z"}}' \
+  https://example.invalid/api/agent-memory/v1/remember
+```
+`memory.write` already existed for candidates and is not expanded silently.
+Neither a partial resident supplement nor a candidate confirmation is advertised
+as the missing operation. No new configuration default or storage kind is added.
 
 ### The dashboard
 
@@ -102,7 +268,7 @@ come from that person's own clicks; it is never a default.
 | `PUT /settings` `{ "learningPaused"?, "recallPaused"? }` | `memory.manage` | The switches (功能开关). |
 | `POST /records/{id}/confirm` `{ "expectedVersion" }` | `memory.manage` | Answers `409 memory_not_pending`: a memory file is in force when it is written. A staged episode or note is confirmed at `/notes/{id}/confirm`. |
 | `PATCH /records/{id}` `{ "expectedVersion", "value" }` | `memory.manage` | The person's edit: the file's text is replaced. A summary edit without `value` is refused with `400 memory_engine_unsupported`. |
-| `POST /records/{id}/forget` · `/restore` · `/undo` `{ "expectedVersion" }` | `memory.manage` | Forget (the file leaves the engine; its text is kept only for the undo, and the learning loop is told not to write it back), or undo the last change. `restore` is the undo (`400 memory_engine_unsupported`: use `undo`). |
+| `POST /records/{id}/forget` · `/restore` · `/undo` `{ "expectedVersion" }` | `memory.manage` | Forget (the file leaves the engine; its text is kept only for the undo, and the learning loop is told not to write it back), or undo the last change. `restore` now uses the memory page status update with the version from `/forgotten`; `undo` reverses the last change. Restore requires an account-scoped key. |
 | `GET /methods/{id}` | `memory.read` | One habit and its versions — text changes only, earlier texts marked `wasTrue`. |
 | `POST /methods/{id}/retire` · `/restore` `{ "expectedRevision" }`, `/rollback` `{ "expectedRevision", "targetRevision" }` | `memory.manage` | Stop a habit, take the stop back (the last version in force), or go back to a named version. |
 | `POST /notes/{id}/confirm` · `/reject` `{ "expectedRevision" }` | `memory.manage` | A proposed note, confirmed or rejected. |
@@ -132,8 +298,8 @@ subject's own identifier). Nothing on the dashboard is stored twice: it is
 derived when read from the records, their evidence and revisions, the usage
 counter and the method ledger.
 
-What an agent can never do through either door: activate a memory, reach a
-project its key is not bound to, or outrun the researcher's own switches. If
+What an agent can never do through either door: bypass the scope for a direct
+statement, reach a project outside its key binding, or outrun the researcher's own switches. If
 the account has paused learning (for everything, or for that project) an
 episode extracts nothing; if it has paused recall, `recall` returns no research
 memory records (capsule entries follow each capsule's own activation). Those
@@ -219,11 +385,9 @@ on demand. The API currently sends those bodies in recall itself; no new
 body-by-digest server route or stale plugin cache is introduced. A method outside
 that catalog's selection/budget cannot be loaded this way.
 `capsule_propose` calls `/note`; it always waits for the person's confirmation.
-The connector has no confirm, forget or share tools, and needs no `memory.manage`.
+`capsule_forget` uses `memory.manage`, and `capsule_forgotten` lists original withdrawn text with restore actions. Context and remember adapters first read status; this server offers context and remember with their respective scopes. Call context at most once at session start, only when offered.
 
-**No raw-history recall or automatic external-work learning is provided. Forget
-and share stay on the web memory page** (`/app/memory`), as does proposal
-confirmation. This is a remote connector, not a local memory engine, transcript
+**Raw history is opt-in** with `include: ["history"]` and both read scopes. Automatic external-work learning is unavailable. Share and proposal confirmation stay on the web memory page (`/app/memory`). This is a remote connector, not a local memory engine, transcript
 collector, method mount or capsule-isolation mechanism. Ordinary work requires
 no recall and continues if memory is unavailable.
 
@@ -239,15 +403,11 @@ installing or publishing anything.
 
 ## The MCP adapter
 
-`runtime/mcp/evimed-memory/server.py` is a stdio MCP server with two tools —
-`memory_recall` and `memory_note` — over the API above. Listing records and
-posting episodes stay HTTP calls: they are integration actions, and a tool per
-verb is a catalogue the model pays for on every first turn.
+`runtime/mcp/evimed-memory/server.py` is a stdio MCP server with `memory_recall`, `memory_note`, `memory_status`, `memory_context`, `memory_remember`, `memory_forget` and `memory_forgotten`. New operations read server capabilities before calling their endpoint; closed capabilities return `capability_unavailable`. Listing ordinary records and posting episodes stay HTTP calls.
 
-`memory_recall` takes `query`, `factKinds`, `since`, `limit`, and the two
-that serve a clinical integration: `capsuleIds` (1–8, read these capsules instead
+`memory_recall` takes `query`, `factKinds`, `since`, `limit`, `projectId`, optional `include: ["history"]`, and `capsuleIds` (1–8, read these capsules instead
 of the ones in force: one school at a time) and `methods` (`all`, `own`,
-`capsules` or `none`). The fact kinds are the API's own fourteen. Both tools take an
+`capsules` or `none`). The fact kinds are the API's own sixteen. All tools take an
 optional `subject`, sent as `X-Subject`, for an integration key (one doctor behind
 an institution): set by the host application, not chosen from the conversation;
 the process's `EVIMED_MEMORY_SUBJECT` is the default when a call names none, and
@@ -258,8 +418,7 @@ It needs Python 3 and nothing else. Configure it with:
 | Variable | Meaning |
 |---|---|
 | `EVIMED_MEMORY_API_URL` | The API base, e.g. `https://evimed.example.org/api/agent-memory/v1`. |
-| `EVIMED_MEMORY_API_KEY_FILE` | A file holding the key (preferred: the key stays out of process listings and shared configs). |
-| `EVIMED_MEMORY_API_KEY` | The key itself, for a local profile only. |
+| `EVIMED_MEMORY_API_KEY_FILE` | Required file holding the key; inline environment credentials are no longer accepted. |
 | `EVIMED_MEMORY_SUBJECT` | The person calls are for when a call names none (integration keys only; absent, the key's own account). |
 | `EVIMED_MEMORY_TIMEOUT_SECONDS` | Per-call timeout, 1–60, default 20. |
 
@@ -289,10 +448,48 @@ Keep the key file readable by you alone (`chmod 600`), and give the key
 
 ## Candidates and admission
 
-The URL, key scopes, project binding and `X-Subject` rules are unchanged. Personal recall reads the engine through the shared recall port. Capsule and method selection retain their existing authorization and scope. Native edits change `value`; forgetting uses the rejection ledger, and restoration uses the undo action. Unsupported operations return `memory_engine_unsupported`.
+The URL, key scopes, project binding and `X-Subject` rules are unchanged. Personal recall reads the engine through the shared recall port. Capsule and method selection retain their existing authorization and scope. Native edits change `value`; forgetting uses the rejection ledger, and restoration uses the web-equivalent restore action (or last-change undo). Unsupported operations return `memory_engine_unsupported`.
 
 `POST /episodes` stores the submitted turns in the candidate-note ledger. It returns `202`, `state: "pending_confirmation"`, `extracted: 0`, `activated: 0`, `candidateId`, and `confirm: { path, expectedRevision }`. It opens no extracting engine session at this stage. The full role-labelled transcript stays only in that candidate as evidence. Confirmation sends only original user statements through the captured-message privacy filter; assistant statements, including assistant-authored role labels or quoted instructions, are never promoted into user facts. If no admissible user content remains, confirmation returns `admission.state: "skipped"` and `reason: "no_user_content"` without touching an extracting session. Confirm at the returned `/api/agent-memory/v1/notes/{id}/confirm` path with `expectedRevision`. There is no episode-confirm endpoint.
 
 A confirmation returns `admission` alongside the candidate. Its immutable candidate ID and revision identify one durable admission. `queued` and `submitting` describe submission work; `pending` means the engine accepted the commit but settlement is outstanding; `completed` means the native worker read the resulting changes. `suspended` means current learning policy prevents a retry; `cancelled` means the candidate revision, the account or the project is no longer authorized. Every new engine write and replay rechecks that authority, so rejecting or editing a candidate prevents its older admission from silently learning later. `failed` retains the candidate and an error, while `uncertain` means a timed-out side effect is being inspected and must not be treated as success. The receipt includes `taskId` and `archiveUri` when known and `recordIds` after settlement; one conversation may produce several records. Repeating the same confirmation returns or recovers that admission, without appending the batch twice.
 
 Capsule snapshots record each selected file's hash, version and capture time. Export re-reads the selected engine bytes after the database snapshot and before publication; a concurrent change returns `409 capsule_native_snapshot_changed` so the caller can retry. This is an optimistic consistency check across two stores. Revoking a hosted share prevents future hosted downloads; it does not remotely erase bytes or independent copies already exported.
+
+
+### Reserved host conversation ingestion (not available)
+
+`memory.ingest` is a reserved, internal-host-only scope, not yet mintable or
+shown in the key panel. Neither `/conversations/{externalSessionId}/turns` nor
+its `/commit` sibling is served. The status and OpenAPI
+`x-unavailable-operations` disclose this without probing an absent endpoint.
+
+The existing history index accepts only canonical kernel conversations
+(`memoryHistory.mjs`, `indexArchive`), and `memoryHistorySources.mjs` proves their
+project incarnation, native session binding and live run-ledger records on
+both ingestion and recall. The worker cannot turn an arbitrary external engine
+session into that authority. A durable external conversation identity, batch
+idempotency/recovery, human/clinical admission and source-deletion integration
+must be completed together before this scope is offered to internal accounts.
+Sending turns to the engine alone would not satisfy that contract. `/episodes`
+retains its existing candidate-only behavior. No model tool or fabricated kernel
+conversation has been added for this operation.
+
+
+### Reserved host work signals (not available)
+
+`POST /work-events` and the internal-host-only `learning.signal` scope remain
+unavailable; the scope is not mintable or offered in the panel. Status and
+OpenAPI disclose `external_run_evidence_unproven`. The existing learning chain
+reads canonical finished runs, delivered file inventories and complete retained
+transcripts. A minimal external run row containing only an outcome, digest and
+method names still fails `learningRefusal` with `transcript_incomplete`; marking
+it complete without a verified transcript would manufacture learning evidence.
+
+A future host adapter must send only actions performed by a human: `used`
+requires a delivered-file digest, `continued` additionally requires the person's
+later words, and `corrected` requires their actual correction. `none` is silent,
+unknown evidence. A model's claim that its own work was used is never evidence.
+Neither DSH nor MCP exposes an ingest or work-signal tool. There is no host hook
+until genuine host events and the existing evidence authority can be connected
+without weakening the thresholds, pauses, trial or clinical refusals.

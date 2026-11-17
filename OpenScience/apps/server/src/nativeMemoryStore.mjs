@@ -1,3 +1,4 @@
+import { filterCapturedMessage } from './memoryGateway.mjs';
 import { mergePeopleFiles, undoPeopleMerge, redirectPeopleWrites } from './nativeMemoryPeopleStore.mjs';
 import { personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
@@ -241,6 +242,7 @@ const BODIES_PER_ACCOUNT = 400;
  */
 /** The sessions the platform itself opens to write a memory, and what the drawer says of what they wrote: 「从其他 AI 导入」 and 「你在两次对话里都这样做」. */
 export const PLATFORM_SESSION_SOURCES = Object.freeze([
+  { prefix: "evimed-stated-", sourceType: "external", label: "来自外部助手" },
   { prefix: "evimed-import-", sourceType: "import", label: "从其他 AI 导入" },
   { prefix: "evimed-promote-", sourceType: "repetition", label: "你在两次对话里都这样做" },
 ]);
@@ -262,7 +264,7 @@ function sessionEvidence({ engineSession, archiveUri, observedAt, fingerprint },
   }
   const platform = PLATFORM_SESSION_SOURCES.find((entry) => session.startsWith(entry.prefix));
   if (!platform) return null;
-  return { sourceType: platform.sourceType, sourceRef: `${platform.sourceType === "import" ? "imports" : "repetitions"}/${session}`, quote: "", observedAt: observedAt ?? null, weight: 1, fingerprint, label: platform.label };
+  return { sourceType: platform.sourceType, sourceRef: `${platform.sourceType === "external" ? "external" : platform.sourceType === "import" ? "imports" : "repetitions"}/${session}`, quote: "", observedAt: observedAt ?? null, weight: 1, fingerprint, label: platform.label, ...(platform.sourceType === 'external' ? { archiveUri } : {}) };
 }
 
 function conversationEvidence(history, sessionProjects, { line = null } = {}) {
@@ -623,6 +625,16 @@ export class NativeMemoryStore {
         });
       }
     }
+    const external = typeof this.overlay.externalSources === 'function' ? await this.overlay.externalSources(userId, archives) : new Map();
+    for (const record of records) record.evidence = record.evidence.flatMap(item => {
+      if (item.sourceType !== 'external') return [item];
+      const source = external.get(item.archiveUri);
+      if (!source) return [];
+      const { archiveUri: _archive, ...evidence } = item;
+      return [{ ...evidence, observedAt: source.saidAt, externalSource: { client: source.client, sessionId: source.sessionId,
+        ...(source.messageId ? { messageId: source.messageId } : {}), saidAt: source.saidAt } }];
+    });
+    for (const record of records) record.evidenceCount = record.evidence.length;
     const withdrawn = new Set(this.sourceDeletion ? await this.sourceDeletion.hiddenMemoryUris(userId) : []);
     const visible=records.filter(record=>![...withdrawn].some(prefix=>record.uri===prefix||record.uri.startsWith(`${prefix}/`)));
     const protectedRecords=this.sourceDeletion?await this.sourceDeletion.redactRecords(userId,visible):visible;
@@ -2030,6 +2042,9 @@ export class NativeMemoryStore {
     const projectId = context.kind === 'geo-project' ? context.projectId : last.projectId;
     if (last.change === "deleted") {
       if (last.before === null) throw new HttpError(409, "memory_conflict", "A deleted memory keeps no text to restore.");
+      if (!live && expectedVersion > 0 && versionOfHash(contentHash(String(last.before))) !== expectedVersion) {
+        throw new HttpError(409, 'memory_conflict', 'This forgotten memory changed since it was read.');
+      }
       await this.#restoreText(userId, { uri, text: String(last.before), memoryType, projectId, revisionId: last.id, reason: "undo" });
       // A file forgotten with the lines elsewhere that said the same brings them back too.
       const act = actOf(last.reason);
@@ -2239,6 +2254,12 @@ export class NativeMemoryStore {
 
   /** @param {string} userId @param {any} admission */
   async processAdmission(userId, admission) {
+    return admission.externalSource
+      ? withNativeMemoryWrite(this.overlay.database, userId, () => this.#processAdmission(userId, admission))
+      : this.#processAdmission(userId, admission);
+  }
+
+  async #processAdmission(userId, admission) {
     const receipt = (/** @type {any} */ row) => ({ candidateId: row.candidateId, revision: row.revision, state: row.state,
       engineSession: row.engineSession, archiveUri: row.archiveUri ?? null, taskId: row.taskId ?? null,
       recordIds: row.recordIds ?? [], ...(row.error ? { error: row.error } : {}) });
@@ -2254,7 +2275,14 @@ export class NativeMemoryStore {
     const authorized = async (unattemptedPhase = null) => {
       if (typeof this.overlay.admissionAuthority !== "function") return true;
       const policy = await this.overlay.admissionAuthority(userId, row);
-      if (policy.allowed) return true;
+      if (policy.allowed) {
+        if (row.externalSource && row.text) {
+          const refused = await removalRefusals({ userId, overlay: this.overlay, projectId: row.projectId, judge: this.rejectionJudge,
+            candidates: memoryLines(row.text).map(text => ({ text, sources: [] })) });
+          if (refused.size) { await save({ state: 'cancelled', error: 'rejected_line', release: true }); return false; }
+        }
+        return true;
+      }
       await save({ state: policy.state, error: policy.reason, phase: unattemptedPhase, release: true });
       return false;
     };
@@ -2272,32 +2300,51 @@ export class NativeMemoryStore {
         // A timed-out commit can already have archived the batch. Discover it before considering another write.
         if (Number(status?.commit_count) > 0) {
           const nodes = await this.sessions.tree(userId, `${this.sessions.sessionUri(userId,row.engineSession)}/history`, { showHidden: true });
-          const archive = nodes.map((node) => parseArchiveUri(node.uri)).find(Boolean)?.archiveUri;
+          const archive = nodes.map((node) => parseArchiveUri(node.uri)).find(parsed => parsed && (!row.externalSource
+            || !parsed.rest && parsed.userRoot === this.sessions.userRoot(userId) && parsed.session === row.engineSession))?.archiveUri;
           if (!archive) { await save({ state: "uncertain", error: "commit_archive_not_visible", release: true }); return receipt(row); }
-          const commit = await this.overlay.recordCommit({ userId, archiveUri: archive, engineSession: row.engineSession, projectId: row.projectId, origin: "tool" });
+          const commit = await this.overlay.recordCommit({ userId, archiveUri: archive, engineSession: row.engineSession, projectId: row.projectId, origin: row.externalSource ? "page" : "tool",
+            ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt, pendingText: row.text } : {}) });
           await save({ archiveUri: archive, taskId: commit.taskId, state: "pending" });
         } else {
           if (!status || !Number.isFinite(Number(status.message_count))) throw new HttpError(503, "memory_engine_unavailable", "The session state could not be inspected.");
-          if (Number(status.message_count) === 0) {
-            // An uncertain append may still finish after its HTTP timeout. Zero messages is not proof it was refused.
-            if (["message_submitting", "commit_submitting"].includes(row.phase)) {
-              await save({ state: "uncertain", error: "submission_outcome_unknown", release: true }); return receipt(row);
+          let messageCount = Number(status.message_count);
+          const projectLine = row.externalSource?.projectLine;
+          const expectedCount = projectLine ? 2 : 1;
+          if (projectLine && messageCount === 0) {
+            if (['context_submitting', 'message_submitting', 'commit_submitting'].includes(row.phase)) {
+              await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true }); return receipt(row);
             }
             const priorPhase = row.phase;
-            await save({ state: "submitting", phase: "message_submitting", error: "" });
-            // A denied final guard attempted no append; restore that fact before releasing this lease.
+            await save({ state: 'submitting', phase: 'context_submitting' });
             if (!await authorized(priorPhase)) return receipt(row);
-            await this.sessions.addMessage(userId, row.engineSession, { role: "user", created_at: row.createdAt, parts: [{ type: "text", text: maskIdentifiers(row.text) }] });
-          } else if (Number(status.message_count) !== 1) {
-            await save({ state: "uncertain", error: "unexpected_session_messages", release: true }); return receipt(row);
+            await this.sessions.addMessage(userId, row.engineSession, { role: 'assistant', parts: [{ type: 'text', text: projectLine }] });
+            messageCount++;
+          }
+          if (messageCount === expectedCount - 1) {
+            // A timed-out append may still finish; a short read cannot authorize resending it.
+            if (['message_submitting', 'commit_submitting'].includes(row.phase)) {
+              await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true }); return receipt(row);
+            }
+            const priorPhase = row.phase;
+            await save({ state: 'submitting', phase: 'message_submitting', error: '' });
+            if (!await authorized(priorPhase)) return receipt(row);
+            await this.sessions.addMessage(userId, row.engineSession, { role: 'user', created_at: row.externalSource?.saidAt ?? row.createdAt,
+              parts: [{ type: 'text', text: row.externalSource ? `请记住：${row.text}` : maskIdentifiers(row.text) }] });
+          } else if (messageCount !== expectedCount) {
+            await save({ state: 'uncertain', error: 'unexpected_session_messages', release: true }); return receipt(row);
           }
           const priorPhase = row.phase;
           await save({ state: "submitting", phase: "commit_submitting" });
           if (!await authorized(priorPhase)) return receipt(row);
           const result = (await this.sessions.commit(userId, row.engineSession))?.result;
           if (result?.status !== "accepted" || typeof result.archive_uri !== "string") throw new HttpError(503,"memory_engine_unavailable","The memory service did not accept the candidate.");
+          const archive = parseArchiveUri(result.archive_uri);
+          if (row.externalSource && (!archive || archive.rest || archive.userRoot !== this.sessions.userRoot(userId) || archive.session !== row.engineSession)) {
+            throw new HttpError(403, 'memory_scope_denied', 'The archive does not belong to the submitted statement.');
+          }
           const commit = await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: row.engineSession,
-            projectId: row.projectId, origin: "tool", taskId: result.task_id ?? null });
+            projectId: row.projectId, ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt } : {}), origin: row.externalSource ? "page" : "tool", pendingText: row.externalSource ? row.text : null, taskId: result.task_id ?? null });
           await save({ state: "pending", archiveUri: commit.archiveUri, taskId: commit.taskId, error: "" });
           this.#touch(userId);
         }
@@ -2317,29 +2364,43 @@ export class NativeMemoryStore {
       return receipt(row);
     } catch (error) {
       if (/** @type {any} */ (error)?.code === "memory_admission_gone") throw error;
-      await save({ state: ["message_submitting","commit_submitting"].includes(row.phase) ? "uncertain" : "failed",
+      await save({ state: ["context_submitting","message_submitting","commit_submitting"].includes(row.phase) ? "uncertain" : "failed",
         error: String(/** @type {any} */ (error)?.code ?? "memory_admission_failed").slice(0,200), release: true });
       return receipt(row);
     }
   }
 
+  get externalRememberEnabled() { return Boolean(this.configured && this.memoryContexts && this.overlay.externalAdmissionPolicy); }
+
   /**
    * 「记住这一条」 from the page: the person's words go to the engine the way a conversation's do — one session, one message,
    * a commit — so what is written has its type, its tags and its place among the memories the engine keeps updating. It
    * appears when the engine has written it (about twelve seconds); until then the page shows it as pending.
-   * @param {string} userId @param {{ text: string, projectId?: string | null, projectName?: string | null }} input
+   * @param {string} userId @param {{ text: string, projectId?: string | null, projectName?: string | null, externalSource?: any }} input
    */
-  async remember(userId, { text, projectId = null, projectName = null }) {
-    const words = String(text ?? "").trim();
-    if (!words || words.length > 2_000) throw new HttpError(400, "memory_payload_invalid", "What to remember must be 1 to 2000 characters.");
+  async remember(userId, { text, projectId = null, projectName = null, externalSource = null }) {
+    const words = externalSource ? String(text ?? '') : String(text ?? '').trim();
+    if (!words.trim() || words.length > 2_000) throw new HttpError(400, "memory_payload_invalid", "What to remember must be 1 to 2000 characters.");
     if (identifierShapesIn(words).length) throw new HttpError(400, "memory_content_refused", "A memory cannot carry a credential or a personal identifier.");
+    if (externalSource) {
+      if (!this.externalRememberEnabled) throw new HttpError(503, 'memory_engine_unavailable', 'External memory admission is unavailable.');
+      const captured = filterCapturedMessage({ role: 'user', content: words });
+      if ('drop' in captured || captured.masked || captured.forward.parts.map(part => part.text).join('\n') !== words) {
+        throw new HttpError(400, 'memory_content_refused', 'The statement contains text that cannot be remembered.');
+      }
+      const refused = await removalRefusals({ userId, overlay: this.overlay, projectId, judge: this.rejectionJudge,
+        candidates: memoryLines(words).map(line => ({ text: line, sources: [] })) });
+      if (refused.size) throw new HttpError(409, 'memory_content_refused', 'The statement was previously withdrawn.');
+    }
     // A shared GEO project's page writes into the project's own namespace (`#projectContext`), the account's page into the account's.
     const context = await this.#projectContext(userId, projectId);
     // Remembered from a named project's page in the account's own namespace: the engine is told which project, as a conversation of it is
     // (`projectContextLine`), so 「这个项目…」 goes on that project's card.
     const line = context.kind !== 'geo-project' && projectId && projectId !== "default" ? projectContextLine(projectName) : null;
     const commit = await this.#submitWords(userId, { content: `请记住：${maskIdentifiers(words)}`, projectId, origin: "page", prefix: "evimed-page-", pendingText: words,
-      context, projectLine: line });
+      context, projectLine: line, externalSource });
+    if (externalSource) return { pending: { id: commit.archiveUri ?? commit.candidateId, text: words, at: externalSource.saidAt,
+      state: commit.state, ...(commit.error ? { reason: commit.error } : {}) }, source: externalSource, storage: 'directly_stated' };
     return { pending: { id: commit.archiveUri, text: words, at: commit.createdAt, state: "pending" } };
   }
 
@@ -2393,12 +2454,21 @@ export class NativeMemoryStore {
    * One message to the engine in a session of its own, and its commit entered in the ledger: the one way a memory is written from
    * outside a conversation (the page, an import, a promotion), so the engine's own templates apply to all of them.
    * `context` is the namespace written to: the account's own unless the page names a shared GEO project (only the page's write can).
-   * @param {string} userId @param {{ content: string, projectId: string | null, origin: "page" | "import" | "promotion", prefix: string, pendingText?: string | null, context?: any, projectLine?: string | null }} write
+   * @param {string} userId @param {{ content: string, projectId: string | null, origin: "page" | "import" | "promotion", prefix: string, pendingText?: string | null, context?: any, projectLine?: string | null, externalSource?: any }} write
    */
-  async #submitWords(userId, { content, projectId, origin, prefix, pendingText = null, context = this.#personalContext(userId), projectLine = null }) {
+  async #submitWords(userId, { content, projectId, origin, prefix, pendingText = null, context = this.#personalContext(userId), projectLine = null, externalSource = null }) {
     this.#assertConfigured();
     this.#touch(userId);
     if (context.kind === 'geo-project' && origin !== "page") throw new HttpError(403, 'memory_scope_denied', 'Only the page writes into a project memory namespace.');
+    if (externalSource) {
+      if (context.kind !== 'owned') throw new HttpError(403, 'memory_scope_denied', 'External statements require an owned namespace.');
+      const id = sha256(JSON.stringify([userId, externalSource.client, externalSource.sessionId, externalSource.messageId ?? sha256(pendingText ?? content)]));
+      const source = { ...externalSource, operation: 'remember', digest: sha256(JSON.stringify([pendingText, projectId, externalSource])),
+        projectCreatedAt: context.projectCreatedAt ?? null, projectLine };
+      const queued = await this.overlay.queueAdmission(userId, { candidateId: `stated:${id}`, revision: 1,
+        engineSession: `evimed-stated-${id}`, text: pendingText, projectId, externalSource: source });
+      return this.processAdmission(userId, queued);
+    }
     const sessions = context.sessions;
     const session = `${prefix}${randomUUID().replace(/-/g, "")}`;
     await this.#engine(async () => {

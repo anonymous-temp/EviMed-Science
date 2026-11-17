@@ -1021,3 +1021,31 @@ for (const mode of ['file', 'line', 'statement']) test(`history fence write fail
   assert.ok(!JSON.stringify(await search(f)).includes('M-41633'));
   assert.equal(await f.sessions.read(f.userId, uri), mode === 'statement' ? body : mode === 'line' ? `- ${independent}` : null);
 });
+
+for (const boundary of ['withdrawn', 'deleted', 'unreviewed']) {
+  test(`public history recall preserves the durable ${boundary} fence and still returns safe memory`, options, async t => {
+    const { createAgentMemoryRoutes } = await import('../src/agentMemoryRoutes.mjs');
+    const f = await setup(t); await f.service.ingestArchive(f.commit, f.context);
+    const routes = createAgentMemoryRoutes({ config: { agentMemoryApiEnabled: true, memoryHistorySearchEnabled: true },
+      apiKeys: { resolve: async () => ({ userId: f.userId, keyId: 'key', scopes: ['memory.read', 'memory.history.read'], projectId: 'default' }) },
+      store: { userById: async () => ({ id: f.userId }), requireProject: async () => ({ id: 'default', userId: f.userId }) },
+      nativeMemory: { configured: true, search: async () => ({ items: [{ id: 'safe', kind: 'preference', scope: 'user', status: 'active', value: 'Use SI units.' }] }) },
+      capsules: { recall: async () => ({ items: [] }), active: async () => ({ items: [] }) },
+      historySearch: input => f.service.search(input, { accountScope: input.accountScope }),
+    });
+    const call = async () => {
+      const res = { data: null, writeHead() {}, end(body) { this.data = JSON.parse(body).data; } };
+      await routes({ url: '/api/agent-memory/v1/recall', method: 'POST', headers: { authorization: 'Bearer fixture' },
+        async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ query: 'trial', methods: 'none', include: ['history'] })); } }, res);
+      return res.data;
+    };
+    assert.equal((await call()).history.length, 1);
+    if (boundary === 'withdrawn') await f.overlay.reject(f.userId, 'preferences', `${f.root}/preferences/a.md`, ['I prefer trial tables.']);
+    if (boundary === 'deleted') await f.service.removeConversation(f.context, 'session_a');
+    if (boundary === 'unreviewed') f.service.config.memoryHistorySecretRedactionEnabled = true;
+    const result = await call();
+    assert.deepEqual(result.history, []);
+    assert.equal(result.items[0].id, 'safe');
+    assert.doesNotMatch(JSON.stringify(result), /trial tables|weekly analyses/);
+  });
+}

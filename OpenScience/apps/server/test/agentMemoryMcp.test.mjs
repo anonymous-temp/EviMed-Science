@@ -33,3 +33,11 @@ test("the adapter sends the person a call is for as a header, and bounds the ide
   assert.equal(AGENT_SUBJECT_PATTERN.test("a".repeat(128)), true);
   assert.equal(AGENT_SUBJECT_PATTERN.test("a".repeat(129)), false, "the adapter's 128 is the pattern's 128");
 });
+
+test('the adapter exposes status and gated lifecycle operations, and forwards the history option', () => {
+  for (const operation of ['status', 'context', 'remember', 'forget', 'forgotten']) assert.ok(source.includes(`"memory_${operation}"`));
+  for (const capability of ['openingContext', 'explicitRemember', 'statementForget', 'forgottenList']) assert.ok(source.includes(`"${capability}"`));
+  assert.match(source, /"include", "projectId"/);
+  assert.match(source, /offered\.get\("available"\) is not True/);
+  assert.doesNotMatch(source, /os\.environ\.get\("EVIMED_MEMORY_API_KEY",/);
+});

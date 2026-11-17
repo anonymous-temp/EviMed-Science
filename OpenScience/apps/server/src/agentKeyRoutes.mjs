@@ -1,3 +1,4 @@
+import { agentMemoryAvailable, agentMemoryDisabled } from './agentMemoryAvailability.mjs';
 import { HttpError, assertObject, readJson, sendJson } from "./security.mjs";
 import { AGENT_KEY_SCOPES } from "./agentApiKeys.mjs";
 
@@ -28,8 +29,10 @@ export function createAgentKeyRoutes({ config, apiKeys, context, audit }) {
   return async function agentKeyRoutes(req, res) {
     const url = new URL(req.url ?? "/", "http://evimed.local");
     if (url.pathname !== AGENT_KEY_PATH && !url.pathname.startsWith(`${AGENT_KEY_PATH}/`)) return false;
+    if (!agentMemoryAvailable(config)) throw agentMemoryDisabled();
     if (!apiKeys) throw new HttpError(503, "product_state_unavailable", "API key storage is unavailable.");
     const ctx = await context(req, res);
+    if (!agentMemoryAvailable(config, ctx.user)) throw agentMemoryDisabled();
     const method = req.method ?? "GET";
     const rest = url.pathname.slice(AGENT_KEY_PATH.length).replace(/^\//, "");
 

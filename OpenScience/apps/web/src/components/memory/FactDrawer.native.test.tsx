@@ -39,6 +39,16 @@ describe("a memory kept as a file, opened from its row", () => {
   beforeEach(() => { vi.clearAllMocks(); client.fetchMemorySources.mockResolvedValue([]); });
   afterEach(cleanup);
 
+  it('labels an external statement with the client and original time without inventing a conversation link', () => {
+    const file = nativeFile('单位', '- 使用公制单位。');
+    file.evidence = [{ sourceType: 'external', sourceRef: 'external/one', fingerprint: 'one', quote: '', observedAt: '2026-11-17T01:00:00Z', weight: 1,
+      label: '来自外部助手', externalSource: { client: 'Editor', sessionId: 'outside', saidAt: '2026-11-17T01:00:00Z' } }];
+    show(file);
+    expect(screen.getByText(/来自外部助手 Editor，/)).toBeInTheDocument();
+    expect(memorySource(file)).toBeNull();
+    expect(screen.getByTestId('file-text').textContent).toContain('使用公制单位');
+  });
+
   it("shows the file as it is written, edits all of it and sends the words with the version, never a summary", async () => {
     const file = nativeFile("回答结构", "- 先给结论，再给依据。\n- 表格不超过五列。");
     api.updateStructuredMemory.mockResolvedValue({ ...file, id: file.id });

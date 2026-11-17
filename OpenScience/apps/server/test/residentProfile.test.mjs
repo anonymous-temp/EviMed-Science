@@ -446,3 +446,18 @@ test('standing preferences appear late without use counts, preserve escaping and
   assert.doesNotMatch((await shared.forDispatch('owner', { ...scope, projectId: 'shared' })).text, /100 characters/);
   assert.equal(sharedReads, 0);
 });
+
+test('peek returns the same opening text without reading or recording conversation delivery state', async () => {
+  const memory = store();
+  const profiles = new ResidentProfiles({ config: {}, store: memory, capsules: capsuleDouble() });
+  const scope = { projectId: 'p1', sessionId: 'session', attended: true };
+  const normal = await profiles.forDispatch('u', scope);
+  const peek = await profiles.forDispatch('u', { ...scope, peek: true });
+  assert.equal(peek.text, normal.text);
+  await peek.delivered();
+  assert.equal(memory.states.size, 0);
+  await normal.delivered();
+  assert.equal(memory.states.size, 1);
+  assert.equal((await profiles.forDispatch('u', scope)).due, false);
+  assert.equal((await profiles.forDispatch('u', { ...scope, peek: true })).text, normal.text);
+});

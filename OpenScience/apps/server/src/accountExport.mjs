@@ -87,7 +87,7 @@ const nativeQueries = [
     FROM evimed_memory.native_revisions WHERE user_id=$1
       AND EXISTS(SELECT 1 FROM unnest($2::text[]) AS roots(root) WHERE starts_with(uri,root||'/memories/')) ORDER BY native_revisions.id`],
   ["nativeAdmissions", `SELECT candidate_id AS "candidateId",candidate_revision AS revision,project_id AS "projectId",state,
-    pending_text AS "pendingText",error,created_at AS "createdAt",updated_at AS "updatedAt"
+    pending_text AS "pendingText",external_source AS "externalSource",error,created_at AS "createdAt",updated_at AS "updatedAt"
     FROM evimed_memory.native_admissions WHERE user_id=$1
       AND account_created_at=(SELECT created_at FROM evimed_control.users WHERE id=$1) ORDER BY created_at,candidate_id,candidate_revision`],
   ["nativeImports", `SELECT id,state,statements,saved,left_out AS "leftOut",created_at AS "createdAt",expires_at AS "expiresAt"

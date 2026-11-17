@@ -3537,6 +3537,10 @@ export function loadConfig(overrides = {}) {
     dataAnalysisMaxPerAccount: boundedInteger(overrides.dataAnalysisMaxPerAccount ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_MAX_PER_ACCOUNT, 50, 1, 1000, "OPEN_SCIENCE_DATA_ANALYSIS_MAX_PER_ACCOUNT"),
     // Off by default: turning it on publishes an account's memory to whoever
     // holds an API key. A deployment decides that, never a default.
+    agentMemoryApiInternalEnabled:
+      overrides.agentMemoryApiInternalEnabled ?? boolEnv("OPEN_SCIENCE_AGENT_MEMORY_API_INTERNAL_ENABLED", false),
+    agentMemoryApiInternalUsers: String(overrides.agentMemoryApiInternalUsers
+      ?? process.env.OPEN_SCIENCE_AGENT_MEMORY_API_INTERNAL_USERS ?? "").split(",").map(value => value.trim()).filter(Boolean),
     agentMemoryApiEnabled:
       overrides.agentMemoryApiEnabled ?? boolEnv("OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED", false),
     // 「转为深度研究」 (fusion plan §9.5, researchHandoff.mjs): EviMed's shell
