@@ -129,3 +129,21 @@ serverComposition.test.mjs
 新增风险是 judge 把无关消息误读成续用，尤其多版本的“这个”。本地不能替代语义判断；只有本人逐字原句、指定关系、精确交付摘要及当前仍可读的版本才能通过，模糊或旧协议一律 unknown，且只增加一个 clean、不直接 adopt、三次门槛不变。最多每个合格晚到真人 turn 一次模型调用，共用原并发上限、超时与 gateway 学习预算；同一输入重放不重复判断，新的纠正仍可读取。关闭开关停止新晚到证据；原事件／方法来源引用及现有撤销路径保留。
 
 上线决策仍应等待完整依赖的接线／配置检查、真实 PostgreSQL 检查和可选的 28 例真实 judge 校验；本次只完成本地代码、测试与提交，不宣称可直接开启生产。
+
+## LEARNFIX
+
+The lab failure in test 9 of `OpenScience/apps/server/test/learningEvidence.integration.test.mjs` was a test setup error: it constructed `new ProductJobs({ database })`, although `ProductJobs` takes the database instance directly. The wrapper has no `transaction` or `query` methods. `afterRun` caught the initial enqueue failure as `settle_failed`, so the first uncaught error appeared later in `queue.claim` during migration. The test now uses `new ProductJobs(database)`, matching this file's passing shared setup.
+
+Production wiring was traced from `store.database` to `new ProductJobs(productDatabase)` in `server.mjs`, then to the same queue passed into `LearningEvidence`, `LearningTriggers` and `LearningWorker`. The new late path calls the existing private `#settleRun` on that evidence instance; it constructs neither a queue nor a database wrapper. No production defect was found, so no production code or additional wiring assertion was needed.
+
+Reviewed every PostgreSQL test addition in LEARN commit `47fd4ffd6` against the passing neighbours, including constructors, migrations, ownership/project setup, queue claim/finish, fixture injection and cleanup. The only other addition is the six-line late-evidence/cascade case in `feedbackEvents.integration.test.mjs`: `FeedbackEvents({ database, jobs })` correctly takes a dependency object, its database is a `ControlPlaneDatabase`, and its `JobsDouble` is intentional existing setup. The remaining changed test files add no PostgreSQL setup. The unchanged passing `learningEvidenceWiring.integration.test.mjs` supplies an isolated database URL to `createWebApiApp`, allowing the production composition above to create the queue.
+
+Local validation: `learningEvidenceLate.test.mjs` passed all 13 tests; targeted ESLint for the changed integration file and `git diff --check` passed. `learningEvidence.integration.test.mjs` loaded but skipped all 9 tests, and `feedbackEvents.integration.test.mjs` loaded but skipped both tests, because `OPEN_SCIENCE_TEST_POSTGRES_URL` is unset. These skips are not database acceptance. The supplied lab batch remains the evidence that the other 12 files passed before this fix.
+
+The commander must re-run the changed file against the lab PostgreSQL, from `OpenScience/apps/server`:
+
+```bash
+node --test test/learningEvidence.integration.test.mjs
+```
+
+Expected acceptance: all nine tests pass, including the real succeeded-job / late acceptance / duplicate callback / correction / withdrawal case. `feedbackEvents.integration.test.mjs` and `learningEvidenceWiring.integration.test.mjs` are unchanged by LEARNFIX and already passed in the supplied lab batch; they require no repeat for this one-line setup correction. No deployment, SSH, fetch, push, dependency installation or secret-directory access was performed.

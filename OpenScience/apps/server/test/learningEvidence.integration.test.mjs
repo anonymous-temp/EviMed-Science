@@ -307,7 +307,7 @@ test('a version-bound late reaction settles after the real settle job succeeded,
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'project','Late',1048576)", [userId]);
   try {
     const ledger = new FeedbackEvents({ database });
-    const queue = new ProductJobs({ database });
+    const queue = new ProductJobs(database);
     const state = lateFixture({ answer: boundAcceptance(message) });
     state.project.userId = userId;
     state.evidence.feedback = ledger; state.evidence.jobs = queue;
