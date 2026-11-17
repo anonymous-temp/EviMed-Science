@@ -101,6 +101,7 @@ test('late evidence preserves bounded version/input bindings inside the existing
   const delivery = { path: 'report/final.md', sha256 };
   const detail = cleanLearningEvidence({ evidence: 'follow-up', verdict: 'accept', at: lateAt, quote: 'Convert this report.',
     lateFollowUp: true, inputDigest: sha256, deliveries: [delivery], artifact: delivery, relation: 'convert' });
+  assert.ok(detail);
   assert.equal(detail.lateFollowUp, true);
   assert.deepEqual(detail.artifact, delivery);
   assert.equal(detail.inputDigest, sha256);
@@ -110,5 +111,6 @@ test('late evidence preserves bounded version/input bindings inside the existing
     shape: [{ format: 'md', labels: Array.from({ length: 16 }, () => '中'.repeat(40)) }] });
   assert.ok(oversized && Buffer.byteLength(JSON.stringify(oversized)) <= 4096);
   const unbound = cleanLearningEvidence({ evidence: 'silent', at: lateAt, deliveries: [{ path: '../escape', sha256 }, { path: 'file', sha256: 'invalid' }] });
+  assert.ok(unbound);
   assert.equal(unbound.deliveries, undefined);
 });

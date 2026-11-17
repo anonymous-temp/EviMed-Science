@@ -121,7 +121,7 @@ export function cleanLearningEvidence(value) {
     && record.sourceRunIds.every(identifier)
   const trace = refs && runs && identifier(record.sourceProjectId) ? {sourceProjectId:record.sourceProjectId,
     sourceRunIds:[...new Set(record.sourceRunIds)],inputReceiptRefs:[...new Set(record.inputReceiptRefs)]} : {}
-  const delivery = item => item && typeof item.path === 'string' && item.path.length <= 200 && item.path.length > 0
+  const delivery = (/** @type {any} */ item) => item && typeof item.path === 'string' && item.path.length <= 200 && item.path.length > 0
     && !item.path.startsWith('/') && !item.path.split(/[\\/]/).includes('..') && /^[a-f0-9]{64}$/.test(item.sha256 ?? '')
     ? { path: item.path, sha256: item.sha256 } : null
   const deliveries = (Array.isArray(record.deliveries) ? record.deliveries : []).slice(0, 4).map(delivery).filter(Boolean)
