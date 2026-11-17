@@ -3352,6 +3352,8 @@ export function loadConfig(overrides = {}) {
     evolutionExecutionTimeoutMs: Number(overrides.evolutionExecutionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS ?? 30_000),
     evolutionDependencyAllowlist: dependencyAllowlist.value,
     // File-free routines are experimental; artifact matching remains the default.
+    // Later human continuations must bind a delivered version; off preserves the half-hour path.
+    learningLateFollowUpEnabled: overrides.learningLateFollowUpEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_LATE_FOLLOW_UP_ENABLED", false),
     learningToolchainRoutineEnabled: overrides.learningToolchainRoutineEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_TOOLCHAIN_ROUTINE_ENABLED", false),
     learningToolchainMinSimilarity: probabilitySetting(overrides, "learningToolchainMinSimilarity", "OPEN_SCIENCE_LEARNING_TOOLCHAIN_MIN_SIMILARITY", 0.8),
     learningEnabled: overrides.learningEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_ENABLED", true),

@@ -289,6 +289,21 @@ export function learningTriggersFor({ run, runs, project = null, internalAgent =
   return marked(lessons);
 }
 
+/** The same matching predicate feeds routine induction and content-free group counts.
+ * @param {{ run: any, shape: unknown, family: readonly any[], toolchain?: unknown, toolchainEnabled?: boolean, minSimilarity?: number }} input
+ * @returns {{ matching: any[], count: number }}
+ */
+export function routineGroupFor({ run, shape, family, toolchain = null, toolchainEnabled = false, minSimilarity = 0.8 }) {
+  const artifact = Array.isArray(shape) && shape.length > 0;
+  const matching = (family ?? []).filter((member) => member.runId !== run?.id && (artifact
+    ? artifactShapesMatch(member.shape, shape)
+    : toolchainEnabled && !(Array.isArray(member.shape) && member.shape.length) && !leftFiles(run)
+      && toolchainsMatch(member.toolchain, toolchain, { minSimilarity })
+      && Number(member.requestSimilarity) >= METHOD_SIMILARITY_PAIR_FLOOR));
+  const count = new Set(matching.map(member => member.runId)).size + 1;
+  return { matching, count };
+}
+
 /**
  * The routine lesson a settled run completes, or null: τ = `METHOD_INDUCTION_MIN_TRAJECTORIES` clean trajectories of one scope whose
  * files are the same shape (EvoDS's threshold in the place it was meant for — what the work did three times, uncorrected, not the
@@ -303,14 +318,10 @@ export function learningTriggersFor({ run, runs, project = null, internalAgent =
  *   toolchain?: unknown, toolchainEnabled?: boolean, minSimilarity?: number, guestInfluence?: boolean }} input
  * @returns {{ trigger: string, idempotencyKey: string, payload: Record<string, any> } | null}
  */
+
 export function routineLessonFor({ run, scope, shape, family, guestInfluence = false, toolchain = null, toolchainEnabled = false, minSimilarity = 0.8 }) {
   const artifact = Array.isArray(shape) && shape.length > 0;
-  const matching = (family ?? []).filter((member) => member.runId !== run?.id && (artifact
-    ? artifactShapesMatch(member.shape, shape)
-    : toolchainEnabled && !(Array.isArray(member.shape) && member.shape.length) && !leftFiles(run)
-      && toolchainsMatch(member.toolchain, toolchain, { minSimilarity })
-      && Number(member.requestSimilarity) >= METHOD_SIMILARITY_PAIR_FLOOR));
-  const count = matching.length + 1;
+  const { matching, count } = routineGroupFor({ run, shape, family, toolchain, toolchainEnabled, minSimilarity });
   if (!run?.id || count < METHOD_INDUCTION_MIN_TRAJECTORIES || count % METHOD_INDUCTION_MIN_TRAJECTORIES !== 0) return null;
   return {
     trigger: "routine",
@@ -435,12 +446,13 @@ export class LearningTriggers {
    *   contextProvenance?: any,
    *   evidence?: { afterRun: (project: any, run: any, options: { guestInfluence: boolean }) => Promise<unknown>,
    *     mirrorResultCorrected?: (project: any, input: { event: any, runId: string }) => Promise<unknown> } | null,
-   *   onRefused?: ((reason: string) => void) | null }} dependencies
+   *   onRefused?: ((reason: string) => void) | null, funnel?: (event: any) => void }} dependencies
    */
   constructor({ jobs, agentRuns, memory = null, internalAgent = async () => false, sessionState = null, audit = async () => {},
     routinePeriodDays = ROUTINE_PERIOD_DAYS, guestInfluence = null, canReuseRun = null, canReuseRuns = null,
-    evidence = null, onRefused = null, contextProvenance = null }) {
+    evidence = null, onRefused = null, contextProvenance = null, funnel = () => {} }) {
     if (!jobs || !agentRuns) throw new TypeError("Learning triggers need the job queue and the run ledger.");
+    this.funnel = funnel;
     this.contextProvenance = contextProvenance;
     this.jobs = jobs;
     this.agentRuns = agentRuns;
@@ -454,6 +466,12 @@ export class LearningTriggers {
     this.guestInfluence = guestInfluence;
     this.evidence = evidence;
     this.onRefused = onRefused;
+  }
+
+  /** Observations contain no transcript or message text and cannot decide admission. */
+  #diagnose(project, run, reason) {
+    try { this.funnel({ userId: project.userId, runId: run?.id ?? "unavailable", scope: learningScopeOf(run),
+      period: Math.floor(Date.parse(run?.finishedAt ?? run?.startedAt ?? "") / this.periodMs), reason }); } catch { /* diagnostics only */ }
   }
 
   /** Counts one refusal; a counter never decides what is learned. @param {string} reason @returns {string} */
@@ -511,7 +529,10 @@ export class LearningTriggers {
    * @returns {Promise<string | null>} one of `LEARNING_REFUSAL_REASONS`
    */
   async #storeRefusal(project, run) {
-    if (this.canReuseRun && !await this.canReuseRun(project, run)) return this.#refused("clinical_context");
+    if (this.canReuseRun && !await this.canReuseRun(project, run)) {
+      this.#diagnose(project, run, "source_not_reusable");
+      return this.#refused("clinical_context");
+    }
     if ((await memoryPausedFor(this.memory, project.userId, project.id).catch(() => ({ learning: false }))).learning) return this.#refused("paused");
     if (endedBeforeReset(run, await this.#resetInstant(project.userId))) {
       recordSkippedBeforeReset("lesson");
@@ -531,16 +552,20 @@ export class LearningTriggers {
    * @returns {Promise<string | null>}
    */
   async refusalFor(project, run, { runs = null } = {}) {
+    const record = reason => {
+      if (reason) { this.#diagnose(project, run, "admission_refused"); this.#diagnose(project, run, reason); }
+      return reason;
+    };
     const stored = await this.#storeRefusal(project, run);
-    if (stored) return stored;
+    if (stored) return record(stored);
     const ledger = runs ?? await this.agentRuns.list(project).catch(() => []);
     const agentId = String(run.effectiveAgentId ?? "");
     const internal = agentId ? await Promise.resolve(this.internalAgent(agentId)).catch(() => false) : false;
     const reason = learningRefusal({ run, runs: ledger, project, internalAgent: () => internal });
-    if (reason) return this.#refused(reason);
+    if (reason) return record(this.#refused(reason));
     // The shared path reads only attributed human input (`GeoContextProvenance.observeRun`): say so here, counted, instead of
     // letting the lesson fail later as an enqueue error.
-    if (automatedRun(run) && await this.#sharedProject(project)) return this.#refused("shared_automated");
+    if (automatedRun(run) && await this.#sharedProject(project)) return record(this.#refused("shared_automated"));
     return null;
   }
 
@@ -575,6 +600,7 @@ export class LearningTriggers {
       await this.jobs.enqueue(project.userId, "distill", payload, { idempotencyKey: lesson.idempotencyKey, projectId: project.id });
       return true;
     } catch (error) {
+      this.#diagnose(project, run, "enqueue_failed");
       this.#refused("enqueue_failed");
       await this.audit("learning.distill.enqueue", {
         userId: project.userId, projectId: project.id, runId: run.id,

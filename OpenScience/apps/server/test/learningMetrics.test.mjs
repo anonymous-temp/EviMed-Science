@@ -176,3 +176,21 @@ test("launches and runs count what they carried, and the families expose all of 
   // Off is one line.
   assert.deepEqual(learningMetricFamilies(false, null, counters).map((family) => family.name), ["open_science_learning_enabled"]);
 });
+
+test('the funnel counts unique runs per account/scope/period/shape without retaining content', () => {
+  const metrics = new LearningMetrics();
+  const group = { userId: 'private-owner', scope: 'conversation', period: 2, shape: [{ format: 'md', labels: ['private heading'] }] };
+  const observe = (runId, reason, extra = {}) => metrics.observeFunnel({ ...group, runId, reason, ...extra });
+  observe('r1', 'fewer_than_three_clean', { clean: true, cleanRuns: 2 });
+  observe('r1', 'fewer_than_three_clean');
+  observe('r2', 'judge_over_budget');
+  observe('r3', 'transcript_incomplete');
+  const families = metrics.families();
+  const blocked = families.find(row => row.name === 'open_science_learning_funnel_runs');
+  assert.equal(blocked.series.find(row => row.labels.reason === 'fewer_than_three_clean').value, 1);
+  assert.equal(blocked.series.find(row => row.labels.reason === 'judge_over_budget').value, 1);
+  assert.equal(families.find(row => row.name === 'open_science_learning_group_clean_runs').series[0].value, 2);
+  assert.doesNotMatch(JSON.stringify([families, [...metrics.funnelRuns]]), /private-owner|private heading|"r1"/);
+  observe('r1', 'corrected', { clean: false });
+  assert.equal(metrics.families().find(row => row.name === 'open_science_learning_group_clean_runs').series[0].value, 1);
+});
