@@ -2372,3 +2372,26 @@ namespaces, sensitive data, withdrawal fences and recall pauses are unchanged.
 `OPEN_SCIENCE_MEMORY_PEOPLE_ACROSS_PROJECTS_ENABLED` controls existing portability;
 it does not open other accounts or shared projects. Typed facts about another person
 use the same layer and retain their subject. No answer is withheld by this feature.
+
+
+### Opt-in extraction candidate (2026-11-17)
+
+Keep `OPEN_SCIENCE_MEMORY_TEMPLATES_DIR=memory-templates` for this release.
+Both it and `memory-templates-extraction-v2` retain their production template bytes.
+The new `memory-templates-next` set carries bounded history, optional project stage,
+no invented preference exceptions, passing-detail retention, the forget-request
+fence and explicit neutral profile headings. The shared source builder produces it:
+
+```sh
+node deploy/web/openviking/memory-templates-src/build.mjs --variant next --out deploy/web/openviking/memory-templates-next --check
+```
+
+Select it only through the existing `OPEN_SCIENCE_MEMORY_TEMPLATES_DIR` setting in
+a separately authorized experiment. The init service, engine mount and control plane
+must agree on the selection. Do not make `next` the default before an attribution
+comparison against production templates on the same sessions. Inspect assistant
+sentences promoted into preferences or project rules, not only retained fact counts.
+The observed candidate improved history retention but increased unattributed
+assistant sentences, so its rules remain opt-in. Read-time neutral-title handling,
+name rows, name normalization and the independent commit-review switch are code
+behaviour and do not require selecting these templates.

@@ -24,19 +24,7 @@ description: |
   PEOPLE is retrieved when relevant, not appended to the opening profile. The user's own current health
   also belongs in PROFILE. Avoid duplicating a person's history into a project card or general preference.
 
-  __HISTORY__
-
-  A forget request is not a new fact or event: do not add a note that restates the withdrawn
-  content or names it as deleted, including when the user refers to it only by a label.
-
   __NEVER_KEEP__
-
-  Keep a concrete number, model name, cost, household detail or project status the user states
-  about their own life or work even in passing: one concise dated line in the matching file.
-  Keep their corrections and explicit confirmation of a suggestion or document fact, with its
-  origin in the wording. An assistant suggestion or a document claim alone is not a first-person
-  fact, preference or project state; it remains in the source conversation. A user opinion stays
-  labelled "User believes:" in NOTES, never promoted to a rule or objective project stage.
 
   __DECIDE__
 directory: "viking://user/{{ user_space }}/memories/people"

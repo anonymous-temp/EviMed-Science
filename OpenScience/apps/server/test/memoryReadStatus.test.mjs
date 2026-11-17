@@ -50,7 +50,7 @@ test('a failed capsule channel is not hidden by a successful empty reference cha
 });
 
 
-test('profile facts and extraction templates share the exact unnamed headings', () => {
+test('profile facts and opt-in next templates share the exact unnamed headings', () => {
   for (const title of Object.values(MEMORY_PROFILE_NEUTRAL_TITLES)) {
     assert.deepEqual(profileStatements(`# ${title}`), []);
     assert.deepEqual(profileStatements(`# ${title}\r\n- Designs reports.\r\n## Work`), ['Designs reports.']);
@@ -58,7 +58,7 @@ test('profile facts and extraction templates share the exact unnamed headings', 
   for (const title of ['Mara Santos', 'Dr User', 'Profile', '用户的昵称']) {
     assert.deepEqual(profileStatements(`# ${title}\n- Designs reports.`), [`# ${title}`, 'Designs reports.']);
   }
-  for (const variant of ['full', 'extraction-v2']) {
+  for (const variant of ['next']) {
     const template = renderMemoryTemplates({ variant })['profile.yaml'];
     assert.ok(template.includes(MEMORY_PROFILE_HEADING_RULE.split('\n').join('\n  ')));
     assert.doesNotMatch(template, /__PROFILE_HEADING__/);

@@ -13,11 +13,6 @@ description: |
   details or health context, belong in PEOPLE under the user's label rather than being discarded.
   One file per subject; update it when the fact changes.
 
-  __HISTORY__
-
-  A forget request is not a new fact or event: do not add a note that restates the withdrawn
-  content or names it as deleted, including when the user refers to it only by a label.
-
   __NEVER_KEEP__
 
   __DECIDE__

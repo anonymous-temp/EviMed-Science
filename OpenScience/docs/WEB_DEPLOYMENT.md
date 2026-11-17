@@ -1210,6 +1210,12 @@ What the deployment adds to the service (`deploy/web/docker-compose.yml`, `deplo
 - **The memory templates.** `deploy/web/openviking/memory-templates/` — ten types, the platform's keep / never-keep policy
   written in the engine's template language — is bind-mounted read-only at `/app/memory-templates`. A missing mount is silent
   upstream (the server falls back to its built-in types), which is why the control plane checks it.
+  `OPEN_SCIENCE_MEMORY_TEMPLATES_DIR` selects that default, `memory-templates-extraction-v2`, or
+  the opt-in `memory-templates-next`. In this release the first two retain the production bytes.
+  Only `next` carries the November 17 history, optional project stage, preference scope,
+  passing-detail, forget-request and profile-heading rules. Do not make it default before an
+  attribution comparison against the production templates on the same sessions; higher retention
+  alone is insufficient, because assistant suggestions must not become user rules or preferences.
 - **The model path.** The engine's `vlm` is this deployment's own model gateway (`http://open-science-web:8787/internal/model/v1`),
   reached over `memory-recall-internal` with a service bearer; the DeepSeek key stays in the control plane. Extraction and
   summaries are booked under the usage purpose `memory-extraction`, Compile rounds under `knowledge`, both to the platform

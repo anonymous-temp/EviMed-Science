@@ -159,11 +159,11 @@ function boolEnv(name, fallback) {
   return !["0", "false", "no", "off"].includes(value.toLowerCase());
 }
 
-/** @param {unknown} value @returns {'memory-templates'|'memory-templates-extraction-v2'} */
+/** @param {unknown} value @returns {'memory-templates'|'memory-templates-extraction-v2'|'memory-templates-next'} */
 export function parseMemoryTemplatesDirectory(value) {
   const directory = String(value ?? 'memory-templates').trim() || 'memory-templates';
-  if (directory === 'memory-templates' || directory === 'memory-templates-extraction-v2') return directory;
-  throw new Error('OPEN_SCIENCE_MEMORY_TEMPLATES_DIR must be memory-templates or memory-templates-extraction-v2.');
+  if (directory === 'memory-templates' || directory === 'memory-templates-extraction-v2' || directory === 'memory-templates-next') return directory;
+  throw new Error('OPEN_SCIENCE_MEMORY_TEMPLATES_DIR must be memory-templates, memory-templates-extraction-v2 or memory-templates-next.');
 }
 
 /** @param {unknown} value @returns {'merge'|'verify'} */

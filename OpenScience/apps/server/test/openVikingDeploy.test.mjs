@@ -460,9 +460,9 @@ test("the embedding the index runs is pinned, because every stored vector came f
   assert.ok(pin.rerank.timeoutMs > 0);
 });
 
-test('extraction-v2 keeps all registered schemas and a read-only selectable mount', () => {
+for (const name of ['extraction-v2', 'next']) test(`${name} keeps all registered schemas and a read-only selectable mount`, () => {
   const defaults = renderMemoryTemplates();
-  const variant = renderMemoryTemplates({ variant: 'extraction-v2' });
+  const variant = renderMemoryTemplates({ variant: name });
   for (const [name, text] of Object.entries(variant)) {
     const current = YAML.parse(defaults[name]);
     const parsed = YAML.parse(text);
@@ -474,5 +474,6 @@ test('extraction-v2 keeps all registered schemas and a read-only selectable moun
   assert.ok(base.services['evimed-openviking'].volumes.includes('./openviking/${OPEN_SCIENCE_MEMORY_TEMPLATES_DIR:-memory-templates}:/app/memory-templates:ro'));
   assert.equal(base.services['evimed-openviking-init'].environment.OPEN_SCIENCE_MEMORY_TEMPLATES_DIR, '${OPEN_SCIENCE_MEMORY_TEMPLATES_DIR:-memory-templates}');
   assert.match(base.services['evimed-openviking-init'].command.join('\n'), /templates = release \/ template_directory/);
+  assert.ok(base.services['evimed-openviking-init'].command.join('\n').includes(`'memory-templates-${name}'`));
   assert.equal(base.services['open-science-web'].environment.OPEN_SCIENCE_MEMORY_TEMPLATES_DIR, '${OPEN_SCIENCE_MEMORY_TEMPLATES_DIR:-memory-templates}');
 });

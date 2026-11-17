@@ -13,9 +13,8 @@ import { fileURLToPath } from "node:url";
 
 import { MEMORY_DECIDE_EXTRACTION_V2_TEXT, MEMORY_DECIDE_TEXT, MEMORY_NEVER_KEPT_TEXT, MEMORY_SAFETY_NOTES_TEXT } from "../../../../packages/domain/src/memoryNeverKept.mjs";
 
-import { MEMORY_PROFILE_HEADING_RULE } from "../../../../packages/domain/src/memoryProfile.mjs";
-
-import { extractionV2Source, HISTORY_RULE } from "./extraction-v2.mjs";
+import { extractionV2Source } from "./extraction-v2.mjs";
+import { nextSource } from "./next.mjs";
 
 const src = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(src, "..", "memory-templates");
@@ -58,15 +57,15 @@ const PASTED_RULE_TYPES = new Set(["preferences.yaml", "corrections.yaml", "prof
 
 /**
  * The rendered text of every type, by file name. `variant` is "full" (every type carries the whole never-kept block: what is
- * deployed), "short-never" (the lab variant above), or the opt-in "extraction-v2" release directory.
+ * deployed), "short-never" (the lab variant above), or the opt-in "extraction-v2" and "next" release directories.
  * `decide` names the decide block (`DECIDE_VARIANTS`); anything but `current` is a lab variant.
  * `safetyNotes` adds the opt-in dedicated safety type and its routing guidance; the deployed files stay unchanged.
  * `pastedRule: "v1"` adds the lab attribution wording at the point of use in the three personal types.
- * @param {{ variant?: "full" | "short-never" | "extraction-v2", decide?: "current" | "purpose" | "purpose-verify", safetyNotes?: boolean, pastedRule?: "current" | "v1" }} [options]
+ * @param {{ variant?: "full" | "short-never" | "extraction-v2" | "next", decide?: "current" | "purpose" | "purpose-verify", safetyNotes?: boolean, pastedRule?: "current" | "v1" }} [options]
  */
 export function renderMemoryTemplates({ variant = "full", decide: decideName = "current", safetyNotes = false, pastedRule = "current" } = {}) {
-  if (!["full", "short-never", "extraction-v2"].includes(variant)) throw new Error(`unknown variant ${variant}`);
-  if (variant === "extraction-v2" && (decideName !== "current" || safetyNotes || pastedRule !== "current")) throw new Error("extraction-v2 is one complete variant; do not combine lab variants");
+  if (!["full", "short-never", "extraction-v2", "next"].includes(variant)) throw new Error(`unknown variant ${variant}`);
+  if (["extraction-v2", "next"].includes(variant) && (decideName !== "current" || safetyNotes || pastedRule !== "current")) throw new Error(`${variant} is one complete variant; do not combine lab variants`);
   if (!Object.hasOwn(DECIDE_VARIANTS, decideName)) throw new Error(`unknown decide variant ${decideName}`);
   if (!["current", "v1"].includes(pastedRule)) throw new Error(`unknown pasted-rule variant ${pastedRule}`);
   const indented = (/** @type {string} */ text) => text.trimEnd().split("\n")
@@ -79,7 +78,7 @@ export function renderMemoryTemplates({ variant = "full", decide: decideName = "
   const rendered = {};
   for (const name of fs.readdirSync(src).filter((file) => file.endsWith(".yaml")).sort()) {
     const source = fs.readFileSync(path.join(src, name), "utf8");
-    const text = variant === "extraction-v2" ? extractionV2Source(name, source) : source;
+    const text = variant === "extraction-v2" ? extractionV2Source(name, source) : variant === "next" ? nextSource(name, source) : source;
     if (!text.includes("__NEVER_KEEP__")) throw new Error(`${name} does not carry the never-kept block`);
     if (!text.includes("__DECIDE__")) throw new Error(`${name} does not carry the decide block`);
     if (!text.includes("__LANGUAGE__")) throw new Error(`${name} does not carry the language block`);
@@ -88,8 +87,7 @@ export function renderMemoryTemplates({ variant = "full", decide: decideName = "
     const safety = safetyNotes ? `\n\n  ${indented(MEMORY_SAFETY_NOTES_TEXT)}` : "";
     const attribution = pastedRule === "v1" && PASTED_RULE_TYPES.has(name) && !text.includes(PASTED_RULE_V1)
       ? `\n\n  ${indented(PASTED_RULE_V1)}` : "";
-    rendered[name] = text.replace("__HISTORY__", () => indented(HISTORY_RULE)).replace("__NEVER_KEEP__", () => never).replace("__DECIDE__", () => decide + safety).replace("__LANGUAGE__", () => language + attribution)
-      .replace("__PROFILE_HEADING__", () => indented(MEMORY_PROFILE_HEADING_RULE));
+    rendered[name] = text.replace("__NEVER_KEEP__", () => never).replace("__DECIDE__", () => decide + safety).replace("__LANGUAGE__", () => language + attribution);
     if (variant === "extraction-v2") rendered[name] = rendered[name].replace(/^[ \t]+$/gm, "");
   }
   if (safetyNotes) {
@@ -108,6 +106,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   // `node build.mjs` renders what is deployed. A lab variant is rendered elsewhere, never over it:
   // `node build.mjs --variant short-never --out /tmp/templates-b`, `node build.mjs --decide purpose --out /tmp/templates-purpose`.
   // `node build.mjs --variant extraction-v2 --out deploy/web/openviking/memory-templates-extraction-v2` renders the selectable release.
+  // `node build.mjs --variant next --out deploy/web/openviking/memory-templates-next` renders the attribution candidate.
   // Add `--check` to compare without writing.
   // `node build.mjs --safety-notes --out /tmp/templates-safety` adds the dedicated safety type only in a lab variant.
   const arguments_ = process.argv.slice(2);
@@ -117,12 +116,12 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const pastedRule = option("--pasted-rule") ?? "current";
   const target = option("--out");
   const safetyNotes = arguments_.includes("--safety-notes");
-  if (!["full", "short-never", "extraction-v2"].includes(variant)) throw new Error(`unknown variant ${variant}`);
+  if (!["full", "short-never", "extraction-v2", "next"].includes(variant)) throw new Error(`unknown variant ${variant}`);
   if (!Object.hasOwn(DECIDE_VARIANTS, decide)) throw new Error(`unknown decide variant ${decide}`);
   if (!["current", "v1"].includes(pastedRule)) throw new Error(`unknown pasted-rule variant ${pastedRule}`);
   if ((variant !== "full" || decide !== "current" || safetyNotes || pastedRule !== "current") && (!target || path.resolve(target) === out)) throw new Error("a lab variant is rendered with --out <directory>, never over the deployed templates");
   const directory = target ? path.resolve(target) : out;
-  const rendered = renderMemoryTemplates({ variant: /** @type {"full" | "short-never" | "extraction-v2"} */ (variant), decide: /** @type {"current" | "purpose" | "purpose-verify"} */ (decide), safetyNotes, pastedRule: /** @type {"current" | "v1"} */ (pastedRule) });
+  const rendered = renderMemoryTemplates({ variant: /** @type {"full" | "short-never" | "extraction-v2" | "next"} */ (variant), decide: /** @type {"current" | "purpose" | "purpose-verify"} */ (decide), safetyNotes, pastedRule: /** @type {"current" | "v1"} */ (pastedRule) });
   if (arguments_.includes("--check")) {
     const names = fs.readdirSync(directory).filter(name => name.endsWith(".yaml")).sort();
     if (JSON.stringify(names) !== JSON.stringify(Object.keys(rendered).sort())) throw new Error("rendered template file set differs");

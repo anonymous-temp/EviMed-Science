@@ -40,19 +40,7 @@ description: |
     time-limited context that do not fit the profile -> NOTES. Do not infer a personal trait
     from the subject of a question.
 
-  __HISTORY__
-
-  A forget request is not a new fact or event: do not add a note that restates the withdrawn
-  content or names it as deleted, including when the user refers to it only by a label.
-
   __NEVER_KEEP__
-
-  Keep a concrete number, model name, cost, household detail or project status the user states
-  about their own life or work even in passing: one concise dated line in the matching file.
-  Keep their corrections and explicit confirmation of a suggestion or document fact, with its
-  origin in the wording. An assistant suggestion or a document claim alone is not a first-person
-  fact, preference or project state; it remains in the source conversation. A user opinion stays
-  labelled "User believes:" in NOTES, never promoted to a rule or objective project stage.
 
   __DECIDE__
 
@@ -61,14 +49,16 @@ description: |
   1. Keep every existing bullet that is still valid, with its existing as-of date; do not
      rebuild the profile from only the latest conversation.
   2. Add only genuinely new facts; merge semantic duplicates into one bullet.
-  3. For a changed state (role, employer, field of work, education), write the latest stated value first and retain bounded dated earlier values in this same file. A role or line of work
+  3. For a changed state (role, employer, field of work, education), replace the old bullet
+     with the latest stated value; keep dated prior states in NOTES or the person's history. A role or line of work
      stated beside an existing one, without saying the earlier one changed or ended, is a
      second bullet, not a replacement: a person can be a nurse and also study for a master's degree.
   4. Remove any bullet that the hard boundaries exclude, even when asked to remember it.
 
   # Required Markdown format
-  __PROFILE_HEADING__
-  - Every current bullet ends with the date the user most recently stated or confirmed it, in the
+  - One H1 heading with the name the user gave for themselves, or the word for "user" in {{ language }}
+    (用户 in Chinese) when they gave none, followed directly by bullet statements. No H2/H3 headings, tables, JSON or paragraphs.
+  - Every bullet ends with the date the user most recently stated or confirmed it, in the
     exact form "(as of YYYY-MM-DD)". Keep an old bullet's date when nothing newer confirms it.
   - Concise, self-contained declarative bullets, normally under 30 words.
 directory: "viking://user/{{ user_space }}/memories"
@@ -80,10 +70,10 @@ fields:
     description: |
       Complete Markdown profile of the user's durable current state:
 
-      # <name the user gave, or the exact fallback heading specified above>
+      # <name the user gave, or the word for "user" in {{ language }}>
       - <current stable fact> (as of YYYY-MM-DD)
       - <current stable fact> (as of YYYY-MM-DD)
 
-      No other headings, labels (except 曾为 / earlier), tables or prose. Preserve untouched valid bullets and their
-      dates; a changed state gets its latest confirmed value plus its earlier-value bullet.
+      No other headings, labels, tables or prose. Preserve untouched valid bullets and their
+      dates; replace a changed state with its latest confirmed value.
     merge_op: patch

@@ -33,7 +33,7 @@ const sourcesOf = pack => (pack.sources?.sessions ?? []).filter(session => !sess
  * @param {{packs:string,adapter?:any,verdicts?:Record<string,any>,limit?:number}} options */
 export async function replayWriteClasses({ packs, adapter = {}, verdicts = {}, limit = 40 }) {
   limit = Math.min(40, Math.max(1, limit));
-  const templates = renderMemoryTemplates();
+  const templates = renderMemoryTemplates({ variant: 'next' });
   const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }, rows = [];
   const account = value => { for (const key of Object.keys(usage)) usage[key] += Number(value?.[key]) || 0; };
   const baselineRef = '717308708';
@@ -112,7 +112,7 @@ export async function replayWriteClasses({ packs, adapter = {}, verdicts = {}, l
     const refused = await judge.check({ userId: 'offline-replay', candidates, conversation });
     rows.push({ id: `basic:${number}`, kind: 'basic-pasted-check', evidence: row.evidence, mode: adapter.basicCall ? 'injected-model' : 'recorded-verdict-fake', refused: [...refused], robust: false });
   }
-  return { baselineRef, cases: rows.length, templateFiles: Object.keys(templates), usage, rows,
+  return { baselineRef, templateSet: 'memory-templates-next', cases: rows.length, templateFiles: Object.keys(templates), usage, rows,
     limits: { maximumCases: 40, maximumCommitCalls: 1, extraction: adapter.extract ? 'measured-by-injected-adapter' : 'not-measured-no-extraction-adapter',
       syntheticVerdicts: !adapter.judge, checkpointSources: 'Do not interpret a checkpoint reconstruction as an exact commit or a false-positive rate.' } };
 }

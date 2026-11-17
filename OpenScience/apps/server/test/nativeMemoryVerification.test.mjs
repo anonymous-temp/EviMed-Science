@@ -162,6 +162,7 @@ test('the single template setting defaults to current and refuses an unknown dir
   assert.equal(parseMemoryTemplatesDirectory(undefined), 'memory-templates');
   assert.equal(parseMemoryTemplatesDirectory(''), 'memory-templates');
   assert.equal(parseMemoryTemplatesDirectory('memory-templates-extraction-v2'), 'memory-templates-extraction-v2');
+  assert.equal(parseMemoryTemplatesDirectory('memory-templates-next'), 'memory-templates-next');
   assert.throws(() => parseMemoryTemplatesDirectory('../elsewhere'), /OPEN_SCIENCE_MEMORY_TEMPLATES_DIR/);
 });
 

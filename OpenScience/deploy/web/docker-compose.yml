@@ -271,7 +271,7 @@ services:
         # Naming the path here is the loud version.
         release = pathlib.Path('/input/openviking')
         template_directory = os.environ.get('OPEN_SCIENCE_MEMORY_TEMPLATES_DIR') or 'memory-templates'
-        if template_directory not in ('memory-templates', 'memory-templates-extraction-v2'):
+        if template_directory not in ('memory-templates', 'memory-templates-extraction-v2', 'memory-templates-next'):
             raise SystemExit('invalid OPEN_SCIENCE_MEMORY_TEMPLATES_DIR')
         templates = release / template_directory
         needed = [templates]

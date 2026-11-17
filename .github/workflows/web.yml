@@ -211,6 +211,9 @@ jobs:
 
       - name: Check generated artifacts are current
         run: |
+          node deploy/web/openviking/memory-templates-src/build.mjs --check
+          node deploy/web/openviking/memory-templates-src/build.mjs --variant extraction-v2 --out deploy/web/openviking/memory-templates-extraction-v2 --check
+          node deploy/web/openviking/memory-templates-src/build.mjs --variant next --out deploy/web/openviking/memory-templates-next --check
           pnpm check:capabilities
           pnpm check:skill-vocabulary
           pnpm check:skill-digests

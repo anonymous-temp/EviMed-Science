@@ -11,13 +11,8 @@ description: |
   Only what the user stated as theirs in a user-role message. Never a next step, a
   suggestion or a list the assistant produced as though the user committed to it. Useful
   suggestions may be retained separately in NOTES as "assistant suggested".
-  One file per subject. When the user says an item is done or dropped, mark it completed or dropped
-  with the stated date; keep bounded earlier states, without presenting them as open.
-
-  __HISTORY__
-
-  A forget request is not a new fact or event: do not add a note that restates the withdrawn
-  content or names it as deleted, including when the user refers to it only by a label.
+  One file per subject. When the user says an item is done or dropped, remove it; delete
+  the file when nothing in it is open.
 
   __NEVER_KEEP__
 
