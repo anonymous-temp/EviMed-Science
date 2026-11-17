@@ -134,6 +134,7 @@ export class LearningMetrics {
     for (const groupKey of this.funnelClean.keys()) if (!live.has(groupKey)) this.funnelClean.delete(groupKey);
   }
 
+  /** @returns {{name: string, help: string, type: "counter" | "gauge", series: {value: number, labels?: Record<string, string>}[]}[]} */
   funnelFamilies() {
     const counts = new Map();
     for (const run of this.funnelRuns.values()) for (const reason of run.reasons) {

@@ -3597,7 +3597,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The external agent-memory API (`/api/agent-memory/v1`): reads and acts on an account's memory through the store the memory page
   // uses, and stages an episode as a pending candidate that the owner confirms (`agentMemoryRoutes.mjs`).
   const agentMemoryRoutes = createAgentMemoryRoutes({
-    openingContext: { resident: residentProfiles, opening: input => memoryGatewayHandler.opening(input), get sourceDeletion() { return sourceDeletion; } },
+    openingContext: { resident: residentProfiles, opening: input => /** @type {any} */ (memoryGatewayHandler).opening(input), get sourceDeletion() { return sourceDeletion; } },
     admission: { admit: input => memoryAdmission.admit(input) },
     config, apiKeys: agentApiKeys, store, memorySettings, capsules: capsuleService,
     historySearch: input => recallHistoryForAgent({ config, history: memoryHistory, admission: memoryAdmission, sourceDeletion }, input),

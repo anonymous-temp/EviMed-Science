@@ -1473,7 +1473,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const answer = await dispatch({ req: { headers: {} }, url: new URL(path, 'http://evimed.local'),
         found: { match: [] }, route, user, project, origin: 'agent-api' });
       if (answer.status !== 200 && answer.status !== 404) throw new HttpError(answer.status, 'memory_engine_unavailable', 'Opening memory could not be read.');
-      parts.push({ name, path, value: answer.json?.result ?? null, omitted: answer.outcome === 'withheld' || answer.status === 404,
+      parts.push({ name, path, value: /** @type {any} */ (answer.json)?.result ?? null, omitted: answer.outcome === 'withheld' || answer.status === 404,
         ...(name === 'profile' && 'elided' in answer ? { elided: answer.elided } : {}) });
     }
     return parts;

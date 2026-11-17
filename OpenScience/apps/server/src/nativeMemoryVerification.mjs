@@ -242,7 +242,7 @@ export class NativeMemoryVerification {
     const assessed = await this.assess(userId, entries, { batchSize: 32, maxAttempts: 1, strictBatch: true });
     const rewrites = changes.map(change => {
       let after = change.after;
-      for (const row of assessed.results.filter(row => row.uri === change.uri)) {
+      for (const row of assessed.results.filter(result => result.uri === change.uri)) {
         if (['corrected', 'attribution_wrong'].includes(row.status) && row.corrected) after = replaceStatement(after, row.fingerprint, row.corrected);
       }
       return { ...change, after };

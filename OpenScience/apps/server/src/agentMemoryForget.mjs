@@ -24,7 +24,9 @@ export async function forgetForAgent({ config, native, admission }, { user, proj
   }
   // A bare statement has account-wide rejection authority, not a project-labelled file.
   if (statement && project.id !== 'default') throw new HttpError(403, 'agent_key_project_denied', 'Statement withdrawal uses the ordinary account namespace; omit projectId.');
-  let uri = null, profileLine = false, options = statement ? { statement: input.statement } : {};
+  /** @type {{statement?: string, lines?: string[]}} */
+  let options = statement ? { statement: input.statement } : {};
+  let uri = null, profileLine = false;
   if (!statement) {
     const record = await native.getRecord(user.id, input.recordId);
     if (record.sensitive === true || privateByDefault(record)) throw new HttpError(404, 'memory_not_found', 'No such memory.');

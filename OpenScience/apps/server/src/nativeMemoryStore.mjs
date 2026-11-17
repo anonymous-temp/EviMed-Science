@@ -2425,8 +2425,8 @@ export class NativeMemoryStore {
     // Remembered from a named project's page in the account's own namespace: the engine is told which project, as a conversation of it is
     // (`projectContextLine`), so 「这个项目…」 goes on that project's card.
     const line = context.kind !== 'geo-project' && projectId && projectId !== "default" ? projectContextLine(projectName) : null;
-    const commit = await this.#submitWords(userId, { content: `请记住：${maskIdentifiers(words)}`, projectId, origin: "page", prefix: "evimed-page-", pendingText: words,
-      context, projectLine: line, externalSource });
+    const commit = /** @type {any} */ (await this.#submitWords(userId, { content: `请记住：${maskIdentifiers(words)}`, projectId, origin: "page", prefix: "evimed-page-", pendingText: words,
+      context, projectLine: line, externalSource }));
     if (externalSource) return { pending: { id: commit.archiveUri ?? commit.candidateId, text: words, at: externalSource.saidAt,
       state: commit.state, ...(commit.error ? { reason: commit.error } : {}) }, source: externalSource, storage: 'directly_stated' };
     return { pending: { id: commit.archiveUri, text: words, at: commit.createdAt, state: "pending" } };
