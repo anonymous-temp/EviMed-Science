@@ -259,7 +259,7 @@ export function removalStatement(text) {
     .replace(/^\*\*(?:habit|fact|preference|note|习惯|事实|偏好)[:：]\*\*\s*/i, '').replace(/\*\*/g, '');
   body = body.replace(/[([【{「『〈<]([^()[\]【】{}「」『』〈〉<>\n]*)[)\]】}」』〉>]/gu, (whole, note) => {
     const label = note.trim();
-    return DATE_NOTE.test(label) || /^\d{4}-\d{2}-\d{2}\s+(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(label) || /^(?:source|来源|出处)\s*[:：]/i.test(label) || new RegExp(`^(?:${SPEAKER})\\s*[:：]?$`, 'i').test(label) ? '' : whole;
+    return DATE_NOTE.test(label) || /^(?:source|来源|出处)\s*[:：]/i.test(label) || new RegExp(`^(?:${SPEAKER})\\s*[:：]?$`, 'i').test(label) ? '' : whole;
   });
   // Source-labelled clauses are metadata; a separator ends the label, not the fact.
   body = body.replace(/(?:^|[;；])\s*(?:source|来源|出处)\s*[:：][^;；\n]*(?:[;；]|$)/gim, '');
@@ -269,14 +269,16 @@ export function removalStatement(text) {
 
 /** Distinctive alphanumeric identifiers survive rewording without a subject-word gate.
  * Generic values still need their subject; provenance and dates alone never withdraw another fact.
- * @param {string} written @param {string} removed @param {{ignoreWhitespace?:boolean,shortContainment?:boolean,hardTokenMatch?:boolean}} [options] */
+ * @param {string} written @param {string} removed @param {{ignoreWhitespace?:boolean,shortContainment?:boolean,hardTokenMatch?:boolean,createdAt?:string|null}} [options] */
 export function removalContentMatch(written, removed, options = {}) {
   if (containsRemoved(written, removed, options)) return true;
   if (options.hardTokenMatch === false) return false;
   const statement = removalStatement(removed), candidate = removalStatement(written);
   const tokens = hardTokens(statement);
-  if (!tokens.length || !tokens.some(token => !/^\d{4}(?:[-/.年]\d{1,2}(?:[-/.月]\d{1,2}日?)?)?$/.test(token))
-    || !tokens.every(token => tokenPresent(token, candidate, options))) return false;
+  if (!tokens.length || !tokens.some(token => !/^\d{4}(?:[-/.年]\d{1,2}(?:[-/.月]\d{1,2}日?)?)?$/.test(token) && tokenPresent(token, candidate, options))
+    || !tokens.every(token => sourceHasToken(token, { text: candidate, created_at: options.createdAt }, options))) return false;
+  // A trusted original message timestamp can ground an extractor-added date/minute,
+  // but never supplies the non-date content token required above.
   // A complete identifier is distinctive; number/unit pairs and generic hyphenated words are not.
   if (tokens.some(token => /^(?=[a-z0-9_.:/-]*[a-z])(?=[a-z0-9_.:/-]*\d)[a-z][a-z0-9_.:/-]*$/i.test(token))) return true;
   // Remove value shapes from both sides before checking the remaining subject words.

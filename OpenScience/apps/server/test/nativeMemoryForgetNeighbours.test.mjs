@@ -157,14 +157,15 @@ test('content identifiers fence paraphrases without a judge, but provenance iden
     ['M-41633', 'My old project is M-41633.'],
     ['M-41633', 'Forget M-41633.'],
     ...['M-31025', 'ｍ＿３１０２５', 'm 31025'].map(id => [
-      'Parked at M-31025 (2026-11-11 03:30).', `Please remember: I parked at ${id}.`,
+      'Parked at M-31025 (2026-11-11 03:30).', `Please remember: I parked at ${id}.`, '2026-11-11T03:30:01.687Z',
     ]),
   ];
   const history = new MemoryHistory({ config: {}, contexts: {}, ledger: {} });
-  for (const [removed, text] of cases) {
-    assert.equal(removalContentMatch(text, removed), true);
-    assert.deepEqual(await history.matchRemoved({ ownerId: 'u' }, removed, [{ text }], null), [{ text }]);
-    assert.equal((await removalRefusals({ userId: 'u', overlay: overlayFor(removed), candidates: [{ text }] })).size, 1);
+  for (const [removed, text, createdAt] of cases) {
+    assert.equal(removalContentMatch(text, removed, { createdAt }), true);
+    const message = { text, created_at: createdAt };
+    assert.deepEqual(await history.matchRemoved({ ownerId: 'u' }, removed, [message], null), [message]);
+    if (!createdAt) assert.equal((await removalRefusals({ userId: 'u', overlay: overlayFor(removed), candidates: [{ text }] })).size, 1);
   }
   for (const [removed, text] of [
     ['Source: T-92516', 'The appointment was filed under T-92516.'],
@@ -172,7 +173,11 @@ test('content identifiers fence paraphrases without a judge, but provenance iden
     ['My booking is T-92516.', 'My booking is T-92517.'],
     ['Dose for T-92516 is 12 mg.', 'Dose for T-92516 is 112 mg.'],
   ]) assert.equal(removalContentMatch(text, removed), false);
-  assert.equal(removalStatement('Parked at M-31025 (2026-11-11 03:30).'), 'parked at m-31025 .');
+  assert.equal(removalContentMatch('Please remember: I parked at M-31025.', 'Parked at M-31025 (2026-11-11 03:30).'), false, 'an unbound timestamp cannot be assumed to be provenance');
+  assert.equal(removalContentMatch('Appointment (2026-11-12 03:30).', 'Appointment (2026-11-11 03:30).'), false);
+  assert.equal(removalContentMatch('Independent note.', '2026-11-11', { createdAt: '2026-11-11T03:30:00Z' }), false);
+  assert.equal(removalContentMatch('Appointment.', 'Appointment (2026-11-11 03:30).', { createdAt: '2026-11-11T03:30:00Z' }), false);
+  assert.match(removalStatement('Appointment (2026-11-11 03:30)'), /2026-11-11 03:30/);
   assert.match(removalStatement('Appointment date (2026-11-11)'), /2026-11-11/);
 });
 

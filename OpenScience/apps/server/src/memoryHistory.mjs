@@ -326,7 +326,7 @@ export class MemoryHistory {
   async matchRemoved(context,text,messages,judge,tokens=hardTokens(removalStatement(text))) {
     const statement = removalStatement(text);
     const literal = new Set(messages.filter(message => removalContentMatch(message.text, statement,
-      { ignoreWhitespace: this.config.memoryForgetRequestCheckEnabled === true, shortContainment: true })));
+      { ignoreWhitespace: this.config.memoryForgetRequestCheckEnabled === true, shortContainment: true, createdAt: message.created_at })));
     const pending = messages.filter(message => !literal.has(message)
       && (!tokens.length || tokens.every(token => sourceHasToken(token, { text: removalStatement(message.text) },
         { ignoreWhitespace: this.config.memoryForgetRequestCheckEnabled === true }))));
