@@ -52,7 +52,7 @@ export function renderSafetyNotes(files, { maxTokens, maxChars = SAFETY_NOTES_MA
     .sort((a, b) => String(b.file.updatedAt ?? b.file.modTime ?? '').localeCompare(String(a.file.updatedAt ?? a.file.modTime ?? ''))
       || String(a.file.uri).localeCompare(String(b.file.uri)));
   const coverage = /** @type {any} */ (files).legacyUnclassified > 0 ? '旧画像或人物记录尚未全部标注安全信息；提供个人建议前，用 mcp__openviking__search 查找并读取对应人的完整文件。' : '';
-  if (!rows.length) return { text: coverage, memos: [] };
+  if (!rows.length) return { text: '', memos: [] };
   const memos = [];
   let partial = false;
   const render = (items, more) => [HEADER,

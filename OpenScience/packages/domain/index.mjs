@@ -2872,3 +2872,5 @@ export { nativeResearchRowIsAdmitted, nativeResearchToolProfileHolds } from './s
 export { privateByDefault, sourcePrivacyOf, sourceAllowsEgress } from "./src/memoryPrivacy.mjs";
 
 export { checkMemoryNoteLabels, memoryHistoryLine, MEMORY_EXTRACTION_V2_REVIEW_TEXT } from './src/memoryExtractionFormat.mjs';
+
+export { MEMORY_PROFILE_NEUTRAL_TITLES, MEMORY_PROFILE_HEADING_RULE, isNeutralProfileHeading, profileMemoryStatements } from './src/memoryProfile.mjs';

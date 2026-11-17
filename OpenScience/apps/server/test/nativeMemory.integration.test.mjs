@@ -69,13 +69,16 @@ test("an account of a deployment with the engine is registered with it, and sett
 test("a memory file is a record, the profile is a document of lines, and counts are counted here", options, async (t) => {
   const { userId, store, seed } = await fixture(t);
   const language = seed("preferences/language.md", "Replies in Simplified Chinese; code and commit messages in English.", { type: "preferences" });
-  const profile = seed("profile.md", "# Profile\n- Works as a pharmacist in a hospital (as of 2026-09-01)\n- Based in Chengdu", { type: "profile" });
+  const profile = seed("profile.md", "# User\n- Works as a pharmacist in a hospital (as of 2026-09-01)\n- Based in Chengdu", { type: "profile" });
   seed("projects/oncology-review.md", "# Oncology review\n领域：肿瘤药学\n## 目标\n- 评价某药的疗效\n## 阶段\n- 检索中", { type: "project_context", tags: ["project=p_onc"] });
   seed("evimed/derived.md", "derived index, not a memory");
   const profilePage = await store.profile(userId, { holder: { id: userId, name: "T" } });
   assert.equal(profilePage.activeCount, 4, "one file, two profile lines, one project card");
   const lines = profilePage.records.filter((record) => record.document);
   assert.equal(lines.length, 2);
+  assert.equal(profilePage.activeCount, profilePage.records.filter(record => record.status === 'active').length);
+  assert.equal(profilePage.groups.profile.length, lines.length);
+  assert.equal((await store.mapMemories(userId)).records.length, profilePage.activeCount);
   assert.equal(lines[0].document.uri, profile);
   assert.ok(lines.some((record) => record.value === "Works as a pharmacist in a hospital" && record.lastConfirmedAt === null), "an as-of date is not the line's text, and since the attribution round (a record's producer evidence is per statement and never a confirmation) it is no confirmation either");
   const preference = profilePage.records.find((record) => record.uri === language);
@@ -123,7 +126,7 @@ test("an edit is a compare-and-swap on the text last read, and it is revisioned 
 test("what a memory used to say comes back from its revisions for the map; an undo, a forget and a delete leave nothing to draw", options, async (t) => {
   const { userId, store, seed } = await fixture(t);
   const uri = seed("preferences/format.md", "Answers as short paragraphs.", { type: "preferences" });
-  const profile = seed("profile.md", "# Profile\n- Target journal: Kidney International\n- Works in a hospital pharmacy", { type: "profile" });
+  const profile = seed("profile.md", "# User\n- Target journal: Kidney International\n- Works in a hospital pharmacy", { type: "profile" });
   const edit = async (test_, value) => { const record = (await store.records(userId)).find(test_); return store.update(userId, record.id, { value, expectedVersion: record.version }); };
 
   await edit((entry) => entry.uri === uri, "Tables for comparisons.");
@@ -169,7 +172,7 @@ test("what a memory used to say comes back from its revisions for the map; an un
 
 test("a line of the profile is edited and removed as a line of its document; a delete scrubs the history, a forget keeps it for the undo", options, async (t) => {
   const { userId, store, seed, sessions, overlay } = await fixture(t);
-  const uri = seed("profile.md", "# Profile\n- Works in a hospital pharmacy (as of 2026-09-01)\n- Allergic to penicillin", { type: "profile" });
+  const uri = seed("profile.md", "# User\n- Works in a hospital pharmacy (as of 2026-09-01)\n- Allergic to penicillin", { type: "profile" });
   const [first, second] = (await store.records(userId)).filter((entry) => entry.document).sort((a, b) => a.value.localeCompare(b.value));
   assert.match(first.id, /^nm_[a-f0-9]{24}_[a-f0-9]{12}$/);
   const dated = await store.update(userId, first.id, { value: "Allergic to penicillin and sulfonamides", expectedVersion: first.version });

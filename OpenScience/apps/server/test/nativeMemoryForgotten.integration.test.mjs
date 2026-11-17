@@ -55,7 +55,7 @@ test("a forgotten file is listed with its text and comes back through the engine
 
 test("a forgotten line of the profile is listed as a line and goes back into the document", options, async (t) => {
   const { userId, store, seed, sessions } = await fixture(t);
-  const uri = seed("profile.md", "# Profile\n- Works in a hospital pharmacy (as of 2026-09-01)\n- Allergic to penicillin", { type: "profile" });
+  const uri = seed("profile.md", "# User\n- Works in a hospital pharmacy (as of 2026-09-01)\n- Allergic to penicillin", { type: "profile" });
   const lines = (await store.records(userId)).filter((record) => record.document);
   const allergy = lines.find((line) => /penicillin/.test(line.value));
   const gone = await store.update(userId, allergy.id, { status: "archived", expectedVersion: allergy.version });

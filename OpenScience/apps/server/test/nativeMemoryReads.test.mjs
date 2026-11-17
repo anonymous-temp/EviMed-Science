@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { unzipSync } from 'fflate';
 import { NativeMemoryStore } from "../src/nativeMemoryStore.mjs";
 
 const ROOT = "viking://user/u1/memories";
@@ -159,4 +160,21 @@ test('a file heading is its visible title, rather than a stale filename after co
   const [record] = await store.records('u1');
   assert.equal(record.summary, 'Current name');
   assert.match(record.value, /Independent fact/);
+});
+
+
+test('neutral profile headings never become records or targets, including title-only files and old forgets', async () => {
+  for (const title of ['用户', 'User']) {
+    const { files, store } = engine({ count: 0, delay: 0 });
+    const uri = `${ROOT}/profile.md`;
+    files.set(uri, { body: `# ${title}`, modTime: '2026-11-17' });
+    assert.deepEqual(await store.records('u1'), []);
+    assert.deepEqual((await store.search('u1', '')).items, []);
+    store.overlay.memoryForgetBody = async (_user, _uri, body) => body;
+    const pack = unzipSync(await store.exportPack('u1'));
+    assert.deepEqual(JSON.parse(Buffer.from(pack['manifest.json']).toString()).files, []);
+    store.overlay.forgottenRevisions = async () => [{ id: 'legacy', uri, change: 'updated', reason: 'forgotten', actor: 'user',
+      before: `# ${title}\n- Designs reports.`, after: '- Designs reports.' }];
+    assert.deepEqual(await store.forgotten('u1'), []);
+  }
 });

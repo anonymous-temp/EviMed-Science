@@ -639,7 +639,9 @@ Modules whose pages have peer views (前沿动态, 医学检索, 知识库, 记�
 
 ### Memory title reachability (2026-11-17)
 
-关于你 includes a profile H1 as an ordinary background row. Its name can be opened,
+关于你 includes a named profile H1 as an ordinary background row. The template's
+neutral unnamed heading is not a personal fact and contributes no row or count;
+the overview, 关于你 count and map agree with the visible active rows. Its name can be opened,
 corrected and forgotten through the same FactDrawer as body facts; surrounding facts
 survive. A file's current H1 takes precedence over its old filename as its visible
 title. A filename-only topic appears as an editable H1 in the existing text editor; opening or cancelling that editor alone changes nothing. Forgetting title text must also withdraw it from recall and extraction;

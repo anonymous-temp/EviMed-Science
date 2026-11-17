@@ -1242,8 +1242,11 @@ technology acceptance still need browser verification.
 
 ### Memory content outside ordinary paragraphs (2026-11-17)
 
-The profile's H1 is a content row in 关于你 → 背景, using the existing FactDrawer
-edit, forget and undo controls. Editing preserves its heading structure; forgetting
+The profile's named H1 is a content row in 关于你 → 背景, using the existing FactDrawer
+edit, forget and undo controls. The extraction template's neutral unnamed headings
+(`memoryProfile.mjs`) are structure: no fact row, count, map mark, forgotten item,
+recall fact, exported fact or line origin. Page counts equal visible active rows;
+a name the person supplies adds one row. Editing preserves its heading structure; forgetting
 removes the title text and records its withdrawal without deleting neighbouring
 facts. Other native files use their H1 as the displayed title when present. A filename-only topic is offered as an H1 in the existing editor, so it can be corrected with its body; opening the editor alone is not a dirty change. Editing
 that title also withdraws and neutralizes an old filename that still carries it.

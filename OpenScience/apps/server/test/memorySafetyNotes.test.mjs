@@ -197,7 +197,10 @@ test('a cut safety statement is never presented as complete; even a tiny opening
 
 test('legacy coverage and failed reads are explicit without fabricating typed safety facts', () => {
   const legacy = renderSafetyNotes(Object.assign([], { legacyUnclassified: 2 }), { maxTokens: 1500 });
-  assert.match(legacy.text, /尚未全部标注.*search/); assert.deepEqual(legacy.memos, []);
+  assert.equal(legacy.text, '', 'unclassified ordinary files alone imply no safety history');
+  assert.deepEqual(legacy.memos, []);
+  const mixed = renderSafetyNotes(Object.assign([file()], { legacyUnclassified: 2 }), { maxTokens: 1500 });
+  assert.match(mixed.text, /尚未全部标注.*search/);
   const failed = renderSafetyNotes(Object.assign([], { unavailable: true }), { maxTokens: 1500 });
   assert.match(failed.text, /暂时无法读取/); assert.deepEqual(failed.memos, []);
   const notes = file({ uri: `${memoryRoot}/notes/patient.md`, type: 'notes' });

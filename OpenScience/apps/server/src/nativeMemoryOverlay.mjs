@@ -1,3 +1,4 @@
+import { MEMORY_PROFILE_NEUTRAL_TITLES, profileMemoryStatements } from '@evimed/domain';
 import { personalMemoryTravels } from './openVikingLayout.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
@@ -55,6 +56,11 @@ export function normalisedStatement(line) {
 export function lineFingerprint(line) {
   return createHash("sha256").update(normalisedStatement(line)).digest("hex");
 }
+
+// Older title-only profiles could acquire an origin through memoryLines' heading fallback.
+// Read and inheritance fences use the same template constants as new writes.
+const neutralProfileOriginPrints = new Set(Object.values(MEMORY_PROFILE_NEUTRAL_TITLES).map(title => lineFingerprint(`# ${title}`)));
+const neutralProfileOrigin = (uri, fingerprint) => String(uri).endsWith('/memories/profile.md') && neutralProfileOriginPrints.has(String(fingerprint));
 
 /** The original conversation set behind one line, flattened when a merge inherits it. @param {any} origin @returns {any[]} */
 export function originalSources(origin) {
@@ -1015,7 +1021,8 @@ export class NativeMemoryOverlay {
    * @param {{ after: string, before?: string, origin?: { revisionId?: string | number | null, engineSession?: string | null, archiveUri?: string | null, projectId?: string | null, projectCreatedAt?:string|null, at?: string | null } | null }} change
    */
   async syncOrigins(userId, uri, { after, before = "", origin = null }) {
-    const prints = (/** @type {string} */ text) => [...new Set(memoryLines(String(text ?? "").split("\n").filter((line) => !LABEL_LINE.test(line.trim())).join("\n")).map(lineFingerprint))];
+    const enumerate = String(uri).endsWith('/memories/profile.md') ? profileMemoryStatements : memoryLines;
+    const prints = (/** @type {string} */ text) => [...new Set(enumerate(String(text ?? "").split("\n").filter((line) => !LABEL_LINE.test(line.trim())).join("\n")).map(lineFingerprint))];
     const present = prints(after);
     await this.#query("DELETE FROM evimed_memory.native_line_origins WHERE user_id=$1 AND uri=$2 AND NOT (fingerprint = ANY($3::text[]))", [owner(userId), String(uri), present]);
     if (!origin) return;
@@ -1041,6 +1048,7 @@ export class NativeMemoryOverlay {
     if (!uris.length) return byUri;
     const result = await this.#query("SELECT o.*,COALESCE(o.project_id,c.project_id) AS project_id,COALESCE(o.project_created_at,CASE WHEN c.created_at<=o.added_at THEN c.project_created_at END) AS source_epoch FROM evimed_memory.native_line_origins o LEFT JOIN evimed_memory.native_commits c ON c.user_id=o.user_id AND c.archive_uri=o.archive_uri AND c.engine_session=o.engine_session WHERE o.user_id=$1 AND o.uri = ANY($2::text[])", [owner(userId), [...uris]]);
     for (const row of result.rows) {
+      if (neutralProfileOrigin(row.uri, row.fingerprint)) continue;
       const lines = byUri.get(String(row.uri)) ?? new Map();
       lines.set(String(row.fingerprint), { revisionId: row.revision_id == null ? null : String(row.revision_id), engineSession: row.engine_session ?? null,
         archiveUri: row.archive_uri ?? null, projectId: row.project_id ?? null, projectCreatedAt:row.source_epoch??null, addedAt: instant(row.added_at),
@@ -1067,7 +1075,7 @@ export class NativeMemoryOverlay {
    * @param {string} userId @param {string} uri @param {Map<string, any[]>} lines */
   async inheritOrigins(userId, uri, lines) {
     for (const [fingerprint, sources] of lines) {
-      if (!sources.length) continue;
+      if (!sources.length || neutralProfileOrigin(uri, fingerprint)) continue;
       const first = sources[0];
       await this.#query(`INSERT INTO evimed_memory.native_line_origins
         (user_id,uri,fingerprint,revision_id,engine_session,archive_uri,project_id,project_created_at,added_at,sources)

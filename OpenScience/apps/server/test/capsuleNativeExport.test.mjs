@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
@@ -191,4 +192,16 @@ test("the domain's share scopes and paths are exactly what the transfer service 
     }
   }
 
+});
+
+
+test('explicit profile export never turns a template heading into a personal fact', async () => {
+  for (const title of Object.values(MEMORY_PROFILE_NEUTRAL_TITLES)) {
+    for (const facts of ['', '\n- I am a researcher.']) {
+      const { service } = fixture({ profile: `# ${title}${facts}` });
+      const exported = await service.exportPreview(userId, 'own-capsule', { scopes: ['workstyle', '+profile'] });
+      assert.deepEqual(exported.entries.map(row => row.content).sort(),
+        ['Keep result tables concise.', ...(facts ? ['I am a researcher.'] : [])].sort());
+    }
+  }
 });

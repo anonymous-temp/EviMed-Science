@@ -1,3 +1,4 @@
+import { isNeutralProfileHeading, profileMemoryStatements, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
 import { readStatus } from './memoryReadStatus.mjs';
 import { mergePeopleFiles, undoPeopleMerge, redirectPeopleWrites } from './nativeMemoryPeopleStore.mjs';
 import { personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
@@ -153,12 +154,9 @@ function statements(body) {
   return memoryLines(String(body ?? "").split("\n").filter((line) => !isLabelLine(line)).join("\n"));
 }
 
-/** Profile titles are user content too. Keep their Markdown identity for exact
- * editing/forgetting; headings beneath H1 remain document structure. */
+/** Named profile titles are user content; the template's unnamed heading is structure. */
 export function profileStatements(body) {
-  const lines = String(body ?? '').split('\n').filter(line => !isLabelLine(line));
-  return lines.map(line => line.trim()).filter(line => line && (/^#\s+/.test(line) || !/^#{1,6}\s/.test(line)))
-    .map(line => line.replace(/^(?:[-*+]|\d+[.)])\s+/, ''));
+  return profileMemoryStatements(String(body ?? '').split('\n').filter(line => !isLabelLine(line)).join('\n'));
 }
 
 /** The reasons of a revision that is itself a forget or a delete (`#write`, `forgetFile`): the version it took a line out of is what its undo goes back to. */
@@ -857,7 +855,7 @@ export class NativeMemoryStore {
     if (!file) throw new HttpError(404, "memory_not_found", "Memory not found.");
     if (line === null) return { file, line: null };
     const raw = file.body.split("\n");
-    const index = raw.findIndex((text) => !isLabelLine(text) && (!/^#{1,6}\s/.test(text.trim()) || file.type === 'profile' && /^#\s/.test(text.trim())) && text.trim()
+    const index = raw.findIndex((text) => !isLabelLine(text) && !isNeutralProfileHeading(text) && (!/^#{1,6}\s/.test(text.trim()) || file.type === 'profile' && /^#\s/.test(text.trim())) && text.trim()
       && lineFingerprint(text.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")).slice(0, 12) === line);
     if (index < 0) throw new HttpError(404, "memory_not_found", "Memory not found.");
     return { file, line: { index, raw: raw[index] } };
@@ -1114,11 +1112,11 @@ export class NativeMemoryStore {
     const scope = { memoryRoot: this.sessions.memoryRoot(userId), projectId, peopleAcrossProjects: this.peopleAcrossProjectsEnabled,
       hiddenUris: [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId, 10000, { peopleAcrossProjects: this.peopleAcrossProjectsEnabled, memoryRoot: this.sessions.memoryRoot(userId) })] };
     const inventory = [...(await this.overlay.files(userId)).values()];
-    const selected = inventory.filter(file => safetyNoteFile(file, scope) && safetyNoteLines(file.body, file.memoryType).length);
-    const legacyUnclassified = inventory.filter(file => safetyNoteFile(file, scope) && !safetyNoteLines(file.body, file.memoryType).length).length;
-    if (!selected.length) return Object.assign([], { legacyUnclassified });
+    const selected = inventory.filter(file => safetyNoteFile(file, scope));
+    if (!selected.length) return [];
     const files = (await this.files(userId, { uris: selected.map(file => file.uri) })).filter(file => safetyNoteFile(file, scope));
     const records = await this.records(userId, { files });
+    let legacyUnclassified = 0;
     const result = files.flatMap(file => {
       const sources = records.filter(record => record.uri === file.uri);
       if (!sources.length) return [];
@@ -1127,12 +1125,18 @@ export class NativeMemoryStore {
         // Profile records are individual statements. Reconstruct only marked lines still visible after redaction.
         const visible = new Set(sources.map(record => lineFingerprint(record.value)));
         const lines = safetyNoteLines(file.body).filter(line => visible.has(lineFingerprint(line)));
-        if (!lines.length) return [];
-        const heading = /^#\s+.+$/m.exec(file.body)?.[0] ?? '# 用户';
+        if (!lines.length) {
+          if (!safetyNoteLines(file.body).length && sources.some(record => record.value.trim())) legacyUnclassified++;
+          return [];
+        }
+        const heading = /^#\s+.+$/m.exec(file.body)?.[0] ?? `# ${MEMORY_PROFILE_NEUTRAL_TITLES.chinese}`;
         const section = file.body.split('\n').find(line => line.trim().startsWith('## ') && line.trim().endsWith(MEMORY_SAFETY_NOTES_ANCHOR));
         body = `${heading}\n${section}\n${lines.map(line => `- ${line}`).join('\n')}`;
       }
-      if (!safetyNoteLines(body, file.type).length) return [];
+      if (!safetyNoteLines(body, file.type).length) {
+        if (body.trim() && file.type === 'people' && !safetyNoteLines(file.body, file.type).length) legacyUnclassified++;
+        return [];
+      }
       const receipt = sourceReceiptState(sources.map(record => ({ id: record.id, contentDigest: record.contentHash,
         sourcePrivacy: record.sourcePrivacy, attribution: record.attribution })), { trusted: true });
       const origins = [...new Set(sources.flatMap(record => record.attribution?.origins ?? ['unknown']))];
@@ -1140,7 +1144,9 @@ export class NativeMemoryStore {
         originalSources: receipt.originalSources, sourcePrivacy: receipt.sourcePrivacy,
         origin: origins.length === 1 ? origins[0] : 'mixed', attribution: { schemaVersion: 1, origins, confirmed: false } }];
     });
-    return Object.assign(result, { legacyUnclassified });
+    // Coverage is advice beside visible safety facts, never a claim that an ordinary
+    // non-health account (or fully redacted source) has undisclosed safety history.
+    return result.length && legacyUnclassified ? Object.assign(result, { legacyUnclassified }) : result;
   }
 
   /** Most-used owned files and opt-in own preference bodies, through deletion and producer-receipt readers.
@@ -1214,7 +1220,7 @@ export class NativeMemoryStore {
       if (!history.length) return [];
       const fileId = nativeFileId(file.uri);
       return replacedStatements({
-        fileId, body: file.body, history, perLine: file.type === "profile", statementsOf: statements,
+        fileId, body: file.body, history, perLine: file.type === "profile", statementsOf: file.type === "profile" ? profileStatements : statements,
         recordIdOfLine: (line) => `${fileId}_${lineFingerprint(line).slice(0, 12)}`, rejected: rejected.get(file.namespaceId ?? null) ?? [],
         // What the worker's checks take out of a memory (`lineRefusal`), which a line older than the checks or gone before they ran has only in the revisions.
         refused: (line) => identifierShapesIn(line).length > 0 || carriesPlatformContext(line) || platformIdentifiersIn(line).length > 0,
@@ -2135,6 +2141,7 @@ export class NativeMemoryStore {
         const id = nativeFileId(revision.uri);
         if (!found.has(id)) {
           const text = String(revision.before ?? "");
+          if (place.type === "profile" && !profileStatements(text).length) continue;
           found.set(id, record({ id, key: place.relPath, value: text, summary: titleOf(place.type, place.relPath, text), version: versionOfHash(contentHash(text)), contentHash: contentHash(text) }));
         }
         continue;
@@ -2145,7 +2152,7 @@ export class NativeMemoryStore {
       const present = new Set(enumerate(live.get(revision.uri)?.body ?? "").map(lineFingerprint));
       for (const raw of String(revision.before ?? "").split("\n")) {
         const text = raw.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "");
-        if (!text || isLabelLine(raw) || /^#{1,6}\s/.test(raw.trim()) && !(place.type === 'profile' && /^#\s/.test(raw.trim()))) continue;
+        if (!text || isLabelLine(raw) || place.type === 'profile' && isNeutralProfileHeading(raw) || /^#{1,6}\s/.test(raw.trim()) && !(place.type === 'profile' && /^#\s/.test(raw.trim()))) continue;
         const print = lineFingerprint(text);
         if (after.has(print) || present.has(print)) continue;
         const id = `${nativeFileId(revision.uri)}_${print.slice(0, 12)}`;
@@ -2637,7 +2644,7 @@ export class NativeMemoryStore {
         for (const file of await this.files(userId, {context:this.memoryContexts ? context : null})) {
           if (!file.uri.startsWith(`${context.userRoot}/memories/`)) continue;
           const body = await fenceWithdrawnMemoryBody(this.overlay, userId, file.uri, file.body, file.namespaceId);
-          if (!body?.trim()) continue;
+          if (!body?.trim() || file.type === 'profile' && !profileStatements(body).length) continue;
           // Filenames can themselves state a removed fact. Opaque names are stable within this pack.
           const path = `memories/${contentHash(file.uri).slice(0,24)}.md`;
           const data = Buffer.from(body);
