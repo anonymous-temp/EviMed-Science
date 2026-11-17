@@ -1,3 +1,4 @@
+import { readStatus, withReadStatus } from './memoryReadStatus.mjs';
 import { removalRefusals, removalText, removalStatement, retainedRemovalKey, lineDecisionKey, decisionCovers } from './nativeMemoryRejections.mjs';
 import { recordNativeMaintenance } from './nativeMemoryMetrics.mjs';
 import { lineFingerprint, nativeMemoryRejectionType, originalSources } from './nativeMemoryOverlay.mjs';
@@ -568,7 +569,8 @@ export class MemoryHistory {
   status() { return { enabled: this.enabled, backfill: { ...this.lastBackfill }, maintenance: { ...this.maintenance } }; }
 
   async search({ user, project, query, limit = 5 }, { includeOrigins = false, includeWithdrawn = false, forRemoval = false, removalUri = null, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
-    if (!this.enabled || !query?.trim()) return [];
+    if (!this.enabled || !query?.trim()) return withReadStatus([], readStatus('skipped', !this.enabled ? 'disabled' : 'empty_query'));
+    const status = readStatus('empty', null, { candidates: 0, droppedByFence: 0, droppedByScore: 0, droppedByLimit: 0 });
     // Leave time for the gateway to render already verified hits. A slow tail
     // must not turn a useful prefix into an empty history block at its deadline.
     const deadline=retrievalV2 ? Date.now()+Math.max(250,Number(this.config.memoryGatewayTimeoutMs)||4000)-150 : Infinity;
@@ -576,17 +578,20 @@ export class MemoryHistory {
     // fabricated default project. Re-resolve its URI to prove the live owner.
     const removal = forRemoval && removalUri !== null;
     const context = removal ? await this.contexts.forUri(user.id, removalUri) : await this.contexts.forProject(project);
-    if (context.ownerId !== user.id || context.kind === 'geo-project') return [];
+    if (context.ownerId !== user.id || context.kind === 'geo-project') return withReadStatus([], readStatus('skipped', 'scope_fence'));
     const source = removal ? null : await this.resolveSource({ userId: user.id, projectId: project.id, engineSession: null }, context);
-    if (!removal && (!source?.projectCreatedAt || source.projectId !== project.id)) return [];
+    if (!removal && (!source?.projectCreatedAt || source.projectId !== project.id)) return withReadStatus([], readStatus('skipped', 'source_unproven'));
     // Only the verified ordinary default conversation expands to the account's
     // personal namespace. A named or shared project remains its exact scope.
     const account = removal || project.id === 'default' && context.kind === 'owned';
     const root = account ? `${context.userRoot}/resources/history/${hash(context.ownerCreatedAt).slice(0,24)}` : this.root(context,source);
     const resources = this.resourcesFor(context);
     const asked = Math.max(1, Math.min(retrievalV2 ? 20 : 8, Math.trunc(Number(limit)) || 5));
-    const found = await resources.searchHistory(user.id, root, query.slice(0, 2000), { limit: 40, ...(retrievalV2 ? { retrievalV2:true } : {}) });
+    const found = await resources.searchHistory(user.id, root, query.slice(0, 2000), { limit: 40, literalFallback: this.config.memoryLiteralFallbackEnabled === true, ...(retrievalV2 ? { retrievalV2:true } : {}) });
     const candidates = retrievalV2 ? diverseHistoryCandidates(found) : found;
+    status.candidates = candidates.length;
+    if (found.readStatus) status.channels = found.readStatus;
+    let visited = 0;
     const redact = this.secretRedaction ? await this.secrets.filterFor(user.id) : text => text;
     const hits = [], originals = new Map(), seenMessages = new Map();
     const hydrate = async candidate => {
@@ -595,7 +600,7 @@ export class MemoryHistory {
       if (!meta || this.secretRedaction && !await this.ledger.secretReviewed(context,meta.archive_uri)) return null;
       let verified;
       try { verified = await this.resolveSource({ userId: user.id, projectId: meta.project_id, engineSession: `dsh-${meta.session_id}` }, context); }
-      catch { return null; } // A deleted/revoked source never falls back to another project.
+      catch { status.state = 'unavailable'; status.reason = 'source_unavailable'; return null; } // Never fall back to another project; a failed proof is not evidence of absence.
       if (!verified || verified.projectId !== meta.project_id || verified.projectCreatedAt !== meta.project_created_at) return null;
       if (!await this.eligible(context, verified)) { await this.removeConversation({ ...context, projectId: verified.projectId, projectCreatedAt: verified.projectCreatedAt }, verified.sessionId); return null; }
       const body = await resources.readHistory(user.id, candidate.uri);
@@ -655,7 +660,7 @@ export class MemoryHistory {
     // V1 remains serial. V2 overlaps at most four source validations, reusing
     // only this request's proven archive promises; selection stays rank ordered.
     for (let offset=0;offset<Math.min(candidates.length,80) && hits.length<asked;) {
-      if (Date.now()>=deadline) break;
+      if (Date.now()>=deadline) { status.state = 'unavailable'; status.reason = 'deadline'; break; }
       const width=retrievalV2 ? Math.min(4,asked-hits.length) : 1;
       const batch=candidates.slice(offset,Math.min(offset+width,80)); offset+=batch.length;
       let timer;
@@ -663,9 +668,10 @@ export class MemoryHistory {
       const validated=await (retrievalV2 ? Promise.race([pending,/** @type {Promise<null>} */ (new Promise(resolve=>{
         timer=setTimeout(()=>resolve(null),Math.max(1,deadline-Date.now()));
       }))]).finally(()=>clearTimeout(timer)) : pending);
-      if (!validated) break;
+      if (!validated) { status.state = 'unavailable'; status.reason = 'deadline'; break; }
       for (const value of validated) {
-        if (!value) continue;
+        visited++;
+        if (!value) { status.droppedByFence++; continue; }
         const {hit,meta}=value;
         if (retrievalV2) {
           const seen=seenMessages.get(meta.session_id)??new Set();seenMessages.set(meta.session_id,seen);
@@ -677,7 +683,11 @@ export class MemoryHistory {
       }
     }
     if (includeWithdrawn && !forRemoval && await this.ledger.hasWithdrawals(context)) hits.push({ withdrawn: true, messages: [] });
-    return hits;
+    status.droppedByLimit = candidates.length - visited;
+    if (status.channels && Object.values(status.channels).some(channel => channel.state === 'unavailable')) { status.state = 'unavailable'; status.reason = 'partial_channels'; }
+    if (status.state !== 'unavailable') status.state = hits.some(hit => !hit.withdrawn) ? 'searched' : 'empty';
+    status.withdrawn = hits.some(hit => hit.withdrawn);
+    return withReadStatus(hits, status);
   }
 
   async removeConversation(context, sessionId) {

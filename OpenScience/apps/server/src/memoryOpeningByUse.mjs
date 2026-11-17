@@ -56,14 +56,24 @@ function openingProfile(value) {
  * The unmarked REST profile route also serves direct REST callers; MCP read always returns the complete file.
  * @param {string} text @param {string} root @param {any} config */
 export function openingProfileRead(text, root, config) {
-  if (config?.memoryOpeningByUseEnabled !== true || !(Number(config.memoryOpeningMaxChars) > 0)) return text;
-  const room = Math.max(0, Number(config.memoryOpeningMaxChars) - `<user-profile uri="${root}/profile.md">\n\n</user-profile>`.length);
-  if (text.trim().length <= room) return text;
-  if (!room) return '';
+  const upstreamCut = openingTokens(text.trim()) > 5_000;
+  const explicit = config?.memoryOpeningByUseEnabled === true && Number(config.memoryOpeningMaxChars) > 0;
+  if (!upstreamCut && !explicit) return text;
+  const notice = 'Profile is partial; use mcp__openviking__read to read the complete profile.md.\n';
+  let selected = upstreamCut ? openingProfile(text) : text;
+  const room = explicit ? Math.max(0, Number(config.memoryOpeningMaxChars) - `<user-profile uri="${root}/profile.md">\n\n</user-profile>`.length) : Infinity;
+  if (!upstreamCut && selected.trim().length <= room) return text;
   const marker = '\n... [profile middle elided] ...\n';
-  const head = text.split('\n').slice(0, 8).join('\n');
-  if (room <= head.length + marker.length) return text.slice(0, room);
-  return head + marker + text.slice(-(room - head.length - marker.length));
+  const head = selected.split('\n').slice(0, 8).join('\n');
+  const contentRoom = Math.max(0, room - notice.length);
+  if (selected.length > contentRoom) {
+    const tailRoom = Math.max(0, contentRoom - head.length - marker.length);
+    selected = tailRoom ? head + marker + selected.slice(-tailRoom) : selected.slice(0, contentRoom);
+  }
+  // Reserve the warning inside upstream's own profile token allowance. With an
+  // impossibly small experimental cap the warning wins over silent omission.
+  while (openingTokens(notice + selected) > 5_000 && selected.length) selected = selected.slice(0, -100);
+  return notice + selected;
 }
 
 /** @param {any} entry */

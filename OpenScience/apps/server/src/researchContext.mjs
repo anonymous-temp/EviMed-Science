@@ -152,6 +152,9 @@ export function renderMemoryContext(memories, { lookup = "" } = {}) {
       const caveats = Array.isArray(memo.caveats) ? memo.caveats.filter((item) => typeof item === "string") : [];
       return [
         `<evimed-memory index="${index + 1}" id="${escapeContext(memo.id)}" type="${escapeContext(memo.memoryType ?? "manual")}" kind="${escapeContext(memo.kind ?? "note")}" scope="${escapeContext(memo.scope ?? "user")}" origin="${originOf(memo.origin) ?? "unrecorded"}"${caveats.length ? ` caveats="${escapeContext(caveats.join(","))}"` : ""}>`,
+        ...(memo.speaker || memo.attribution?.origins ? [`Source: ${escapeContext(memo.speaker ?? memo.attribution.origins.join(', '))}`] : []),
+        ...(memo.asOf || memo.updatedAt ? [`Recorded: ${escapeContext(memo.asOf ?? memo.updatedAt)}`] : []),
+        ...(memo.earlierValue ? ['Earlier value, not necessarily current.'] : []),
         escapeContext(memo.content),
         ...(memo.validity?.from || memo.validity?.until
           ? [`有效期：${escapeContext(memo.validity.from ?? "起点未知")} 起，${escapeContext(memo.validity.until ?? "至今")} 止`] : []),

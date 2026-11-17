@@ -431,3 +431,13 @@ test('AL8 a repeated statement keeps its undo act and a delayed sweep never sele
   await f.store.sweepForgottenMemory({owner_id:'u1',user_root:root,memory_sweep:queued[1]});
   assert.match(f.files.get(other),/Measures/);
 });
+
+test('exact-title forget removes a profile name and keeps independent statements', async () => {
+  const f = fixture(), target = `${root}/memories/profile.md`;
+  f.files.clear(); f.files.set(target, '# Mara Santos\n## Work\n- Designs reports.');
+  f.store.files = async () => [...f.files].map(([uri, body]) => ({ uri, body, type: 'profile', hash: contentHash(body), projectId: null }));
+  await f.store.forget(user, project, target, { lines: ['# Mara Santos'] });
+  assert.doesNotMatch(f.files.get(target), /Mara/);
+  assert.match(f.files.get(target), /Designs reports/);
+  assert.ok(f.rejections.some(row => row.lines.includes('Mara Santos')));
+});

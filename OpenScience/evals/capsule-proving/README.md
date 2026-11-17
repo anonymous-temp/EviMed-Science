@@ -172,3 +172,39 @@ checks them verbatim and derives gold. `node run.mjs graphs|c3|l8 <dev|sealed>` 
 `node verify-data.mjs --data DIR` checks every manifest's sha256 against its files and that no question shown at run time
 already contains an answer its gold expects (an anchor the question names leaves the substring check for the judge,
 `expect.anchorInQuestion`). It prints counts only, so it is safe over sealed data.
+
+### Read/answer-time class replay (2026-11-17)
+
+`replay/read-classes.mjs` reads one supplied RCA pack at a time, writes a request for
+every available named member and recorded passing control, and selects at most 30
+members plus the same number of controls (60 answers). It rebuilds current guidance,
+profile elision, index wording, typed safety blocks and recorded tool serialization
+using the production modules. It does **not** manufacture retrieval hits from gold
+or feed source sessions/reference answers to the answer function. The lexical audit
+compares the old whitespace admission and the isolated token/BM25 path on the provided
+evidence chunks, for both recorded queries and question text. Full-corpus ranking,
+semantic embeddings, new tool-selection behaviour and live fences require the lab.
+
+```sh
+node evals/capsule-proving/replay/read-classes.mjs prepare \
+  --packs ../.lane/packs --out ../.lane/read-replay
+node evals/capsule-proving/replay/read-classes.mjs run \
+  --dir ../.lane/read-replay --answer-module /path/to/lab-answer.mjs --allow-incomplete
+```
+
+The injectable module exports `async answer({qid, messages, tools, toolChoice})` and
+returns a string or `{answer}`. This repository adds no model client, credentials or
+model calls. The existing `checkAnswer` scorer writes mechanical verdicts and keeps
+semantic checks as `needs-judge`, never an automatic pass. Run that existing semantic
+scorer on the lab separately; do not add a production judge per turn.
+
+Inspect `manifest.json` before running: missing named packs are listed, all generated
+requests remain available, and the selected list may be changed while preserving the
+equal-control/60-answer checks. Packs contain a skill-catalogue hash rather than its
+body and omit old per-source completion states, live authorization/source receipts, and resident-budget state. `--catalog FILE` includes the catalogue
+only when its SHA256 matches the recorded value. Such missing inputs stay explicit in
+`gaps`/`contextExact`; the runner refuses incomplete context unless the commander passes
+`--allow-incomplete`. That flag runs a labelled context replay, **not** an exact native
+turn reconstruction or proof that the model will newly decide to search. No extra
+search is inserted into a recorded tool-free ordinary question. Historical failures
+are re-serialized as unavailable, and an unrecorded history lookup is not called empty.

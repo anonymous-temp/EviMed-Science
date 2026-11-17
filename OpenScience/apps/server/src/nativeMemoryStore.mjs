@@ -1,3 +1,4 @@
+import { readStatus } from './memoryReadStatus.mjs';
 import { mergePeopleFiles, undoPeopleMerge, redirectPeopleWrites } from './nativeMemoryPeopleStore.mjs';
 import { personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
@@ -152,6 +153,14 @@ function statements(body) {
   return memoryLines(String(body ?? "").split("\n").filter((line) => !isLabelLine(line)).join("\n"));
 }
 
+/** Profile titles are user content too. Keep their Markdown identity for exact
+ * editing/forgetting; headings beneath H1 remain document structure. */
+export function profileStatements(body) {
+  const lines = String(body ?? '').split('\n').filter(line => !isLabelLine(line));
+  return lines.map(line => line.trim()).filter(line => line && (/^#\s+/.test(line) || !/^#{1,6}\s/.test(line)))
+    .map(line => line.replace(/^(?:[-*+]|\d+[.)])\s+/, ''));
+}
+
 /** The reasons of a revision that is itself a forget or a delete (`#write`, `forgetFile`): the version it took a line out of is what its undo goes back to. */
 const FORGET_REASON = /^(?:forgotten|deleted)/iu;
 
@@ -163,17 +172,15 @@ const FORGET_REASON = /^(?:forgotten|deleted)/iu;
 function withoutForgottenLines(text, forgotten) {
   return text.split("\n").filter((line) => {
     const statement = line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "");
-    return !statement || isLabelLine(line) || /^#{1,6}\s/.test(line.trim()) || !statementForgotten(statement, forgotten);
+    return !statement || isLabelLine(line) || !statementForgotten(statement.replace(/^#{1,6}\s+/, ''), forgotten);
   }).join("\n");
 }
 
 /** What a file is called on the page: the card's title for a project, else the topic or entity name in its file name. */
 function titleOf(type, relPath, body) {
   if (type === "profile") return "";
-  if (type === "project_context") {
-    const heading = /^#\s+(.+)$/m.exec(String(body ?? ""));
-    if (heading) return heading[1].trim();
-  }
+  const heading = /^#\s+(.+)$/m.exec(String(body ?? ""));
+  if (heading) return heading[1].trim();
   return relPath.split("/").at(-1)?.replace(/\.md$/, "") ?? relPath;
 }
 
@@ -267,7 +274,7 @@ function sessionEvidence({ engineSession, archiveUri, observedAt, fingerprint },
 
 function conversationEvidence(history, sessionProjects, { line = null } = {}) {
   const print = line === null ? null : lineFingerprint(line);
-  const printsOf = (/** @type {unknown} */ text) => new Set(memoryLines(text ?? "").map(lineFingerprint));
+  const printsOf = (/** @type {unknown} */ text) => new Set((line !== null && /^#\s/.test(line) ? profileStatements(text) : memoryLines(text ?? "")).map(lineFingerprint));
   /** @type {Set<string>} */
   const seen = new Set();
   /** @type {any[]} */
@@ -607,7 +614,7 @@ export class NativeMemoryStore {
       const base = this.#fileRecord(file, history, changed, conversationEvidence(history, sessionProjects), forgotten.has(file.namespaceId ?? null) ? forgotten.get(file.namespaceId ?? null) : []);
       if (file.type !== "profile") { records.push({...base,...this.#attribution(file,history,origins.get(file.uri),attributionCommits)}); continue; }
       // The profile is one document; its lines are the items the page lists.
-      for (const line of statements(file.body)) {
+      for (const line of profileStatements(file.body)) {
         // A line's own conversation is the one whose commit brought it, not every conversation that touched the file: from the index of
         // origins when it has the line, else from the revisions the overlay still holds (a line already there when the oldest of them was
         // written, and unknown to the index, names nothing rather than a guess).
@@ -618,7 +625,7 @@ export class NativeMemoryStore {
         records.push({
           ...base, id: `${base.id}_${lineFingerprint(line).slice(0, 12)}`, key: `profile.md#${lineFingerprint(line).slice(0, 12)}`,
           ...this.#attribution(file,history,origins.get(file.uri),attributionCommits,line),
-          value: line.replace(AS_OF, "").trim(), summary: "",
+          value: line.replace(/^#\s+/, "").replace(AS_OF, "").trim(), summary: "",
           document: { id: base.id, uri: file.uri }, revisions: [], evidence, evidenceCount: evidence.length,
         });
       }
@@ -631,16 +638,17 @@ export class NativeMemoryStore {
 
   /** Producer evidence is per statement. Editing one statement and restoring a version never confirm its neighbours. */
   #attribution(file,history,origins,commits,line=null) {
+    const enumerate = file.type === 'profile' ? profileStatements : statements;
     const producer=(archive,actor)=>{
       const kind=archive?commits.get(archive):null;
       if(['import','migration'].includes(kind))return 'imported';
       return actor==='engine'||kind?'engine':'unknown';
     };
-    const kinds=(line?[line]:statements(file.body)).map(text=>{
+    const kinds=(line?[line]:enumerate(file.body)).map(text=>{
       const print=lineFingerprint(text),indexed=origins?.get(print);
       if(indexed?.archiveUri||indexed?.engineSession)return producer(indexed.archiveUri,'engine');
       for(const revision of [...history].reverse()) {
-        if(!statements(revision.after??'').some(value=>lineFingerprint(value)===print)||statements(revision.before??'').some(value=>lineFingerprint(value)===print))continue;
+        if(!enumerate(revision.after??'').some(value=>lineFingerprint(value)===print)||enumerate(revision.before??'').some(value=>lineFingerprint(value)===print))continue;
         if(revision.actor==='user'&&revision.change==='updated'&&!String(revision.reason).startsWith('undo'))return 'manual';
         if(revision.actor==='engine')return producer(revision.archiveUri,revision.actor);
       }
@@ -849,7 +857,7 @@ export class NativeMemoryStore {
     if (!file) throw new HttpError(404, "memory_not_found", "Memory not found.");
     if (line === null) return { file, line: null };
     const raw = file.body.split("\n");
-    const index = raw.findIndex((text) => !isLabelLine(text) && !/^#{1,6}\s/.test(text.trim()) && text.trim()
+    const index = raw.findIndex((text) => !isLabelLine(text) && (!/^#{1,6}\s/.test(text.trim()) || file.type === 'profile' && /^#\s/.test(text.trim())) && text.trim()
       && lineFingerprint(text.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")).slice(0, 12) === line);
     if (index < 0) throw new HttpError(404, "memory_not_found", "Memory not found.");
     return { file, line: { index, raw: raw[index] } };
@@ -1045,11 +1053,11 @@ export class NativeMemoryStore {
     const lower = text.toLowerCase();
     const items = text ? records.filter((record) => `${record.summary}\n${record.value}`.toLowerCase().includes(lower)) : records;
     const seen = new Set(items.map((record) => record.id));
-    let semantic = 0;
+    let semantic = 0, failedChannels = 0;
     if (text) {
       const views = await this.#contexts(userId);
       const hits = (await mapLimit(views, 4, context => this.#engine(() => context.sessions.find(userId, text,
-        { target: context.sessions.memoryRoot(userId), limit: 25 })).catch(() => []))).flat();
+        { target: context.sessions.memoryRoot(userId), limit: 25 })).catch(() => { failedChannels++; return []; }))).flat();
       const words = lower.split(/\s+/).filter((word) => word.length >= 2);
       for (const hit of hits) {
         for (const record of records.filter((candidate) => candidate.uri === hit.uri)) {
@@ -1064,7 +1072,7 @@ export class NativeMemoryStore {
     // Search is recall, not the explicit undo/history view. A forget's private
     // before-image must not ride beside an otherwise current search result.
     const recalled = this.overlay.deferredSummaryRebuildEnabled === true ? items.map(record => ({ ...record, revisions: [] })) : items;
-    return { items: recalled, query: text, semantic, conversations: (await this.#withConversationTitles(userId, items)).titles, usage: {} };
+    return { items: recalled, readStatus: readStatus(failedChannels ? 'unavailable' : recalled.length ? 'searched' : 'empty', failedChannels ? 'partial_channels' : null), query: text, semantic, conversations: (await this.#withConversationTitles(userId, items)).titles, usage: {} };
   }
 
   /**
@@ -1105,12 +1113,13 @@ export class NativeMemoryStore {
   async safetyNotes(userId, projectId) {
     const scope = { memoryRoot: this.sessions.memoryRoot(userId), projectId, peopleAcrossProjects: this.peopleAcrossProjectsEnabled,
       hiddenUris: [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId, 10000, { peopleAcrossProjects: this.peopleAcrossProjectsEnabled, memoryRoot: this.sessions.memoryRoot(userId) })] };
-    const selected = [...(await this.overlay.files(userId)).values()]
-      .filter(file => safetyNoteFile(file, scope) && safetyNoteLines(file.body, file.memoryType).length);
-    if (!selected.length) return [];
+    const inventory = [...(await this.overlay.files(userId)).values()];
+    const selected = inventory.filter(file => safetyNoteFile(file, scope) && safetyNoteLines(file.body, file.memoryType).length);
+    const legacyUnclassified = inventory.filter(file => safetyNoteFile(file, scope) && !safetyNoteLines(file.body, file.memoryType).length).length;
+    if (!selected.length) return Object.assign([], { legacyUnclassified });
     const files = (await this.files(userId, { uris: selected.map(file => file.uri) })).filter(file => safetyNoteFile(file, scope));
     const records = await this.records(userId, { files });
-    return files.flatMap(file => {
+    const result = files.flatMap(file => {
       const sources = records.filter(record => record.uri === file.uri);
       if (!sources.length) return [];
       let body = sources[0].value;
@@ -1131,6 +1140,7 @@ export class NativeMemoryStore {
         originalSources: receipt.originalSources, sourcePrivacy: receipt.sourcePrivacy,
         origin: origins.length === 1 ? origins[0] : 'mixed', attribution: { schemaVersion: 1, origins, confirmed: false } }];
     });
+    return Object.assign(result, { legacyUnclassified });
   }
 
   /** Most-used owned files and opt-in own preference bodies, through deletion and producer-receipt readers.
@@ -1382,14 +1392,14 @@ export class NativeMemoryStore {
       if (line) {
         const raw = file.body.split("\n");
         const date = this.now().toISOString().slice(0, 10);
-        raw[line.index] = `- ${text.replace(/^(?:[-*+]|\d+[.)])\s+/, "").replace(AS_OF, "")} (as of ${date})`;
+        raw[line.index] = /^#\s/.test(line.raw.trim()) ? `# ${text.replace(/^#+\s*/, '')}` : `- ${text.replace(/^(?:[-*+]|\d+[.)])\s+/, "").replace(AS_OF, "")} (as of ${date})`;
         next = raw.join("\n");
       } else {
         next = text;
       }
       await this.#write(userId, file, next, { actor: "user", reason: "edited on the memory page", origin: "edit" });
     }
-    return this.getRecord(userId, line ? `${nativeFileId(file.uri)}_${lineFingerprint(String(value ?? "").trim().replace(AS_OF, "")).slice(0, 12)}` : nativeFileId(file.uri))
+    return this.getRecord(userId, line ? `${nativeFileId(file.uri)}_${lineFingerprint((/^#\s/.test(line.raw.trim()) ? `# ${String(value ?? '').trim().replace(/^#+\s*/, '')}` : String(value ?? '').trim()).replace(AS_OF, '')).slice(0, 12)}` : nativeFileId(file.uri))
       .catch(() => this.getRecord(userId, nativeFileId(file.uri))).catch(error => {
         if (!this.instructionWriteCheck || error?.code !== 'memory_not_found') throw error;
         return { id: nativeFileId(file.uri), status: 'pending', value: String(value ?? ''), pending: true };
@@ -1424,7 +1434,9 @@ export class NativeMemoryStore {
     const context = await this.#fileContext(userId, file.uri);
     const rejectionType = this.#rejectionType(context, file.type);
     this.#touch(userId);
-    const before = removalLines(file.body);
+    const titleChanged = actor === 'user' && origin === 'edit' && file.type !== 'profile'
+      && /^#\s+.+$/m.test(next) && titleOf(file.type, file.uri, next) !== titleOf(file.type, file.uri, file.body);
+    const before = [...removalLines(file.body), ...(titleChanged ? memoryNameVariants(file.uri) : [])];
     const after = removalLines(next);
     const kept = new Set(after.map(lineFingerprint));
     const removed = await this.#aliasRemovalLines(userId, file, before.filter(text=>!kept.has(lineFingerprint(text))));
@@ -1583,13 +1595,13 @@ export class NativeMemoryStore {
   async remove(userId, id, { keepText = false, actor = "user" } = {}) {
     const { file, line } = await this.#target(userId, id);
     // What else says the same is found first, so that the act the revisions share is named in the first of them.
-    const plan = await this.#duplicatesPlan(userId, line ? [line.raw.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")] : statements(file.body), file);
+    const plan = await this.#duplicatesPlan(userId, line ? [removalText(line.raw)] : removalLines(file.body), file);
     const act = plan.size ? newAct() : null;
     if (line) {
       const raw = file.body.split("\n");
       raw.splice(line.index, 1);
       const next = raw.join("\n");
-      await this.#write(userId, file, next, { actor, reason: `${keepText ? "forgotten on the memory page" : "deleted on the memory page"}${actSuffix(act)}` });
+      await this.#write(userId, file, next, { actor, neutralizeRemovedPath: true, reason: `${keepText ? "forgotten on the memory page" : "deleted on the memory page"}${actSuffix(act)}` });
       // A delete takes the line out of the history too; a forget keeps it for the undo.
       if (!keepText) await this.overlay.scrubLines(userId, file.uri, await this.#wordingsOf(userId, file.uri, line.raw.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")));
       const also = await this.#forgetDuplicates(userId, keepText ? plan : withoutJudged(plan), { act, keepText, actor });
@@ -2128,16 +2140,17 @@ export class NativeMemoryStore {
         continue;
       }
       // A profile edit that forgot lines: the lines the revision took out, each a record of its own as it was while it lived.
-      const after = new Set(statements(String(revision.after ?? "")).map(lineFingerprint));
-      const present = new Set(statements(live.get(revision.uri)?.body ?? "").map(lineFingerprint));
+      const enumerate = place.type === "profile" ? profileStatements : statements;
+      const after = new Set(enumerate(String(revision.after ?? "")).map(lineFingerprint));
+      const present = new Set(enumerate(live.get(revision.uri)?.body ?? "").map(lineFingerprint));
       for (const raw of String(revision.before ?? "").split("\n")) {
         const text = raw.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "");
-        if (!text || isLabelLine(raw) || /^#{1,6}\s/.test(raw.trim())) continue;
+        if (!text || isLabelLine(raw) || /^#{1,6}\s/.test(raw.trim()) && !(place.type === 'profile' && /^#\s/.test(raw.trim()))) continue;
         const print = lineFingerprint(text);
         if (after.has(print) || present.has(print)) continue;
         const id = `${nativeFileId(revision.uri)}_${print.slice(0, 12)}`;
         if (found.has(id)) continue;
-        found.set(id, record({ id, key: `profile.md#${print.slice(0, 12)}`, value: text.replace(AS_OF, "").trim(), summary: "", raw: raw.trim(), version: versionOfHash(contentHash(text)),
+        found.set(id, record({ id, key: `profile.md#${print.slice(0, 12)}`, value: text.replace(/^#\s+/, "").replace(AS_OF, "").trim(), summary: "", raw: raw.trim(), version: versionOfHash(contentHash(text)),
           contentHash: contentHash(text), document: { id: nativeFileId(revision.uri), uri: revision.uri } }));
       }
     }
@@ -2188,12 +2201,14 @@ export class NativeMemoryStore {
       return this.getRecord(userId, nativeFileId(entry.uri));
     }
     // A line: the line as the document had it, after the document's own lines.
-    const raw = String(revision.before ?? "").split("\n").find((line) => lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")) === lineFingerprint(entry.value));
+    const raw = String(revision.before ?? "").split("\n").find((line) => lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")).slice(0, 12) === String(entry.id).slice(28));
     const line = (raw ?? `- ${entry.value}`).trim();
     const document = files.find((file) => file.uri === entry.uri);
     if (document) {
       const body = document.body.replace(/\s+$/, "");
-      await this.#write(userId, document, `${body}\n${line}`, { actor: "user", reason: "restored from forgotten" });
+      if (/^#\s/.test(line) && /^#\s/m.test(body)) throw new HttpError(409, 'memory_conflict', 'The profile already has a title. Edit the current title instead.');
+      const restored = /^#\s/.test(line) ? `${line}\n${body}` : `${body}\n${line}`;
+      await this.#write(userId, document, restored, { actor: 'user', reason: 'restored from forgotten' });
       await this.overlay.unreject(userId, this.#rejectionType(await this.#fileContext(userId, document.uri), memoryType), [entry.value]);
       // A judged request may remove several lines at once. Restoring one must leave the others available to restore too.
       const originallyKept = new Set(removalLines(revision.after ?? '').map(lineFingerprint));
@@ -2202,9 +2217,8 @@ export class NativeMemoryStore {
         && removalLines(revision.before ?? '').some(text => !originallyKept.has(lineFingerprint(text)) && !nowKept.has(lineFingerprint(text)));
       if (!stillForgotten) await this.overlay.markUndone(userId, revision.id);
     } else {
-      // The document itself was forgotten since: it comes back with its headings and this one line.
-      const headings = String(revision.before ?? "").split("\n").filter((text) => /^#{1,6}\s/.test(text.trim()));
-      await this.#restoreText(userId, { uri: entry.uri, text: [...headings, line].join("\n"), memoryType, projectId, revisionId: revision.id, reason: "restored from forgotten" });
+      // The document itself was forgotten since: restore only the selected line, never another withdrawn title.
+      await this.#restoreText(userId, { uri: entry.uri, text: line, memoryType, projectId, revisionId: revision.id, reason: "restored from forgotten" });
     }
     return this.getRecord(userId, id).catch(() => this.getRecord(userId, nativeFileId(entry.uri)));
   }

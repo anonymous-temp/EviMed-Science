@@ -31,7 +31,7 @@ export function nativeMemoryIndex(files, { memoryRoot, hiddenUris = [], historyS
 export function nativeIndexLine(index, maxTokens) {
   const places = Object.entries(index.counts).filter(([, count]) => Number.isSafeInteger(count) && count > 0)
     .sort(([a], [b]) => a.localeCompare(b)).map(([place, count]) => `${place} ${count}`);
-  const suffix = `${index.historySearchEnabled ? '；早先的对话也可搜索' : ''}；用 mcp__openviking__search 查找。`;
+  const suffix = `${index.historySearchEnabled ? '；早先的对话也可搜索' : ''}；目录仅分类，notes 等处也可能有同一主题；用 mcp__openviking__search 跨目录查找。`;
   for (let keep = places.length; keep >= 0; keep -= 1) {
     const rest = keep < places.length ? `另 ${places.length - keep} 处` : '';
     const listing = [...places.slice(0, keep), ...(rest ? [rest] : [])].join(' · ') || '暂无已索引文件';

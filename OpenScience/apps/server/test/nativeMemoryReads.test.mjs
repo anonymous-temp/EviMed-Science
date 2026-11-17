@@ -119,3 +119,44 @@ test('deferred-mode search excludes private undo before-images while the explici
   store.overlay.deferredSummaryRebuildEnabled = false;
   assert.equal((await store.search('u1', '')).items[0].revisions[0].value, 'Withdrawn fact.');
 });
+
+test('profile H1 is a visible editable row; forgetting the title preserves neighbours and rejects its old text', async () => {
+  const { files, store } = engine({ count: 0, delay: 0 });
+  const uri = `${ROOT}/profile.md`, rejected = [], revisions = [];
+  store.overlay.addRevision = async row => { const revision = { ...row, id: `r${revisions.length}`, changedAt: '2026-11-17' }; revisions.push(revision); return revision; };
+  store.overlay.forgottenRevisions = async () => revisions.filter(row => row.reason.startsWith('forgotten') && !row.undoneAt).reverse();
+  store.overlay.revisionsOf = async () => revisions;
+  store.overlay.revisionsOfMany = async () => new Map([[uri, [...revisions].reverse()]]);
+  store.overlay.markUndone = async (_user, id) => { revisions.find(row => row.id === id).undoneAt = '2026-11-17'; };
+  files.set(uri, { body: '# Mara Santos\n## Work\n- Works in design.', modTime: '2026-11-17' });
+  store.overlay.reject = async (_user, _type, _uri, lines) => rejected.push(...lines);
+  let records = await store.records('u1');
+  const title = records.find(row => row.value === 'Mara Santos');
+  assert.ok(title?.document, 'the ordinary row and drawer can reach the title');
+  assert.equal(records.length, 2);
+  const edited = await store.update('u1', title.id, { expectedVersion: title.version, value: 'Mara Chen' });
+  assert.equal(edited.value, 'Mara Chen');
+  assert.equal(edited.origin, 'manual', 'an edited title carries its real provenance into recall and export');
+  assert.match(files.get(uri).body, /^# Mara Chen\n/);
+  assert.ok(rejected.includes('Mara Santos'));
+  await store.remove('u1', edited.id, { keepText: true });
+  assert.doesNotMatch(files.get(uri).body, /Mara/);
+  assert.match(files.get(uri).body, /Works in design/);
+  assert.ok(rejected.includes('Mara Chen'));
+  records = await store.records('u1');
+  assert.equal(records.length, 1);
+  const forgotten = (await store.forgotten('u1')).find(row => row.value === 'Mara Chen');
+  assert.ok(forgotten, 'the forgotten drawer can reach and restore the title');
+  const restored = await store.update('u1', forgotten.id, { status: 'active', expectedVersion: forgotten.version });
+  assert.equal(restored.value, 'Mara Chen');
+  assert.match(files.get(uri).body, /^# Mara Chen\n/);
+  assert.doesNotMatch(files.get(uri).body, /Mara Santos/);
+});
+
+test('a file heading is its visible title, rather than a stale filename after correction', async () => {
+  const { files, store } = engine({ count: 0, delay: 0 });
+  files.set(`${ROOT}/people/old-label.md`, { body: '# Current name\n- Independent fact.', modTime: '2026-11-17' });
+  const [record] = await store.records('u1');
+  assert.equal(record.summary, 'Current name');
+  assert.match(record.value, /Independent fact/);
+});

@@ -389,6 +389,7 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     memorySharedCaptureProofEnabled: overrides.memorySharedCaptureProofEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SHARED_CAPTURE_PROOF_ENABLED", false),
     memoryRuntimeLockIsolationEnabled: overrides.memoryRuntimeLockIsolationEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED", false),
     memoryHistorySearchEnabled: overrides.memoryHistorySearchEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_SEARCH_ENABLED", true),
+    memoryLiteralFallbackEnabled: overrides.memoryLiteralFallbackEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_LITERAL_FALLBACK_ENABLED", false),
     memoryHistoryRetrievalV2Enabled: overrides.memoryHistoryRetrievalV2Enabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_RETRIEVAL_V2_ENABLED", false),
     memorySearchHintEnabled: overrides.memorySearchHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SEARCH_HINT_ENABLED", false),
     memoryPeopleAcrossProjectsEnabled: overrides.memoryPeopleAcrossProjectsEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PEOPLE_ACROSS_PROJECTS_ENABLED", false),

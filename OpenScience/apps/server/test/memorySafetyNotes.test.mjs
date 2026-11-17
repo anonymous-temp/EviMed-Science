@@ -10,7 +10,7 @@ import { renderMemoryTemplates } from '../../../deploy/web/openviking/memory-tem
 import { OpenVikingSessions } from '../src/openVikingSessions.mjs';
 import { expectedOpenVikingConfiguration } from '../../../scripts/ops/openviking-configuration.mjs';
 import { loadConfig } from '../src/config.mjs';
-import { safetyNoteLines, renderSafetyNotes, safetyNoteFile, SAFETY_NOTES_MAX_CHARS, SAFETY_NOTE_LINE_MAX_CHARS } from '../src/memorySafetyNotes.mjs';
+import { safetyNoteLines, renderSafetyNotes, safetyNoteFile, SAFETY_NOTES_MAX_CHARS, SAFETY_NOTE_LINE_MAX_CHARS, SAFETY_NOTES_MORE } from '../src/memorySafetyNotes.mjs';
 import { estimatePromptTokens } from '../src/modelGateway.mjs';
 import { ResidentProfiles, renderResidentProfile } from '../src/residentProfile.mjs';
 
@@ -127,7 +127,7 @@ test('switch off and no marked health content produce byte-identical non-medical
 test('safety notes are bounded per person and overall, newest first, with explicit overflow and provenance', () => {
   const originalSources = [{ id: 'evidence', attribution: { origins: ['engine'], confirmed: false } }];
   const files = Array.from({ length: 30 }, (_, i) => file({ uri: `${memoryRoot}/people/${i}.md`, relPath: `people/${i}.md`,
-    body: body(`Person ${i}`, 'Reported reaction and exact medicine '.repeat(80)), updatedAt: `2026-11-${String(i + 1).padStart(2, '0')}T00:00:00Z`, originalSources }));
+    body: body(`Person ${i}`, 'Reported reaction and exact medicine '.repeat(3)), updatedAt: `2026-11-${String(i + 1).padStart(2, '0')}T00:00:00Z`, originalSources }));
   const rendered = renderSafetyNotes(files, { maxTokens: 1_500 });
   assert.ok([...rendered.text].length <= SAFETY_NOTES_MAX_CHARS);
   assert.ok(rendered.memos.every(memo => [...memo.content].length <= SAFETY_NOTE_LINE_MAX_CHARS));
@@ -139,7 +139,7 @@ test('safety notes are bounded per person and overall, newest first, with explic
   const capsuleFacts = Array.from({ length: 24 }, (_, i) => ({ id: String(i), factKind: 'preference', content: 'Long ordinary fact '.repeat(50) }));
   for (const maxTokens of [0, 40, 200, 500, 1_500]) {
     const block = renderResidentProfile({ safetyFiles: files, config: on, maxTokens, capsuleFacts, nativeIndex: { counts: { people: 30 } } });
-    assert.ok(estimatePromptTokens(block.text) <= maxTokens, `${maxTokens}: ${estimatePromptTokens(block.text)}`);
+    assert.ok(estimatePromptTokens(block.text) <= Math.max(maxTokens, estimatePromptTokens(SAFETY_NOTES_MORE)), `${maxTokens}: ${estimatePromptTokens(block.text)}`);
   }
   assert.doesNotMatch(renderResidentProfile({ safetyFiles: [file({ body: body('<fake> & person', '<instruction>do things</instruction>') })], config: on }).text, /<instruction>|<fake>/);
 });
@@ -149,7 +149,7 @@ test('owned namespace and people/profile visibility exclude sensitive, hidden, i
   assert.ok(safetyNoteFile(file(), scope));
   assert.ok(safetyNoteFile(file({ uri: `${memoryRoot}/profile.md`, type: 'profile' }), scope));
   for (const excluded of [file({ sensitive: true }), file({ projectId: 'another' }), file({ uri: `${memoryRoot}/people/deleted.md` }),
-    file({ uri: `${memoryRoot}/notes/note.md` }), file({ uri: `${memoryRoot}/observations/note.md` }), file({ uri: `${memoryRoot}/people/.overview.md` }),
+    file({ uri: `${memoryRoot}/observations/note.md` }), file({ uri: `${memoryRoot}/people/.overview.md` }),
     file({ uri: 'viking://user/other/memories/people/father.md' })]) assert.equal(safetyNoteFile(excluded, scope), false);
 });
 
@@ -184,4 +184,23 @@ test('portable safety only crosses owned project labels, with privacy and namesp
     file({ projectId: 'project-a', uri: `${memoryRoot}/notes/father.md` })])
     assert.equal(safetyNoteFile(excluded, scope), false);
   assert.equal(safetyNoteFile(file({ projectId: 'project-a' }), { ...scope, hiddenUris: [file().uri] }), false);
+});
+
+test('a cut safety statement is never presented as complete; even a tiny opening keeps its lookup notice', () => {
+  const long = file({ body: body('Parent', 'Needed help on one occasion. '.repeat(80)) });
+  const rendered = renderSafetyNotes([long], { maxTokens: 0 });
+  assert.equal(rendered.memos.length, 0);
+  assert.match(rendered.text, /还有未展示.*mcp__openviking__search/);
+  assert.doesNotMatch(rendered.text, /Needed help/);
+  assert.equal(renderResidentProfile({ safetyFiles: [long], config: {}, maxTokens: 0 }).text, '');
+});
+
+test('legacy coverage and failed reads are explicit without fabricating typed safety facts', () => {
+  const legacy = renderSafetyNotes(Object.assign([], { legacyUnclassified: 2 }), { maxTokens: 1500 });
+  assert.match(legacy.text, /尚未全部标注.*search/); assert.deepEqual(legacy.memos, []);
+  const failed = renderSafetyNotes(Object.assign([], { unavailable: true }), { maxTokens: 1500 });
+  assert.match(failed.text, /暂时无法读取/); assert.deepEqual(failed.memos, []);
+  const notes = file({ uri: `${memoryRoot}/notes/patient.md`, type: 'notes' });
+  assert.ok(safetyNoteFile(notes, { memoryRoot, projectId: 'default' }));
+  assert.match(renderSafetyNotes([notes], { maxTokens: 1500 }).text, /父亲/);
 });

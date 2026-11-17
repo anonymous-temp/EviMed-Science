@@ -35,6 +35,29 @@ test('history prose names dates, speaker, link and historical context; unknown t
   assert.match(text, /context|历史/);
 });
 
+test('a failed source proof is unavailable, while an absent proof remains fenced without its private details', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const context = { kind: 'owned', ownerId: 'u1', ownerCreatedAt: '2026-01-01', namespaceId: 'u1', userRoot: 'viking://user/u1' };
+  let fails = true;
+  const service = new MemoryHistory({ config: { memoryHistorySearchEnabled: true },
+    contexts: { forProject: async () => context },
+    ledger: { lookup: async () => ({ project_id: 'default', project_created_at: '2026-01-01', session_id: 'source' }) },
+    resourcesFor: () => ({ searchHistory: async (_user, root) => [{ uri: `${root}/candidate` }] }),
+    resolveSource: async ({ engineSession }) => {
+      if (!engineSession) return { projectId: 'default', projectCreatedAt: '2026-01-01' };
+      if (fails) throw Error('DO-NOT-REVEAL');
+      return null;
+    } });
+  const request = { user: { id: 'u1' }, project: { id: 'default' }, query: 'past statement' };
+  const unavailable = await service.search(request);
+  assert.equal(unavailable.readStatus.state, 'unavailable');
+  assert.doesNotMatch(JSON.stringify(unavailable.readStatus), /DO-NOT-REVEAL/);
+  fails = false;
+  const absent = await service.search(request);
+  assert.equal(absent.readStatus.state, 'empty');
+  assert.equal(absent.readStatus.droppedByFence, 1);
+});
+
 
 test('source-count, fragment and chunk capacity failures have a dedicated local error type', () => {
   const isLimit = limit => error => error instanceof MemoryHistoryLimitError && error.limit === limit;
