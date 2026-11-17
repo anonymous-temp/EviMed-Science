@@ -63,9 +63,15 @@ test('public statement withdrawal fences raw history and its listed restore acti
 
 test('public exact-line forget preserves neighbours, rejects limited keys, and restores through the page path', options, async t => {
   const f = await setup(t), body = '- Use metric units.\n- Keep answers short.';
-  const uri = f.seed('preferences/format.md', body, { type: 'preferences' });
+  // Seeded bytes have no producer receipt. Only newly written statements gain
+  // the page edit's ordinary source scope; rewriting identical bytes cannot attest them.
+  const uri = f.seed('preferences/format.md', '# Formatting', { type: 'preferences' });
   const record = await f.store.getRecord(f.userId, nativeFileId(uri));
-  await f.store.update(f.userId, record.id, { value: body, expectedVersion: record.version });
+  assert.equal(record.sourcePrivacy.classification, 'unclassified');
+  await assert.rejects(f.call('/forget', { recordId: record.id }), error => error.code === 'memory_not_found');
+  const edited = await f.store.update(f.userId, record.id, { value: body, expectedVersion: record.version });
+  assert.equal(edited.origin, 'manual');
+  assert.equal(edited.sourcePrivacy.classification, 'ordinary');
   const bound = await f.keys.create(f.userId, { name: 'Bound', scopes: ['memory.manage'], projectId: 'default' });
   const readonly = await f.keys.create(f.userId, { name: 'Read', scopes: ['memory.read'] });
   for (const key of [bound, readonly]) {

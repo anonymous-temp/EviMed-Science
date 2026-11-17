@@ -6,6 +6,8 @@ import { createAgentMemoryRoutes } from '../src/agentMemoryRoutes.mjs';
 import { createMemoryAdmission } from '../src/memoryAdmission.mjs';
 import { rememberAdmission } from '../src/agentMemoryRemember.mjs';
 import { GeoNativeMemoryContext } from '../src/geoNativeMemoryContext.mjs';
+import { NativeMemoryOverlay } from '../src/nativeMemoryOverlay.mjs';
+import { NativeMemoryStore } from '../src/nativeMemoryStore.mjs';
 const { options, fixture } = nativeIntegration();
 
 async function setup(t) {
@@ -28,7 +30,7 @@ async function setup(t) {
     await routes({ url: `/api/agent-memory/v1${path}`, method: 'POST', headers: { authorization: `Bearer ${key.key}` },
       async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify(body)); } }, res); return res.data;
   };
-  return { ...f, call };
+  return { ...f, call, contexts };
 }
 const input = { statement: 'Use metric units.', source: { client: 'Editor', sessionId: 'outside-one', messageId: 'msg-one', saidAt: '2026-11-17T01:00:00Z' } };
 
@@ -40,8 +42,26 @@ test('external remember is idempotent across durable admissions, settles through
   const admissions = await f.database.query('SELECT * FROM evimed_memory.native_admissions WHERE user_id=$1', [f.userId]);
   assert.equal(admissions.rows.length, 1); assert.equal(admissions.rows[0].external_source.client, 'Editor');
   await f.worker.processCommits({ userId: f.userId }); await f.store.processAdmissions(f.userId);
+  // A new adapter must recover the admission from PostgreSQL, without an in-memory dedupe cache.
+  const overlay = new NativeMemoryOverlay({ database: f.database });
+  overlay.externalAdmissionPolicy = f.overlay.externalAdmissionPolicy;
+  const restarted = new NativeMemoryStore({ sessions: f.sessions, overlay, memoryContexts: f.contexts });
+  const recovered = await restarted.remember(f.userId, { text: input.statement, projectId: 'default', externalSource: input.source });
+  assert.equal(recovered.pending.state, 'completed');
   const retry = await f.call('/remember', input); assert.equal(retry.pending.state, 'completed');
-  assert.equal(f.stub.sent('POST', '/api/v1/sessions').length, 1);
+  assert.equal(retry.pending.id, recovered.pending.id);
+  // sent() matches a path prefix: creation, message append and commit are three
+  // different POSTs under /sessions, not three extracting sessions.
+  const sessionPath = `/api/v1/sessions/${admissions.rows[0].engine_session}`;
+  for (const path of ['/api/v1/sessions', `${sessionPath}/messages`, `${sessionPath}/commit`]) {
+    assert.equal(f.stub.sent('POST', path).filter(request => request.path === path).length, 1, path);
+  }
+  const persisted = await f.database.query('SELECT * FROM evimed_memory.native_admissions WHERE user_id=$1', [f.userId]);
+  assert.equal(persisted.rows.length, 1);
+  assert.equal(persisted.rows[0].state, 'completed');
+  const commits = await f.overlay.commitsOfSession(f.userId, admissions.rows[0].engine_session);
+  assert.equal(commits.length, 1);
+  assert.equal(commits[0].archiveUri, retry.pending.id);
   const record = (await f.store.records(f.userId)).find(record => record.value.includes('metric'));
   assert.ok(record); assert.equal(record.evidence[0].externalSource.client, 'Editor');
   assert.equal(record.evidence[0].externalSource.saidAt, input.source.saidAt);
