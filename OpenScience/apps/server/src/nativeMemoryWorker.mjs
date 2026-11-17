@@ -1,3 +1,4 @@
+import { reconcileMemoryNames } from './nativeMemoryNames.mjs';
 import { keepUnexplainedLines } from './nativeMemoryKeepLines.mjs';
 import { confirmedAliasRequest, confirmedAliases, choiceRows, choiceKey } from './nativeMemoryInduction.mjs';
 import { checkForgetRequests } from './nativeMemoryForgetRequests.mjs';
@@ -267,6 +268,11 @@ export class NativeMemoryWorker {
         try {
           commits += await this.processCommits({ userId });
           await this.nativeMemory?.processAdmissions(userId);
+          if (this.config.memoryNormalizeNamesEnabled === true) {
+            const context = await this.#contextForUri(userId, this.sessions.memoryRoot(userId));
+            await withNativeMemoryWrite(this.overlay.database, userId, () => reconcileMemoryNames({ userId, context, overlay: this.overlay }))
+              .catch(() => this.report('native memory name reconciliation unavailable'));
+          }
           // The weekly consolidation of the account's memories, where it is switched on (`nativeMemoryConsolidation.mjs`).
           // The account scheduler owns only the personal namespace. Project
           // consolidation needs a namespace-specific task ledger before scheduling.
@@ -882,8 +888,48 @@ export class NativeMemoryWorker {
       await this.nativeMemory.redirectPeople(userId, context, [...(operations.adds ?? []), ...(operations.updates ?? [])]
         .filter(operation => nativeMemoryFile(operation.uri, root)?.type === 'people').map(operation => operation.uri));
     }
+    if (!sourceDeleted && this.config.memoryCommitVerificationEnabled === true) {
+      await this.#verifyCommit(commit, operations, context).catch(() => { recordVerificationLines('unverifiable', 1); });
+    }
+    if (!sourceDeleted && this.config.memoryNormalizeNamesEnabled === true) {
+      // Failure leaves the extracted lines available; the next commit can retry the merge.
+      await reconcileMemoryNames({ userId, context, overlay: this.overlay }).catch(() => this.report('native memory name reconciliation unavailable'));
+    }
     recordNativeOperations(counts);
     return counts.added + counts.updated + counts.deleted;
+  }
+
+  /** Review only the still-live newly extracted lines against their own conversation.
+   * @param {any} commit @param {any} operations @param {any} context */
+  async #verifyCommit(commit, operations, context) {
+    // Promotion archives contain platform-authored evidence summaries, not a new
+    // statement by the person. Their existing original-source lineage remains authoritative.
+    if (commit.origin === 'promotion') return;
+    const { userId, archiveUri } = commit, sessions = context.sessions, root = sessions.memoryRoot(userId);
+    const changes = [];
+    for (const operation of [...(operations.adds ?? []), ...(operations.updates ?? [])]) {
+      const file = nativeMemoryFile(operation.uri, root);
+      if (!file || !['profile', 'preferences', 'project_context', 'people', 'notes'].includes(file.type)) continue;
+      const body = await sessions.read(userId, operation.uri);
+      if (typeof body !== 'string' || body !== operation.after) continue;
+      changes.push({ ...operation, type: file.type, body, projectId: PROJECT_MEMORY_TYPES.includes(file.type) ? commit.projectId ?? null : null });
+    }
+    if (!changes.length || !await this.overlay.claimCommitVerification(userId, archiveUri)) return;
+    const origin = { archiveUri, engineSession: commit.engineSession, projectId: commit.projectId ?? null,
+      projectCreatedAt: commit.projectCreatedAt ?? null };
+    const sources = await this.verification.readSources(userId, [origin], context);
+    const assessed = await this.verification.assessCommit(userId, changes, sources);
+    let applied = 0;
+    for (const change of assessed.rewrites) {
+      if (change.after === change.body) continue;
+      const origins = new Map(assessed.results.filter(row => row.uri === change.uri && row.corrected)
+        .map(row => [lineFingerprint(row.corrected), [origin]]));
+      // The optional review may never invoke the instruction hold path. Its existing
+      // local grounding and withdrawal check still apply; missing authority leaves bytes alone.
+      if (await this.verification.write(userId, change, change.after, 'commit source verification', origins, context, { instructionReview: false })) applied++;
+    }
+    await this.overlay.recordCommitVerification(userId, archiveUri, { state: 'complete', calls: assessed.calls,
+      omitted: assessed.omitted, applied, findings: assessed.results.map(row => ({ uri: row.uri, fingerprint: row.fingerprint, status: row.status })) });
   }
 
   /** Accept an extraction after-image before either ingestion or instruction review records it.
@@ -919,7 +965,6 @@ export class NativeMemoryWorker {
       let accepted = settled ? settled.after : entry.after;
       if (!settled) {
         const beforeLines = memoryLines(entry.before);
-        if (beforeLines.length > 200) { recordUnexplainedDeletions('skipped_large'); continue; }
         const present = new Set(memoryLines(entry.after).map(lineFingerprint));
         const missing = beforeLines.filter(line => !present.has(lineFingerprint(line)));
         if (!missing.length) continue;
@@ -979,6 +1024,16 @@ export class NativeMemoryWorker {
       if (this.memoryContexts) this.memoryContexts.assertUri(context, uri);
     }
     const held = await this.overlay.files(userId);
+    if (this.config.memoryKeepUnexplainedLinesEnabled === true) {
+      const operations = { adds: [], updates: [], deletes: [] };
+      for (const uri of new Set([...adds, ...updates, ...deletes])) {
+        const before = held.get(uri)?.body ?? null, after = await sessions.read(userId, uri);
+        if (after === null && before !== null) operations.deletes.push({ uri, deleted_content: before });
+        else if (after !== null) operations[before === null ? 'adds' : 'updates'].push({ uri, before, after });
+      }
+      await this.#keepUnexplainedLines({ userId, archiveUri: `consolidation:${taskId}` }, { operations }, context);
+      adds = operations.adds.map(row => row.uri); updates = operations.updates.map(row => row.uri); deletes = operations.deletes.map(row => row.uri);
+    }
     const verify = mode === 'verify' && this.config.nativeMemoryConsolidationEnabled === true;
     const origins = await this.overlay.originsOf(userId, [...new Set([...adds, ...updates, ...deletes])]);
     const mergeOrigins = [...origins.values()].flatMap(lines => [...lines.values()].flatMap(originalSources));

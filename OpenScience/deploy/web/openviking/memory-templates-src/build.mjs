@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 import { MEMORY_DECIDE_EXTRACTION_V2_TEXT, MEMORY_DECIDE_TEXT, MEMORY_NEVER_KEPT_TEXT, MEMORY_SAFETY_NOTES_TEXT } from "../../../../packages/domain/src/memoryNeverKept.mjs";
 
-import { extractionV2Source } from "./extraction-v2.mjs";
+import { extractionV2Source, HISTORY_RULE } from "./extraction-v2.mjs";
 
 const src = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(src, "..", "memory-templates");
@@ -86,7 +86,7 @@ export function renderMemoryTemplates({ variant = "full", decide: decideName = "
     const safety = safetyNotes ? `\n\n  ${indented(MEMORY_SAFETY_NOTES_TEXT)}` : "";
     const attribution = pastedRule === "v1" && PASTED_RULE_TYPES.has(name) && !text.includes(PASTED_RULE_V1)
       ? `\n\n  ${indented(PASTED_RULE_V1)}` : "";
-    rendered[name] = text.replace("__NEVER_KEEP__", () => never).replace("__DECIDE__", () => decide + safety).replace("__LANGUAGE__", () => language + attribution);
+    rendered[name] = text.replace("__HISTORY__", () => indented(HISTORY_RULE)).replace("__NEVER_KEEP__", () => never).replace("__DECIDE__", () => decide + safety).replace("__LANGUAGE__", () => language + attribution);
     if (variant === "extraction-v2") rendered[name] = rendered[name].replace(/^[ \t]+$/gm, "");
   }
   if (safetyNotes) {

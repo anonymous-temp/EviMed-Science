@@ -41,10 +41,13 @@ description: |
     Excel 导出", "use Airflow"), one line each, with the reason when they gave one. A choice
     stated and then questioned in the same message ("行，先做 Excel，CSV 放到下个迭代。这样排期
     合理吗？") is taken: keep the choice; the question is not kept. A reversed
-    decision replaces its line. A budget, a date or a standard is a limit, not a choice: it
+    decision keeps the new choice first and its dated earlier value below. A budget, a date or a standard is a limit, not a choice: it
     belongs under 约束.
   - 阶段: where the work stands now, and what the user said is still open or pending on
-    their side. Remove an item once the user says it is done. A due date is not a stage.
+    their side. A completed item becomes a dated completed state, with bounded earlier history. A due date is not a stage.
+    An opinion about difficulty is not a stage. Never invent a stage to fill this optional section;
+    retain an opinion in NOTES with the label "User believes:". A status change the user states
+    in passing or in a subordinate clause still updates this project, even when the main request is unrelated.
   - 约束: limits the user stated: any deadline or due date ("周五前出初稿", "by the end of
     the quarter"), budget, standards to follow, things ruled out, and the conventions they set
     for this work's deliverables (language, format, audience, citation style, what not to
@@ -70,7 +73,19 @@ description: |
   (same project name) rather than creating another; change only the lines the conversation
   changes and keep the rest.
 
+  __HISTORY__
+
+  A forget request is not a new fact or event: do not add a note that restates the withdrawn
+  content or names it as deleted, including when the user refers to it only by a label.
+
   __NEVER_KEEP__
+
+  Keep a concrete number, model name, cost, household detail or project status the user states
+  about their own life or work even in passing: one concise dated line in the matching file.
+  Keep their corrections and explicit confirmation of a suggestion or document fact, with its
+  origin in the wording. An assistant suggestion or a document claim alone is not a first-person
+  fact, preference or project state; it remains in the source conversation. A user opinion stays
+  labelled "User believes:" in NOTES, never promoted to a rule or objective project stage.
 
   __DECIDE__
 directory: "viking://user/{{ user_space }}/memories/projects"

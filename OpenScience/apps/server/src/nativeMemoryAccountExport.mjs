@@ -36,7 +36,7 @@ export function projectNativeMemoryAccountData(data, roots) {
     return content === null ? null : content.split('\n').filter(line => !(data.sourceRejections ?? [])
       .some(row => row.fingerprint === lineFingerprint(memoryLines(line)[0] ?? line))).join('\n');
   };
-  const forgetRequests = data.commits.map(row => {
+  const forgetRequests = data.commits.filter(row => row.forgetRequests).map(row => {
     const plan = record(row.forgetRequests);
     return { at: row.createdAt, updatedAt: row.updatedAt, state: text(plan.state),
       requests: records(plan.requests).map(request => ({ at: record(request.requestMessage).at ?? row.createdAt,
@@ -75,5 +75,13 @@ export function projectNativeMemoryAccountData(data, roots) {
       const content = cleanPending(statement.text);
       return content ? [{ text: content, sensitivity: text(statement.sensitivity), ticked: statement.ticked === true }] : [];
     }) } : {}) }));
-  return { forgetRequests, revisions, admissions, imports };
+  const sourceVerification = data.commits.filter(row => row.sourceVerification).map(row => {
+    const review = record(row.sourceVerification);
+    const findings = records(review.findings).map(finding => text(finding.status))
+      .filter(status => ['supported', 'unsupported', 'corrected', 'attribution_wrong', 'unverifiable'].includes(status));
+    return { at: row.createdAt, state: text(review.state), calls: count(review.calls),
+      appliedFiles: count(review.applied), omittedLines: count(review.omitted),
+      findings: Object.fromEntries([...new Set(findings)].map(status => [status, findings.filter(value => value === status).length])) };
+  });
+  return { forgetRequests, sourceVerification, revisions, admissions, imports };
 }

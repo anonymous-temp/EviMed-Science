@@ -167,3 +167,13 @@ test('AL8 raw account files omit every generated memory projection while retaini
   assert.equal(accountMemoryProjection('workspace/report.md'), false);
   assert.equal(accountMemoryProjection('runtime/container-runtime/dsh-home/sessions/s/session.jsonl'), false);
 });
+
+test('commit source-review receipts export counts without paths, withdrawn words or retry authority', () => {
+  const result = project(input({ commits: [{ createdAt: at, sourceVerification: { state: 'complete', calls: 1, applied: 1, omitted: 2,
+    findings: [{ uri, fingerprint: lineFingerprint(forgotten), status: 'corrected' }, { uri, status: 'unsupported' }] } }] }));
+  assert.equal(result.forgetRequests.length, 0);
+  assert.deepEqual(result.sourceVerification, [{ at, state: 'complete', calls: 1, appliedFiles: 1, omittedLines: 2,
+    findings: { corrected: 1, unsupported: 1 } }]);
+  assert.equal(JSON.stringify(result).includes(forgotten), false);
+  assert.equal(JSON.stringify(result).includes('viking://'), false);
+});

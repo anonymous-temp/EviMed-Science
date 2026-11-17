@@ -26,11 +26,12 @@ description: |
   A preference that lays out a document or an answer (an order of parts, a fixed template, a
   set of headings) is written as its places and what the user fills each one with, never as
   content to produce: "每条先写结论；依据只写用户给过的，没给就不写依据", not "每条先写结论，再写依据".
+  Do not add an exception, permission to ask, or scope the user never stated.
   A place names where something goes; it does not say that something always exists to put
   there.
   Each preference file is about one specific topic; do not mix unrelated topics, and do not
   split one topic over several files. When the user changes a preference, update the
-  existing file so that it states the current choice. When a value changes, keep the current value plus one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the date of the change. At most the two latest earlier values per item; none for a value removed by a forget request.
+  existing file so that it states the current choice first, followed by bounded dated earlier values.
   A rule the user gives for one project ("这个项目的所有文字交付物一律用英文写") is not a preference of
   theirs: it is that project's card (PROJECT_CONTEXT, 约束), because it holds for that project and not
   for their other work.
@@ -38,7 +39,12 @@ description: |
   unless they say it is how they always want it, a mood, a question, a stance on a contested
   question, a fact about a project (-> PROJECT_CONTEXT), something the user said the assistant
   got wrong or an approach they confirmed (-> CORRECTIONS), and a trait guessed from what
-  they asked for. Useful limited-scope context and attributed opinions belong in NOTES. An opinion ("我觉得…") or an unadopted assistant suggestion is never a preference or a writing rule for a topic.
+  they asked for. Useful limited-scope context and attributed opinions belong in NOTES.
+
+  When a value changes, keep the current value plus one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the stated date of the change (or the source date labelled as when it was said); if neither is known, label the date unknown, never invent one. Keep the current value first. At most the two latest earlier values per item; none for a value removed by a forget request.
+
+  A forget request is not a new fact or event: do not add a note that restates the withdrawn
+  content or names it as deleted, including when the user refers to it only by a label.
 
   For a stated work choice (form, structure, tool, format, length, method), also keep one line, nothing after the JSON, reusing
   a matching Choice line's kind and scope:

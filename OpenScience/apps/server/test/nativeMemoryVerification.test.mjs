@@ -164,3 +164,62 @@ test('the single template setting defaults to current and refuses an unknown dir
   assert.equal(parseMemoryTemplatesDirectory('memory-templates-extraction-v2'), 'memory-templates-extraction-v2');
   assert.throws(() => parseMemoryTemplatesDirectory('../elsewhere'), /OPEN_SCIENCE_MEMORY_TEMPLATES_DIR/);
 });
+
+// F03/F06 and XV P01-x07/P03-x10 are synthetic reproductions of recorded classes.
+test('commit source review repairs only grounded attribution and leaves unsupported lines visible', async () => {
+  const { NativeMemoryVerification } = await import('../src/nativeMemoryVerification.mjs');
+  const original = '- 回复先结论后依据，200 字以内；需要展开时先问。\n- 用户使用 REDCap。\n- 用户认为患者依从性最难，项目已经启动。\n- Unverifiable statement.';
+  const sources = [source('回复先结论后依据，200 字以内。'), source('可以试试 REDCap。', 'assistant'), source('我认为患者依从性最难。')];
+  const fixes = ['回复先结论后依据，200 字以内。', 'Assistant suggested REDCap; the user has not adopted it.', '用户认为患者依从性最难。'];
+  let calls = 0;
+  const verification = new NativeMemoryVerification({ config: {}, sessions: {}, overlay: {}, judge: { judge: async ({ lines, maxAttempts }) => {
+    calls++; assert.equal(maxAttempts, 1); assert.deepEqual(lines[0].sources, sources);
+    return { calls: 1, results: new Map(lines.map((_, index) => [index, { index, verdict: index === 3 ? 'unsupported' : 'attribution_wrong', corrected: fixes[index] ?? null }])) };
+  } } });
+  const reviewed = await verification.assessCommit('u', [{ uri: 'profile', before: '', after: original }], sources);
+  assert.equal(calls, 1);
+  for (const fix of fixes) assert.ok(reviewed.rewrites[0].after.includes(fix));
+  assert.ok(reviewed.rewrites[0].after.includes('Unverifiable statement.'));
+  assert.equal(reviewed.rewrites[0].after.includes('项目已经启动'), false);
+});
+
+test('commit review keeps own statements, corrections, adopted suggestions and confirmed document facts', async () => {
+  const { NativeMemoryVerification } = await import('../src/nativeMemoryVerification.mjs');
+  const texts = ['我对青霉素过敏。', '更正：我现在住迎泽区。', '就用你建议的 REDCap。', '文档里说的每周游泳也是我本人的情况。'];
+  const verification = new NativeMemoryVerification({ config: {}, sessions: {}, overlay: {}, judge: { judge: async ({ lines }) => ({ calls: 1,
+    results: new Map(lines.map((_, index) => [index, { index, verdict: 'supported', corrected: null }])) }) } });
+  const after = texts.map(text => `- ${text}`).join('\n');
+  const result = await verification.assessCommit('u', [{ uri: 'profile', before: '', after }], texts.map(text => source(text)));
+  assert.equal(result.rewrites[0].after, after);
+});
+
+test('commit review is bounded, missing-source and unavailable/malformed judge results never change bytes', async () => {
+  const { NativeMemoryVerification } = await import('../src/nativeMemoryVerification.mjs');
+  for (const sources of [[], [source('Dose 12 mg.')]]) for (const mode of ['invalid', 'throws']) {
+    let calls = 0;
+    const judge = createVerificationJudge({ config: { deepseekModel: 'fake', deepseekApiKey: 'fake' }, callModel: async () => {
+      calls++; if (mode === 'throws') throw Error('unavailable'); return response([]);
+    } });
+    const verification = new NativeMemoryVerification({ config: {}, sessions: {}, overlay: {}, judge });
+    const after = Array.from({ length: 100 }, (_, index) => `- Dose ${index} mg.`).join('\n');
+    const result = await verification.assessCommit('u', [{ uri: 'profile', before: '', after }], sources);
+    assert.equal(result.rewrites[0].after, after);
+    assert.ok(calls <= 1); assert.equal(result.omitted, 68);
+  }
+});
+
+test('a commit correction cannot invent a number or borrow another conversation', async () => {
+  const { NativeMemoryVerification } = await import('../src/nativeMemoryVerification.mjs');
+  const verification = new NativeMemoryVerification({ config: {}, sessions: {}, overlay: {}, judge: { judge: async () => ({ calls: 1,
+    results: new Map([[0, { index: 0, verdict: 'corrected', corrected: 'Dose 99 mg.' }]]) }) } });
+  const after = '- Dose 12 mg.';
+  assert.equal((await verification.assessCommit('u', [{ uri: 'profile', after }], [source('Dose 12 mg.')])).rewrites[0].after, after);
+});
+
+test('a malformed partial injected commit verdict cannot rewrite even its apparently valid row', async () => {
+  const { NativeMemoryVerification } = await import('../src/nativeMemoryVerification.mjs');
+  const verification = new NativeMemoryVerification({ config: {}, sessions: {}, overlay: {}, judge: { judge: async () => ({ calls: 1,
+    results: new Map([[0, { index: 0, verdict: 'corrected', corrected: 'Dose 12 mg.' }]]) }) } });
+  const after = '- Dose 21 mg.\n- Prefers concise replies.';
+  assert.equal((await verification.assessCommit('u', [{ uri: 'profile', after }], [source('Dose 12 mg. Prefers concise replies.')])).rewrites[0].after, after);
+});

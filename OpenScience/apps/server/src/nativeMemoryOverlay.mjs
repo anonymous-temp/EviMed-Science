@@ -560,6 +560,24 @@ export class NativeMemoryOverlay {
       WHERE user_id=$1 AND archive_uri=$2`, [owner(userId), archiveUri, JSON.stringify(result)]);
   }
 
+  /** At most one optional source review per extraction, including across worker restarts.
+   * Existing commit JSON is exported and privacy-deleted with its conversation.
+   * @param {string} userId @param {string} archiveUri */
+  async claimCommitVerification(userId, archiveUri) {
+    const result = await this.#query(`UPDATE evimed_memory.native_commits SET
+      extraction=jsonb_set(COALESCE(extraction,'{}'::jsonb),'{sourceVerification}','{"state":"started"}'::jsonb)
+      WHERE user_id=$1 AND archive_uri=$2 AND NOT (COALESCE(extraction,'{}'::jsonb) ? 'sourceVerification') RETURNING archive_uri`,
+    [owner(userId), String(archiveUri)]);
+    return result.rows.length > 0;
+  }
+
+  /** @param {string} userId @param {string} archiveUri @param {Record<string,any>} summary */
+  async recordCommitVerification(userId, archiveUri, summary) {
+    await this.#query(`UPDATE evimed_memory.native_commits SET
+      extraction=jsonb_set(COALESCE(extraction,'{}'::jsonb),'{sourceVerification}',$3::jsonb)
+      WHERE user_id=$1 AND archive_uri=$2`, [owner(userId), String(archiveUri), JSON.stringify(summary)]);
+  }
+
   /**
    * @param {string} userId @param {string} archiveUri
    * @param {{ operations?: number, extraction?: Record<string, any> | null }} [outcome] `extraction`: what the engine said the
@@ -567,7 +585,7 @@ export class NativeMemoryOverlay {
    */
   async completeCommit(userId, archiveUri, { operations = 0, extraction = null } = {}) {
     await this.#query(`UPDATE evimed_memory.native_commits SET state='completed', operations=$3, error='', next_attempt_at=NULL, pending_text=NULL,
-      extraction=COALESCE($4::jsonb, extraction) || CASE WHEN extraction ? 'forgetRequests' THEN jsonb_build_object('forgetRequests',extraction->'forgetRequests') ELSE '{}'::jsonb END, ingested_at=clock_timestamp(), updated_at=clock_timestamp()
+      extraction=COALESCE($4::jsonb, extraction) || CASE WHEN extraction ? 'forgetRequests' THEN jsonb_build_object('forgetRequests',extraction->'forgetRequests') ELSE '{}'::jsonb END || CASE WHEN extraction ? 'sourceVerification' THEN jsonb_build_object('sourceVerification',extraction->'sourceVerification') ELSE '{}'::jsonb END, ingested_at=clock_timestamp(), updated_at=clock_timestamp()
       WHERE user_id=$1 AND archive_uri=$2 AND state IN ('pending', 'failed')`,
     [owner(userId), String(archiveUri), Math.max(0, Math.trunc(Number(operations)) || 0), extraction ? JSON.stringify(extraction) : null]);
   }

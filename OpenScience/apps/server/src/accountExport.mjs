@@ -78,8 +78,9 @@ export function accountExportDocumentKinds() { return [...customerKinds]; }
 
 // These stores contain personal input alongside runtime authority. Select only the fields the projections need.
 const nativeQueries = [
-  ["nativeCommits", `SELECT created_at AS "createdAt",updated_at AS "updatedAt",extraction->'forgetRequests' AS "forgetRequests"
-    FROM evimed_memory.native_commits WHERE user_id=$1 AND extraction ? 'forgetRequests'
+  ["nativeCommits", `SELECT created_at AS "createdAt",updated_at AS "updatedAt",extraction->'forgetRequests' AS "forgetRequests",
+    extraction->'sourceVerification' AS "sourceVerification"
+    FROM evimed_memory.native_commits WHERE user_id=$1 AND (extraction ? 'forgetRequests' OR extraction ? 'sourceVerification')
       AND EXISTS(SELECT 1 FROM unnest($2::text[]) AS roots(root) WHERE starts_with(archive_uri,root||'/sessions/')) ORDER BY created_at,archive_uri`],
   ["nativeRevisions", `SELECT id::text,uri,memory_type AS "memoryType",change,actor,reason,before,after,
     archive_uri AS "archiveUri",engine_session AS "engineSession",project_id AS "projectId",

@@ -74,13 +74,13 @@ export function parseVerificationJudgement(content, lines) {
 export function createVerificationJudge({ config, usageLedger = null, fetchImpl = globalThis.fetch, now = () => new Date(), callModel = callModelForControlPlane }) {
   const spent = new Map();
   return {
-    async judge({ userId, lines }) {
+    async judge({ userId, lines, maxAttempts = 2 }) {
       const nothing = { results: new Map(), calls: 0 };
       if (!lines.length) return nothing;
       const model = String(config.memoryExtractionModel || config.deepseekModel || '');
       if (!model || config.deepseekProviderEnabled === false || !config.deepseekApiKey) { recordVerificationJudge('unavailable'); return nothing; }
       let made = 0;
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 0; attempt < Math.max(1, Math.min(2, maxAttempts)); attempt++) {
         const day = now().toISOString().slice(0, 10), held = spent.get(userId);
         const calls = held?.day === day ? held.calls : 0;
         if (calls >= Math.max(0, Number(config.nativeMemoryVerifyDailyCalls ?? 40))) {
@@ -191,8 +191,8 @@ export class NativeMemoryVerification {
   }
 
   /** Bounded batch judging with one malformed-output retry. Literal support is also read for temporal/attribution errors. */
-  async assess(userId, entries) {
-    const results = [], batchSize = 8;
+  async assess(userId, entries, { batchSize = 8, maxAttempts = 2, strictBatch = false } = {}) {
+    const results = [];
     let calls = 0;
     for (let start = 0; start < entries.length; start += batchSize) {
       const batch = entries.slice(start, start + batchSize);
@@ -200,8 +200,13 @@ export class NativeMemoryVerification {
       const deterministic = ready.map(entry => verifyLines({ lines: [entry], sources: entry.sources })[0]);
       let judged = { results: new Map(), calls: 0 };
       if (ready.length) {
-        try { judged = await this.judge.judge({ userId, lines: ready.map((entry, index) => ({ index, text: entry.text, sources: entry.sources })) }); }
+        try { judged = await this.judge.judge({ userId, maxAttempts, lines: ready.map((entry, index) => ({ index, text: entry.text, sources: entry.sources })) }); }
         catch { recordVerificationJudge('failed'); }
+      }
+      if (strictBatch) {
+        const valid = judged?.results instanceof Map
+          ? parseVerificationJudgement(JSON.stringify({ results: [...judged.results.values()] }), ready) : null;
+        judged = { results: valid ?? new Map(), calls: judged?.calls ?? 0 };
       }
       calls += judged.calls ?? 0;
       for (const entry of batch) {
@@ -216,8 +221,37 @@ export class NativeMemoryVerification {
     return { results, calls };
   }
 
+  /** One bounded call for this commit only. No lookup of related conversations, no
+   * unsupported rollback and no holding/deletion. The worker persists the attempt before
+   * calling so a crash cannot repeatedly spend on a commit. Also used by offline replay.
+   * @param {string} userId @param {any[]} changes @param {SourceExcerpt[]} sources */
+  async assessCommit(userId, changes, sources) {
+    const entries = [];
+    let omitted = 0, characters = 0;
+    for (const change of changes) {
+      const before = new Set(memoryLines(change.before ?? '').map(lineFingerprint));
+      for (const text of memoryLines(change.after ?? '')) {
+        const fingerprint = lineFingerprint(text);
+        if (before.has(fingerprint)) continue;
+        const entry = { text, fingerprint, uri: change.uri, sources };
+        const size = JSON.stringify(entry).length;
+        if (entries.length >= 32 || size > 16000 || characters + size > 48000) { omitted++; continue; }
+        entries.push(entry); characters += size;
+      }
+    }
+    const assessed = await this.assess(userId, entries, { batchSize: 32, maxAttempts: 1, strictBatch: true });
+    const rewrites = changes.map(change => {
+      let after = change.after;
+      for (const row of assessed.results.filter(row => row.uri === change.uri)) {
+        if (['corrected', 'attribution_wrong'].includes(row.status) && row.corrected) after = replaceStatement(after, row.fingerprint, row.corrected);
+      }
+      return { ...change, after };
+    });
+    return { ...assessed, rewrites, omitted };
+  }
+
   /** Apply an undoable revision only if the engine still has the body we verified. Never deletes a memory file. */
-  async write(userId, file, next, reason, origins = new Map(), context = null) {
+  async write(userId, file, next, reason, origins = new Map(), context = null, { instructionReview = true } = {}) {
     if (next === file.body) return false;
     const sessions = context?.sessions ?? this.sessions;
     if (await sessions.read(userId, file.uri) !== file.body) return false;
@@ -237,7 +271,7 @@ export class NativeMemoryVerification {
       engineSession: authority?.engineSession ?? null,
       sourceProjectId: authority?.projectId ?? null,
       sourceProjectCreatedAt: authority?.projectCreatedAt ?? null });
-    const review = this.instructionWriteCheck ? async () => {
+    const review = instructionReview && this.instructionWriteCheck ? async () => {
       await record();
       next = await this.instructionWriteCheck(userId, file, next, origins, context);
     } : null;

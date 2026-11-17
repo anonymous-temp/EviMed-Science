@@ -1074,7 +1074,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           if (name === "read") {
             const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && ctx.recallFile(absolute(uri, ctx.userRoot)) && !isHidden(uri)).slice(0, 10).map(uri => absolute(uri, ctx.userRoot));
             if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件。")); continue; }
-            if (overlay?.memoryForgetBody || config.memoryDeferredSummaryRebuildEnabled === true || config.memoryObservationInductionEnabled === true || config.memoryPersonAliasHintEnabled === true || config.memoryPersonMergeEnabled === true) {
+            if (overlay?.memoryForgetBody || config.memoryDeferredSummaryRebuildEnabled === true || (config.memoryObservationInductionEnabled === true || config.memoryObservationRecallEnabled === true) || config.memoryPersonAliasHintEnabled === true || config.memoryPersonMergeEnabled === true) {
               const content = [];
               for (const uri of uris) {
                 const read = await handlers.read({ ...ctx, query: new URLSearchParams({ uri, model_use: 'true' }) });
@@ -1354,7 +1354,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         },
         inductionEnabled: !shared && config.memoryObservationInductionEnabled === true,
         recallFile: (/** @type {string} */ uri) => nativeMemoryFile(uri, `${userRoot}/memories`)
-          ?? (!shared && config.memoryObservationInductionEnabled === true ? observationFile(uri, `${userRoot}/memories`) : null),
+          ?? (!shared && (config.memoryObservationInductionEnabled === true || config.memoryObservationRecallEnabled === true) ? observationFile(uri, `${userRoot}/memories`) : null),
         personIdentityVisible: async (/** @type {string} */ uri, /** @type {string} */ body) => {
           // A safe surviving body does not authorize a removed title or filename as an alias hint.
           // Use the same source-aware fence for both names, including filename fallback and redirects.
@@ -1406,7 +1406,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             const otherProjects = shared || !overlay?.configured || typeof overlay.otherProjectUris !== "function" ? [] : await overlay.otherProjectUris(user.id, project.id, 10000, {
               peopleAcrossProjects: config.memoryPeopleAcrossProjectsEnabled === true, memoryRoot: `${userRoot}/memories` });
             // Observations remain hidden by default and in shared namespaces; opt-in personal recall labels them.
-            return [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, ...(shared || config.memoryObservationInductionEnabled !== true ? [`${userRoot}/memories/${OBSERVATIONS_SEGMENT}`] : []), ...otherProjects,
+            return [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, ...(shared || config.memoryObservationInductionEnabled !== true && config.memoryObservationRecallEnabled !== true ? [`${userRoot}/memories/${OBSERVATIONS_SEGMENT}`] : []), ...otherProjects,
               ...(shared ? [`${userRoot}/memories/profile.md`, `${userRoot}/memories/.overview.md`, `${userRoot}/memories/.abstract.md`, ...await privatePreferences(ctx)] : []),
               ...sensitive.filter((/** @type {string} */ uri) => !shared || uri === userRoot || uri.startsWith(`${userRoot}/`))];
           })();
