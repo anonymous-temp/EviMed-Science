@@ -342,9 +342,17 @@ test('source cleanup removes its current identity and keeps an independently sou
   for (const removeTitle of [true, false]) {
     const f = await fixture(t), uri = f.seed('profile.md', '# Named person\n- Body preference.', { type: 'profile' });
     await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'profile', body: '# Named person\n- Body preference.' });
+    await f.overlay.addRevision({ userId: f.userId, uri, memoryType: 'profile', change: 'added', actor: 'engine',
+      after: '# Named person', engineSession: removeTitle ? 'dsh-a' : 'dsh-b', sourceProjectId: 'default' });
     await f.overlay.syncOrigins(f.userId, uri, { after: '# Named person', origin: { engineSession: removeTitle ? 'dsh-a' : 'dsh-b', projectId: 'default' } });
+    await f.overlay.addRevision({ userId: f.userId, uri, memoryType: 'profile', change: 'updated', actor: 'engine',
+      before: '# Named person', after: '# Named person\n- Body preference.', engineSession: removeTitle ? 'dsh-b' : 'dsh-a', sourceProjectId: 'default' });
     await f.overlay.syncOrigins(f.userId, uri, { before: '# Named person', after: '# Named person\n- Body preference.', origin: { engineSession: removeTitle ? 'dsh-b' : 'dsh-a', projectId: 'default' } });
     await f.store.removeConversationSource(f.userId, 'default', ['a']);
-    assert.equal(await f.sessions.read(f.userId, uri), removeTitle ? '- Body preference.' : '# Named person');
+    const expected = removeTitle ? '- Body preference.' : '# Named person', keptTitle = removeTitle ? '' : '# Named person';
+    assert.equal(await f.sessions.read(f.userId, uri), expected);
+    assert.deepEqual((await f.overlay.revisionsOf(f.userId, uri)).map(({ before, after }) => [before, after]), [
+      [expected, expected], [keptTitle, expected], [null, keptTitle],
+    ]);
   }
 });

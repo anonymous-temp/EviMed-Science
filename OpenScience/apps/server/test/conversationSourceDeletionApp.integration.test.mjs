@@ -101,8 +101,13 @@ test('only controller-proven native namespace copies are cleaned and equal ids i
   for(const [view,rel,type,source,kept] of [[personal,'profile.md','profile','Personal source A.','Personal independent B.'],[shared,'project_facts/source.md','project_facts','Shared source A.','Shared independent B.']]){
     const uri=stub.seedMemory(view.namespaceId,rel,`# Facts\n- ${source}\n- ${kept}`,{type});
     await overlay.upsertFile({userId:user.id,uri,memoryType:type,body:`# Facts\n- ${source}\n- ${kept}`,projectId:type==='profile'?null:'default'});
-    await overlay.syncOrigins(user.id,uri,{after:`# Facts\n- ${source}`,origin:{engineSession:'dsh-source_a',projectId:'default'}});
+    // The heading predates A: a profile H1 is content and must have its own source.
+    await overlay.syncOrigins(user.id,uri,{after:'# Facts',origin:{engineSession:'dsh-b',projectId:'default'}});
+    await overlay.addRevision({userId:user.id,uri,memoryType:type,change:'updated',actor:'engine',before:'# Facts',after:`# Facts\n- ${source}`,engineSession:'dsh-source_a',sourceProjectId:'default'});
+    await overlay.syncOrigins(user.id,uri,{before:'# Facts',after:`# Facts\n- ${source}`,origin:{engineSession:'dsh-source_a',projectId:'default'}});
+    await overlay.addRevision({userId:user.id,uri,memoryType:type,change:'updated',actor:'engine',before:`# Facts\n- ${source}`,after:`# Facts\n- ${source}\n- ${kept}`,engineSession:'dsh-b',sourceProjectId:'default'});
     await overlay.syncOrigins(user.id,uri,{before:`# Facts\n- ${source}`,after:`# Facts\n- ${source}\n- ${kept}`,origin:{engineSession:'dsh-b',projectId:'default'}});entries.push({view,uri,kept});
+    if(type==='profile')assert.equal((await overlay.originsOf(user.id,[uri])).get(uri).get(lineFingerprint('# Facts')).engineSession,'dsh-b');
   }
   const otherUri=stub.seedMemory(other.namespaceId,'project_facts/source.md','Independent equal-id source.',{type:'project_facts'});
   await overlay.upsertFile({userId:user.id,uri:otherUri,memoryType:'project_facts',body:'Independent equal-id source.',projectId:'other'});
@@ -113,7 +118,12 @@ test('only controller-proven native namespace copies are cleaned and equal ids i
   assert.equal((await fetch(`${base}/api/projects/default/conversations/source_a/source`,{method:'DELETE',headers})).status,202);
   const row=await app.sourceDeletion.ledger.get(project,'source_a');assert.deepEqual(new Set(row.nativeRoots),new Set([personal.userRoot,shared.userRoot]));
   await app.sourceDeletion.drain();const status=await app.sourceDeletion.status(project,'source_a');assert.equal(status.cleanup,'complete',JSON.stringify(status));
-  for(const entry of entries)assert.equal(await entry.view.sessions.read(user.id,entry.uri),`# Facts\n- ${entry.kept}`);
+  for(const entry of entries){
+    const expected=`# Facts\n- ${entry.kept}`;
+    assert.equal(await entry.view.sessions.read(user.id,entry.uri),expected);
+    const revisions=await overlay.revisionsOf(user.id,entry.uri);
+    assert.deepEqual(revisions.map(({before,after})=>[before,after]),[[expected,expected],['# Facts',expected],['# Facts','# Facts']]);
+  }
   assert.equal(await other.sessions.read(user.id,otherUri),'Independent equal-id source.');
 });
 

@@ -1584,7 +1584,8 @@ export class NativeMemoryStore {
         if (prints.has(lineFingerprint(statement))) removed.push(statement); else kept.push(line);
       }
       if (!removed.length) continue;
-      const next = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+      // Source deletion removes attributed lines only; preserve every surviving byte as in revision scrubbing.
+      const next = kept.join('\n');
       const currentBody = await context.sessions.read(userId,file.uri);
       if (currentBody === null || contentHash(currentBody) !== file.hash) throw new HttpError(409,'memory_source_body_changed','The memory changed while source cleanup was prepared.');
       // Engine reads and overlay undo/export reads must lose the same source text.

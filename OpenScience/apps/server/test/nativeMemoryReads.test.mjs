@@ -5,6 +5,7 @@ import { test } from "node:test";
 
 import { unzipSync } from 'fflate';
 import { NativeMemoryStore } from "../src/nativeMemoryStore.mjs";
+import { NativeMemoryOverlay, lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 
 const ROOT = "viking://user/u1/memories";
 
@@ -214,3 +215,61 @@ test('source cleanup removes its identity row and preserves an independent ident
     assert.deepEqual(scrubbed, [removeTitle ? '# Named person' : 'Body preference.']);
   }
 });
+
+for (const { sourceOwnsTitle, heading } of [
+  { sourceOwnsTitle: false, heading: '  # Facts  \r' },
+  { sourceOwnsTitle: true, heading: '# Private A' },
+  { sourceOwnsTitle: true, heading: '# Facts' },
+]) {
+  test(`source cleanup ${sourceOwnsTitle ? 'scrubs its name' : 'preserves a foreign heading byte for byte'} (${heading.trim()}) in current and retained revisions`, async () => {
+    const { store, files } = engine({ count: 0, delay: 0 });
+    const uri = `${ROOT}/profile.md`;
+    const before = sourceOwnsTitle ? '' : `${heading}\n\n\n`;
+    const sourceBody = sourceOwnsTitle ? `${heading}\n- Source A.` : `${before}- Source A.`;
+    const body = `${sourceBody}\n- Independent B.\n`;
+    const revisions = [
+      { id: '1', uri, before, after: sourceBody, engineSession: 'dsh-a', reason: '' },
+      { id: '2', uri, before: sourceBody, after: body, engineSession: 'dsh-b', reason: '' },
+    ];
+    // Exercise the real revision scrubber; the adapter only stores its SQL reads/writes.
+    const overlay = new NativeMemoryOverlay({ database: {
+      transaction: async () => {},
+      query: async (sql, values) => {
+        if (sql.startsWith('SELECT 1 FROM evimed_memory.native_markers')) return { rows: [{}] };
+        if (sql.startsWith('SELECT id, before, after FROM evimed_memory.native_revisions')) return { rows: revisions.map(row => ({ ...row })) };
+        if (sql.startsWith('UPDATE evimed_memory.native_revisions SET before=$3')) {
+          const row = revisions.find(row => row.id === values[1]);
+          Object.assign(row, { before: values[2], after: values[3], reason: `${row.reason} [source-deleted]` });
+          return { rows: [] };
+        }
+        if (sql.startsWith('UPDATE evimed_memory.native_person_merges SET snapshot=NULL')) return { rows: [] };
+        assert.fail(`Unexpected revision SQL: ${sql}`);
+      },
+    } });
+    const origins = new Map([
+      [lineFingerprint(heading), { engineSession: sourceOwnsTitle ? 'dsh-a' : 'dsh-b', projectId: 'default' }],
+      [lineFingerprint('Source A.'), { engineSession: 'dsh-a', projectId: 'default' }],
+      [lineFingerprint('Independent B.'), { engineSession: 'dsh-b', projectId: 'default' }],
+    ]);
+    Object.assign(store.overlay, {
+      sourceRevisions: async () => revisions.filter(row => row.engineSession === 'dsh-a'),
+      consolidationRevisions: async () => [], revisionsOf: async () => [],
+      conversationOf: async (_user, session) => session?.slice(4), projectOfSession: async () => null,
+      withdrawConversationSource: async () => [], pendingSummaryInvalidations: async () => [],
+      originsOf: async () => new Map([[uri, origins]]),
+      scrubLines: overlay.scrubLines.bind(overlay),
+      addRevision: async row => { const revision = { ...row, id: String(revisions.length + 1) }; revisions.push(revision); return revision; },
+    });
+    files.set(uri, { body, modTime: '2026-11-17' });
+    const contributions = await store.sourceHistoryContributions('u1', 'default', ['a'], 'viking://user/u1');
+    assert.deepEqual(contributions[0].lines, sourceOwnsTitle ? [heading, 'Source A.'] : ['Source A.']);
+    await store.removeConversationSource('u1', 'default', ['a']);
+    const expected = `${before}- Independent B.\n`;
+    assert.equal(files.get(uri).body, expected);
+    const scrubbedSource = sourceOwnsTitle ? '' : `${heading}\n\n`;
+    assert.deepEqual(revisions.map(({ before: prior, after }) => [prior, after]), [
+      [before, scrubbedSource], [scrubbedSource, expected], [expected, expected],
+    ]);
+    assert.doesNotMatch(JSON.stringify(revisions), /Private A|Source A\./);
+  });
+}
