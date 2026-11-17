@@ -153,19 +153,34 @@ infer capabilities from error responses.
 | Capability | Current API coverage |
 |---|---|
 | Raw conversation recall | `POST /recall`, `include: ["history"]`, separately scoped. |
-| Complete opening context | Unavailable; native profile and gateway context have not been exposed. |
+| Opening context | `GET /context` (`memory.read`), the resident supplement plus the gateway startup profile and listings. |
 | Direct explicit remember | Unavailable; `/note` remains a candidate. |
 | Statement forget and forgotten list | `POST /forget` uses native statement/line withdrawal; `GET /forgotten` returns original text and the web-equivalent restore action. Requires account-scoped manage authority for withdrawal/restore; see below. |
 | Trusted conversation ingest | Unavailable; `/episodes` still waits for confirmation. |
 | General work signals | Unavailable; existing prescription observations are unchanged. |
 | Capsule sharing / selected-capsule-only recall | Unavailable; `capsuleIds` retains additive semantics. Trials stay web-only. |
-| Clients | DSH and MCP provide status, history recall, forget and forgotten tools. Context/remember adapters consult status and remain unavailable on this server. |
+| Clients | DSH and MCP provide status, history recall, forget and forgotten tools. Context/remember adapters consult status; context is now offered. |
 
-This is a partial expansion, not full capsule parity. The next item is a complete
-opening-context read reusing both `ResidentProfiles` and the gateway's native
-profile/context readers. Returning only the resident supplement would omit the
-engine's profile/preferences; directly calling the engine would bypass protected
-URIs, summaries, project exclusions and withdrawal filters.
+### Opening context
+
+Call `GET /context?projectId=<owned-project>` once at session start with
+`memory.read`. Project binding is identical to recall. `platformText` is the
+existing resident producer's exact block, read in peek mode: no conversation
+acknowledgement or delivery digest is stored. `layers` identifies profile,
+listings, projectCard, standingPreferences, index, safetyNotes, capsules and the
+optional mostUsed layer. Present layers carry text; absent ones carry a reason
+(`paused`, `trial`, `switch_off`, `budget`, `empty_or_filtered`). A cut native
+profile has `omissionReason: "elided"`. `omittedEntries` counts resident entries
+that did not fit. `listings.text` is JSON of the two filtered gateway arrays;
+it is not the plugin's presentation markup. The native profile text is the
+startup read result before the host formats it. These are the same inputs the
+kernel receives, not raw history. Shared namespaces are refused. Privacy,
+withdrawal and project exclusions are enforced by the gateway, including a
+source-version check. These reads never count as explicit use.
+
+```sh
+curl -H 'Authorization: Bearer <KEY>' https://example.invalid/api/agent-memory/v1/context
+```
 
 ### Targeted withdrawal and recovery
 
@@ -204,8 +219,7 @@ now checks the kept before-image version too, returning 409 for a stale version.
 The dashboard reads forgotten revisions directly instead of filtering active
 files for an archived status they cannot have.
 
-Complete opening remains closed (`complete_opening_composition_unavailable`):
-no `/context` endpoint is shipped. External explicit writing remains closed
+External explicit writing remains closed
 (`external_source_admission_unavailable`): no `/remember` endpoint is shipped.
 `memory.write` already existed for candidates and is not expanded silently.
 Neither a partial resident supplement nor a candidate confirmation is advertised
@@ -341,7 +355,7 @@ on demand. The API currently sends those bodies in recall itself; no new
 body-by-digest server route or stale plugin cache is introduced. A method outside
 that catalog's selection/budget cannot be loaded this way.
 `capsule_propose` calls `/note`; it always waits for the person's confirmation.
-`capsule_forget` uses `memory.manage`, and `capsule_forgotten` lists original withdrawn text with restore actions. Context and remember adapters first read status; this server keeps both capabilities closed. Call context at most once at session start, only when offered.
+`capsule_forget` uses `memory.manage`, and `capsule_forgotten` lists original withdrawn text with restore actions. Context and remember adapters first read status; this server offers context; remember remains closed. Call context at most once at session start, only when offered.
 
 **Raw history is opt-in** with `include: ["history"]` and both read scopes. Automatic external-work learning is unavailable. Share and proposal confirmation stay on the web memory page (`/app/memory`). This is a remote connector, not a local memory engine, transcript
 collector, method mount or capsule-isolation mechanism. Ordinary work requires

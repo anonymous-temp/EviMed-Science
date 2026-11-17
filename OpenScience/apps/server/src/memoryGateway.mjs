@@ -423,7 +423,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
    * @param {any} ctx @param {readonly unknown[]} uris
    */
   async function noteRecalled(ctx, uris) {
-    if (!overlay?.configured) return;
+    if (ctx.origin === 'agent-api' || !overlay?.configured) return;
     const userId = ctx.user.id;
     const root = `${ctx.userRoot}/memories`;
     const files = /** @type {string[]} */ ([...new Set(uris.filter((uri) => typeof uri === "string" && Boolean(nativeMemoryFile(/** @type {string} */ (uri), root))))]);
@@ -442,7 +442,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
   /** Count use only after an explicit read succeeded. Search exposure alone never trains the opening.
    * @param {any} ctx @param {string[]} uris */
   async function noteUsed(ctx, uris) {
-    if (config.memoryOpeningByUseEnabled !== true || !overlay?.configured || typeof overlay.noteUsed !== 'function') return;
+    if (ctx.origin === 'agent-api' || config.memoryOpeningByUseEnabled !== true || !overlay?.configured || typeof overlay.noteUsed !== 'function') return;
     const root = `${ctx.userRoot}/memories`;
     const files = [...new Set(uris.filter(uri => nativeMemoryFile(uri, root)))];
     if (!files.length) return;
@@ -935,7 +935,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // MCP profile reads always count and return the complete source.
       const startupProfile = !ctx.shared && uri === `${ctx.userRoot}/memories/profile.md` && ctx.query.get('model_use') !== 'true';
       if (!startupProfile) await noteUsed(ctx, [absolute(uri, ctx.userRoot)]);
-      return { status: 200, json: ok(startupProfile
+      return { status: 200, ...(ctx.origin === 'agent-api' && startupProfile ? { elided: openingProfileRead(text, `${ctx.userRoot}/memories`, config) !== text } : {}), json: ok(startupProfile
         ? openingProfileRead(text, `${ctx.userRoot}/memories`, config) : await ctx.recallText(uri, text)), outcome: "forwarded" };
     },
     async list(ctx) {
@@ -1274,42 +1274,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     },
   };
 
-  const handle = async (/** @type {any} */ req, /** @type {any} */ res, /** @type {((failure: any) => void) | undefined} */ onFailure) => {
-    let route = "unknown";
-    const send = (/** @type {{ status: number, json?: unknown, text?: string, contentType?: string }} */ answer) => {
-      const body = answer.json !== undefined ? JSON.stringify(answer.json) : (answer.text ?? "");
-      res.writeHead(answer.status, { "Content-Type": answer.contentType ?? "application/json", "Cache-Control": "no-store" });
-      res.end(body);
-    };
-    try {
-      const url = new URL(req.url, "http://evimed.local");
-      const rest = url.pathname.slice(MEMORY_GATEWAY_PATH.length);
-      const found = ROUTES.map(([method, pattern, name]) => ({ method, match: /** @type {RegExp} */ (pattern).exec(rest), name }))
-        .find((candidate) => candidate.method === req.method && candidate.match);
-      route = found ? String(found.name) : "unknown";
-      if (!enabled) throw new HttpError(404, "memory_gateway_disabled", "The memory gateway is not available in this deployment.");
-      const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
-      /** @type {{ userId: string, projectId: string }} */
-      let identity;
-      try { identity = await runtimeManager.assertActiveEviMedWorkloadToken(token); }
-      catch { throw new HttpError(401, "memory_gateway_unauthenticated", "The memory gateway does not know this caller."); }
-      // A caller cannot assert a role, and the identity headers it sends are never read.
-      if (req.headers["x-openviking-role"] !== undefined) throw new HttpError(403, "memory_gateway_role_refused", "A caller cannot assert a role.");
-      if (!found) throw new HttpError(404, "memory_gateway_route_refused", `${req.method} is not a memory gateway route here.`);
-      const user = await store.userById(identity.userId);
-      if (!user) throw new HttpError(401, "memory_gateway_unauthenticated", "The memory gateway does not know this caller.");
-      const project = await store.requireProject(user, identity.projectId);
-      if (overLimit(requestWindows, JSON.stringify([identity.userId, identity.projectId]), 60_000, ratePerMinute)) {
-        throw new HttpError(429, "memory_gateway_rate_limited", "Too many memory requests.");
-      }
-      const raw = req.method === "GET" || req.method === "DELETE" ? Buffer.alloc(0) : await readBody(req);
-      let json;
-      if (raw.length) {
-        try { json = JSON.parse(raw.toString("utf8")); }
-        catch { throw new HttpError(400, "memory_gateway_body_invalid", "The request body is not JSON."); }
-      }
-      // Body streaming may outlive a runtime stop, a rotation or an account's removal.
-      if (raw.length) await runtimeManager.assertActiveEviMedWorkloadToken(token).catch(() => { throw new HttpError(401, "memory_gateway_unauthenticated", "The memory gateway does not know this caller."); });
+  // Authentication is owned by the HTTP prelude; both callers below use these identical handlers and fences.
+  async function dispatch({ req, url, found, route, user, project, json = undefined, origin = 'kernel' }) {
       // Liveness carries no namespace data and needs no project policy.
       const memoryContext = config.memoryRuntimeLockIsolationEnabled === true && route === 'health' ? null : await resolveContext(user, project);
       const view = memoryContext?.sessions ?? sessions;
@@ -1327,7 +1293,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         && /^[A-Za-z0-9_.@-]{1,180}$/.test(req.headers['x-evimed-memory-session']) ? req.headers['x-evimed-memory-session'] : null;
       const ctx = {
         memoryFileSearchMinScore: config.memoryFileSearchMinScore,
-        user, project, json, query: url.searchParams, match: found.match, engineUser, userRoot, sessions: view, memoryContext, shared,
+        user, project, json, origin, query: url.searchParams, match: found.match, engineUser, userRoot, sessions: view, memoryContext, shared,
         account: /** @type {any} */ (view).client.account,
         readMemory: async (/** @type {string} */ uri, options = {}) => {
           const text = await view.read(user.id, uri, options);
@@ -1388,7 +1354,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         admit: (/** @type {string | null} */ engineSessionId, /** @type {number | null} */ at = null) => {
           engineSessionId = toolSession ? `dsh-${toolSession}` : engineSessionId;
           const key = `${engineSessionId ?? ""}\u0000${at ?? ""}`;
-          if (!admissions.has(key)) admissions.set(key, scopedAdmission(user, project, engineSessionId, at, memoryContext));
+          if (!admissions.has(key)) admissions.set(key, origin === 'agent-api' ? admission.admit({ user, project, engineSessionId, at, allowRunningFallback: false }) : scopedAdmission(user, project, engineSessionId, at, memoryContext));
           return /** @type {Promise<import("./memoryAdmission.mjs").MemoryAdmission>} */ (admissions.get(key));
         },
         // What recall never reads: the derived index subtree and the files the person marked sensitive.
@@ -1459,6 +1425,71 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           answer = { ...answer,text:stream ? safe.map(message=>`event: message\ndata: ${JSON.stringify(message)}\n\n`).join('') : JSON.stringify(safe) };
         }
       }
+      return answer;
+  }
+
+  // Only the fixed startup reads are callable by an API identity. No URI, session, role or write handler is accepted.
+  async function opening({ userId, projectId }) {
+    if (!enabled) throw new HttpError(503, 'memory_engine_unavailable', 'The memory service is unavailable.');
+    const user = await store.userById(userId);
+    if (!user) throw new HttpError(401, 'memory_gateway_unauthenticated', 'Unknown memory account.');
+    const project = await store.requireProject(user, projectId);
+    const context = await resolveContext(user, project);
+    if (context?.kind === 'geo-project') throw new HttpError(403, 'memory_scope_denied', 'Shared namespaces are not available here.');
+    const root = (context?.sessions ?? sessions).userRoot(user.id);
+    const paths = [
+      ['profile', `/api/v1/content/read?uri=${encodeURIComponent(`${root}/memories/profile.md`)}`],
+      ...['preferences', 'entities'].map(name => [name, `/api/v1/fs/ls?uri=${encodeURIComponent(`${root}/memories/${name}`)}&output=agent&recursive=true&abs_limit=512&node_limit=512`]),
+    ];
+    const parts = [];
+    for (const [name, path] of paths) {
+      const route = name === 'profile' ? 'read' : 'list';
+      const answer = await dispatch({ req: { headers: {} }, url: new URL(path, 'http://evimed.local'),
+        found: { match: [] }, route, user, project, origin: 'agent-api' });
+      if (answer.status !== 200 && answer.status !== 404) throw new HttpError(answer.status, 'memory_engine_unavailable', 'Opening memory could not be read.');
+      parts.push({ name, path, value: answer.json?.result ?? null, omitted: answer.outcome === 'withheld' || answer.status === 404,
+        ...(name === 'profile' && 'elided' in answer ? { elided: answer.elided } : {}) });
+    }
+    return parts;
+  }
+
+  const handle = async (/** @type {any} */ req, /** @type {any} */ res, /** @type {((failure: any) => void) | undefined} */ onFailure) => {
+    let route = "unknown";
+    const send = (/** @type {{ status: number, json?: unknown, text?: string, contentType?: string }} */ answer) => {
+      const body = answer.json !== undefined ? JSON.stringify(answer.json) : (answer.text ?? "");
+      res.writeHead(answer.status, { "Content-Type": answer.contentType ?? "application/json", "Cache-Control": "no-store" });
+      res.end(body);
+    };
+    try {
+      const url = new URL(req.url, "http://evimed.local");
+      const rest = url.pathname.slice(MEMORY_GATEWAY_PATH.length);
+      const found = ROUTES.map(([method, pattern, name]) => ({ method, match: /** @type {RegExp} */ (pattern).exec(rest), name }))
+        .find((candidate) => candidate.method === req.method && candidate.match);
+      route = found ? String(found.name) : "unknown";
+      if (!enabled) throw new HttpError(404, "memory_gateway_disabled", "The memory gateway is not available in this deployment.");
+      const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
+      /** @type {{ userId: string, projectId: string }} */
+      let identity;
+      try { identity = await runtimeManager.assertActiveEviMedWorkloadToken(token); }
+      catch { throw new HttpError(401, "memory_gateway_unauthenticated", "The memory gateway does not know this caller."); }
+      // A caller cannot assert a role, and the identity headers it sends are never read.
+      if (req.headers["x-openviking-role"] !== undefined) throw new HttpError(403, "memory_gateway_role_refused", "A caller cannot assert a role.");
+      if (!found) throw new HttpError(404, "memory_gateway_route_refused", `${req.method} is not a memory gateway route here.`);
+      const user = await store.userById(identity.userId);
+      if (!user) throw new HttpError(401, "memory_gateway_unauthenticated", "The memory gateway does not know this caller.");
+      const project = await store.requireProject(user, identity.projectId);
+      if (overLimit(requestWindows, JSON.stringify([identity.userId, identity.projectId]), 60_000, ratePerMinute)) {
+        throw new HttpError(429, "memory_gateway_rate_limited", "Too many memory requests.");
+      }
+      const raw = req.method === "GET" || req.method === "DELETE" ? Buffer.alloc(0) : await readBody(req);
+      let json;
+      if (raw.length) {
+        try { json = JSON.parse(raw.toString("utf8")); }
+        catch { throw new HttpError(400, "memory_gateway_body_invalid", "The request body is not JSON."); }
+      }
+      // Body streaming may outlive a runtime stop, a rotation or an account's removal.
+      if (raw.length) await runtimeManager.assertActiveEviMedWorkloadToken(token).catch(() => { throw new HttpError(401, "memory_gateway_unauthenticated", "The memory gateway does not know this caller."); });
+      const answer = await dispatch({ req, url, found, route, user, project, json });
       recordGatewayRequest(route, answer.outcome);
       send(answer);
     } catch (error) {
@@ -1525,5 +1556,5 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     });
   };
 
-  return Object.assign(handle, { commitSession });
+  return Object.assign(handle, { commitSession, opening });
 }

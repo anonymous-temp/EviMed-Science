@@ -80,7 +80,7 @@ async function fixture(t, { admission = fixedAdmission(), config = {}, overlay =
     const messages = answer.contentType.includes("event-stream") ? parseEventStream(answer.text) : answer.json ? [answer.json].flat() : [];
     return { ...answer, messages };
   };
-  return { stub, call, mcp, failures, admission, sessions };
+  return { stub, call, mcp, failures, admission, sessions, handler };
 }
 
 test("the engine is asked as the caller the token names, whatever the request says about itself", async (t) => {
@@ -1678,3 +1678,55 @@ for (const running of [[], [{ id: 'one', sessionId: 'neighbour' }], [{ id: 'one'
     assert.equal(named.sessionId, 'request-source', 'an explicit request session precedes the legacy running fallback');
   });
 }
+
+
+test('agent opening invokes the kernel read/list handlers without recording use or source receipts', async t => {
+  const uses = [], receipts = [];
+  const f = await fixture(t, { config: { memoryOpeningByUseEnabled: true },
+    sourceReceipt: async input => receipts.push(input), overlay: { configured: true,
+      sensitiveUris: async () => [`${ROOT}/memories/preferences/hidden.md`],
+      files: async () => new Map(), noteRecalled: async () => {}, noteUsed: async (...args) => uses.push(args) } });
+  f.stub.seedMemory(OV_USER, 'profile.md', 'I prefer concise answers.');
+  f.stub.seedMemory(OV_USER, 'preferences/visible.md', 'Use metric units.');
+  f.stub.seedMemory(OV_USER, 'preferences/hidden.md', 'Hidden preference.');
+  const opening = await f.handler.opening({ userId: USER, projectId: 'p1' });
+  assert.deepEqual(uses, []); assert.deepEqual(receipts, []);
+  for (const part of opening) {
+    const kernel = await f.call('GET', part.path);
+    assert.deepEqual(part.value, kernel.json.result);
+  }
+  assert.equal(opening[0].value, 'I prefer concise answers.');
+  assert.match(JSON.stringify(opening), /visible.md/);
+  assert.doesNotMatch(JSON.stringify(opening), /hidden.md|Hidden preference/);
+});
+
+
+test('public opening retains withdrawal, sensitive, other-project and source-version fences', async t => {
+  const { createAgentMemoryRoutes } = await import('../src/agentMemoryRoutes.mjs');
+  const { ResidentProfiles } = await import('../src/residentProfile.mjs');
+  let version = 0, change = false;
+  const f = await fixture(t, { overlay: { configured: true, sensitiveUris: async () => [`${ROOT}/memories/preferences/hidden.md`],
+    otherProjectUris: async () => [`${ROOT}/memories/entities/foreign.md`],
+    memoryForgetBody: async (_owner, _uri, text) => text?.replace('- Old booking.\n', '') ?? null },
+    sourceDeletion: { version: async () => change ? version++ : version } });
+  f.stub.seedMemory(OV_USER, 'profile.md', '- Old booking.\n- Keep green folders.');
+  f.stub.seedMemory(OV_USER, 'preferences/hidden.md', 'Hidden preference.');
+  f.stub.seedMemory(OV_USER, 'preferences/visible.md', 'Keep metric units.');
+  f.stub.seedMemory(OV_USER, 'entities/foreign.md', 'Foreign project.');
+  const settings = { configured: true, settings: async () => ({ pausedProjects: [] }) };
+  const routes = createAgentMemoryRoutes({ config: { agentMemoryApiEnabled: true }, capsules: {}, memorySettings: settings,
+    apiKeys: { resolve: async () => ({ userId: USER, keyId: 'test', scopes: ['memory.read'] }) },
+    store: { userById: async () => ({ id: USER }), requireProject: async () => ({ id: 'p1', userId: USER }) },
+    nativeMemory: { configured: true, memoryContexts: { forProject: async () => ({ kind: 'owned' }), assertLive: async () => {} } },
+    admission: fixedAdmission(), openingContext: { resident: new ResidentProfiles({ config: {}, store: settings }), opening: f.handler.opening } });
+  const call = async () => {
+    const res = { text: '', writeHead() {}, end(text) { this.text = text; } };
+    await routes({ method: 'GET', url: '/api/agent-memory/v1/context', headers: { authorization: 'Bearer test' } }, res);
+    return res.text;
+  };
+  const text = await call();
+  assert.match(text, /green folders/); assert.match(text, /visible.md/);
+  assert.doesNotMatch(text, /Old booking|hidden.md|Hidden preference|foreign.md|Foreign project/);
+  change = true;
+  await assert.rejects(call(), error => error.code === 'memory_gateway_source_changed');
+});

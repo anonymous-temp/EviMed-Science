@@ -333,6 +333,10 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
     },
     security: [{ agentApiKey: [] }],
     paths: {
+      '/context': { get: { summary: 'Read opening context once at session start',
+        description: 'Requires memory.read. Calls the resident producer in peek mode and the native gateway startup profile/list handlers. Does not acknowledge a conversation or count use. Each layer has text or an omission reason; platformText is the exact resident block. Listings are JSON text of the gateway entries, not a second history search.',
+        parameters: [{ name: 'projectId', in: 'query', schema: { type: 'string' }, description: 'Owned project; a bound key cannot widen its project.' }],
+        responses: { 200: { description: 'Opening layers with present/text or omitted/reason, including profile elision.' }, ...common } } },
       "/": {
         get: {
           summary: "What this key can do",

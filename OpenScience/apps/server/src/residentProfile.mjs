@@ -277,13 +277,13 @@ export class ResidentProfiles {
    * sending the run out without the profile it would have had (the caller wraps it in `memoryRecallRejection`). The
    * capsule's half degrades — a capsule that cannot be read leaves the card — and so does the project's card.
    *
-   * @param {string} userId @param {{ projectId: string, sessionId: string | null, attended?: boolean }} scope
+   * @param {string} userId @param {{ projectId: string, sessionId: string | null, attended?: boolean, peek?: boolean }} scope
    *   `attended`: a person is in this turn now (the web chat, an IM channel). A scheduled task, an episode, a module's step and
    *   a platform job are turns nobody is in, and are handed no project card.
-   * @returns {Promise<{ text: string, memories: any[], due: boolean, reason: string, omitted: number, digest: string | null, delivered: () => Promise<void> }>}
+   * @returns {Promise<{ text: string, memories: any[], due: boolean, reason: string, omitted: number, digest: string | null, delivered: () => Promise<void>, layers?: any }>}
    *   `digest` names the block, for a caller that hands it over in two steps (`acknowledge`): the capsule gateway's first-step context
    */
-  async forDispatch(userId, { projectId, sessionId, attended = false }) {
+  async forDispatch(userId, { projectId, sessionId, attended = false, peek = false }) {
     const none = (/** @type {string} */ reason) => {
       recordResidentProfile(reason);
       return { text: "", memories: [], due: false, reason, omitted: 0, digest: null, delivered: async () => {} };
@@ -323,7 +323,7 @@ export class ResidentProfiles {
     // having been: it is the safe direction, and the next dispatch asks again.
     /** @type {{ digest: string | null, compactedSince: boolean } | null} */
     let state = null;
-    if (sessionId) {
+    if (sessionId && !peek) {
       try { state = await this.store.residentState(userId, projectId, sessionId); }
       catch (error) {
         if (/** @type {any} */ (error)?.code !== "memory_session_invalid") throw error;
@@ -337,9 +337,15 @@ export class ResidentProfiles {
     const memories = block.memos;
     return {
       text: block.text, memories, due, reason, omitted: block.omitted, digest,
+      // A read-only projection of the already rendered opening; the normal dispatch result is unchanged.
+      ...(peek ? { layers: {
+        ...Object.fromEntries([['projectCard', 'project_card'], ['capsules', 'capsule'], ['mostUsed', 'native_most_used']].map(([name, type]) =>
+          [name, (block.profile.match(/<evimed-memory\b[^>]*>[\s\S]*?<\/evimed-memory>/g) ?? []).filter((_text, index) => block.memos[index]?.memoryType === type).join('\n')])),
+        standingPreferences: block.standing, index: block.index, safetyNotes: block.safety,
+      } } : {}),
       // After the prompt that carried it was accepted, so a dispatch that failed leaves the next one to hand it over.
       delivered: async () => {
-        if (!due) return;
+        if (!due || peek) return;
         if (state && sessionId) await this.store.noteResidentDelivered(userId, projectId, sessionId, digest, memories).catch(() => {});
       },
     };

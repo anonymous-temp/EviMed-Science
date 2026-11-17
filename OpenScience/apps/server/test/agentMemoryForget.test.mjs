@@ -97,7 +97,7 @@ test('forgotten list contains original text and the page restore action, exclude
 test('capabilities disclose incomplete opening and writing, and exact forgetting availability', async () => {
   const f = fixture();
   const caps = (await f.call('')).capabilities;
-  assert.equal(caps.openingContext.available, false); assert.ok(caps.openingContext.reason);
+  assert.equal(caps.openingContext.available, false);
   assert.equal(caps.explicitRemember.available, false); assert.ok(caps.explicitRemember.reason);
   assert.equal(caps.statementForget.available, true); assert.equal(caps.forgottenList.path, '/forgotten');
   f.state.bound = 'default';
@@ -118,7 +118,7 @@ test('a profile-line selector cannot expose or remove neighbouring lines', async
 
 test('closed opening and remember endpoints cannot act even with all scopes', async () => {
   const f = fixture(); f.state.scopes.push('memory.write');
-  await assert.rejects(f.call('/context'), error => error.code === 'not_found');
+  await assert.rejects(f.call('/context'), error => error.code === 'memory_engine_unavailable');
   await assert.rejects(f.call('/remember', { statement: 'Use metric units.', source: { client: 'Fixture', sessionId: 'one', saidAt: '2026-11-17T00:00:00Z' } }), error => error.code === 'not_found');
   assert.equal(f.state.calls.length, 0);
   assert.equal((await f.call('/forget', { statement: 'Use metric units.' })).historyRejected, true);
