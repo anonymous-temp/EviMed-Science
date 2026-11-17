@@ -586,7 +586,7 @@ export function createAgentMemoryRoutes({
             ...(identity.projectId ? { reason: 'withdrawal_requires_account_scope' } : {}) },
           forgottenList: { available: nativeMemory?.configured === true && Boolean(nativeMemory?.memoryContexts) && typeof nativeMemory?.forgotten === 'function' && identity.scopes.includes('memory.read'), requiredScopes: ['memory.read'], path: '/forgotten' },
           conversationIngest: { available: false, requiredScopes: ['memory.ingest'], internalOnly: true, reason: 'external_conversation_history_authority_unavailable' },
-          workSignals: { available: false },
+          workSignals: { available: false, requiredScopes: ['learning.signal'], internalOnly: true, reason: 'external_run_evidence_unproven' },
           capsuleSharing: { available: false },
           selectedCapsuleOnly: { available: false },
         },

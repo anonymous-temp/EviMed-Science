@@ -21,3 +21,9 @@ B 已运行：agentMemoryRemember 3、agentMemoryRememberStore 3、accountExport
 能力表现在明确 `conversationIngest.available=false`、`requiredScopes:[memory.ingest]`、`internalOnly:true`、`reason:external_conversation_history_authority_unavailable`。该 scope 尚不可签发，面板不提供空有权限但无功能的选项；OpenAPI 用 x-unavailable-operations 记录保留路由，没有宣称已服务的 path。
 
 确切缺口：`apps/server/src/memoryHistory.mjs:461` 只索引 platformSessionOf 可解析的内核会话，`:467` 再要求原生 session 与权威来源一致；`memoryHistorySources.mjs:30–37` 验证原生命名、项目绑定和真实 conversationRuns。不是“把角色、内容传给引擎”就可以自动得到后续 recall / 源删除可达的历史。需要把外部会话身份、批次幂等/恢复、人为/临床准入和源删除一起接入现有权威，本轮没有完成这一组合；不能把 B 的单条直接陈述当 E 的完整会话。现有历史拒绝外部 engine session 的刻画测试及已绑定内核会话仍可解析的正向断言通过；能力关闭原因测试先失败，修复后共 2 项通过。
+
+## F 工作信号：保持关闭
+
+能力表 `workSignals.available=false`、`requiredScopes:[learning.signal]`、`internalOnly:true`、`reason:external_run_evidence_unproven`；OpenAPI 同样记录关闭原因，不发布不存在的 /work-events。保留 scope 不可签发，也没有给模型一个可自报“成果被使用”的工具。
+
+确切障碍：`learningEvidence.mjs:642–655` 的 noteFileUse 从本人的 canonical run ledger 找已完成且确实交付该路径的 run；`:574–586` 的后续消息寻找同一真实会话的前一运行；`learningTriggers.mjs:251–253` 读 run 的完整 transcript 收据。`AgentRunStore.createRun`（agentRuns.mjs:5434）创建的是内核运行，不是外部成果证明。即使写一个 external=true 的最小 run（finishedAt、文件 digest、method 名称齐全），仍被 transcript_incomplete 拒绝；本轮新增刻画测试证明这一点，并证明有真实完整收据的既有路径不被新限制。任务的 F 请求体没有完整工作轨迹，不能伪填 completeness=complete。完整接入需要真实宿主事件与可验证 transcript / 文件清单，不能并列存储另一套学习状态或降低门槛。新增能力原因测试先失败，修复后 host boundaries 共 4 项通过。

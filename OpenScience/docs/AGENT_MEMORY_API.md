@@ -157,7 +157,7 @@ infer capabilities from error responses.
 | Direct explicit remember | `POST /remember` (`memory.remember`), page-origin direct statement with external source and durable idempotency. `/note` remains a candidate. |
 | Statement forget and forgotten list | `POST /forget` uses native statement/line withdrawal; `GET /forgotten` returns original text and the web-equivalent restore action. Requires account-scoped manage authority for withdrawal/restore; see below. |
 | Trusted conversation ingest | Unavailable: `external_conversation_history_authority_unavailable`; `/episodes` still waits for confirmation. |
-| General work signals | Unavailable; existing prescription observations are unchanged. |
+| General work signals | Unavailable: `external_run_evidence_unproven`; existing prescription observations are unchanged. |
 | Capsule sharing / selected-capsule-only recall | Unavailable; `capsuleIds` retains additive semantics. Trials stay web-only. |
 | Clients | DSH and MCP provide status, history recall, forget and forgotten tools. Context/remember adapters consult status; context and directly stated remember are offered. |
 
@@ -474,3 +474,22 @@ must be completed together before this scope is offered to internal accounts.
 Sending turns to the engine alone would not satisfy that contract. `/episodes`
 retains its existing candidate-only behavior. No model tool or fabricated kernel
 conversation has been added for this operation.
+
+
+### Reserved host work signals (not available)
+
+`POST /work-events` and the internal-host-only `learning.signal` scope remain
+unavailable; the scope is not mintable or offered in the panel. Status and
+OpenAPI disclose `external_run_evidence_unproven`. The existing learning chain
+reads canonical finished runs, delivered file inventories and complete retained
+transcripts. A minimal external run row containing only an outcome, digest and
+method names still fails `learningRefusal` with `transcript_incomplete`; marking
+it complete without a verified transcript would manufacture learning evidence.
+
+A future host adapter must send only actions performed by a human: `used`
+requires a delivered-file digest, `continued` additionally requires the person's
+later words, and `corrected` requires their actual correction. `none` is silent,
+unknown evidence. A model's claim that its own work was used is never evidence.
+Neither DSH nor MCP exposes an ingest or work-signal tool. There is no host hook
+until genuine host events and the existing evidence authority can be connected
+without weakening the thresholds, pauses, trial or clinical refusals.

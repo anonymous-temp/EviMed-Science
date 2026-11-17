@@ -74,6 +74,9 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
     },
     servers: [{ url: basePath }],
     'x-unavailable-operations': {
+      workSignals: { available: false, requiredScopes: ['learning.signal'], internalOnly: true, proposedPaths: ['POST /work-events'],
+        reason: 'external_run_evidence_unproven',
+        description: 'Reserved, not served or mintable. The learning chain requires a complete canonical run transcript and delivered file inventory; a minimal external ledger row cannot prove them. Hosts must report only human actions, never model self-reports. Silence remains unknown.' },
       conversationIngest: { available: false, requiredScopes: ['memory.ingest'], internalOnly: true,
         proposedPaths: ['POST /conversations/{externalSessionId}/turns', 'POST /conversations/{externalSessionId}/commit'],
         reason: 'external_conversation_history_authority_unavailable',
