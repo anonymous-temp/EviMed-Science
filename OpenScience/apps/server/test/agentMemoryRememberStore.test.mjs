@@ -41,6 +41,8 @@ test('explicit statements enter the page commit path exactly once, keep their so
   const first = await f.remember(); const second = await f.remember();
   assert.equal(first.pending.id, second.pending.id); assert.equal(f.calls.length, 1);
   assert.equal([...f.commits.values()][0].origin, 'page');
+  assert.equal([...f.commits.values()][0].projectCreatedAt, '2026-01-01');
+  assert.equal([...f.commits.values()][0].pendingText, 'Use metric units.');
   assert.equal([...f.rows.values()][0].externalSource.client, 'Editor');
   assert.equal(f.calls[0].created_at, source.saidAt);
   await assert.rejects(f.remember('Use imperial units.'), error => error.code === 'memory_conflict');

@@ -2301,9 +2301,10 @@ export class NativeMemoryStore {
         if (Number(status?.commit_count) > 0) {
           const nodes = await this.sessions.tree(userId, `${this.sessions.sessionUri(userId,row.engineSession)}/history`, { showHidden: true });
           const archive = nodes.map((node) => parseArchiveUri(node.uri)).find(parsed => parsed && (!row.externalSource
-            || parsed.userRoot === this.sessions.userRoot(userId) && parsed.session === row.engineSession))?.archiveUri;
+            || !parsed.rest && parsed.userRoot === this.sessions.userRoot(userId) && parsed.session === row.engineSession))?.archiveUri;
           if (!archive) { await save({ state: "uncertain", error: "commit_archive_not_visible", release: true }); return receipt(row); }
-          const commit = await this.overlay.recordCommit({ userId, archiveUri: archive, engineSession: row.engineSession, projectId: row.projectId, origin: row.externalSource ? "page" : "tool" });
+          const commit = await this.overlay.recordCommit({ userId, archiveUri: archive, engineSession: row.engineSession, projectId: row.projectId, origin: row.externalSource ? "page" : "tool",
+            ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt, pendingText: row.text } : {}) });
           await save({ archiveUri: archive, taskId: commit.taskId, state: "pending" });
         } else {
           if (!status || !Number.isFinite(Number(status.message_count))) throw new HttpError(503, "memory_engine_unavailable", "The session state could not be inspected.");
@@ -2343,7 +2344,7 @@ export class NativeMemoryStore {
             throw new HttpError(403, 'memory_scope_denied', 'The archive does not belong to the submitted statement.');
           }
           const commit = await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: row.engineSession,
-            projectId: row.projectId, origin: row.externalSource ? "page" : "tool", pendingText: row.externalSource ? row.text : null, taskId: result.task_id ?? null });
+            projectId: row.projectId, ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt } : {}), origin: row.externalSource ? "page" : "tool", pendingText: row.externalSource ? row.text : null, taskId: result.task_id ?? null });
           await save({ state: "pending", archiveUri: commit.archiveUri, taskId: commit.taskId, error: "" });
           this.#touch(userId);
         }
