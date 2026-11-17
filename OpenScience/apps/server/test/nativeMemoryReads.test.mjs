@@ -306,3 +306,32 @@ for (const { sourceOwnsTitle, heading } of [
     assert.doesNotMatch(JSON.stringify(revisions), /Private A|Source A\./);
   });
 }
+
+test('an identical admission committing at the same moment is read back instead of failing on the engine-session index', async () => {
+  const row = { user_id: 'u', candidate_id: 'stated:x', candidate_revision: 1, engine_session: 'evimed-stated-x', project_id: null,
+    pending_text: 'Use metric units.', external_source: null, state: 'pending', phase: 'queued', record_ids: [], created_at: new Date(0), updated_at: new Date(0) };
+  const collision = constraint => Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505', constraint });
+  const overlayWith = failures => {
+    let inserts = 0;
+    const overlay = new NativeMemoryOverlay({ database: { transaction: async () => {}, query: async sql => {
+      if (!sql.startsWith('INSERT INTO evimed_memory.native_admissions')) return { rows: [{}] };
+      inserts += 1;
+      if (failures.length) throw failures.shift();
+      return { rows: [row] };
+    } } });
+    return { overlay, inserts: () => inserts };
+  };
+  const input = { candidateId: 'stated:x', revision: 1, engineSession: 'evimed-stated-x', text: 'Use metric units.' };
+  const raced = overlayWith([collision('native_admissions_user_id_engine_session_key')]);
+  assert.equal((await raced.overlay.queueAdmission('u', input)).candidateId, 'stated:x');
+  assert.equal(raced.inserts(), 2);
+  // A second collision is not a race with a twin: the first error is raised, once.
+  const first = collision('native_admissions_user_id_engine_session_key');
+  const stuck = overlayWith([first, collision('native_admissions_user_id_engine_session_key')]);
+  await assert.rejects(stuck.overlay.queueAdmission('u', input), error => error === first);
+  assert.equal(stuck.inserts(), 2);
+  // Any other constraint is never retried.
+  const other = overlayWith([collision('native_admissions_pkey')]);
+  await assert.rejects(other.overlay.queueAdmission('u', input), error => error.constraint === 'native_admissions_pkey');
+  assert.equal(other.inserts(), 1);
+});

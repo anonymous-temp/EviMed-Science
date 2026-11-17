@@ -234,11 +234,21 @@ export class NativeMemoryOverlay {
   /** External candidates are admitted once per immutable revision, before any extracting session is touched.
    * @param {string} userId @param {any} input */
   async queueAdmission(userId, input) {
-    const result = await this.#query(`INSERT INTO evimed_memory.native_admissions
+    const insert = () => this.#query(`INSERT INTO evimed_memory.native_admissions
       (user_id,candidate_id,candidate_revision,engine_session,project_id,pending_text,account_created_at,external_source)
       SELECT id,$2,$3,$4,$5,$6,created_at,$7::jsonb FROM evimed_control.users WHERE id=$1
       ON CONFLICT (user_id,candidate_id,candidate_revision) DO UPDATE SET candidate_id=EXCLUDED.candidate_id
       RETURNING *`, [owner(userId), input.candidateId, input.revision, input.engineSession, input.projectId ?? null, input.text, input.externalSource ? JSON.stringify(input.externalSource) : null]);
+    let result;
+    try { result = await insert(); } catch (error) {
+      // ON CONFLICT arbitrates the candidate revision only. An identical submission committing at the same moment can trip the
+      // engine-session index first, which PostgreSQL raises instead of arbitrating (seen as an intermittent 500 on two concurrent
+      // external `remember` calls). Its twin's row is committed by then, so the statement is asked once more and meets that row
+      // through the arbiter. Any other collision, and a retry that fails again, is raised as the first error.
+      const failure = /** @type {any} */ (error);
+      if (failure?.code !== '23505' || failure?.constraint !== 'native_admissions_user_id_engine_session_key') throw error;
+      try { result = await insert(); } catch { throw error; }
+    }
     if (!result.rows[0]) throw new HttpError(404, "memory_admission_gone", "The account no longer exists.");
     const saved = admissionRow(result.rows[0]);
     if (input.externalSource && (saved.externalSource?.digest !== input.externalSource.digest || saved.projectId !== (input.projectId ?? null))) {
