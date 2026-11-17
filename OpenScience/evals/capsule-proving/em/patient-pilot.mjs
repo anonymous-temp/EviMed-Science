@@ -5,14 +5,16 @@ import { buildJudgePacket, judgePackets } from '../run/judgePackets.mjs';
 import { checkPatientAttribution } from '../run/scoreChecks.mjs';
 const root = '/srv/evimed/runs';
 const cases = [
-  ['r3-synthetic-users-dev-cand-1', 'off', 'U06-q083'],
-  ['r4-synthetic-users-dev-cand2-1', 'nohv2', 'U06-q083'],
-  ['v3-synthetic-users-dev-product-1', '', 'U06-q083'],
+  ['r3-synthetic-users-dev-cand-1', 'off', 'U06', 'U06-q083'],
+  ['r4-synthetic-users-dev-cand2-1', 'nohv2', 'U06', 'U06-q083'],
+  ['v3-synthetic-users-dev-product-1', '', 'U06', 'U06-q083'],
 ];
 const packets = [];
-for (const [run, variant, id] of cases) {
-  const old = (await readFile(`${root}/${run}/scores${variant ? '.' + variant : ''}/judge-packets.jsonl`, 'utf8')).split('\n').filter(Boolean).map(JSON.parse)
-    .find(p => JSON.parse(p.rowKey)[4] === 'redline-check' && JSON.parse(p.rowKey)[5] === id);
+for (const [run, variant, expectedCaseId, id] of cases) {
+  const matches = (await readFile(`${root}/${run}/scores${variant ? '.' + variant : ''}/judge-packets.jsonl`, 'utf8')).split('\n').filter(Boolean).map(JSON.parse)
+    .filter(p => JSON.parse(p.rowKey)[3] === expectedCaseId && JSON.parse(p.rowKey)[4] === 'redline-check' && JSON.parse(p.rowKey)[5] === id);
+  if (matches.length !== 1) throw new Error('pilot_packet_binding_ambiguous');
+  const old = matches[0];
   const [runId, set, split, caseId] = JSON.parse(old.rowKey);
   const outcome = checkPatientAttribution(old.reply, old.gold.expect);
   const files = {};

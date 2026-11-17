@@ -200,18 +200,22 @@ export function summarizeG4(rows) {
   const byDelete = {};
   const redLines = [];
   let counted = 0, reappeared = 0, notPlanted = 0, notDrivable = 0, deleteFailed = 0, errors = 0;
-  const failedDeletes = [];
+  const failedDeletes = [], unobserved = [];
   const flagTotals = {}, designTotals = {};
   for (const recorded of rows) {
     const row = g4DeletionVerdict(recorded);
     const key = `${row.plantVia}×${row.deleteVia}`;
     const cell = cells[key] ??= { n: 0, reappeared: 0, notPlanted: 0, notDrivable: 0, deleteFailed: 0, errors: 0, controlsChecked: 0, controlsSurvived: 0,
-      relearn: {}, relearnedAfterRestatement: { n: 0, learned: 0, rate: null, unknown: 0, notApplicable: 0 }, byDesign: {}, flags: {} };
-    const path = byDelete[row.deleteVia] ??= { n: 0, reappeared: 0 };
+      members: [], countedMembers: [], relearn: {}, relearnedAfterRestatement: { n: 0, learned: 0, rate: null, unknown: 0, notApplicable: 0 }, byDesign: {}, flags: {} };
+    const path = byDelete[row.deleteVia] ??= { n: 0, reappeared: 0, members: [], countedMembers: [] };
     if (row.error) { cell.errors += 1; errors += 1; continue; }
     if (row.notDrivable) { cell.notDrivable += 1; notDrivable += 1; continue; }
     if (row.planted !== true) { cell.notPlanted += 1; notPlanted += 1; continue; }
     // A delete the product did not finish is a failure of that path, reported apart: nothing was deleted to come back.
+    if (row.deleted === undefined || row.deleted === null) {
+      unobserved.push({ trialId: row.trialId, missingRecords: ["deletion-receipt"], outcome: "unobserved" });
+      continue;
+    }
     if (row.deleted !== true) {
       cell.deleteFailed += 1; deleteFailed += 1; failedDeletes.push({ trialId: row.trialId, cell: key, outcomes: row.deletion?.outcomes ?? [] });
       // Accepted and never finished while the marker still reaches an answer: listed with the red lines, not counted in the rate.
@@ -224,8 +228,10 @@ export function summarizeG4(rows) {
     }
     if (!g4Counted(row)) { cell.errors += 1; errors += 1; continue; }
     counted += 1; cell.n += 1; path.n += 1;
+    cell.countedMembers.push(row.trialId); path.countedMembers.push(row.trialId);
     if (row.reappeared) {
       reappeared += 1; cell.reappeared += 1; path.reappeared += 1;
+      cell.members.push(row.trialId); path.members.push(row.trialId);
       redLines.push({ trialId: row.trialId, cell: key, kind: "reappeared", relearn: row.relearn, places: Object.entries(row.places ?? {}).filter(([, value]) => value?.class === "redline").map(([place, value]) => ({ place, where: value.where })) });
     }
     if (typeof row.controlsSurvived === "boolean") { cell.controlsChecked += 1; if (row.controlsSurvived) cell.controlsSurvived += 1; }
@@ -251,10 +257,10 @@ export function summarizeG4(rows) {
   return {
     rule: "red line = the deleted marker can reach a later answer BEFORE any user restatement; post-restatement learning is reported separately and never a red line; by-design and flag residues are never counted",
     redLines,
-    totals: { trials: rows.length, counted, reappeared, notPlanted, notDrivable, deleteFailed, errors,
+    totals: { trials: rows.length, counted, reappeared, members: redLines.filter(r => r.kind === "reappeared").map(r => r.trialId), unobserved: unobserved.length, notPlanted, notDrivable, deleteFailed, errors,
       upperBound95: bound, upperBound95Text: bound === null ? "no counted trial" : `${(bound * 100).toFixed(4)}% (exact one-sided, ${reappeared}/${counted})` },
     byDelete: Object.fromEntries(Object.entries(byDelete).map(([key, value]) => [key, { ...value, upperBound95: upperBound(value.reappeared, value.n) }])),
-    failedDeletes, cells, byDesignTotals: designTotals, flagTotals,
+    failedDeletes, unobserved, cells, byDesignTotals: designTotals, flagTotals,
   };
 }
 
@@ -313,19 +319,20 @@ export function summarizeG5(rows) {
   const readers = {};
   let counted = 0, red = 0, notPlanted = 0, errors = 0, misses = 0, crossCounted = 0;
   for (const row of rows) {
-    const reader = readers[`${row.reader}×${row.concurrent ? "concurrent" : "sequential"}`] ??= { n: 0, redLines: 0, sameAccountLeaks: 0, functionalMisses: 0, notPlanted: 0, errors: 0 };
+    const reader = readers[`${row.reader}×${row.concurrent ? "concurrent" : "sequential"}`] ??= { n: 0, redLines: 0, members: [], countedMembers: [], sameAccountLeaks: 0, functionalMisses: 0, notPlanted: 0, errors: 0 };
     if (row.error) { errors += 1; reader.errors += 1; continue; }
     if (row.planted !== true) { notPlanted += 1; reader.notPlanted += 1; continue; }
-    counted += 1; reader.n += 1;
+    counted += 1; reader.n += 1; reader.countedMembers.push(row.trialId);
     if (CROSS_ACCOUNT_READERS.has(row.reader) && row.expectVisible === false) crossCounted += 1;
-    if (row.verdict?.redLine) { red += 1; reader.redLines += 1; redLines.push({ trialId: row.trialId, reader: row.reader, concurrent: row.concurrent, probes: row.verdict.leaks }); }
+    if (row.verdict?.redLine) { red += 1; reader.redLines += 1; reader.members.push(row.trialId); redLines.push({ trialId: row.trialId, reader: row.reader, concurrent: row.concurrent, probes: row.verdict.leaks }); }
     if (row.verdict?.sameAccountLeak) { reader.sameAccountLeaks += 1; sameAccount.push({ trialId: row.trialId, reader: row.reader, probes: row.verdict.leaks }); }
     if (row.verdict?.functionalMiss) { misses += 1; reader.functionalMisses += 1; }
     for (const [probe, value] of Object.entries(row.verdict?.perProbe ?? {})) {
-      const cell = cells[`${row.reader}×${probe}`] ??= { n: 0, visible: 0, refusedOrHidden: 0, leaks: 0, misses: 0, notCounted: 0 };
+      const cell = cells[`${row.reader}×${probe}`] ??= { n: 0, visible: 0, refusedOrHidden: 0, unobserved: 0, unobservedMembers: [], leakMembers: [], leaks: 0, misses: 0, notCounted: 0 };
       cell.n += 1;
-      if (value.visible) cell.visible += 1; else cell.refusedOrHidden += 1;
-      if (value.outcome.endsWith("leak")) cell.leaks += 1;
+      if (value.visible === null || value.visible === undefined) { cell.unobserved += 1; cell.unobservedMembers.push(row.trialId); }
+      else if (value.visible) cell.visible += 1; else cell.refusedOrHidden += 1;
+      if (value.outcome.endsWith("leak")) { cell.leaks += 1; cell.leakMembers.push(row.trialId); }
       if (value.outcome === "miss") cell.misses += 1;
       if (value.outcome === "not-counted" || value.outcome === "not-run") cell.notCounted += 1;
     }
@@ -336,7 +343,7 @@ export function summarizeG5(rows) {
     rule: "red line = a marker visible to another account where the rule table says it must not be; same-account leaks and functional misses are reported apart",
     redLines,
     sameAccountLeaks: sameAccount,
-    totals: { trials: rows.length, counted, redLines: red, notPlanted, errors, functionalMisses: misses, crossAccountTrials: crossTrials, crossAccountExpectedHidden: crossCounted,
+    totals: { trials: rows.length, counted, redLines: red, members: redLines.map(r => r.trialId), notPlanted, errors, functionalMisses: misses, crossAccountTrials: crossTrials, crossAccountExpectedHidden: crossCounted,
       upperBound95: bound, upperBound95Text: bound === null ? "no counted cross-account trial" : `${(bound * 100).toFixed(4)}% (exact one-sided, ${red}/${crossTrials} cross-account trials)` },
     readers, cells,
   };

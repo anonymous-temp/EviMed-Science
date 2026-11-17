@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { scoreTrajectory } from '../synthetic/toolverse/score.mjs';
 import { wilson } from '../run/ledger.mjs';
 
-export const L8_SCORER_VERSION = 'l8-v2';
+export const L8_SCORER_VERSION = 'l8-v3';
 
 export function scoreCalls(gold, toolCalls, error = null) {
   const calls = toolCalls.filter(c => c.kind === 'task' || c.kind === 'ask').map(c => c.scoringCall);
@@ -35,6 +35,9 @@ function group(rows) {
   }
   return { n: rows.length, pass, passRate: pass / (rows.length || 1), ci95: wilson(pass, rows.length),
     finalTask: { n: finalRows.length, pass: finalPass, unknown: rows.length - finalRows.length, passRate: finalRows.length ? finalPass / finalRows.length : null },
+    prescribedPath: { n: rows.length, pass: rows.filter(r => r.score.prescribedPathFollowed === true).length, unobserved: rows.filter(r => r.score.prescribedPathFollowed === undefined).length },
+    extraCalls: { total: rows.reduce((n, r) => n + (r.score.extraCalls ?? 0), 0), episodes: rows.filter(r => r.score.extraCalls > 0).map(r => ({ itemId: r.itemId, arm: r.arm, variant: r.variant ?? null, count: r.score.extraCalls })) },
+    legacyStrict: { n: rows.length, pass: rows.filter(r => (r.score.legacyStrictPass ?? r.score.pass) === true).length },
     meanStepCredit: mean(rows, r => r.score.stepCredit), meanPrefixCredit: mean(rows, r => r.score.prefixCredit),
     tellOnceRate: mean(rows, r => r.score.tellOnceFailure), askedUserRate: mean(rows, r => r.score.askedUser),
     memorySearchBeforeTaskRate: mean(rows, r => r.score.memorySearchBeforeTask), memoryReadBeforeTaskRate: mean(rows, r => r.score.memoryReadBeforeTask),

@@ -33,3 +33,12 @@ test('a checkpoint from another session is refused before any API mutation',asyn
   await assert.rejects(runConversation({api:{call:()=>assert.fail('must not call')},userId:'u',projectId:'p',sessionId:'s',
     resumeRecord:{projectId:'other',sessionId:'s'},first:'x',next:()=>null,dataDir:'/unused',outDir:'/unused',timeoutMs:1,log:()=>{}}),/identity mismatch/);
 });
+test('a project ID owned by another evaluation run is not adopted after a creation conflict', async () => {
+  const calls = [];
+  const api = { call: async (method, url) => { calls.push([method, url]); return method === 'POST'
+    ? { status: 409, raw: 'conflict' } : { status: 200, json: { data: [{ id: 'p', name: 'Another run' }] } }; } };
+  const record = await runConversation({ api, userId: 'u', projectId: 'p', sessionId: 's', first: 'task', next: () => null,
+    dataDir: '/unused', outDir: '/unused', timeoutMs: 1, log: () => {}, waitMemoryTools: false });
+  assert.equal(record.outcome, 'unobserved'); assert.equal(record.errorCode, 'project_identity_conflict');
+  assert.ok(calls.every(([, url]) => url === '/api/projects'));
+});

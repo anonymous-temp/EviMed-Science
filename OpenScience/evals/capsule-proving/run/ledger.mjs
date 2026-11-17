@@ -168,6 +168,10 @@ export function validateLedgerRow(row) {
   if (!isNonNegativeInteger(row.n)) problems.push('n must be a non-negative integer');
   if (!isFiniteNumber(row.value)) problems.push('value must be a finite number');
 
+  if (row.metric === 'redline_count' && row.value > 0 && (!Array.isArray(row.members) || row.members.length !== row.value || row.members.some(m => !isNonEmptyString(m.caseId) || !isNonEmptyString(m.id)))) {
+    problems.push('redline_count requires every counted caseId and id');
+  }
+
   if (row.ci95 !== null) {
     if (!Array.isArray(row.ci95) || row.ci95.length !== 2 || !row.ci95.every(isFiniteNumber)) {
       problems.push('ci95 must be null or an array of two finite numbers');
@@ -767,6 +771,7 @@ export function rowsFromSummary({
           ...base,
           set: setName,
           metric: 'store_recall',
+          notIngestedYet: set.store.notIngestedYet ?? null,
           n: storeN,
           value: storeValue,
           ci95: interval(set.store.ci95) ?? safeWilson(storePass, storeN),
@@ -774,6 +779,12 @@ export function rowsFromSummary({
           ...(costNote ? { notes: costNote } : {}),
         });
       }
+    }
+
+    if (set.store?.notIngestedYet?.count > 0) {
+      const pending = set.store.notIngestedYet;
+      rows.push({ ...base, set: setName, metric: 'store_not_ingested_yet_count', n: toCount(set.store.n) + pending.count,
+        value: pending.count, members: pending.members, ci95: null, judged: { code: 0, judge: 0, unknown: pending.count, error: 0 } });
     }
 
     if (isPlainObject(set.redlines)) {
@@ -784,10 +795,13 @@ export function rowsFromSummary({
         if (!isNonNegativeNumber(count)) continue;
         const typeStats = singleSet && byType && isPlainObject(byType[type]) ? byType[type] : null;
         const typeN = typeStats && isNonNegativeInteger(typeStats.n) ? typeStats.n : n;
+        const members = set.redlineMembers?.[type] ?? typeStats?.members ?? (count === 0 ? [] : null);
+        if (members && members.length !== count) throw new Error('redline_members_count_mismatch');
         rows.push({
           ...base,
           set: setName,
-          metric: 'redline_count',
+          metric: members ? 'redline_count' : 'legacy_redline_count',
+          members, ...(members ? {} : { outcome: 'unobserved', missingRecords: ['redline-members'] }),
           n: typeN,
           value: count,
           ci95: null,
@@ -805,7 +819,8 @@ export function rowsFromSummary({
       judged: { code: called.n - called.unknown, judge: 0, unknown: called.unknown, error: 0 },
       notes: joinNotes(['Live forget requests; unknown interventions remain in n.', costNote]) });
     for (const [group, stats] of Object.entries(summary.forget.forgottenReappeared)) {
-      rows.push({ ...base, set: Object.keys(sets)[0], metric: 'forgotten_reappeared_count', n: stats.n,
+      rows.push({ ...base, set: Object.keys(sets)[0], metric: stats.members || stats.count === 0 ? 'forgotten_reappeared_count' : 'legacy_forgotten_reappeared_count', n: stats.n, members: stats.members ?? (stats.count === 0 ? [] : null),
+        ...(!stats.members && stats.count ? { outcome: 'unobserved', missingRecords: ['forget-reappearance-members'] } : {}),
         value: stats.count, ci95: null,
         judged: { code: stats.n - stats.unknown, judge: 0, unknown: stats.unknown, error: 0 },
         notes: joinNotes([`forget=${group}; literal prohibited-anchor reappearance in subsequent answers`, costNote]) });
@@ -824,6 +839,7 @@ export function rowsFromSummary({
           ...base,
           set: fallbackSet,
           metric: 'store_recall',
+          notIngestedYet: summary.storeRecall.notIngestedYet ?? null,
           n: storeN,
           value: isFiniteNumber(summary.storeRecall.value)
             ? summary.storeRecall.value
@@ -845,7 +861,8 @@ export function rowsFromSummary({
           rows.push({
             ...base,
             set: fallbackSet,
-            metric: 'redline_count',
+            metric: stats.members || stats.fail === 0 ? 'redline_count' : 'legacy_redline_count',
+            members: stats.members ?? (stats.fail === 0 ? [] : null), ...(!stats.members && stats.fail ? { outcome: 'unobserved', missingRecords: ['redline-members'] } : {}),
             n: typeN,
             value: toCount(stats.fail),
             ci95: null,
@@ -858,7 +875,8 @@ export function rowsFromSummary({
         rows.push({
           ...base,
           set: fallbackSet,
-          metric: 'redline_count',
+          metric: summary.redLines.members || summary.redLines.count === 0 ? 'redline_count' : 'legacy_redline_count',
+          members: summary.redLines.members ?? (summary.redLines.count === 0 ? [] : null), ...(!summary.redLines.members && summary.redLines.count ? { outcome: 'unobserved', missingRecords: ['redline-members'] } : {}),
           n: redN,
           value: toCount(summary.redLines.count),
           ci95: null,

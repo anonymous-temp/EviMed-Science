@@ -62,7 +62,9 @@ export const DACODE_FULL = '/srv/evimed/data/c2-dacode-full';
 export const TERMINATE_SENTENCE = 'When the task is complete, end your reply with Terminate(output="literal_answer_or_output_path"): it returns the final answer or the output file/folder path. Make sure the output file is located in the initial workspace directory.';
 
 export function dacodeText(task) {
-  return `${task.instruction.trim()}\n\n${TERMINATE_SENTENCE}`;
+  const plotContract = task.post_process?.includes('plot_process') || /plot/i.test(task.type ?? '')
+    ? '\n\nSave a reproducible top-level .py plotting script (any filename) in the initial workspace, using plt.savefig for the requested image. Keep that script alongside the image so the evaluation can replay the plot.' : '';
+  return `${task.instruction.trim()}\n\n${TERMINATE_SENTENCE}${plotContract}`;
 }
 
 export async function dacodeTasks(ids, { repo = DACODE_REPO, full = DACODE_FULL } = {}) {

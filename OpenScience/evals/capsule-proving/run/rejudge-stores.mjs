@@ -19,9 +19,12 @@ export async function rejudgeStores({ runs, out, keyFile, categories = null, fet
     const manifest = await json(path.join(run, 'run.json'));
     if (manifest.split !== 'dev') throw new Error('store_review_requires_development_run');
     const cache = await json(path.join(run, 'scores/score-cache.json'));
-    const rows = cache.rows.filter(row => row.kind === 'store' && (!categories || categories.includes(row.category)));
+    let rows = cache.rows.filter(row => row.kind === 'store' && (!categories || categories.includes(row.category)));
     const selected = new Set(rows.map(rowKey));
-    const packets = cache.packets.filter(packet => selected.has(packet.rowKey)).map(memoryStoreJudgePacket);
+    const eligible = new Set(rows.filter(row => !['not_ingested_yet', 'unobserved'].includes(row.verdict) && row.detail !== 'not_ingested_yet').map(rowKey));
+    const packets = cache.packets.filter(packet => selected.has(packet.rowKey) && eligible.has(packet.rowKey)).map(memoryStoreJudgePacket);
+    const reviewable = new Set(packets.map(packet => packet.rowKey));
+    rows = rows.map(row => reviewable.has(rowKey(row)) ? { ...row, reviewOriginalVerdict: row.verdict, verdict: 'needs-judge' } : row);
     const directory = path.join(out, manifest.runId);
     await mkdir(directory, { recursive: true });
     const identity = { runId: manifest.runId, rubric: STORE_JUDGE_CLIENT_SHA256, categories, batchSize: 1,

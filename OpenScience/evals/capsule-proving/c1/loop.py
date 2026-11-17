@@ -129,7 +129,8 @@ def run_episode(env, model, env_name, phase, provider=None, checkpoint=None):
     start = time.monotonic()
     record = {"env": env_name, "phase": phase, "stepCap": STEP_CAPS[env_name],
               "steps": [], "messages": [], "cards": [], "promptTokens": 0,
-              "completionTokens": 0, "score": 0, "success": False, "error": None}
+              "completionTokens": 0, "score": 0, "success": False, "error": None,
+              "terminationReason": None, "cardExposure": []}
     try:
         obs, task = env.reset()
         record["task"] = task
@@ -139,6 +140,11 @@ def run_episode(env, model, env_name, phase, provider=None, checkpoint=None):
         select = getattr(provider, "cards_for_episode", None)
         cards = select(task, obs, env_name, phase) if select else provider.cards_for(task, env_name, phase)
         record["cards"] = cards
+        record["cardExposure"] = [{"name": card["name"], "shown": True, "textIncluded": bool(card.get("text")),
+                                   "textSha256": hashlib.sha256(card.get("text", "").encode()).hexdigest(),
+                                   "textRead": None, "detailRead": False} for card in cards]
+        # Prompt inclusion is observable; the model's internal attention is not.
+
         if getattr(provider, "last", None) is not None:
             record["selection"] = provider.last
         system = ("You are solving a text game. Complete the task using observations and actions.\n"
@@ -153,7 +159,10 @@ def run_episode(env, model, env_name, phase, provider=None, checkpoint=None):
                        "reads that file only when needed. It uses one of the same bounded calls; other actions are game commands.")
         messages = record["messages"]
         messages.extend([{"role": "system", "content": system}, {"role": "user", "content": obs}])
+        invalid_streak = 0
         for step in range(STEP_CAPS[env_name]):
+            admissible_read = getattr(env, "admissible_commands", None)
+            admissible = admissible_read() if admissible_read else None
             step_start = time.monotonic()
             reply = model.complete(messages)
             usage = reply.get("usage", {})
@@ -165,22 +174,43 @@ def run_episode(env, model, env_name, phase, provider=None, checkpoint=None):
             record["steps"].append(entry)
             action = parse_action(reply["text"])
             entry["action"] = action
+            entry["admissibleCommands"] = admissible
+            entry["admissible"] = action in admissible if admissible is not None else None
+            entry["admissibilityMissing"] = None if admissible is not None else "environment-admissible-commands"
+
             if action.startswith("read_skill ") and any(card.get("detailAvailable") for card in cards):
                 obs = provider.read_detail(action.removeprefix("read_skill ").strip())
                 score, done, won = record["score"], False, record["success"]
                 entry["detailRead"] = True
+                name = action.removeprefix("read_skill ").strip()
+                entry["admissible"] = any(c["name"] == name and c.get("detailAvailable") for c in cards)
+                for exposure in record["cardExposure"]:
+                    if exposure["name"] == name and entry["admissible"]:
+                        exposure["detailRead"] = True
+                        exposure["detailReadStep"] = step + 1
             else:
                 obs, score, done, won = env.step(action)
             entry.update(observation=obs, score=score, done=done, success=won,
                          seconds=time.monotonic() - step_start)
             record.update(score=score, success=won)
-            messages.append({"role": "user", "content": obs})
+            next_read = getattr(env, "admissible_commands", None)
+            next_commands = next_read() if next_read else None
+            vocabulary = "\nAdmissible commands: " + "; ".join(next_commands) if next_commands is not None else ""
+            messages.append({"role": "user", "content": obs + vocabulary})
+            invalid_streak = invalid_streak + 1 if entry["admissible"] is False else 0
             if checkpoint:
                 checkpoint(record)
             if done:
+                record["terminationReason"] = "success" if won else "early-terminal-state"
                 break
+        if record["terminationReason"] is None:
+            record["terminationReason"] = "invalid-action-loop" if invalid_streak >= 3 else "step-limit"
     except Exception as error:
         record["error"] = first_line(error)
+        record["terminationReason"] = "unobserved"
+        record["missingRecords"] = ["completed-episode"]
+    record["terminationScore"] = record["score"]
+    record["outcome"] = "unobserved" if record["error"] else "success" if record["success"] else "task-failed"
     record["seconds"] = time.monotonic() - start
     if checkpoint:
         checkpoint(record)
