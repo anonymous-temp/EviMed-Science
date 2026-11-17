@@ -26,15 +26,15 @@ test('a reindex conflict remains due after backoff and completes without purging
 });
 
 test('source cleanup removes only its attributed memory lines, scrubs undo history and preserves unrelated bytes', options, async t => {
-  const f=await fixture(t), uri=`${f.root}/profile.md`, body='# Profile\n- Source A preference.\n- Independent B preference.';
+  const f=await fixture(t), uri=`${f.root}/profile.md`, body='# User\n- Source A preference.\n- Independent B preference.';
   f.seed('profile.md',body,{type:'profile'});
   await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body});
-  const a=await f.overlay.addRevision({userId:f.userId,uri,memoryType:'profile',change:'added',actor:'engine',after:'# Profile\n- Source A preference.',engineSession:'dsh-a',archiveUri:`viking://user/${f.engineUser}/sessions/dsh-a/history/archive_001`,projectId:'default'});
-  await f.overlay.syncOrigins(f.userId,uri,{before:'',after:'# Profile\n- Source A preference.',origin:{revisionId:a.id,engineSession:'dsh-a',projectId:'default'}});
-  await f.overlay.syncOrigins(f.userId,uri,{before:'# Profile\n- Source A preference.',after:body,origin:{engineSession:'dsh-b',projectId:'default'}});
+  const a=await f.overlay.addRevision({userId:f.userId,uri,memoryType:'profile',change:'added',actor:'engine',after:'# User\n- Source A preference.',engineSession:'dsh-a',archiveUri:`viking://user/${f.engineUser}/sessions/dsh-a/history/archive_001`,projectId:'default'});
+  await f.overlay.syncOrigins(f.userId,uri,{before:'',after:'# User\n- Source A preference.',origin:{revisionId:a.id,engineSession:'dsh-a',projectId:'default'}});
+  await f.overlay.syncOrigins(f.userId,uri,{before:'# User\n- Source A preference.',after:body,origin:{engineSession:'dsh-b',projectId:'default'}});
   const result=await f.store.removeConversationSource(f.userId,'default',['a']);
   assert.ok(result.length>0);
-  assert.equal(await f.sessions.read(f.userId,uri),'# Profile\n- Independent B preference.');
+  assert.equal(await f.sessions.read(f.userId,uri),'# User\n- Independent B preference.');
   assert.ok((await f.overlay.revisionsOf(f.userId,uri)).every(row=>![row.before,row.after].filter(Boolean).some(text=>text.includes('Source A preference.'))));
 });
 
@@ -55,9 +55,9 @@ test('a replay of the deleted source retains its source fence and cannot leave s
   const f=await fixture(t), original=await f.commitConversation('a',[{role:'user',text:'Private source.'}],{projectId:'default'});
   const replay=await f.commitConversation('replay',[{role:'user',text:'Private source.'}],{projectId:'default',engineSession:'evimed-replay-source'});
   await f.overlay.markReplayed(f.userId,original.archive_uri,replay.archive_uri);
-  const uri=f.seed('profile.md','# Profile\n- Private replay preference.',{type:'profile'});
-  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# Profile\n- Private replay preference.'});
-  await f.overlay.syncOrigins(f.userId,uri,{before:'',after:'# Profile\n- Private replay preference.',origin:{engineSession:replay.session,archiveUri:replay.archive_uri,projectId:'default'}});
+  const uri=f.seed('profile.md','# User\n- Private replay preference.',{type:'profile'});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# User\n- Private replay preference.'});
+  await f.overlay.syncOrigins(f.userId,uri,{before:'',after:'# User\n- Private replay preference.',origin:{engineSession:replay.session,archiveUri:replay.archive_uri,projectId:'default'}});
   const ledger=new ConversationSourceDeletionLedger(f.database);
   const ownerStamp=(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[f.userId])).rows[0].stamp;
   await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:ownerStamp,projectCreatedAt:f.projectCreatedAt,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});
@@ -78,7 +78,7 @@ test('the native worker checks a source tombstone before recreating a failed arc
 });
 
 test('worker-ingested ordinary profile and preferences retain source authority while their display project remains null', options, async t => {
-  const f=await fixture(t,{extract:({user})=>({adds:[{uri:`viking://user/${user}/memories/profile.md`,memory_type:'profile',after:'# Profile\n- Ordinary profile source.'},{uri:`viking://user/${user}/memories/preferences/source.md`,memory_type:'preferences',after:'# Preferences\n- Ordinary preference source.'}]})});
+  const f=await fixture(t,{extract:({user})=>({adds:[{uri:`viking://user/${user}/memories/profile.md`,memory_type:'profile',after:'# User\n- Ordinary profile source.'},{uri:`viking://user/${user}/memories/preferences/source.md`,memory_type:'preferences',after:'# Preferences\n- Ordinary preference source.'}]})});
   const archive=await f.commitConversation('a',[{role:'user',text:'Use ordinary profile and preference sources.'}],{projectId:'default'});
   await f.worker.processCommits({userId:f.userId});
   const profile=`${f.root}/profile.md`, preference=`${f.root}/preferences/source.md`;
@@ -92,14 +92,14 @@ test('worker-ingested ordinary profile and preferences retain source authority w
 });
 
 test('deleted source history is scrubbed after another source replaces the current line', options, async t => {
-  const f=await fixture(t), uri=f.seed('profile.md','# Profile\n- Independent current B.',{type:'profile'});
+  const f=await fixture(t), uri=f.seed('profile.md','# User\n- Independent current B.',{type:'profile'});
   const a=await f.commitConversation('a',[{role:'user',text:'Old source A.'}],{projectId:'default'});
-  await f.overlay.addRevision({userId:f.userId,uri,memoryType:'profile',change:'added',actor:'engine',after:'# Profile\n- Private historical A.',engineSession:a.session,archiveUri:a.archive_uri,projectId:null});
-  await f.overlay.addRevision({userId:f.userId,uri,memoryType:'profile',change:'updated',actor:'engine',before:'# Profile\n- Private historical A.',after:'# Profile\n- Independent current B.',engineSession:'dsh-b',projectId:null});
-  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# Profile\n- Independent current B.'});
-  await f.overlay.syncOrigins(f.userId,uri,{before:'',after:'# Profile\n- Independent current B.',origin:{engineSession:'dsh-b',projectId:'default'}});
+  await f.overlay.addRevision({userId:f.userId,uri,memoryType:'profile',change:'added',actor:'engine',after:'# User\n- Private historical A.',engineSession:a.session,archiveUri:a.archive_uri,projectId:null});
+  await f.overlay.addRevision({userId:f.userId,uri,memoryType:'profile',change:'updated',actor:'engine',before:'# User\n- Private historical A.',after:'# User\n- Independent current B.',engineSession:'dsh-b',projectId:null});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# User\n- Independent current B.'});
+  await f.overlay.syncOrigins(f.userId,uri,{before:'',after:'# User\n- Independent current B.',origin:{engineSession:'dsh-b',projectId:'default'}});
   await f.store.removeConversationSource(f.userId,'default',['session_a']);
-  assert.equal(await f.sessions.read(f.userId,uri),'# Profile\n- Independent current B.');
+  assert.equal(await f.sessions.read(f.userId,uri),'# User\n- Independent current B.');
   assert.ok((await f.overlay.revisionsOf(f.userId,uri)).every(row=>![row.before,row.after].filter(Boolean).some(text=>text.includes('Private historical A.'))));
 });
 
@@ -115,20 +115,20 @@ test('account-native exclusion defers same-owner writers while preserving indepe
 });
 
 test('a changed mixed body is deferred and retried without overwriting a concurrent independent addition',options,async t=>{
-  const f=await fixture(t),uri=f.seed('profile.md','# Profile\n- Source A.\n- Independent B.',{type:'profile'});
-  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# Profile\n- Source A.\n- Independent B.'});
-  await f.overlay.syncOrigins(f.userId,uri,{after:'# Profile\n- Source A.\n- Independent B.',origin:{engineSession:'dsh-a',projectId:'default'}});
+  const f=await fixture(t),uri=f.seed('profile.md','# User\n- Source A.\n- Independent B.',{type:'profile'});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# User\n- Source A.\n- Independent B.'});
+  await f.overlay.syncOrigins(f.userId,uri,{after:'# User\n- Source A.\n- Independent B.',origin:{engineSession:'dsh-a',projectId:'default'}});
   const rawFiles=f.store.rawFiles.bind(f.store);let changed=false;
-  f.store.rawFiles=async(...args)=>{const files=await rawFiles(...args);if(!changed){changed=true;await f.sessions.replace(f.userId,uri,'# Profile\n- Source A.\n- Independent B.\n- Independent C.');}return files;};
+  f.store.rawFiles=async(...args)=>{const files=await rawFiles(...args);if(!changed){changed=true;await f.sessions.replace(f.userId,uri,'# User\n- Source A.\n- Independent B.\n- Independent C.');}return files;};
   await assert.rejects(f.store.removeConversationSource(f.userId,'default',['a']),{code:'memory_source_body_changed'});
   assert.match(await f.sessions.read(f.userId,uri),/Independent C/);
 });
 
 test('a source version restored by an earlier ordinary undo is still removed after its origin row was pruned',options,async t=>{
-  const f=await fixture(t),uri=f.seed('profile.md','# Profile\n- Source A restored.',{type:'profile'}),archive=await f.commitConversation('a',[{role:'user',text:'Source A restored.'}],{projectId:'default'});
-  await f.overlay.addRevision({userId:f.userId,uri,memoryType:'profile',change:'added',actor:'engine',after:'# Profile\n- Source A restored.',engineSession:archive.session,archiveUri:archive.archive_uri,projectId:null});
-  await f.overlay.addRevision({userId:f.userId,uri,memoryType:'profile',change:'restored',actor:'user',after:'# Profile\n- Source A restored.',reason:'undo',projectId:null});
-  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# Profile\n- Source A restored.'});
+  const f=await fixture(t),uri=f.seed('profile.md','# User\n- Source A restored.',{type:'profile'}),archive=await f.commitConversation('a',[{role:'user',text:'Source A restored.'}],{projectId:'default'});
+  await f.overlay.addRevision({userId:f.userId,uri,memoryType:'profile',change:'added',actor:'engine',after:'# User\n- Source A restored.',engineSession:archive.session,archiveUri:archive.archive_uri,projectId:null});
+  await f.overlay.addRevision({userId:f.userId,uri,memoryType:'profile',change:'restored',actor:'user',after:'# User\n- Source A restored.',reason:'undo',projectId:null});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# User\n- Source A restored.'});
   await f.store.removeConversationSource(f.userId,'default',['session_a']);
   assert.equal(await f.sessions.read(f.userId,uri),null);
 });
@@ -144,11 +144,11 @@ test('a consolidation that rewrites source text without lineage defers native cl
 });
 
 test('interleaved native extraction diffs attribute only their own additions before source cleanup',options,async t=>{
-  const f=await fixture(t,{extract:({user,session})=>session.endsWith('_a')?{adds:[{uri:`viking://user/${user}/memories/profile.md`,memory_type:'profile',after:'# Profile\n- Source A.'}]}:{updates:[{uri:`viking://user/${user}/memories/profile.md`,memory_type:'profile',before:'# Profile\n- Source A.',after:'# Profile\n- Source A.\n- Independent C.'}]}});
+  const f=await fixture(t,{extract:({user,session})=>session.endsWith('_a')?{adds:[{uri:`viking://user/${user}/memories/profile.md`,memory_type:'profile',after:'# User\n- Source A.'}]}:{updates:[{uri:`viking://user/${user}/memories/profile.md`,memory_type:'profile',before:'# User\n- Source A.',after:'# User\n- Source A.\n- Independent C.'}]}});
   await f.commitConversation('a',[{role:'user',text:'Source A.'}],{projectId:'default'});await f.commitConversation('b',[{role:'user',text:'Independent C.'}],{projectId:'default'});
   await f.worker.processCommits({userId:f.userId});const uri=`${f.root}/profile.md`,origins=await f.overlay.originsOf(f.userId,[uri]);
   assert.equal(origins.get(uri).get((await import('../src/nativeMemoryOverlay.mjs')).lineFingerprint('Independent C.')).engineSession,'dsh-session_b');
-  await f.store.removeConversationSource(f.userId,'default',['session_a']);assert.equal(await f.sessions.read(f.userId,uri),'# Profile\n- Independent C.');
+  await f.store.removeConversationSource(f.userId,'default',['session_a']);assert.equal(await f.sessions.read(f.userId,uri),'# User\n- Independent C.');
 });
 
 test('native source cleanup refuses a cross-incarnation raw session alias before touching retained files',options,async t=>{
@@ -162,11 +162,11 @@ test('native source cleanup refuses a cross-incarnation raw session alias before
 });
 
 test('a new source never deletes a retained legacy personal origin with an unproved project incarnation',options,async t=>{
-  const f=await fixture(t),uri=f.seed('profile.md','# Profile\n- Historical independent preference.',{type:'profile'});
-  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# Profile\n- Historical independent preference.'});
-  await f.overlay.syncOrigins(f.userId,uri,{after:'# Profile\n- Historical independent preference.',origin:{engineSession:'dsh-same',projectId:'default',projectCreatedAt:null,at:'2020-01-01T00:00:00Z'}});
+  const f=await fixture(t),uri=f.seed('profile.md','# User\n- Historical independent preference.',{type:'profile'});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# User\n- Historical independent preference.'});
+  await f.overlay.syncOrigins(f.userId,uri,{after:'# User\n- Historical independent preference.',origin:{engineSession:'dsh-same',projectId:'default',projectCreatedAt:null,at:'2020-01-01T00:00:00Z'}});
   await assert.rejects(f.store.removeConversationSource(f.userId,'default',['same'],{projectCreatedAt:f.projectCreatedAt}),{code:'memory_source_lineage_unverified'});
-  assert.equal(await f.sessions.read(f.userId,uri),'# Profile\n- Historical independent preference.');
+  assert.equal(await f.sessions.read(f.userId,uri),'# User\n- Historical independent preference.');
 });
 
 test('an old exact-epoch failed native archive remains source-deleted after its project is replaced',options,async t=>{
@@ -245,8 +245,8 @@ test('a deleted conversation with a failed, replayed and abandoned extraction hi
   const replay=await f.commitConversation('replay',[{role:'user',text:'Private source.'}],{projectId:'default',engineSession:'evimed-replay-source'});
   await f.overlay.markReplayed(f.userId,original.archive_uri,replay.archive_uri);
   await f.database.query("UPDATE evimed_memory.native_commits SET state='abandoned' WHERE user_id=$1 AND archive_uri=$2",[f.userId,replay.archive_uri]);
-  const unrelated=f.seed('profile.md','# Profile\n- Unrelated preference.',{type:'profile'});
-  await f.overlay.upsertFile({userId:f.userId,uri:unrelated,memoryType:'profile',body:'# Profile\n- Unrelated preference.'});
+  const unrelated=f.seed('profile.md','# User\n- Unrelated preference.',{type:'profile'});
+  await f.overlay.upsertFile({userId:f.userId,uri:unrelated,memoryType:'profile',body:'# User\n- Unrelated preference.'});
   const ledger=new ConversationSourceDeletionLedger(f.database), stamp=(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[f.userId])).rows[0].stamp;
   await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:stamp,projectCreatedAt:f.projectCreatedAt,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});
   assert.equal((await f.overlay.commit(f.userId,original.archive_uri)).state,'replayed');
@@ -278,8 +278,8 @@ test('a completed deletion is never selected or downgraded, and a failed cleanup
 test('deleting a conversation whose extraction failed abandons its commit: other memory stays visible and nothing waits on it', options, async t => {
   const f=await fixture(t,{extract:()=>({fail:'budget_exhausted'})}), ledger=new ConversationSourceDeletionLedger(f.database);
   const archive=await f.commitConversation('a',[{role:'user',text:'Private source whose extraction ran out of budget.'}],{projectId:'default'});
-  const unrelated=f.seed('profile.md','# Profile\n- Unrelated preference.',{type:'profile'});
-  await f.overlay.upsertFile({userId:f.userId,uri:unrelated,memoryType:'profile',body:'# Profile\n- Unrelated preference.'});
+  const unrelated=f.seed('profile.md','# User\n- Unrelated preference.',{type:'profile'});
+  await f.overlay.upsertFile({userId:f.userId,uri:unrelated,memoryType:'profile',body:'# User\n- Unrelated preference.'});
   const stamp=(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[f.userId])).rows[0].stamp;
   await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:stamp,projectCreatedAt:f.projectCreatedAt,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});
   f.overlay.sourceDeletion={ledger};
@@ -306,7 +306,7 @@ test('a deleted-source commit with no diff and no proof of failure stays pending
 
 test('a secondary inherited origin fences disclosure immediately and cleanup scrubs the combined line undoably', options, async t => {
   const f = await fixture(t), ledger = new ConversationSourceDeletionLedger(f.database);
-  const body = '# Profile\n- Combined A and B.\n- Independent C.';
+  const body = '# User\n- Combined A and B.\n- Independent C.';
   const uri = f.seed('profile.md', body, { type: 'profile' });
   await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'profile', body });
   const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
@@ -318,6 +318,33 @@ test('a secondary inherited origin fences disclosure immediately and cleanup scr
     rootSessionId: 'b', sessionIds: ['b'], frozen: { root: { id: 'b' } }, memoryUserRoot: f.sessions.userRoot(f.userId) });
   assert.ok((await ledger.hiddenMemoryUris(f.userId)).includes(uri));
   await f.store.removeConversationSource(f.userId, 'default', ['b']);
-  assert.equal(await f.sessions.read(f.userId, uri), '# Profile\n- Independent C.');
+  assert.equal(await f.sessions.read(f.userId, uri), '# User\n- Independent C.');
   assert.ok((await f.overlay.revisionsOf(f.userId, uri)).every(revision => ![revision.before, revision.after].some(text => text?.includes('Combined A and B.'))));
+});
+
+test('source cleanup scrubs a historical profile identity after its current origin was replaced', options, async t => {
+  const f = await fixture(t), uri = f.seed('profile.md', '# Independent B\n- Kept preference.', { type: 'profile' });
+  const archive = await f.commitConversation('private-name', [{ role: 'user', text: 'My name is Private A.' }], { projectId: 'default' });
+  await f.overlay.addRevision({ userId: f.userId, uri, memoryType: 'profile', change: 'added', actor: 'engine',
+    after: '# Private A\n- Kept preference.', engineSession: archive.session, archiveUri: archive.archive_uri, projectId: 'default' });
+  await f.overlay.addRevision({ userId: f.userId, uri, memoryType: 'profile', change: 'updated', actor: 'engine',
+    before: '# Private A\n- Kept preference.', after: '# Independent B\n- Kept preference.', engineSession: 'dsh-b', projectId: 'default' });
+  await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'profile', body: '# Independent B\n- Kept preference.' });
+  await f.overlay.syncOrigins(f.userId, uri, { after: '# Independent B\n- Kept preference.', origin: { engineSession: 'dsh-b', projectId: 'default' } });
+  const contributions = await f.store.sourceHistoryContributions(f.userId, 'default', ['session_private-name'], f.sessions.userRoot(f.userId));
+  assert.ok(contributions.some(row => row.lines.includes('# Private A')));
+  await f.store.removeConversationSource(f.userId, 'default', ['session_private-name']);
+  assert.equal(await f.sessions.read(f.userId, uri), '# Independent B\n- Kept preference.');
+  assert.doesNotMatch(JSON.stringify(await f.overlay.revisionsOf(f.userId, uri)), /Private A/);
+});
+
+test('source cleanup removes its current identity and keeps an independently sourced identity-only profile', options, async t => {
+  for (const removeTitle of [true, false]) {
+    const f = await fixture(t), uri = f.seed('profile.md', '# Named person\n- Body preference.', { type: 'profile' });
+    await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'profile', body: '# Named person\n- Body preference.' });
+    await f.overlay.syncOrigins(f.userId, uri, { after: '# Named person', origin: { engineSession: removeTitle ? 'dsh-a' : 'dsh-b', projectId: 'default' } });
+    await f.overlay.syncOrigins(f.userId, uri, { before: '# Named person', after: '# Named person\n- Body preference.', origin: { engineSession: removeTitle ? 'dsh-b' : 'dsh-a', projectId: 'default' } });
+    await f.store.removeConversationSource(f.userId, 'default', ['a']);
+    assert.equal(await f.sessions.read(f.userId, uri), removeTitle ? '- Body preference.' : '# Named person');
+  }
 });

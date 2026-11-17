@@ -160,6 +160,12 @@ export function profileStatements(body) {
   return profileMemoryStatements(String(body ?? '').split('\n').filter(line => !isLabelLine(line)).join('\n'));
 }
 
+/** Source cleanup uses the same profile identity rows as origin attribution.
+ * @param {string} uri @param {unknown} body */
+function sourceStatements(uri, body) {
+  return uri.endsWith('/memories/profile.md') ? profileStatements(body) : memoryLines(body).filter(line => !/^#{1,6}\s/.test(line));
+}
+
 /** The reasons of a revision that is itself a forget or a delete (`#write`, `forgetFile`): the version it took a line out of is what its undo goes back to. */
 const FORGET_REASON = /^(?:forgotten|deleted)/iu;
 
@@ -1514,14 +1520,14 @@ export class NativeMemoryStore {
   /** Source history is derived from exact archive/session authority even when no current file or origin remains. */
   async sourceHistoryContributions(userId,projectId,sessionIds,userRoot,projectCreatedAt=null) {
     const rows=await this.overlay.sourceRevisions(userId,projectId,sessionIds,userRoot,projectCreatedAt),byUri=new Map();
-    for(const row of rows){const before=new Set(memoryLines(row.before??'').map(lineFingerprint)),prior=byUri.get(row.uri)??[];
-      byUri.set(row.uri,[...new Set([...prior,...memoryLines(row.after??'').filter(line=>!/^#{1,6}\s/.test(line)&&!before.has(lineFingerprint(line)))])]);}
+    for(const row of rows){const before=new Set(sourceStatements(row.uri,row.before).map(lineFingerprint)),prior=byUri.get(row.uri)??[];
+      byUri.set(row.uri,[...new Set([...prior,...sourceStatements(row.uri,row.after).filter(line=>!before.has(lineFingerprint(line)))])]);}
     const contributions=[...byUri].filter(([,lines])=>lines.length).map(([uri,lines])=>({uri,lines,unverifiedRoot:null,prints:lines.map(lineFingerprint),recordIds:[nativeFileId(uri),...lines.map(line=>`${nativeFileId(uri)}_${lineFingerprint(line).slice(0,12)}`)]}));
     const prints=new Set(contributions.flatMap(item=>item.prints));
     if(this.sourceDeletion)for(const fence of await this.sourceDeletion.ledger.recordsForOwner(userId))if(fence.projectId===projectId&&(fence.nativeRoots??[fence.memoryUserRoot]).includes(userRoot))for(const values of Object.values(fence.historyPrints??{}))for(const print of values)prints.add(print);
     const ambiguous=(await this.overlay.consolidationRevisions(userId,userRoot)).some(revision=>{
-      const after=new Set(memoryLines(revision.after??'').map(lineFingerprint));
-      return memoryLines(revision.before??'').some(line=>prints.has(lineFingerprint(line))&&!after.has(lineFingerprint(line)));
+      const after=new Set(sourceStatements(revision.uri,revision.after).map(lineFingerprint));
+      return sourceStatements(revision.uri,revision.before).some(line=>prints.has(lineFingerprint(line))&&!after.has(lineFingerprint(line)));
     });
     return ambiguous?[...contributions,{uri:userRoot,lines:[],prints:[],recordIds:[],unverifiedRoot:userRoot}]:contributions;
   }
@@ -1546,8 +1552,8 @@ export class NativeMemoryStore {
     const historical = await this.overlay.sourceRevisions(userId,projectId,sessionIds,context.userRoot ?? context.sessions.userRoot(userId),projectCreatedAt);
     const historyLines = new Map();
     for (const revision of historical) {
-      const before = new Set(memoryLines(revision.before ?? '').map(lineFingerprint));
-      const brought = memoryLines(revision.after ?? '').filter(line => !/^#{1,6}\s/.test(line) && !before.has(lineFingerprint(line)));
+      const before = new Set(sourceStatements(revision.uri, revision.before).map(lineFingerprint));
+      const brought = sourceStatements(revision.uri, revision.after).filter(line => !before.has(lineFingerprint(line)));
       const prior = historyLines.get(revision.uri) ?? [];
       historyLines.set(revision.uri,[...new Set([...prior,...brought])]);
     }
@@ -1582,7 +1588,7 @@ export class NativeMemoryStore {
       const currentBody = await context.sessions.read(userId,file.uri);
       if (currentBody === null || contentHash(currentBody) !== file.hash) throw new HttpError(409,'memory_source_body_changed','The memory changed while source cleanup was prepared.');
       // Engine reads and overlay undo/export reads must lose the same source text.
-      if (memoryLines(next).some(line => !/^#/.test(line))) await this.#write(userId, file, next, { actor: 'platform', reason: 'source conversation deleted' });
+      if (sourceStatements(file.uri, next).length) await this.#write(userId, file, next, { actor: 'platform', reason: 'source conversation deleted' });
       else await this.forgetFile(userId, file, { keepText: false, actor: 'platform', reason: 'source conversation deleted' });
       await this.overlay.scrubLines(userId, file.uri, removed,{sourceDeleted:true});
       affected.push({ uri: file.uri, id: nativeFileId(file.uri), hash: file.hash, recordIds: [nativeFileId(file.uri), ...[...prints].map(print => `${nativeFileId(file.uri)}_${print.slice(0, 12)}`)] });

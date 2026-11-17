@@ -178,3 +178,39 @@ test('neutral profile headings never become records or targets, including title-
     assert.deepEqual(await store.forgotten('u1'), []);
   }
 });
+
+test('source history includes named profile titles but excludes the neutral scaffold', async () => {
+  const { store } = engine({ count: 0 });
+  const uri = `${ROOT}/profile.md`;
+  store.overlay.sourceRevisions = async () => [
+    { uri, before: '# User\n- Independent B.', after: '# Private A\n- Independent B.' },
+    { uri: `${ROOT}/notes/a.md`, before: '', after: '# Notes\n- Source A fact.' },
+  ];
+  store.overlay.consolidationRevisions = async () => [];
+  const contributions = await store.sourceHistoryContributions('u1', 'default', ['a'], 'viking://user/u1');
+  assert.deepEqual(contributions.map(row => row.lines), [['# Private A'], ['Source A fact.']]);
+  store.overlay.consolidationRevisions = async () => [{ uri, before: '# Private A\n- Independent B.', after: '# Reworded A\n- Independent B.' }];
+  assert.equal((await store.sourceHistoryContributions('u1', 'default', ['a'], 'viking://user/u1')).at(-1).unverifiedRoot, 'viking://user/u1');
+});
+
+test('source cleanup removes its identity row and preserves an independent identity-only profile', async () => {
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  for (const removeTitle of [true, false]) {
+    const { store, files } = engine({ count: 0, delay: 0 });
+    const uri = `${ROOT}/profile.md`, scrubbed = [];
+    files.set(uri, { body: '# Named person\n- Body preference.', modTime: '2026-11-17' });
+    Object.assign(store.overlay, {
+      sourceRevisions: async () => [], consolidationRevisions: async () => [], revisionsOf: async () => [],
+      conversationOf: async (_user, session) => session.slice(4), projectOfSession: async () => null,
+      withdrawConversationSource: async () => [], pendingSummaryInvalidations: async () => [],
+      scrubLines: async (_user, _uri, lines) => scrubbed.push(...lines),
+      originsOf: async () => new Map([[uri, new Map([
+        [lineFingerprint('# Named person'), { engineSession: removeTitle ? 'dsh-a' : 'dsh-b', projectId: 'default' }],
+        [lineFingerprint('Body preference.'), { engineSession: removeTitle ? 'dsh-b' : 'dsh-a', projectId: 'default' }],
+      ])]]),
+    });
+    await store.removeConversationSource('u1', 'default', ['a']);
+    assert.equal(files.get(uri)?.body, removeTitle ? '- Body preference.' : '# Named person');
+    assert.deepEqual(scrubbed, [removeTitle ? '# Named person' : 'Body preference.']);
+  }
+});
