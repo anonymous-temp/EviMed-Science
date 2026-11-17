@@ -1,4 +1,4 @@
-import { MEMORY_PROFILE_NEUTRAL_TITLES, profileMemoryStatements } from '@evimed/domain';
+import { MEMORY_PROFILE_STRUCTURAL_TITLES, profileMemoryStatements } from '@evimed/domain';
 import { personalMemoryTravels } from './openVikingLayout.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
@@ -59,7 +59,7 @@ export function lineFingerprint(line) {
 
 // Older title-only profiles could acquire an origin through memoryLines' heading fallback.
 // Read and inheritance fences use the same template constants as new writes.
-const neutralProfileOriginPrints = new Set(Object.values(MEMORY_PROFILE_NEUTRAL_TITLES).map(title => lineFingerprint(`# ${title}`)));
+const neutralProfileOriginPrints = new Set(MEMORY_PROFILE_STRUCTURAL_TITLES.map(title => lineFingerprint(`# ${title}`)));
 const neutralProfileOrigin = (uri, fingerprint) => String(uri).endsWith('/memories/profile.md') && neutralProfileOriginPrints.has(String(fingerprint));
 
 /** The original conversation set behind one line, flattened when a merge inherits it. @param {any} origin @returns {any[]} */

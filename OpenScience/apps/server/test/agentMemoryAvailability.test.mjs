@@ -100,6 +100,25 @@ test('cookie key routes enforce the account audience while internal access is en
   assert.deepEqual(calls, ['create', 'revoke']);
 });
 
+test('keys stay manageable for the data-analysis API when the memory API is closed or internal-only, and open no memory route', async () => {
+  // The key store serves every API a key can call. CI caught the memory audience gate closing analysis keys with it:
+  // dataAnalysisApp.integration minted a key with `dataAnalysisApiEnabled` alone and got 503.
+  for (const config of [{ dataAnalysisApiEnabled: true }, { dataAnalysisApiEnabled: true, agentMemoryApiInternalUsers: ['internal'] }]) {
+    const { keys, routes, calls } = fixture(config, 'outside');
+    await keys(request('/api/agent-keys'), response());
+    await keys({ ...request('/api/agent-keys', 'valid', 'POST'),
+      async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ name: 'Analysis', scopes: ['analysis.read', 'analysis.write'] })); } }, response());
+    await keys(request('/api/agent-keys/key', 'valid', 'DELETE'), response());
+    assert.deepEqual(calls, ['list', 'create', 'revoke']);
+    // The same outside account's key is still refused by the memory routes.
+    for (const url of [path, `${path}/openapi.json`, `${path}/recall`]) await assert.rejects(routes(request(url), response()), disabled);
+  }
+  // With no key-bearing API offered at all, key management stays closed as before.
+  const { keys, calls } = fixture({ dataAnalysisApiEnabled: false }, 'outside');
+  await assert.rejects(keys(request('/api/agent-keys'), response()), disabled);
+  assert.deepEqual(calls, []);
+});
+
 test('the me feature uses the same audience decision as the key and bearer routes', async () => {
   const { agentMemoryAvailable } = await import('../src/agentMemoryAvailability.mjs');
   const { readFile } = await import('node:fs/promises');

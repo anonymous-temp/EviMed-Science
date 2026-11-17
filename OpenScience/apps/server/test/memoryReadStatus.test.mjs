@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { measuredRead, readStatus, searchStatusText, literalIndexMatch, memorySourceLabel } from '../src/memoryReadStatus.mjs';
 import { profileStatements } from '../src/nativeMemoryStore.mjs';
-import { MEMORY_PROFILE_NEUTRAL_TITLES, MEMORY_PROFILE_HEADING_RULE } from '@evimed/domain';
+import { MEMORY_PROFILE_NEUTRAL_TITLES, MEMORY_PROFILE_STRUCTURAL_TITLES, MEMORY_PROFILE_HEADING_RULE } from '@evimed/domain';
 import { renderMemoryTemplates } from '../../../deploy/web/openviking/memory-templates-src/build.mjs';
 import { loadConfig } from '../src/config.mjs';
 
@@ -55,7 +55,13 @@ test('profile facts and opt-in next templates share the exact unnamed headings',
     assert.deepEqual(profileStatements(`# ${title}`), []);
     assert.deepEqual(profileStatements(`# ${title}\r\n- Designs reports.\r\n## Work`), ['Designs reports.']);
   }
-  for (const title of ['Mara Santos', 'Dr User', 'Profile', '用户的昵称']) {
+  // A generic document title or the word for "user" in another language is scaffolding too: the serving template asks for
+  // "the word for user" in the conversation's language, and the memory page must not show such a title as the person's name
+  // (memoryApi.integration pins a "# Profile" file as its statements only).
+  for (const title of [...MEMORY_PROFILE_STRUCTURAL_TITLES, 'profile', 'USER  PROFILE', 'Ｐｒｏｆｉｌｅ']) {
+    assert.deepEqual(profileStatements(`# ${title}\n- Designs reports.`), ['Designs reports.'], title);
+  }
+  for (const title of ['Mara Santos', 'Dr User', 'Profile of Mara', '用户的昵称', '画像师小王']) {
     assert.deepEqual(profileStatements(`# ${title}\n- Designs reports.`), [`# ${title}`, 'Designs reports.']);
   }
   for (const variant of ['next']) {

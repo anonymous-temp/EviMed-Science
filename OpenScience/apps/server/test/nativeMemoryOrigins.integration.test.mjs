@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
+import { MEMORY_PROFILE_NEUTRAL_TITLES, isNeutralProfileHeading } from '@evimed/domain';
 import { nativeRecallSource } from '../src/agentMemoryRecall.mjs';
 import { nativeFileId } from '../src/nativeMemoryStore.mjs';
 import { lineFingerprint } from "../src/nativeMemoryOverlay.mjs";
@@ -213,9 +213,11 @@ test('sequential verification corrections bind each revision only to the source 
 });
 
 
-for (const title of [...Object.values(MEMORY_PROFILE_NEUTRAL_TITLES), 'Mara Santos', 'Profile']) {
+// 'Profile' and '用户画像' are document titles, not names: they are scaffolding like the two template headings. 'Dr User' is a name.
+for (const title of [...Object.values(MEMORY_PROFILE_NEUTRAL_TITLES), 'Profile', '用户画像', 'Mara Santos', 'Dr User']) {
   test(`profile heading ${title}: worker origins, page, map, recall and forget agree`, options, async t => {
-    const neutral = Object.values(MEMORY_PROFILE_NEUTRAL_TITLES).includes(title);
+    const neutral = isNeutralProfileHeading(`# ${title}`);
+    assert.equal(neutral, !['Mara Santos', 'Dr User'].includes(title));
     const text = `# ${title}\n- Designs reports.`;
     const f = await fixture(t, { extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/profile.md`, memory_type: 'profile', after: text }] }) });
     await f.commitConversation('heading', [{ role: 'user', text: neutral ? 'I design reports.' : `Call me ${title}. I design reports.` }]);

@@ -14,6 +14,16 @@ export function agentMemoryAvailable(config, user = undefined) {
   return config.agentMemoryApiEnabled === true || additional.includes(user.id) || operators.includes(user.id);
 }
 
+/** Key management is shared by every API a key can call (memory and data analysis today), so it stays open while
+ * any of them is offered: gating it on the memory audience alone closed the data-analysis keys with it. A key's
+ * memory scopes still open nothing for an account outside the memory audience, since the memory routes ask
+ * `agentMemoryAvailable` of the key's own account.
+ * @param {any} config @param {any} [user]
+ */
+export function agentKeysAvailable(config, user = undefined) {
+  return config.dataAnalysisApiEnabled === true || agentMemoryAvailable(config, user);
+}
+
 export function agentMemoryDisabled() {
   return new HttpError(503, 'agent_memory_disabled', 'The agent memory API is not enabled in this deployment.');
 }
