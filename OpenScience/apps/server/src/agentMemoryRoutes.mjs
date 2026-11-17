@@ -42,9 +42,8 @@ import { forgetForAgent, forgottenForAgent } from './agentMemoryForget.mjs';
  *  3. **`episodes` is an input, not an import.** An external agent posts what
  *     happened — the turns — and what, if anything, is worth remembering is
  *     decided by the engine's own extraction after the owner confirms (see
- *     below). An endpoint that let a caller insert memory directly would be a way
- *     to write memory with no conversation behind it, which is the one thing the
- *     engine's design refuses.
+ *     below). Directly stated memories use the page's real one-message engine
+ *     session; that source is not an imported external conversation.
  *
  * An account's memory is the engine's own files (`nativeMemory`, the store the memory page uses): `/recall` reads them, `/records`,
  * `/dashboard` and every record act go to them (a forget removes the file from the engine, with the page's undo), and `/episodes` stages
@@ -578,7 +577,7 @@ export function createAgentMemoryRoutes({
               && ['memory.read', 'memory.history.read'].every(scope => identity.scopes.includes(scope)),
             requiredScopes: ['memory.read', 'memory.history.read'],
           },
-          // Explicitly unavailable until the complete shared service path is exposed.
+          // Availability follows the wired producers and the scopes this key actually holds.
           openingContext: { available: Boolean(openingContext && admission && nativeMemory?.configured && nativeMemory?.memoryContexts) && identity.scopes.includes('memory.read'), requiredScopes: ['memory.read'], path: '/context' },
           explicitRemember: { available: Boolean(nativeMemory?.externalRememberEnabled && admission) && identity.scopes.includes('memory.remember'), requiredScopes: ['memory.remember'], path: '/remember', storage: 'directly_stated' },
           statementForget: { available: config.memoryForgetTargetsEnabled === true && nativeMemory?.configured === true && nativeMemory?.forgetTargetsEnabled === true && Boolean(nativeMemory?.memoryContexts) && Boolean(admission)
