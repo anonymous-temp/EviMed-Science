@@ -1,3 +1,4 @@
+import { rememberAdmission } from './agentMemoryRemember.mjs';
 import { recallHistoryForAgent } from './agentMemoryRecall.mjs';
 import { agentMemoryAvailable } from './agentMemoryAvailability.mjs';
 import { NativeMemoryEngineDeferred } from './nativeMemoryEngineDeferred.mjs';
@@ -5237,6 +5238,20 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
   }
   if (feedbackEvents && productDocuments) feedbackEvents.memoryForgetReader = productDocuments.memoryForgetReader;
+  nativeMemoryOverlay.externalAdmissionPolicy = async (userId, row) => {
+    if (row.externalSource?.operation !== 'remember') return { allowed: false, state: 'cancelled', reason: 'external_operation_unknown' };
+    try {
+      const user = await store.userById(userId);
+      if (!user) return { allowed: false, state: 'cancelled', reason: 'account_unavailable' };
+      const project = await store.requireProject(user, row.projectId ?? 'default');
+      const rememberContext = await rememberAdmission({ native: nativeMemory, admission: memoryAdmission },
+        { user, project, at: Date.parse(row.externalSource.saidAt) });
+      if ((rememberContext.projectCreatedAt ?? null) !== row.externalSource.projectCreatedAt) return { allowed: false, state: 'cancelled', reason: 'project_changed' };
+      return { allowed: true, state: null, reason: null };
+    } catch (error) {
+      return { allowed: false, state: 'suspended', reason: error.details?.reason ?? error.code ?? 'memory_scope_denied' };
+    }
+  };
   nativeMemory.history = memoryHistory;
   if (memoryHistory) {
     memoryHistory.sweepMemory = scan => nativeMemory.sweepForgottenMemory(scan);

@@ -324,7 +324,7 @@ test("a limit the capsule half cannot serve is served, not refused", async () =>
 test("each request schema in the description is exactly the fields its route accepts", async () => {
   const { AGENT_MEMORY_REQUEST_FIELDS } = await import("../src/agentMemoryRoutes.mjs");
   const schemas = agentMemoryOpenApi({ basePath: AGENT_MEMORY_PATH, rateLimitPerMinute: 120 }).components.schemas;
-  const described = { recall: "RecallRequest", note: "NoteRequest", episodes: "EpisodeRequest", forget: "ForgetRequest", observations: "ObservationRequest" };
+  const described = { recall: "RecallRequest", note: "NoteRequest", episodes: "EpisodeRequest", remember: "RememberRequest", forget: "ForgetRequest", observations: "ObservationRequest" };
   assert.deepEqual(Object.keys(described).sort(), Object.keys(AGENT_MEMORY_REQUEST_FIELDS).sort(), "every body the routes read is described");
   for (const [operation, schema] of Object.entries(described)) {
     assert.deepEqual(Object.keys(schemas[schema].properties).sort(), [...AGENT_MEMORY_REQUEST_FIELDS[operation]].sort(), operation);

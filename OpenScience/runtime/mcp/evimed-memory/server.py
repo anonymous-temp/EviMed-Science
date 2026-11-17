@@ -124,9 +124,9 @@ TOOLS = [
 # names that condition without probing an unsupported operation.
 for _name, _description, _properties, _required in [
     ("memory_status", "Read this key's server capabilities and scopes before choosing an operation.", {}, []),
-    ("memory_context", "Read opening context once at session start when openingContext is available.", {"attended": {"type": "boolean"}}, []),
-    ("memory_remember", "Remember the person's verbatim words with their external source only when explicitRemember is available.", {
-        "statement": {"type": "string", "minLength": 1},
+    ("memory_context", "Read opening context once at session start when openingContext is available.", {}, []),
+    ("memory_remember", "Remember the person's verbatim words with their external source with memory.remember only when explicitRemember is available.", {
+        "statement": {"type": "string", "minLength": 1, "maxLength": 2000},
         "source": {"type": "object", "additionalProperties": False, "required": ["client", "sessionId", "saidAt"], "properties": {
             "client": {"type": "string"}, "sessionId": {"type": "string"}, "messageId": {"type": "string"}, "saidAt": {"type": "string", "format": "date-time"}}}}, ["statement", "source"]),
     ("memory_forget", "Withdraw a statement or selected exact record lines at the person's request; report confirmed outcomes and pending checks exactly.", {
@@ -253,7 +253,7 @@ def call_tool(name, arguments, opener=None):
     if name == "memory_status":
         return _call("", None, opener, _subject(arguments))
     operations = {
-        "memory_context": ("openingContext", "context", ("projectId", "attended"), True),
+        "memory_context": ("openingContext", "context", ("projectId",), True),
         "memory_remember": ("explicitRemember", "remember", ("statement", "source", "projectId"), False),
         "memory_forget": ("statementForget", "forget", ("recordId", "lines", "statement", "projectId"), False),
         "memory_forgotten": ("forgottenList", "forgotten", ("projectId",), True),

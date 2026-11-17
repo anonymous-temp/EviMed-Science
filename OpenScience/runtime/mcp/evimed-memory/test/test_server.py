@@ -229,6 +229,18 @@ class AdapterTests(unittest.TestCase):
         self.assertNotIn("evk_x", json.dumps(result))
         self.assertEqual(result["data"]["safe"], "Use metric units.")
 
+    def test_offered_opening_and_remember_preserve_the_source_contract(self):
+        seen = []
+        def opener(request, timeout=None):
+            seen.append((request.full_url, request.get_method(), json.loads(request.data) if request.data else None))
+            return Response({"data": {"capabilities": {"openingContext": {"available": True}, "explicitRemember": {"available": True}}}})
+        statement = {"statement": "Use metric units.", "source": {"client": "Editor", "sessionId": "one", "messageId": "msg", "saidAt": "2026-11-17T01:00:00Z"}}
+        with mock.patch.dict(server.os.environ, CONFIGURED, clear=True):
+            server.call_tool("memory_context", {"projectId": "p1", "attended": False}, opener)
+            self.assertTrue(seen[-1][0].endswith("/context?projectId=p1"))
+            server.call_tool("memory_remember", dict(statement, used=True), opener)
+            self.assertEqual(seen[-1][2], statement)
+
     def test_new_operations_and_history_use_server_capabilities(self):
         seen = []
         def opener(request, timeout=None):

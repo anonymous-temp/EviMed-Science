@@ -69,8 +69,8 @@ file to restore access. Revoked keys cannot be shown or recovered.
 | `capsule_propose` | Posts `factKind`, `content`, optional `projectId` to `/note`; pending until the person confirms it on the web memory page. It never confirms or activates anything. |
 | `capsule_method` | Fetches the **current** recall catalog and returns one method body by `digest` or exact `name` (ID/title/name). Duplicate names require a digest. |
 | `capsule_status` | Checks configuration and the API's key-capability endpoint. |
-| `capsule_context` | Once at session start, only when status offers openingContext (currently unavailable). |
-| `capsule_remember` | Sends verbatim words and external source only when explicitRemember is offered (currently unavailable). |
+| `capsule_context` | Once at session start, only when status offers openingContext. |
+| `capsule_remember` | Sends verbatim words and external source only when explicitRemember is offered with memory.remember. |
 | `capsule_forget` | Withdraws a statement or record lines when offered; requires an account-scoped manage key and preserves pending-check outcomes. |
 | `capsule_forgotten` | Lists withdrawn original text and available restore actions as a management view. |
 

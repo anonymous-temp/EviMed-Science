@@ -706,3 +706,10 @@ test('the account snapshot applies the live forget reader before exporting deriv
   assert.equal(checked.length,2);
   assert.ok(state.omissions.some(row=>row.reason==='withdrawn_memory'));
 });
+
+test('external statement references travel with the already exported native admission rows', () => {
+  const source = readFileSync(new URL('../src/accountExport.mjs', import.meta.url), 'utf8');
+  const admissionQuery = source.slice(source.indexOf('["nativeAdmissions"'), source.indexOf('["nativeImports"'));
+  assert.match(admissionQuery, /external_source AS "externalSource"/);
+  assert.match(admissionQuery, /WHERE user_id=\$1/);
+});

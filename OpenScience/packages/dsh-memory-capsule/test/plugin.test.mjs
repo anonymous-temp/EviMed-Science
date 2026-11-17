@@ -195,3 +195,13 @@ test('new tools consult capabilities before acting and preserve native forget ou
   assert.deepEqual(f.calls.at(-1).body, { statement: 'Use metric units.' });
   assert.match(SYSTEM_PROMPT, /session start/);
 });
+
+test('offered opening and remember forward only the public source contract', async t => {
+  const f = await fixture(t);
+  f.state.body = { capabilities: { openingContext: { available: true }, explicitRemember: { available: true, requiredScopes: ['memory.remember'] } } };
+  await f.client.call('capsule_context', { projectId: 'p1', attended: false });
+  assert.equal(f.calls.at(-1).path, '/api/agent-memory/v1/context?projectId=p1');
+  const input = { statement: 'Use metric units.', source: { client: 'Editor', sessionId: 'one', messageId: 'msg', saidAt: '2026-11-17T01:00:00Z' } };
+  await f.client.call('capsule_remember', { ...input, used: true });
+  assert.deepEqual(f.calls.at(-1).body, input);
+});

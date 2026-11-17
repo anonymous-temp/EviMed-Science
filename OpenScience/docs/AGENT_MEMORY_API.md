@@ -70,7 +70,7 @@ Keys belong to an account and are managed with that account's browser session
 
 - **Scopes:** `memory.read` (recall, list records, the dashboard), `memory.history.read`
   (opt-in raw conversation recall, also requires `memory.read`), `memory.write` (note,
-  episodes), `memory.manage` (the dashboard's acts) and `memory.observe`
+  episodes), `memory.remember` (direct statements with source), `memory.manage` (the dashboard's acts) and `memory.observe`
   (prescription edits) — see below. Give a key
   only what its agent needs.
 - **Project binding:** a key created with `projectId` can read and write that
@@ -154,12 +154,12 @@ infer capabilities from error responses.
 |---|---|
 | Raw conversation recall | `POST /recall`, `include: ["history"]`, separately scoped. |
 | Opening context | `GET /context` (`memory.read`), the resident supplement plus the gateway startup profile and listings. |
-| Direct explicit remember | Unavailable; `/note` remains a candidate. |
+| Direct explicit remember | `POST /remember` (`memory.remember`), page-origin direct statement with external source and durable idempotency. `/note` remains a candidate. |
 | Statement forget and forgotten list | `POST /forget` uses native statement/line withdrawal; `GET /forgotten` returns original text and the web-equivalent restore action. Requires account-scoped manage authority for withdrawal/restore; see below. |
 | Trusted conversation ingest | Unavailable; `/episodes` still waits for confirmation. |
 | General work signals | Unavailable; existing prescription observations are unchanged. |
 | Capsule sharing / selected-capsule-only recall | Unavailable; `capsuleIds` retains additive semantics. Trials stay web-only. |
-| Clients | DSH and MCP provide status, history recall, forget and forgotten tools. Context/remember adapters consult status; context is now offered. |
+| Clients | DSH and MCP provide status, history recall, forget and forgotten tools. Context/remember adapters consult status; context and directly stated remember are offered. |
 
 ### Opening context
 
@@ -219,8 +219,38 @@ now checks the kept before-image version too, returning 409 for a stale version.
 The dashboard reads forgotten revisions directly instead of filtering active
 files for an archived status they cannot have.
 
-External explicit writing remains closed
-(`external_source_admission_unavailable`): no `/remember` endpoint is shipped.
+`POST /remember` requires the separate `memory.remember` scope. `memory.write`
+continues to authorize proposals only. Send `{statement, source: {client,
+sessionId, messageId?, saidAt}, projectId?}` with the person's verbatim words
+(maximum 2000 characters), client label (80), session/message reference (200)
+and original ISO timestamp. The host must preserve actual human authorship;
+this endpoint is not permission for a model to invent a source.
+
+The page's `NativeMemoryStore.remember` entry records the statement as a direct
+page-origin request. Its existing native admission ledger stores the external
+reference and a digest before contacting the engine. Retries share one owner /
+client / session / message key (statement hash when messageId is absent).
+Changed words or scope under the same key conflict. An uncertain append is
+inspected, never blindly repeated. The engine creates a real one-message
+source, with the named project's existing context preamble when needed. It is
+not a fabricated conversation import. The native worker performs the same
+instruction, forget-request, rejection and verification checks as page writes.
+Pending and uncertain states are not completed writes. The page labels the
+result with its external client and original date; existing record undo and
+forget routes apply. External source metadata is included in account export.
+
+Admission refuses learning pause, trial, automated/clinical context, engine
+unreadiness and pre-reset statements using the existing admission reasons
+(`error.details.reason` on `memory_scope_denied`). The public path additionally
+refuses shared namespaces and does not reintroduce withdrawn statements; the
+person can restore one through its existing record action. These checks are
+repeated before durable retries. Unknown or changed project generations refuse.
+
+```sh
+curl -X POST -H 'Authorization: Bearer <KEY>' -H 'Content-Type: application/json' \
+  --data '{"statement":"Use metric units.","source":{"client":"Editor","sessionId":"chat-1","messageId":"msg-1","saidAt":"2026-11-17T01:00:00Z"}}' \
+  https://example.invalid/api/agent-memory/v1/remember
+```
 `memory.write` already existed for candidates and is not expanded silently.
 Neither a partial resident supplement nor a candidate confirmation is advertised
 as the missing operation. No new configuration default or storage kind is added.
@@ -268,8 +298,8 @@ subject's own identifier). Nothing on the dashboard is stored twice: it is
 derived when read from the records, their evidence and revisions, the usage
 counter and the method ledger.
 
-What an agent can never do through either door: activate a memory, reach a
-project its key is not bound to, or outrun the researcher's own switches. If
+What an agent can never do through either door: bypass the scope for a direct
+statement, reach a project outside its key binding, or outrun the researcher's own switches. If
 the account has paused learning (for everything, or for that project) an
 episode extracts nothing; if it has paused recall, `recall` returns no research
 memory records (capsule entries follow each capsule's own activation). Those
@@ -355,7 +385,7 @@ on demand. The API currently sends those bodies in recall itself; no new
 body-by-digest server route or stale plugin cache is introduced. A method outside
 that catalog's selection/budget cannot be loaded this way.
 `capsule_propose` calls `/note`; it always waits for the person's confirmation.
-`capsule_forget` uses `memory.manage`, and `capsule_forgotten` lists original withdrawn text with restore actions. Context and remember adapters first read status; this server offers context; remember remains closed. Call context at most once at session start, only when offered.
+`capsule_forget` uses `memory.manage`, and `capsule_forgotten` lists original withdrawn text with restore actions. Context and remember adapters first read status; this server offers context and remember with their respective scopes. Call context at most once at session start, only when offered.
 
 **Raw history is opt-in** with `include: ["history"]` and both read scopes. Automatic external-work learning is unavailable. Share and proposal confirmation stay on the web memory page (`/app/memory`). This is a remote connector, not a local memory engine, transcript
 collector, method mount or capsule-isolation mechanism. Ordinary work requires

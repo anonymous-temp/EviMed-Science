@@ -11,7 +11,7 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
   fetchWebAgentKeys: mocks.list, createWebAgentKey: mocks.create, revokeWebAgentKey: mocks.revoke,
 }));
 const record: WebAgentKey = { id: "agk_hidden", name: "Local DSH", scopes: ["memory.read"], createdAt: "2026-11-15T00:00:00Z", lastUsedAt: null, revokedAt: null, expiresAt: null, projectId: null };
-const catalogue = { keys: [record], scopes: ["memory.read", "memory.history.read", "memory.write", "memory.manage", "memory.observe", "analysis.read", "analysis.write", "unknown.future"] };
+const catalogue = { keys: [record], scopes: ["memory.read", "memory.history.read", "memory.write", "memory.remember", "memory.manage", "memory.observe", "analysis.read", "analysis.write", "unknown.future"] };
 const secret = "evk_once_only_fixture";
 beforeEach(() => {
   vi.clearAllMocks();
@@ -56,6 +56,7 @@ describe("external agent keys", () => {
     await user.click(screen.getByLabelText("提出待确认的记忆"));
     await user.click(screen.getByRole("button", { name: "创建" }));
     expect(await screen.findByLabelText("新密钥（仅显示这一次）")).toHaveValue(secret);
+    expect(screen.getByRole('checkbox', { name: '记住本人明确说过的话' })).not.toBeChecked();
     expect(mocks.create).toHaveBeenCalledWith({ name: "My DSH", scopes: ["memory.read", "memory.write"] });
     expect(screen.getByText(/保存到本机文件/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "复制密钥" }));

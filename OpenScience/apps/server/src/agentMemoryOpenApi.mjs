@@ -65,7 +65,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
         "",
         "Three rules hold everywhere in this API and are worth reading before the endpoints:",
         "",
-        "1. Nothing you write becomes an active memory. An episode stays a pending candidate, and a note an unconfirmed one, until the account owner confirms it — on their memory page, or through the dashboard operations with a key carrying `memory.manage`, which a key holds only when its requests come from that person's own clicks. There is no parameter that changes this; a caller's assertion that its user said something outright is not that user saying it.",
+        "1. memory.write only proposes candidates. A separate memory.remember scope admits a directly stated memory through the page write path with an external source. An episode stays a pending candidate, and a note an unconfirmed one, until the account owner confirms it — on their memory page, or through the dashboard operations with a key carrying `memory.manage`, which a key holds only when its requests come from that person's own clicks. The explicit-remember host must send the person's verbatim words, with their source reference; do not send a model's paraphrase.",
         "2. A key's scope is a property of the key. A key bound to a project cannot read or write outside it, and no request field widens that. An integration key (minted with `subjects: true`) may name the person a request is for in the `X-Subject` header — a doctor behind a hospital's HIS — and every read and write is then that person's own memory and nobody else's; without the header it is the key's own account, the institution. A subject is given its memory the first time something is written for it; reading one that has none answers as an empty memory.",
         "3. An account's memory is the memory engine's own files. `/recall`, `/records` and `/dashboard` read them, a forget removes the file from the engine (an undo brings it back with the `version` the forget answered with), an edit replaces its text, and `/episodes` stages a pending candidate without extraction or activation; explicit confirmation admits that exact revision through a durable native session. Active files have no pending state or usage counts, and `restore` uses the page status update with the forgotten-list version. A deployment that cannot reach the engine answers `503 memory_engine_unavailable`.",
         "",
@@ -89,6 +89,13 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
         },
       },
       schemas: {
+        RememberRequest: { type: 'object', additionalProperties: false, required: ['statement', 'source'], properties: {
+          statement: { type: 'string', minLength: 1, maxLength: 2000, description: "The person's verbatim statement, never a model-authored paraphrase." },
+          source: { type: 'object', additionalProperties: false, required: ['client', 'sessionId', 'saidAt'], properties: {
+            client: { type: 'string', minLength: 1, maxLength: 80 }, sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+            messageId: { type: 'string', minLength: 1, maxLength: 200 }, saidAt: { type: 'string', format: 'date-time' } } },
+          projectId: { type: 'string' },
+        } },
         FactKind: { type: "string", enum: [...CAPSULE_FACT_KINDS] },
         RecallRequest: {
           type: "object",
@@ -333,6 +340,10 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
     },
     security: [{ agentApiKey: [] }],
     paths: {
+      '/remember': { post: { summary: 'Remember a directly stated memory',
+        description: 'Requires memory.remember, separately from candidate-only memory.write. Calls the page remember entry with source attribution and durable idempotency on owner/client/sessionId/messageId (or statement hash). Admission, withdrawal and native worker verification apply. Response reports pending, uncertain or completed; it never claims a pending extraction is already a verified fact. Undo and forget use existing record routes.',
+        requestBody: jsonBody({ $ref: '#/components/schemas/RememberRequest' }),
+        responses: { 200: { description: 'Direct statement receipt, source and actual pending state.' }, 409: errorResponse('Conflicting idempotent retry or previously withdrawn statement.'), ...common } } },
       '/context': { get: { summary: 'Read opening context once at session start',
         description: 'Requires memory.read. Calls the resident producer in peek mode and the native gateway startup profile/list handlers. Does not acknowledge a conversation or count use. Each layer has text or an omission reason; platformText is the exact resident block. Listings are JSON text of the gateway entries, not a second history search.',
         parameters: [{ name: 'projectId', in: 'query', schema: { type: 'string' }, description: 'Owned project; a bound key cannot widen its project.' }],

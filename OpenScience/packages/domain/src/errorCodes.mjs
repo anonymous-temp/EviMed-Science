@@ -3768,6 +3768,7 @@ export function runtimeLockMessage(reason) {
  * @type {Readonly<Record<string, Readonly<Record<string, 'number' | readonly string[]>>>>}
  */
 export const ERROR_DETAIL_FIELDS = Object.freeze({
+  memory_scope_denied: Object.freeze({ reason: Object.freeze(['paused', 'trial', 'automated_run', 'clinical_context', 'engine_unavailable', 'memory_off', 'internal_project', 'before_reset', 'source_deleted', 'subagent']) }),
   // Why a project's runtime does not take a question now (`RUNTIME_LOCK_REASONS`): the browser says the sentence of the reason it was
   // given, not the one every holder used to share.
   runtime_reserved_for_autopilot: Object.freeze({

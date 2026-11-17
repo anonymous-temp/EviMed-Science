@@ -1,3 +1,4 @@
+import { rememberSource, rememberAdmission } from './agentMemoryRemember.mjs';
 import { contextForAgent } from './agentMemoryContext.mjs';
 import { agentMemoryAvailable, agentMemoryDisabled } from './agentMemoryAvailability.mjs';
 import { createHash } from "node:crypto";
@@ -27,12 +28,12 @@ import { forgetForAgent, forgottenForAgent } from './agentMemoryForget.mjs';
  * Three rules that are properties of this surface rather than of the services
  * underneath it, and each one is here because the caller is not ours:
  *
- *  1. **Nothing written here takes effect by itself.** A note arrives as an
+ *  1. **Proposals require confirmation.** A note arrives as an
  *     `inferred` candidate and an episode as a pending candidate note; the
  *     parameter that would say otherwise does not exist. A model's claim that its
  *     user said something outright is not the user saying it, and an external
  *     agent's claim is one more step removed. The account owner confirms, or does
- *     not.
+ *     not. Directly stated memory has its own memory.remember scope and source receipt.
  *  2. **Scope comes from the key.** A key bound to a project cannot read or
  *     write outside it, and no request field can widen that. An integration
  *     key may name the person a request is for (`X-Subject`), and then every
@@ -69,7 +70,7 @@ const MAX_TRACKED_KEYS = 10_000;
  *  holds the OpenAPI description's paths to exactly this list. */
 export const AGENT_MEMORY_ENDPOINTS = Object.freeze([
   "POST /recall", "POST /note", "GET /records", "POST /episodes",
-  "POST /forget", "GET /forgotten", "GET /context",
+  "POST /forget", "GET /forgotten", "GET /context", "POST /remember",
   "POST /observations", "GET /dashboard", "PUT /settings",
   "PATCH /records/{id}", "POST /records/{id}/confirm", "POST /records/{id}/forget", "POST /records/{id}/restore", "POST /records/{id}/undo",
   "GET /methods/{id}", "POST /methods/{id}/retire", "POST /methods/{id}/restore", "POST /methods/{id}/rollback",
@@ -83,6 +84,7 @@ export const AGENT_MEMORY_REQUEST_FIELDS = Object.freeze({
   recall: Object.freeze(["query", "projectId", "limit", "factKinds", "since", "scope", "capsuleIds", "methods", "include"]),
   note: Object.freeze(["factKind", "content", "projectId"]),
   episodes: Object.freeze(["projectId", "sessionId", "messages"]),
+  remember: Object.freeze(["statement", "source", "projectId"]),
   forget: Object.freeze(["recordId", "lines", "statement", "projectId"]),
   observations: OBSERVATION_FIELDS,
 });
@@ -252,6 +254,23 @@ export function createAgentMemoryRoutes({
       }
       return { id, act: match[2] ?? "" };
     };
+
+    if (action === 'remember' && method === 'POST') {
+      requireScope('memory.remember');
+      const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.remember);
+      const source = rememberSource(input);
+      const user = await accountFor({ create: false });
+      if (!user) throw new HttpError(404, 'memory_not_found', 'No such memory account.');
+      const projectId = await projectOf(user, input.projectId);
+      const project = await store.requireProject(user, projectId ?? 'default');
+      const native = await nativeFor(user);
+      if (!native?.externalRememberEnabled) throw new HttpError(503, 'memory_engine_unavailable', 'External remember admission is unavailable.');
+      await rememberAdmission({ native, admission }, { user, project, at: Date.parse(source.saidAt) });
+      const result = await native.remember(user.id, { text: input.statement, projectId: project.id, projectName: project.name ?? null, externalSource: source });
+      await trail('remember', user);
+      sendJson(res, 200, { data: result });
+      return true;
+    }
 
     if (action === 'context' && method === 'GET') {
       requireScope('memory.read');
@@ -561,7 +580,7 @@ export function createAgentMemoryRoutes({
           },
           // Explicitly unavailable until the complete shared service path is exposed.
           openingContext: { available: Boolean(openingContext && admission && nativeMemory?.configured && nativeMemory?.memoryContexts) && identity.scopes.includes('memory.read'), requiredScopes: ['memory.read'], path: '/context' },
-          explicitRemember: { available: false, requiredScopes: ['memory.write'], reason: 'external_source_admission_unavailable' },
+          explicitRemember: { available: Boolean(nativeMemory?.externalRememberEnabled && admission) && identity.scopes.includes('memory.remember'), requiredScopes: ['memory.remember'], path: '/remember', storage: 'directly_stated' },
           statementForget: { available: config.memoryForgetTargetsEnabled === true && nativeMemory?.configured === true && nativeMemory?.forgetTargetsEnabled === true && Boolean(nativeMemory?.memoryContexts) && Boolean(admission)
             && !identity.projectId && identity.scopes.includes('memory.manage'), requiredScopes: ['memory.manage'], path: '/forget',
             ...(identity.projectId ? { reason: 'withdrawal_requires_account_scope' } : {}) },
