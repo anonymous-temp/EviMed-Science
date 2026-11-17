@@ -133,3 +133,12 @@ test("a removed line is kept with its words and lifted with them: the rejection 
   await overlay.purgeUser(userId);
   assert.deepEqual(await overlay.rejectedLines(userId, "preferences"), [], "a reset takes the words with the rest");
 });
+
+test('FORGETFIX extraction removes a re-dated forgotten copy but physically preserves the same-date key note', options, async t => {
+  const night = '用户自述：上个月临时顶了两次夜班，属一次性事件，不是固定排班（2026-11-17 用户陈述）。';
+  const keys = '- 家里备用钥匙放在蓝色鞋柜第二层（用户 2026-11-17 说明）。';
+  const f = await removeThenWrite(t, { removedText: night, after: `${keys}\n- ${night.replace('2026-11-17', '2026-12-01')}`,
+    name: 'new-note', memoryType: 'notes', judge: judgeDouble() });
+  assert.equal(await f.read(), keys);
+  assert.equal((await f.overlay.file(f.userId, f.uri)).body, keys);
+});

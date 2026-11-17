@@ -207,3 +207,38 @@ test('a running deferred rebuild excludes writes; their retry and the next gener
   const overview = await f.sessions.read(f.userId, `${f.root}/.overview.md`);
   assert.match(overview, /Retained fact/); assert.doesNotMatch(overview, /First fact|Second fact/);
 });
+
+// A forget of an emptied file queues actual summary maintenance, not conversation deletion.
+// Use the real lease table and admission transaction, with only the engine held at reindex.
+for (const finishes of [true, false]) test(`empty-file forget maintenance meets bounded prompt admission (finishes=${finishes})`, options, async t => {
+  const { PluginService } = await import('../src/pluginService.mjs');
+  const { MemoryHistoryLedger } = await import('../src/memoryHistoryPersistence.mjs');
+  const f = await fixture(t);
+  await new MemoryHistoryLedger({ database: f.database, overlay: f.overlay }).migrate();
+  f.overlay.deferredSummaryRebuildEnabled = true; f.store.forgetTargetsEnabled = true;
+  const uri = f.seed('notes/aside.md', '- A temporary night shift.', { type: 'notes' });
+  await f.store.forget({ id: f.userId }, { id: 'default' }, uri, { lines: ['A temporary night shift.'] });
+  assert.equal(await f.sessions.read(f.userId, uri), null);
+  assert.equal((await f.database.query('SELECT 1 FROM evimed_memory.history_fences WHERE owner_id=$1', [f.userId])).rows.length, 0);
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; }), held = new Promise(resolve => { release = resolve; });
+  t.after(() => release());
+  f.stub.beforeReindex = async () => { entered(); await held; };
+  const draining = f.worker.drainSummaryInvalidations(f.userId);
+  await started;
+  const service = new PluginService(f.database, { admissionWaitMs: finishes ? 2000 : 120 });
+  service.scope = async () => ({});
+  let ran = 0;
+  const admitted = service.withAdmission({ id: 'default', userId: f.userId }, async () => { ran++; return 'accepted'; });
+  try {
+    if (finishes) {
+      setTimeout(release, 100);
+      assert.equal(await admitted, 'accepted'); assert.equal(ran, 1);
+    } else {
+      await assert.rejects(admitted, { code: 'memory_source_cleanup_busy', status: 409 });
+      assert.equal(ran, 0);
+    }
+  } finally { release(); await draining; }
+  assert.equal((await f.database.query('SELECT 1 FROM evimed_memory.native_writer_leases WHERE user_id=$1', [f.userId])).rows.length, 0);
+  assert.equal(await service.withAdmission({ id: 'default', userId: f.userId }, async () => 'next message'), 'next message');
+});

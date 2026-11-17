@@ -1,0 +1,88 @@
+{
+  "native_rejections": [
+    {
+      "memory_type": "notes",
+      "fingerprint": "178917560b4d3748695d9d699ab9e1908d8fbfc39190533f2a4e0b5543c67e4f",
+      "uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/memories/notes/临时顶夜班.md",
+      "text": "用户自述：上个月临时顶了两次夜班，属一次性事件，不是固定排班（2026-11-17 用户陈述）。",
+      "rejected_at": "2026-11-17T07:23:30.672+00:00",
+      "origin": "forget"
+    }
+  ],
+  "history_message_rejections": [
+    {
+      "memory_type": "notes",
+      "fingerprint": "178917560b4d3748695d9d699ab9e1908d8fbfc39190533f2a4e0b5543c67e4f",
+      "archive_uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/sessions/dsh-s-pp2-1-mwkd14po",
+      "message_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "memory_type": "notes",
+      "fingerprint": "178917560b4d3748695d9d699ab9e1908d8fbfc39190533f2a4e0b5543c67e4f",
+      "archive_uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/sessions/mcp-store-2b7d742323f8/history/archive_001",
+      "message_hash": "9d6e515eeea58f8ba7b86d69fe6a60420cdffa5bf2a9a47d6b8b730b7d5194cf"
+    },
+    {
+      "memory_type": "notes",
+      "fingerprint": "178917560b4d3748695d9d699ab9e1908d8fbfc39190533f2a4e0b5543c67e4f",
+      "archive_uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/sessions/mcp-store-2b7d742323f8/history/archive_001",
+      "message_hash": "329ed87064fca9d4e0cc62d949b18b3ec83a96e4b343a07f71e45da4d06a4a16"
+    },
+    {
+      "memory_type": "notes",
+      "fingerprint": "178917560b4d3748695d9d699ab9e1908d8fbfc39190533f2a4e0b5543c67e4f",
+      "archive_uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/sessions/mcp-store-2b7d742323f8/history/archive_001",
+      "message_hash": "ec6b66a8bd7a0778237e37c2966875f566fbd83bc12a3a1f14f003fb09fc1476"
+    },
+    {
+      "memory_type": "notes",
+      "fingerprint": "178917560b4d3748695d9d699ab9e1908d8fbfc39190533f2a4e0b5543c67e4f",
+      "archive_uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/sessions/dsh-s-pp2-1-mwkd14po/history/archive_001",
+      "message_hash": "9d6e515eeea58f8ba7b86d69fe6a60420cdffa5bf2a9a47d6b8b730b7d5194cf"
+    },
+    {
+      "memory_type": "notes",
+      "fingerprint": "178917560b4d3748695d9d699ab9e1908d8fbfc39190533f2a4e0b5543c67e4f",
+      "archive_uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/sessions/dsh-s-pp2-1-mwkd14po/history/archive_001",
+      "message_hash": "ac45560d1081b4b2a61081d2f9ef4218af523eaee3bcb646e297776ee703a294"
+    },
+    {
+      "memory_type": "notes",
+      "fingerprint": "178917560b4d3748695d9d699ab9e1908d8fbfc39190533f2a4e0b5543c67e4f",
+      "archive_uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/sessions/dsh-s-pp2-1-mwkd14po/history/archive_001",
+      "message_hash": "7b2695f431b58dd048b53158589e12fd8b0ca36a075b3d580c123d79d0bfdc74"
+    }
+  ],
+  "history_fences": [],
+  "history_write_messages": [
+    {
+      "archive_uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/sessions/mcp-store-b8e4b2fe9ff4/history/archive_001",
+      "message_hash": "7f0d6a3643ee2705bcfcd189eed614c51b3dfe0b14c8e41d4617d91c626eeb48"
+    },
+    {
+      "archive_uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/sessions/mcp-store-2b7d742323f8/history/archive_001",
+      "message_hash": "329ed87064fca9d4e0cc62d949b18b3ec83a96e4b343a07f71e45da4d06a4a16"
+    },
+    {
+      "archive_uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/sessions/dsh-s-pp2-1-mwkd14po/history/archive_001",
+      "message_hash": "ac45560d1081b4b2a61081d2f9ef4218af523eaee3bcb646e297776ee703a294"
+    }
+  ],
+  "native_line_origins": [
+    {
+      "uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/memories/notes/家中备用钥匙位置.md",
+      "fingerprint": "62a2fb9e6d56f3d6d4d5c1e0017786044b7127a5507f7cf872078f3c10a4239d",
+      "archive_uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/sessions/mcp-store-b8e4b2fe9ff4/history/archive_001"
+    },
+    {
+      "uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/memories/profile.md",
+      "fingerprint": "830330cb412f91faaa62607fec4c9c54288d5e26cb59f7f5265d01828413e925",
+      "archive_uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/sessions/mcp-store-b8e4b2fe9ff4/history/archive_001"
+    },
+    {
+      "uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/memories/profile.md",
+      "fingerprint": "f3e71a5259aedf0de981622ec707de9714c3fa3b9b4b4039447c1bf52c1d9d35",
+      "archive_uri": "viking://user/u-0c07ce1f74cb2e7ab6aabe53/sessions/mcp-store-b8e4b2fe9ff4/history/archive_001"
+    }
+  ]
+}

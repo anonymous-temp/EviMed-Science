@@ -9,7 +9,7 @@ import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWi
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
-import { neutralMemoryUri, removalStatement, similarity, removalRefusals, removalLines, removalText, lineDecisionKey } from './nativeMemoryRejections.mjs';
+import { neutralMemoryUri, removalStatement, containsRemoved, similarity, removalRefusals, removalLines, removalText, lineDecisionKey } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
@@ -1440,8 +1440,8 @@ export class NativeMemoryStore {
     const oldUri = file.uri, source = await this.#bodySource(userId,file);
     // A removed value in a filename is still returned by list/search. Keep the
     // edited document at an opaque address; the before-image remains undoable.
-    const nextTokens = new Set(hardTokens(next));
-    const pathRemoved = (actor === "user" && origin === "edit" || neutralizeRemovedPath) && removed.some(text => hardTokens(text)
+    const nextTokens = new Set(hardTokens(removalStatement(next)));
+    const pathRemoved = (actor === "user" && origin === "edit" || neutralizeRemovedPath) && removed.some(text => hardTokens(removalStatement(text))
       .some(token => !nextTokens.has(token) && memoryNameVariants(oldUri).some(name => tokenPresent(token, name))));
     if (pathRemoved) file.uri = await neutralMemoryUri({ userId, overlay: this.overlay, uri: oldUri, projectId: file.projectId,
       namespaceId: context.kind === 'geo-project' ? context.namespaceId : null, judge: this.rejectionJudge });
@@ -1718,7 +1718,7 @@ export class NativeMemoryStore {
   /** Freeze addresses and hashes, never text, before the withdrawal. A delayed search cannot delete later writes.
    * @param {string} userId @param {string|null} namespaceId @param {string[]} removed */
   async #sweepInventory(userId, namespaceId, removed) {
-    const prints = new Set(removed.map(removalStatement).map(lineFingerprint));
+    const prints = new Set(removed.map(removalStatement).filter(text => containsRemoved(text, text)).map(lineFingerprint));
     return (await this.rawFiles(userId)).filter(file => (file.namespaceId ?? null) === namespaceId)
       .map(file => ({uri:file.uri,hash:file.hash,afterExactHash:contentHash(file.body.split('\n')
         .filter(line => !prints.has(lineFingerprint(removalStatement(line)))).join('\n'))}));
@@ -1727,7 +1727,7 @@ export class NativeMemoryStore {
   /** Literal equality only: a longer safety statement containing these words is not the same fact.
    * @param {string} userId @param {{namespaceId?:string,kind?:string}} context @param {string[]} removed @param {string} act */
   async #exactSweep(userId, context, removed, act) {
-    const prints = new Set(removed.map(removalStatement).map(lineFingerprint));
+    const prints = new Set(removed.map(removalStatement).filter(text => containsRemoved(text, text)).map(lineFingerprint));
     const namespace = context.kind === 'geo-project' ? context.namespaceId : null;
     for (const file of await this.rawFiles(userId)) {
       if ((file.namespaceId ?? null) !== namespace) continue;

@@ -1,6 +1,6 @@
 import { recordForgetDuplicates } from "./nativeMemoryMetrics.mjs";
 import { lineFingerprint, normalisedStatement } from "./nativeMemoryOverlay.mjs";
-import { REJECTION_JUDGE_MAX_CANDIDATES, containsRemoved, nearRemoved, similarity } from "./nativeMemoryRejections.mjs";
+import { REJECTION_JUDGE_MAX_CANDIDATES, removalStatement, containsRemoved, nearRemoved, similarity } from "./nativeMemoryRejections.mjs";
 
 /**
  * Forget means forget everywhere (2026-10-25, found by the production baseline of `evals/capsule-longitudinal`, S4).
@@ -45,16 +45,13 @@ export function actOf(reason) {
 export async function duplicatesOf({ files, removed, judge = null, userId }) {
   /** @type {Map<string, string[]>} */
   const found = new Map();
-  const gone = [...new Map(removed.map((text) => [lineFingerprint(text), { fingerprint: lineFingerprint(text), text: normalisedStatement(text).slice(0, 400) }])).values()].filter((line) => line.text);
+  const gone = [...new Map(removed.map((text) => [lineFingerprint(text), { fingerprint: lineFingerprint(text), text: removalStatement(text) }])).values()].filter((line) => line.text);
   if (!gone.length) return found;
-  const goneFingerprints = new Set(gone.map((line) => line.fingerprint));
   /** @type {{ uri: string, line: string, score: number, near: { fingerprint: string, text: string }[] }[]} */
   const near = [];
   const keep = (/** @type {string} */ uri, /** @type {string} */ line) => found.set(uri, [...(found.get(uri) ?? []), line]);
   for (const file of files) {
     for (const line of file.statements) {
-      const print = lineFingerprint(line);
-      if (goneFingerprints.has(print)) { keep(file.uri, line); continue; }
       if (gone.some((entry) => containsRemoved(line, entry.text))) { keep(file.uri, line); continue; }
       const candidates = nearRemoved(line, gone).map((entry) => ({ fingerprint: entry.fingerprint, text: /** @type {string} */ (entry.text) }));
       if (candidates.length) near.push({ uri: file.uri, line, near: candidates, score: Math.max(...candidates.map((entry) => similarity(line, entry.text))) });

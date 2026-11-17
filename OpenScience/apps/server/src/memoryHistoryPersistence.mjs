@@ -4,8 +4,7 @@ import { migrateMemorySettings } from './memorySettingsPersistence.mjs';
 import { migrateNativeMemory } from './nativeMemoryPersistence.mjs';
 import { lineFingerprint, normalisedStatement, nativeMemoryRejectionType } from './nativeMemoryOverlay.mjs';
 import { OPENVIKING_KNOWN_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from './openVikingLayout.mjs';
-import { compact, removalStatement, removalAssertionKey } from './nativeMemoryRejections.mjs';
-import { hardTokens, tokenPresent } from './nativeMemoryHardTokens.mjs';
+import { removalContentMatch, removalAssertionKey } from './nativeMemoryRejections.mjs';
 
 /** @typedef {{act:string,removed:string[],files?:{uri:string,hash:string,afterExactHash?:string}[],candidates?:{uri:string,fingerprint:string,hash:string}[],done?:boolean}} MemorySweep */
 /** @typedef {{id:string,owner_id:string,owner_created_at:string,namespace_id:string,user_root:string,
@@ -238,8 +237,6 @@ export class MemoryHistoryLedger {
       if (row.archive_uri === archiveUri) return true;
       for (const text of texts) if (lineFingerprint(text) === row.message_hash && !await freshlyStated(text,row)) return true;
     }
-    const prints = new Set(texts.flatMap(text => text.split('\n')).map(normalisedStatement).filter(Boolean).map(lineFingerprint));
-    const candidates = texts.map(compact);
     let type = '', fingerprint = '', count = 0;
     for (;;) {
       const result = await this.database.query(`SELECT memory_type,fingerprint,text,rejected_at,EXISTS(SELECT 1 FROM evimed_memory.history_forget_scans s
@@ -249,13 +246,9 @@ export class MemoryHistoryLedger {
         ORDER BY memory_type,fingerprint LIMIT 500`, [context.ownerId,types,type,fingerprint]);
       for (const row of result.rows) {
         if (++count > 10000) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
-        const removed = typeof row.text === 'string' ? compact(removalStatement(row.text)) : '';
-        const tokens = row.scan_pending ? hardTokens(removalStatement(row.text ?? '')) : [];
         for (const text of texts) {
-          const matched = tokens.length && tokens.every(token => tokenPresent(token,text))
-            || (prints.has(row.fingerprint) || removed && candidates.some(candidate => candidate.includes(removed)))
-              && (text.split('\n').some(line => lineFingerprint(normalisedStatement(line)) === row.fingerprint)
-                || removed && compact(text).includes(removed));
+          const matched = row.text ? removalContentMatch(text, row.text)
+            : text.split('\n').some(line => lineFingerprint(normalisedStatement(line)) === row.fingerprint);
           if (matched && !await freshlyStated(text,row)) return true;
         }
       }

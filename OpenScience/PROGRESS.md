@@ -1567,3 +1567,4 @@ Synthetic-data fidelity remains limited. Live conversation acceptance and
 exact-candidate CI have separate terminal records; no deployment, main merge,
 production migration or public package-registry publication is implied.
 2026-11-17 · WRITE: Add opt-in commit source review, lossless normalized-name reconciliation and observation recall; strengthen long-file history protection and default extraction templates; 191 focused unit tests and 20 offline replay cases pass, with pre-creation name routing and database/live-model validation still open.
+2026-11-17 · FORGETFIX: Match withdrawals on content rather than provenance across native reads, history, copy sweeps and extraction cleanup; preserve existing assertion identities and bounded maintenance admission, correct its deletion wording, and add the forget-neighbours product-path harness; 320 local checks pass with documented dependency exclusions, PostgreSQL and live lab validation remain pending.

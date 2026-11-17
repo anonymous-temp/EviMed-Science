@@ -67,17 +67,11 @@ export function similarity(left, right) {
 export function containsRemoved(written, removed) {
   const writtenHistory = memoryHistoryLine(written);
   const removedHistory = memoryHistoryLine(removed);
-  if (!writtenHistory && !removedHistory) {
-    const ordinaryNeedle = compact(removed);
-    return [...ordinaryNeedle].length >= MIN_CONTAINED && compact(written).includes(ordinaryNeedle);
-  }
-  // Wrapping a short forgotten value in a dated history line cannot defeat exact removal.
-  // Keep ordinary fingerprints unchanged: history and current still have distinct record/origin identities.
-  const plainWritten = normalisedStatement(writtenHistory?.value ?? written);
-  const plainRemoved = normalisedStatement(removedHistory?.value ?? removed);
-  if ((writtenHistory || removedHistory) && plainRemoved && plainWritten === plainRemoved) return true;
-  const needle = compact(plainRemoved);
-  return [...needle].length >= MIN_CONTAINED && compact(plainWritten).includes(needle);
+  const haystack = compact(removalStatement(writtenHistory?.value ?? written));
+  const needle = compact(removalStatement(removedHistory?.value ?? removed));
+  // A bare date/year/count is not a fact. Even equality must contain content.
+  if (!needle || !/[\p{L}]/u.test(needle) || /^(?:\d+[年月日次个]?)+$/u.test(needle)) return false;
+  return haystack === needle || [...needle].length >= MIN_CONTAINED && haystack.includes(needle);
 }
 
 /**
@@ -87,7 +81,7 @@ export function containsRemoved(written, removed) {
 export function nearRemoved(written, removed) {
   return removed
     .filter((line) => line.text)
-    .map((line) => ({ line, score: similarity(written, /** @type {string} */ (line.text)) }))
+    .map((line) => ({ line, score: similarity(removalStatement(written), removalStatement(/** @type {string} */ (line.text))) }))
     .filter((entry) => entry.score >= SIMILAR)
     .sort((left, right) => right.score - left.score)
     .slice(0, MAX_REMOVED_PER_CANDIDATE)
@@ -244,19 +238,60 @@ export function removalText(text) {
   return String(text).trim().replace(/^(?:#{1,6}|[-*+]|\d+[.)])\s+/, '');
 }
 
-/** Strip only memory presentation syntax before comparing the fact. Event dates inside the
- * statement remain hard tokens; a template's trailing as-of date and bold field label do not.
+// These are attribution forms used by the profile/notes/people/project templates and
+// extraction workers. Dates in the fact itself (event dates, earlier values) stay intact.
+const PROVENANCE_DATE = String.raw`\d{4}(?:[-/.年]\d{1,2}(?:[-/.月]\d{1,2}日?)?)?`;
+const SPEAKER = String.raw`(?:the\s+)?user\s+(?:believes|reports|states|said|confirmed|noted)|用户(?:自述|陈述|说明|表示|认为|确认|提到)|据用户(?:自述|陈述|说明)|(?:assistant\s+(?:suggested|recommended)|助手建议)(?:\s*\((?:not adopted|用户未采用)\))?|document\s+(?:states|reports)|文档(?:记载|说明)`;
+const DATE_NOTE = new RegExp(String.raw`^(?:(?:as\s+of|(?:(?:the\s+)?user\s+)?(?:last\s+)?(?:said|stated|reported|confirmed|noted|recorded|updated)\s+(?:on|at))\s+${PROVENANCE_DATE}|${PROVENANCE_DATE}\s*(?:用户(?:自述|陈述|说明|确认|提供)|user\s+(?:statement|report|confirmation))|用户\s*(?:于\s*)?${PROVENANCE_DATE}\s*(?:自述|陈述|说明|确认|提供))$`, 'i');
+const INLINE_DATE_NOTE = new RegExp(String.raw`\b(?:as\s+of|(?:(?:the\s+)?user\s+)?(?:said|stated|reported|confirmed|noted|recorded|updated)\s+(?:on|at))\s+${PROVENANCE_DATE}\b`, 'gi');
+const SPEAKER_LABEL = new RegExp(String.raw`^(?:${SPEAKER})\s*[:：]?\s*`, 'gim');
+const CHINESE_DATE_NOTE = new RegExp(String.raw`(?:用户\s*(?:于\s*)?${PROVENANCE_DATE}\s*(?:自述|陈述|说明|确认|提供)|${PROVENANCE_DATE}\s*用户(?:自述|陈述|说明|确认|提供))`, 'g');
+
+/** Compare content only, without changing stored bytes or legacy fingerprint identities.
+ * Brackets are removed only when their entire payload is an attribution, never for event dates.
  * @param {string} text */
 export function removalStatement(text) {
-  return normalisedStatement(removalText(text).replace(/^\*\*[^*\n]+[:：]\*\*\s*/, ''));
+  let body = removalText(text).normalize('NFKC')
+    .replace(/^\*\*(?:habit|fact|preference|note|习惯|事实|偏好)[:：]\*\*\s*/i, '').replace(/\*\*/g, '');
+  body = body.replace(/[([【{「『〈<]([^()[\]【】{}「」『』〈〉<>\n]*)[)\]】}」』〉>]/gu, (whole, note) => {
+    const label = note.trim();
+    return DATE_NOTE.test(label) || /^(?:source|来源|出处)\s*[:：]/i.test(label) || new RegExp(`^(?:${SPEAKER})\\s*[:：]?$`, 'i').test(label) ? '' : whole;
+  });
+  // Source-labelled clauses are metadata; a separator ends the label, not the fact.
+  body = body.replace(/(?:^|[;；])\s*(?:source|来源|出处)\s*[:：][^;；\n]*(?:[;；]|$)/gim, '');
+  body = body.replace(INLINE_DATE_NOTE, '').replace(CHINESE_DATE_NOTE, '').replace(SPEAKER_LABEL, '');
+  return normalisedStatement(body);
+}
+
+/** A lexical shortcut needs both the value/identifier and its subject. A shared date,
+ * year or integer alone never withdraws another fact; paraphrases remain the judge's job.
+ * @param {string} written @param {string} removed @param {{ignoreWhitespace?:boolean}} [options] */
+export function removalContentMatch(written, removed, options = {}) {
+  if (containsRemoved(written, removed)) return true;
+  const statement = removalStatement(removed), candidate = removalStatement(written);
+  const tokens = hardTokens(statement);
+  if (!tokens.length || !tokens.some(token => !/^\d{4}(?:[-/.年]\d{1,2}(?:[-/.月]\d{1,2}日?)?)?$/.test(token))
+    || !tokens.every(token => tokenPresent(token, candidate, options))) return false;
+  // Remove value shapes from both sides before checking the remaining subject words.
+  const remainder = value => hardTokens(value).reduce((text, token) => text.split(token).join(' '), value);
+  const left = remainder(statement), right = remainder(candidate);
+  const words = (left.match(/[a-z]{3,}|\p{Script=Han}{2,}/gu) ?? [])
+    .filter(word => !['the', 'was', 'has', 'had', 'and', 'for', 'with', 'user', 'value'].includes(word));
+  // Keep every remaining subject phrase: sharing "commute" and 40 minutes must not
+  // equate cycling with taking the subway. Looser wording requires the judge.
+  return words.length > 0 && words.every(word => /\p{Script=Han}/u.test(word)
+    ? right.includes(word) : new RegExp(`\\b${word}\\b`).test(right));
 }
 
 /** Shared by write review and history readers; dates and exact source bytes are part of consent.
  * @param {string|null} namespaceId @param {{fingerprint:string,rejectedAt?:string|null}} removed
  * @param {string} text @param {{role:string,text:string,created_at?:string|null}} source */
 export function removalAssertionKey(namespaceId, removed, text, source) {
+  // Receipt identities predate content-only comparison; keep their original normalization so
+  // an existing witnessed reauthorization stays valid without a migration.
+  const identity = normalisedStatement(removalText(text).replace(/^\*\*[^*\n]+[:：]\*\*\s*/, ''));
   return contentHash(JSON.stringify(['removal-assertion-v1', namespaceId, removed.fingerprint,
-    removed.rejectedAt, removalStatement(text), source.role, source.text, source.created_at ?? null]));
+    removed.rejectedAt, identity, source.role, source.text, source.created_at ?? null]));
 }
 
 /** Legacy receipt address, bound to the entire removal authority of its time: any later removal, even an
@@ -357,12 +392,13 @@ export async function removalRefusals({ userId, overlay, projectId = null, names
       }) : undefined;
       if (restated) {
         await overlay.recordInstructionCheck?.(userId, receiptKey(restated), { removalAssertion: true });
-        await overlay.recordInstructionCheck?.(userId, removalAssertionKey(namespaceId, entry, text, restated), { removalAssertion: true });
+        await overlay.recordInstructionCheck?.(userId, removalAssertionKey(namespaceId, entry, entry.text ?? text, restated), { removalAssertion: true });
         continue;
       }
-      const hardMatch = tokens.length > 0 && tokens.every(token => tokenPresent(token, removalStatement(candidate.text), { ignoreWhitespace: ignoreTokenWhitespace }));
-      if (tokens.length && !hardMatch) continue;
-      const literal = hardMatch || print === entry.fingerprint || Boolean(text && containsRemoved(removalStatement(candidate.text), text));
+      const literal = entry.text == null ? print === entry.fingerprint
+        : removalContentMatch(candidate.text, entry.text, { ignoreWhitespace: ignoreTokenWhitespace });
+      // Missing values rule out this lexical conflict, but date-only provenance never shortlists a fact.
+      if (!literal && tokens.length && !tokens.every(token => tokenPresent(token, removalStatement(candidate.text), { ignoreWhitespace: ignoreTokenWhitespace }))) continue;
       // Matching words or identifiers establish a conflict, never consent to relearn.
       // Even exact containment in a later user message may be a question or an old quote.
       if (literal && (!sources.length || !judge)) { refused.set(print, { rejected: entry.fingerprint, via: 'contained' }); continue; }
@@ -389,7 +425,7 @@ export async function removalRefusals({ userId, overlay, projectId = null, names
           // A history excerpt has the person's wording, not the extractor's candidate. Bind the
           // same witnessed assertion to the removed fact so both readers share this authority.
           if (answer.same.has(index) || item.literal) await overlay.recordInstructionCheck?.(userId,
-            removalAssertionKey(namespaceId, entry, text, item.sources[witness]), { removalAssertion: true });
+            removalAssertionKey(namespaceId, entry, entry.text ?? text, item.sources[witness]), { removalAssertion: true });
         }
         if ((item.literal || answer.same.has(index)) && !asserted) {
           refused.set(lineFingerprint(item.candidate.text), { rejected: entry.fingerprint, via: item.literal ? 'contained' : 'judged' });
