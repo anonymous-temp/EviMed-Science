@@ -126,3 +126,52 @@ test('native export projections share the provenance-free containment rule', asy
   assert.match(JSON.stringify(projected), /蓝色鞋柜第二层/);
   assert.doesNotMatch(JSON.stringify(projected), /夜班/);
 });
+
+test('history literal fences retain short withdrawals, format characters, titles and fragment boundaries', async () => {
+  const cases = [
+    ['我吃素', '我吃素，希望聚餐时准备蔬菜。'],
+    ['青霉素过敏', 'Legacy title says 青霉素过敏 only'],
+    ['青霉素过敏', `${'普通'.repeat(899)}青霉素过敏，请记住。`],
+    ['我\u200b吃素', '平时我吃素，需要准备蔬菜。'],
+    ['我吃素', '平时我\u200b吃素，需要准备蔬菜。'],
+  ];
+  for (const [removed, message] of cases) {
+    for (const scan_pending of [true, false]) {
+      const ledger = new MemoryHistoryLedger({ overlay: overlayFor(removed), database: { query: async () => ({ rows: [{
+        memory_type: 'notes', fingerprint: row(removed).fingerprint, text: removed, scan_pending,
+      }] }) } });
+      ledger.migrate = async () => {};
+      const context = { ownerId: 'u', kind: 'owned', namespaceId: 'u' };
+      assert.equal(await ledger.rejected(context, [message]), true, message);
+      assert.equal(await ledger.rejected(context, ['I prefer trial tables.']), false);
+      const history = new MemoryHistory({ config: {}, contexts: {}, ledger });
+      const messages = [{ text: message }];
+      assert.deepEqual(await history.matchRemoved(context, removed, messages, null), messages);
+    }
+  }
+});
+
+test('content identifiers fence paraphrases without a judge, but provenance identifiers do not', async () => {
+  const cases = [
+    ['My withdrawn booking number is T-92516.', 'The appointment was filed under T-92516.'],
+    ['M-41633', 'My old project is M-41633.'],
+    ['M-41633', 'Forget M-41633.'],
+    ...['M-31025', 'ｍ＿３１０２５', 'm 31025'].map(id => [
+      'Parked at M-31025 (2026-11-11 03:30).', `Please remember: I parked at ${id}.`,
+    ]),
+  ];
+  const history = new MemoryHistory({ config: {}, contexts: {}, ledger: {} });
+  for (const [removed, text] of cases) {
+    assert.equal(removalContentMatch(text, removed), true);
+    assert.deepEqual(await history.matchRemoved({ ownerId: 'u' }, removed, [{ text }], null), [{ text }]);
+    assert.equal((await removalRefusals({ userId: 'u', overlay: overlayFor(removed), candidates: [{ text }] })).size, 1);
+  }
+  for (const [removed, text] of [
+    ['Source: T-92516', 'The appointment was filed under T-92516.'],
+    ['My booking is T-92516.', 'My booking is T-92516-4.'],
+    ['My booking is T-92516.', 'My booking is T-92517.'],
+    ['Dose for T-92516 is 12 mg.', 'Dose for T-92516 is 112 mg.'],
+  ]) assert.equal(removalContentMatch(text, removed), false);
+  assert.equal(removalStatement('Parked at M-31025 (2026-11-11 03:30).'), 'parked at m-31025 .');
+  assert.match(removalStatement('Appointment date (2026-11-11)'), /2026-11-11/);
+});

@@ -28,7 +28,7 @@ const MAX_SAID = 6;
 
 /** A statement with no spacing, punctuation or symbols: what two renderings of one wording share. @param {unknown} text */
 export function compact(text) {
-  return String(text ?? "").normalize("NFKC").toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+  return String(text ?? "").normalize("NFKC").toLowerCase().replace(/[\s\p{P}\p{S}\p{Cf}]+/gu, "");
 }
 
 /** @param {string} text */
@@ -63,15 +63,19 @@ export function similarity(left, right) {
 /**
  * Whether a written line contains a removed line's words: that line with something around it.
  * @param {string} written @param {string} removed the removed line's normalised text
+ * @param {{ shortContainment?: boolean, ignoreWhitespace?: boolean }} [options] history fences also cover short literal withdrawals
  */
-export function containsRemoved(written, removed) {
+export function containsRemoved(written, removed, { shortContainment = false, ignoreWhitespace = false } = {}) {
   const writtenHistory = memoryHistoryLine(written);
   const removedHistory = memoryHistoryLine(removed);
   const haystack = compact(removalStatement(writtenHistory?.value ?? written));
   const needle = compact(removalStatement(removedHistory?.value ?? removed));
   // A bare date/year/count is not a fact. Even equality must contain content.
   if (!needle || !/[\p{L}]/u.test(needle) || /^(?:\d+[年月日次个]?)+$/u.test(needle)) return false;
-  return haystack === needle || [...needle].length >= MIN_CONTAINED && haystack.includes(needle);
+  if (!(haystack === needle || (shortContainment || [...needle].length >= MIN_CONTAINED) && haystack.includes(needle))) return false;
+  // Compact containment must not turn T-92516 into a prefix match of T-92516-4.
+  return hardTokens(removalStatement(removedHistory?.value ?? removed)).every(token =>
+    tokenPresent(token, removalStatement(writtenHistory?.value ?? written), { ignoreWhitespace }));
 }
 
 /**
@@ -255,7 +259,7 @@ export function removalStatement(text) {
     .replace(/^\*\*(?:habit|fact|preference|note|习惯|事实|偏好)[:：]\*\*\s*/i, '').replace(/\*\*/g, '');
   body = body.replace(/[([【{「『〈<]([^()[\]【】{}「」『』〈〉<>\n]*)[)\]】}」』〉>]/gu, (whole, note) => {
     const label = note.trim();
-    return DATE_NOTE.test(label) || /^(?:source|来源|出处)\s*[:：]/i.test(label) || new RegExp(`^(?:${SPEAKER})\\s*[:：]?$`, 'i').test(label) ? '' : whole;
+    return DATE_NOTE.test(label) || /^\d{4}-\d{2}-\d{2}\s+(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(label) || /^(?:source|来源|出处)\s*[:：]/i.test(label) || new RegExp(`^(?:${SPEAKER})\\s*[:：]?$`, 'i').test(label) ? '' : whole;
   });
   // Source-labelled clauses are metadata; a separator ends the label, not the fact.
   body = body.replace(/(?:^|[;；])\s*(?:source|来源|出处)\s*[:：][^;；\n]*(?:[;；]|$)/gim, '');
@@ -263,15 +267,17 @@ export function removalStatement(text) {
   return normalisedStatement(body);
 }
 
-/** A lexical shortcut needs both the value/identifier and its subject. A shared date,
- * year or integer alone never withdraws another fact; paraphrases remain the judge's job.
- * @param {string} written @param {string} removed @param {{ignoreWhitespace?:boolean}} [options] */
+/** Distinctive alphanumeric identifiers survive rewording without a subject-word gate.
+ * Generic values still need their subject; provenance and dates alone never withdraw another fact.
+ * @param {string} written @param {string} removed @param {{ignoreWhitespace?:boolean,shortContainment?:boolean}} [options] */
 export function removalContentMatch(written, removed, options = {}) {
-  if (containsRemoved(written, removed)) return true;
+  if (containsRemoved(written, removed, options)) return true;
   const statement = removalStatement(removed), candidate = removalStatement(written);
   const tokens = hardTokens(statement);
   if (!tokens.length || !tokens.some(token => !/^\d{4}(?:[-/.年]\d{1,2}(?:[-/.月]\d{1,2}日?)?)?$/.test(token))
     || !tokens.every(token => tokenPresent(token, candidate, options))) return false;
+  // A complete identifier is distinctive; number/unit pairs and generic hyphenated words are not.
+  if (tokens.some(token => /^(?=[a-z0-9_.:/-]*[a-z])(?=[a-z0-9_.:/-]*\d)[a-z][a-z0-9_.:/-]*$/i.test(token))) return true;
   // Remove value shapes from both sides before checking the remaining subject words.
   const remainder = value => hardTokens(value).reduce((text, token) => text.split(token).join(' '), value);
   const left = remainder(statement), right = remainder(candidate);
