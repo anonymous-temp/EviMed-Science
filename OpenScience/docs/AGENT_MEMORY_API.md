@@ -13,25 +13,49 @@ once and revoke keys under 设置 → 账户 → 外部智能体访问（API 密
 (`/app/account`); no curl is needed. The section lists names, permissions, creation
 and last-use dates. It offers only scopes the service advertises, defaults to
 read-only, and is drawn only when `GET /api/me` offers `features.agentMemoryApi: true`
-(the deployment's `OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED` switch). A missing or false
+(the account-specific audience decision described below). A missing or false
 feature hides the whole section without requesting key routes or `openapi.json`.
 If a key route answers `503 agent_memory_disabled` while the page is open, the
 section clears its controls and shows a disabled notice. The existing browser session and CSRF protect key
 management; a secret is kept only in the open one-time display, never browser storage.
 
-## Turning it on
+## Internal access first
 
-Off by default: it publishes an account's memory to whoever holds one of its
-keys, and that is a deployment's decision.
+The public switch stays off. Internal access reuses the existing operator account
+IDs and an explicit list of additional account IDs; it creates no new role.
 
 ```bash
-# deploy/web/.env
-OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED=true
+OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED=false
+# Opt in existing OPEN_SCIENCE_OPERATOR_USERS accounts (default false).
+OPEN_SCIENCE_AGENT_MEMORY_API_INTERNAL_ENABLED=true
+# Optional additional exact account IDs, comma-separated (default empty).
+OPEN_SCIENCE_AGENT_MEMORY_API_INTERNAL_USERS=internal-account-id
 ```
 
-Recreate `open-science-web` after changing it. While it is off every route under
-`/api/agent-memory/v1` answers `503 agent_memory_disabled`, including the
-OpenAPI description.
+An additional listed account is allowed even when `INTERNAL_ENABLED=false`;
+that switch grants access only to the existing operators. Listing an account
+does not give it operator privileges. With both internal settings at their
+defaults, operators do not acquire API access automatically.
+
+An operator changes these environment values, then recreates `open-science-web`
+through the normal release procedure. This documentation does not authorize a
+release. Sign in as the allowed account; `/api/me` offers
+`features.agentMemoryApi: true`, and the existing account key panel appears.
+Create a key with only the required scopes and save it to a local credential
+file. Read `GET /api/agent-memory/v1` capabilities before optional operations.
+
+Key creation, listing, revocation, every bearer operation and the feature flag
+use one audience decision. Removing the account from the list (and from operator
+eligibility, if applicable) disables existing keys on their next request.
+In internal-only mode, invalid, unknown, revoked, missing-owner and excluded-owner
+keys all receive `503 agent_memory_disabled`; no account/key existence is
+disclosed. OpenAPI then also requires an eligible account's key. With the public
+switch on, OpenAPI retains anonymous access and ordinary keys remain allowed.
+The public switch is not enabled by this change.
+
+Key management previously had no feature gate even while the web panel and
+bearer API were off. It now returns the same disabled response when the account
+is not eligible, as required by the unified audience policy.
 
 ## Keys
 
@@ -44,7 +68,8 @@ Keys belong to an account and are managed with that account's browser session
 | `POST /api/agent-keys` `{ "name", "scopes", "projectId"?, "expiresInDays"?, "subjects"? }` | Creates a key and returns its secret **once**; it is stored as a digest. `subjects: true` makes it an integration key (below). |
 | `DELETE /api/agent-keys/<id>` | Revokes it. |
 
-- **Scopes:** `memory.read` (recall, list records, the dashboard), `memory.write` (note,
+- **Scopes:** `memory.read` (recall, list records, the dashboard), `memory.history.read`
+  (opt-in raw conversation recall, also requires `memory.read`), `memory.write` (note,
   episodes), `memory.manage` (the dashboard's acts) and `memory.observe`
   (prescription edits) — see below. Give a key
   only what its agent needs.
@@ -82,12 +107,65 @@ per key per minute (`429 agent_memory_rate_limited` beyond that).
 
 | Call | Scope | What it does |
 |---|---|---|
-| `GET /openapi.json` | none | The machine-readable description (no key needed, still behind the enable switch). |
-| `GET /` | any | What this key can do: its scopes, its project, the rate limit, the endpoints. An integrator's first call. |
-| `POST /recall` `{ "query", "projectId"?, "limit"? (1–50), "factKinds"?, "since"?, "scope"?, "capsuleIds"? (1–8), "methods"? }` | `memory.read` | Searches the account's memory and returns hits with their source: the engine's memory files (the account's own and the project's asked for, never a sensitive one) and the capsule's facts, each item saying which. A caveat on a hit is a label, never a reason to withhold it. `scope` is `all`, `capsule`, `conversation` or `agenda`. `capsuleIds` reads the named capsules instead of the ones in force (a subject may name its institution's). Also returns `methods` — the account's own learned methods first, then the capsules' work-style methods, within the same budget a run mounts (32 methods, 32 KiB); `methods` is `all`, `own`, `capsules` or `none`. |
+| `GET /openapi.json` | any eligible key in internal mode | The machine-readable description. Anonymous access only while the public switch is on. |
+| `GET /` | any | What this key can do: its scopes, its project, the rate limit, the endpoints and per-key `capabilities`. An integrator's first call. |
+| `POST /recall` `{ "query", "projectId"?, "limit"? (1–50), "factKinds"?, "since"?, "scope"?, "capsuleIds"? (1–8), "methods"?, "include"? }` | `memory.read` | Searches the account's memory and returns hits with their source: the engine's memory files (the account's own and the project's asked for, never a sensitive one) and the capsule's facts, each item saying which. A caveat on a hit is a label, never a reason to withhold it. `scope` is `all`, `capsule`, `conversation` or `agenda`. `capsuleIds` reads the named capsules instead of the ones in force (a subject may name its institution's). Also returns `methods` — the account's own learned methods first, then the capsules' work-style methods, within the same budget a run mounts (32 methods, 32 KiB); `methods` is `all`, `own`, `capsules` or `none`. |
 | `POST /note` `{ "factKind", "content", "projectId"? }` | `memory.write` | Adds one note. It arrives as an **inferred, unconfirmed candidate** whatever the caller says, and takes effect only when the account owner confirms it: on their memory page, where it is listed with 待确认 and the choice 确认 or 不要, or through the dashboard's note operations. Notes are the capsule store's. |
 | `GET /records?scope=&kind=&status=&scopeId=&query=&pageSize=` | `memory.read` | Lists the engine's memory files as records, filtered (comma-separated values; `pageSize` up to 200, default 50). Every one is in force (a file is written by the person or by the engine's extraction and takes effect at once), so a `status` that excludes `active` finds none: a proposal is a staged note, never a record. |
 | `POST /episodes` `{ "projectId", "sessionId"?, "messages": [{ "role": "user"\|"assistant", "text" }] }` | `memory.write` | Hands over a conversation (1–200 turns). It is **staged as a pending candidate note** (`202`, `state: "pending_confirmation"`, `extracted: 0`, `activated: 0`, `candidateId`, `confirm.path`) and nothing is extracted or written until the account owner confirms it at `POST /notes/{id}/confirm`; a memory already in force is never changed by an episode. |
+
+### Original conversation recall
+
+`POST /recall` with `"include": ["history"]` appends a separate `history` array;
+the default response and memory/method selection are unchanged. The key needs
+**both `memory.read` and `memory.history.read`**. The existing
+`OPEN_SCIENCE_MEMORY_HISTORY_SEARCH_ENABLED` switch must be on, and the native
+memory service must be configured. The server uses `MemoryHistory.search`, the
+kernel gateway's reader, with the same admission, deletion and secret services.
+
+Hits name `sessionId`, `conversationTitle`, `conversationUrl`, `projectId` and
+messages with `sourceRole` and `date` (null when unknown). They carry
+`contextOnly: true`, `confirmed: false`: assistant text is not promoted to the
+person's statement. Withdrawal notices contain no original text. Recall pause,
+deleted/changed sources, withdrawn statements, shared namespaces and unreviewed
+archives under the secret-review switch remain excluded. Learning pause alone
+does not disable recall. Failed privacy checks never read unfiltered archives.
+
+An unbound key without `projectId` searches its owner's ordinary account history.
+An explicit project or project-bound key searches only that project, including
+`default`. No request can choose another owner, raw URI, review override or
+removal-search mode. History retains the reader's bounds (8 hits in V1, up to 20
+in V2) and the gateway timeout; timeout returns no history and does not imply
+complete coverage. `factKinds`, `since` and `scope` continue to filter stored
+memory/capsules, not optional history.
+
+The standalone DSH connector forwards `include`; `capsule_status` returns server
+`capabilities`. Its credential stays file-only. The MCP adapter has not yet been
+extended for history or status.
+
+### Capability parity status
+
+The root response reports `available` per key, with `requiredScopes` for offered
+operations. Availability describes the service/key offer; pause and privacy
+fences can still return no context. Clients must read this status rather than
+infer capabilities from error responses.
+
+| Capability | Current API coverage |
+|---|---|
+| Raw conversation recall | `POST /recall`, `include: ["history"]`, separately scoped. |
+| Complete opening context | Unavailable; native profile and gateway context have not been exposed. |
+| Direct explicit remember | Unavailable; `/note` remains a candidate. |
+| Statement forget and forgotten list | Statement form unavailable; existing `/dashboard` lists forgotten records and record-id operations remain unchanged. |
+| Trusted conversation ingest | Unavailable; `/episodes` still waits for confirmation. |
+| General work signals | Unavailable; existing prescription observations are unchanged. |
+| Capsule sharing / selected-capsule-only recall | Unavailable; `capsuleIds` retains additive semantics. Trials stay web-only. |
+| Clients | DSH status/history option supported; MCP and the remaining new operations are not implemented. |
+
+This is a partial expansion, not full capsule parity. The next item is a complete
+opening-context read reusing both `ResidentProfiles` and the gateway's native
+profile/context readers. Returning only the resident supplement would omit the
+engine's profile/preferences; directly calling the engine would bypass protected
+URIs, summaries, project exclusions and withdrawal filters.
 
 ### The dashboard
 

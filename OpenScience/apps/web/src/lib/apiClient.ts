@@ -2739,7 +2739,7 @@ export async function stageVcrConversationReference(sessionId: string, projectId
 }
 
 /** Account credentials for external agents; secrets exist only in the create response. */
-export type WebAgentKeyScope = "memory.read" | "memory.write" | "memory.manage" | "memory.observe" | "analysis.read" | "analysis.write";
+export type WebAgentKeyScope = "memory.read" | "memory.history.read" | "memory.write" | "memory.manage" | "memory.observe" | "analysis.read" | "analysis.write";
 export interface WebAgentKey {
   id: string;
   name: string;

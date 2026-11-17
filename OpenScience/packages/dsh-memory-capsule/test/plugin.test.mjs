@@ -171,3 +171,12 @@ test('dispose aborts pending HTTP and unregisters Cordis tools and prompt sectio
   assert.equal(definitions.size, 0);
   assert.equal(section, null);
 });
+
+test('status preserves per-key server capabilities and recall opts into history only when requested', async t => {
+  const f = await fixture(t);
+  f.state.body = { capabilities: { rawConversationRecall: { available: true, requiredScopes: ['memory.read', 'memory.history.read'] }, openingContext: { available: false } } };
+  const status = await f.client.call('capsule_status');
+  assert.deepEqual(status.data.capabilities, f.state.body.capabilities);
+  await f.client.call('capsule_recall', { query: 'sensors', include: ['history'] });
+  assert.deepEqual(f.calls.at(-1).body.include, ['history']);
+});

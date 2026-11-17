@@ -301,3 +301,24 @@ export async function recallForAgent({ capsules, memory = null, learning = null 
     ...(named ? { capsules: named.map(({ ownerId: _ownerId, ...capsule }) => capsule) } : {}),
   };
 }
+
+/** Original conversation context through the gateway's existing services.
+ * No caller-supplied URI, session binding, removal mode or review override.
+ * @param {{ config: any, history: any, admission: any, sourceDeletion?: any }} services
+ * @param {{ user: any, project: any, query: string, limit?: number, accountScope?: boolean }} input
+ * @returns {Promise<any[]>}
+ */
+export async function recallHistoryForAgent({ config, history, admission, sourceDeletion = null }, input) {
+  if (!history || config.memoryHistorySearchEnabled !== true) return [];
+  const admitted = await admission.admit({ user: input.user, project: input.project, allowRunningFallback: false });
+  if (!admitted.recall) return [];
+  const version = sourceDeletion ? await sourceDeletion.version(input.user.id) : null;
+  const found = await history.search(input, { includeWithdrawn: true, accountScope: input.accountScope === true });
+  // Like the gateway, apply the account-wide secret filter to the completed
+  // reply, including labels, and fail closed if its privacy state is unreadable.
+  const safe = config.memoryHistorySecretRedactionEnabled === true ? await history.secrets.filterValue(input.user.id, found) : found;
+  if (sourceDeletion && await sourceDeletion.version(input.user.id) !== version) {
+    throw new HttpError(503, 'memory_gateway_source_changed', 'The source privacy state changed during this request.');
+  }
+  return safe;
+}

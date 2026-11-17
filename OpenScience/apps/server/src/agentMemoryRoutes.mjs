@@ -1,3 +1,4 @@
+import { agentMemoryAvailable, agentMemoryDisabled } from './agentMemoryAvailability.mjs';
 import { createHash } from "node:crypto";
 import { CAPSULE_FACT_KINDS, privateByDefault } from "@evimed/domain";
 import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES, nativeRecallSource, recallForAgent } from "./agentMemoryRecall.mjs";
@@ -76,7 +77,7 @@ export const AGENT_MEMORY_ENDPOINTS = Object.freeze([
 /** The fields each request body may carry, by operation. A contract test holds
  *  the OpenAPI description's request schemas to exactly these lists. */
 export const AGENT_MEMORY_REQUEST_FIELDS = Object.freeze({
-  recall: Object.freeze(["query", "projectId", "limit", "factKinds", "since", "scope", "capsuleIds", "methods"]),
+  recall: Object.freeze(["query", "projectId", "limit", "factKinds", "since", "scope", "capsuleIds", "methods", "include"]),
   note: Object.freeze(["factKind", "content", "projectId"]),
   episodes: Object.freeze(["projectId", "sessionId", "messages"]),
   observations: OBSERVATION_FIELDS,
@@ -104,7 +105,7 @@ function fields(body, allowed) {
 /**
  * @param {{
  *   config: any, apiKeys: any, store: any, memorySettings: any, capsules: any,
- *   learning?: any, observations?: any, nativeMemory?: any,
+ *   learning?: any, observations?: any, nativeMemory?: any, historySearch?: ((input: any) => Promise<any[]>) | null,
  *   deleteSubject?: ((ownerId: string, subjectAccountId: string) => Promise<number>) | null,
  *   audit?: ((event: string, status: string, details: Record<string, unknown>) => unknown) | null,
  * }} dependencies
@@ -112,9 +113,8 @@ function fields(body, allowed) {
  */
 export function createAgentMemoryRoutes({
   config, apiKeys, store, memorySettings, capsules, learning = null,
-  observations = null, nativeMemory = null, deleteSubject = null, audit = null,
+  observations = null, nativeMemory = null, historySearch = null, deleteSubject = null, audit = null,
 }) {
-  const enabled = config.agentMemoryApiEnabled === true;
   /** @type {Map<string, {until: number, count: number}>} */
   const windows = new Map();
 
@@ -123,21 +123,32 @@ export function createAgentMemoryRoutes({
     if (url.pathname !== AGENT_MEMORY_PATH && !url.pathname.startsWith(`${AGENT_MEMORY_PATH}/`)) return false;
     // Off by default and named when off. This publishes an account's memory to
     // whoever holds a key; a deployment turns it on deliberately.
-    if (!enabled) throw new HttpError(503, "agent_memory_disabled", "The agent memory API is not enabled in this deployment.");
+    if (!agentMemoryAvailable(config)) throw agentMemoryDisabled();
     if (!apiKeys) throw new HttpError(503, "product_state_unavailable", "The agent memory API requires durable storage.");
 
     // Before the key check: the description is not a secret, and an integrator
     // reading it is how they find out what a key would let them do. Still
     // behind the enable switch, so a deployment that has not turned this on
     // does not advertise it either.
-    if (url.pathname === `${AGENT_MEMORY_PATH}/openapi.json` && (req.method ?? "GET") === "GET") {
+    const openapi = url.pathname === `${AGENT_MEMORY_PATH}/openapi.json` && (req.method ?? "GET") === "GET";
+    if (openapi && config.agentMemoryApiEnabled === true) {
       sendJson(res, 200, agentMemoryOpenApi({ basePath: AGENT_MEMORY_PATH, rateLimitPerMinute: RATE_LIMIT_PER_MINUTE }));
       return true;
     }
 
     const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
-    const identity = await apiKeys.resolve(token);
+    let identity;
+    try { identity = await apiKeys.resolve(token); }
+    catch (error) {
+      if (config.agentMemoryApiEnabled !== true) throw agentMemoryDisabled();
+      throw error;
+    }
     const keyAccount = await store.userById(identity.userId);
+    if (!agentMemoryAvailable(config, keyAccount) && config.agentMemoryApiEnabled !== true) throw agentMemoryDisabled();
+    if (openapi && agentMemoryAvailable(config, keyAccount)) {
+      sendJson(res, 200, agentMemoryOpenApi({ basePath: AGENT_MEMORY_PATH, rateLimitPerMinute: RATE_LIMIT_PER_MINUTE }));
+      return true;
+    }
     // A key that resolves to the platform's publishing account is no key: nothing speaks for that account.
     if (!keyAccount || isPlatformAccount(keyAccount)) throw new HttpError(401, "agent_key_invalid", "The API key is not valid.");
 
@@ -241,6 +252,14 @@ export function createAgentMemoryRoutes({
     if (action === "recall" && method === "POST") {
       requireScope("memory.read");
       const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.recall);
+      if (input.include !== undefined && (!Array.isArray(input.include) || input.include.length > 1 || input.include.some(value => value !== 'history'))) {
+        throw new HttpError(400, 'agent_memory_payload_invalid', 'include may contain only history.');
+      }
+      const withHistory = input.include?.includes('history') === true;
+      if (withHistory) {
+        requireScope('memory.history.read');
+        if (!historySearch || config.memoryHistorySearchEnabled !== true) throw new HttpError(503, 'memory_engine_unavailable', 'Conversation recall is unavailable.');
+      }
       if (!capsules) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
       if (input.factKinds !== undefined && (!Array.isArray(input.factKinds)
         || input.factKinds.length > CAPSULE_FACT_KINDS.length
@@ -270,10 +289,11 @@ export function createAgentMemoryRoutes({
       const native = await nativeFor(user);
       // A subject never seen has no memory and no methods of its own; it may
       // still read its institution's named capsules.
+      const projectId = await projectOf(user, input.projectId);
       const result = await recallForAgent({ capsules, memory: native ? nativeRecallSource(native, { recallEnabled: config.memoryRecallEnabled !== false }) : null, learning },
         { user, institution: subject ? keyAccount : null }, {
           query,
-          projectId: await projectOf(user, input.projectId),
+          projectId,
           limit: input.limit ?? 10,
           factKinds: input.factKinds ?? [],
           since: input.since ?? null,
@@ -281,7 +301,17 @@ export function createAgentMemoryRoutes({
           ...(input.capsuleIds ? { capsuleIds: input.capsuleIds } : {}),
           methods: input.methods ?? "all",
         });
-      sendJson(res, 200, { data: result });
+      if (withHistory) {
+        // The same history reader used by the gateway owns archive review, source
+        // revalidation, withdrawals and shared-namespace refusal. No raw archive fallback.
+        const project = user ? await store.requireProject(user, projectId ?? 'default') : null;
+        let timer;
+        const history = user && project ? await Promise.race([
+          historySearch({ user, project, query, accountScope: identity.projectId == null && input.projectId == null, limit: Math.min(20, Math.max(1, Math.trunc(Number(input.limit)) || 5)) }),
+          new Promise(resolve => { timer = setTimeout(() => resolve([]), Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4000)); }),
+        ]).finally(() => clearTimeout(timer)) : [];
+        sendJson(res, 200, { data: { ...result, history } });
+      } else sendJson(res, 200, { data: result });
       return true;
     }
 
@@ -480,6 +510,22 @@ export function createAgentMemoryRoutes({
       sendJson(res, 200, { data: {
         version: 1,
         scopes: identity.scopes,
+        capabilities: {
+          rawConversationRecall: {
+            available: config.memoryHistorySearchEnabled === true && Boolean(historySearch) && nativeMemory?.configured === true
+              && ['memory.read', 'memory.history.read'].every(scope => identity.scopes.includes(scope)),
+            requiredScopes: ['memory.read', 'memory.history.read'],
+          },
+          // Explicitly unavailable until the complete shared service path is exposed.
+          openingContext: { available: false },
+          explicitRemember: { available: false },
+          statementForget: { available: false },
+          forgottenList: { available: nativeMemory?.configured === true && identity.scopes.includes('memory.read'), requiredScopes: ['memory.read'], path: '/dashboard' },
+          conversationIngest: { available: false },
+          workSignals: { available: false },
+          capsuleSharing: { available: false },
+          selectedCapsuleOnly: { available: false },
+        },
         projectId: identity.projectId,
         // An integration key, and whether this request named a subject.
         subjects: identity.subjects === true,

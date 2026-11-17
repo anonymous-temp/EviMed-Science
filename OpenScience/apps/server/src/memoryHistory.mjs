@@ -567,7 +567,7 @@ export class MemoryHistory {
   }
   status() { return { enabled: this.enabled, backfill: { ...this.lastBackfill }, maintenance: { ...this.maintenance } }; }
 
-  async search({ user, project, query, limit = 5 }, { includeOrigins = false, includeWithdrawn = false, forRemoval = false, removalUri = null, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
+  async search({ user, project, query, limit = 5 }, { includeOrigins = false, includeWithdrawn = false, accountScope = true, forRemoval = false, removalUri = null, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
     if (!this.enabled || !query?.trim()) return [];
     // Leave time for the gateway to render already verified hits. A slow tail
     // must not turn a useful prefix into an empty history block at its deadline.
@@ -581,7 +581,7 @@ export class MemoryHistory {
     if (!removal && (!source?.projectCreatedAt || source.projectId !== project.id)) return [];
     // Only the verified ordinary default conversation expands to the account's
     // personal namespace. A named or shared project remains its exact scope.
-    const account = removal || project.id === 'default' && context.kind === 'owned';
+    const account = removal || accountScope && project.id === 'default' && context.kind === 'owned';
     const root = account ? `${context.userRoot}/resources/history/${hash(context.ownerCreatedAt).slice(0,24)}` : this.root(context,source);
     const resources = this.resourcesFor(context);
     const asked = Math.max(1, Math.min(retrievalV2 ? 20 : 8, Math.trunc(Number(limit)) || 5));

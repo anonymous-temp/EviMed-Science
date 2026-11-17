@@ -95,3 +95,21 @@ test("an account already holding a subject's id is never adopted, and an institu
   await database.query("DELETE FROM evimed_control.users WHERE id=$1", [id]);
   await assert.rejects(() => keys.subjectAccount(`missing_${randomUUID()}`, "doc-1"), (error) => error.code === "agent_key_invalid");
 });
+
+test('a persisted key loses internal API access when its owner leaves the allowlist', options, async () => {
+  const { createAgentMemoryRoutes } = await import('../src/agentMemoryRoutes.mjs');
+  const config = { agentMemoryApiInternalUsers: [hospital] };
+  const created = await keys.create(hospital, { name: 'Internal history', scopes: ['memory.read', 'memory.history.read'] });
+  const routes = createAgentMemoryRoutes({ config, apiKeys: keys,
+    store: { userById: async id => (await database.query('SELECT id FROM evimed_control.users WHERE id=$1', [id])).rows[0] ?? null } });
+  const req = token => ({ url: '/api/agent-memory/v1', method: 'GET', headers: { authorization: `Bearer ${token}` } });
+  const res = { body: null, writeHead() {}, end(body) { this.body = JSON.parse(body); } };
+  await routes(req(created.key), res);
+  assert.ok(res.body.data.scopes.includes('memory.history.read'));
+  config.agentMemoryApiInternalUsers = [clinic];
+  for (const token of [created.key, 'unknown']) await assert.rejects(routes(req(token), res), error => error.code === 'agent_memory_disabled' && error.status === 503);
+  config.agentMemoryApiInternalUsers = [hospital];
+  await routes(req(created.key), res);
+  await keys.revoke(hospital, created.id);
+  await assert.rejects(routes(req(created.key), res), error => error.code === 'agent_memory_disabled' && error.status === 503);
+});
