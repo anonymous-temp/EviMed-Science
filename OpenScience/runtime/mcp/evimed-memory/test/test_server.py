@@ -10,6 +10,7 @@ import importlib.util
 import json
 import pathlib
 import sys
+import tempfile
 import unittest
 import urllib.error
 from unittest import mock
@@ -34,15 +35,22 @@ class Response:
         return False
 
 
-CONFIGURED = {"EVIMED_MEMORY_API_URL": "https://evimed.example/api/agent-memory/v1", "EVIMED_MEMORY_API_KEY": "evk_x"}
+KEY_FILE = tempfile.NamedTemporaryFile("w", dir=ROOT / "test", suffix=".key", delete=False)
+KEY_FILE.write("evk_x")
+KEY_FILE.close()
+CONFIGURED = {"EVIMED_MEMORY_API_URL": "https://evimed.example/api/agent-memory/v1", "EVIMED_MEMORY_API_KEY_FILE": KEY_FILE.name}
+
+
+def tearDownModule():
+    pathlib.Path(KEY_FILE.name).unlink(missing_ok=True)
 
 
 class AdapterTests(unittest.TestCase):
-    def test_two_tools_and_no_more(self):
+    def test_supported_tools(self):
         # The catalogue is a first-turn cost. Recall and note are what an agent
         # does with memory; records and episodes are operator actions with an
         # HTTP endpoint of their own.
-        self.assertEqual([tool["name"] for tool in server.TOOLS], ["memory_recall", "memory_note"])
+        self.assertEqual([tool["name"] for tool in server.TOOLS], ["memory_recall", "memory_note", "memory_status", "memory_context", "memory_remember", "memory_forget", "memory_forgotten"])
 
     def test_descriptions_support_general_work_without_mandatory_recall(self):
         recall = server.TOOLS[0]["description"]
@@ -103,9 +111,10 @@ class AdapterTests(unittest.TestCase):
 
     def test_a_key_file_is_preferred_to_a_key_in_the_environment(self):
         import tempfile
-        with tempfile.NamedTemporaryFile("w", suffix=".key", delete=False) as handle:
+        with tempfile.NamedTemporaryFile("w", dir=ROOT / "test", suffix=".key", delete=False) as handle:
             handle.write("evk_from_file\n")
             path = handle.name
+        self.addCleanup(lambda: pathlib.Path(path).unlink(missing_ok=True))
         seen = {}
 
         def opener(request, timeout=None):
@@ -128,7 +137,7 @@ class AdapterTests(unittest.TestCase):
         initialize = server.handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
         self.assertEqual(initialize["result"]["serverInfo"]["name"], "evimed-memory")
         listed = server.handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
-        self.assertEqual(len(listed["result"]["tools"]), 2)
+        self.assertEqual(len(listed["result"]["tools"]), 7)
         missing = server.handle_request({
             "jsonrpc": "2.0", "id": 3, "method": "tools/call",
             "params": {"name": "memory_note", "arguments": {"factKind": "preference"}},
@@ -156,7 +165,7 @@ class AdapterTests(unittest.TestCase):
             self.assertNotIn(kind, server.FACT_KINDS)
         for kind in ("profile", "person", "note", "method_preference", "writing_style", "tooling", "tension"):
             self.assertIn(kind, server.FACT_KINDS)
-        recall, note = server.TOOLS
+        recall, note = server.TOOLS[:2]
         self.assertEqual(recall["inputSchema"]["properties"]["factKinds"]["items"]["enum"], list(server.FACT_KINDS))
         self.assertEqual(recall["inputSchema"]["properties"]["factKinds"]["maxItems"], len(server.FACT_KINDS))
         self.assertEqual(note["inputSchema"]["properties"]["factKind"]["enum"], list(server.FACT_KINDS))
@@ -207,6 +216,41 @@ class AdapterTests(unittest.TestCase):
         with mock.patch.dict(server.os.environ, CONFIGURED, clear=True):
             result = server.call_tool("memory_recall", {"query": "x", "subject": "doctor-1"}, opener)
         self.assertEqual(result["code"], "agent_key_subject_unsupported")
+
+    def test_inline_credential_is_not_accepted(self):
+        with mock.patch.dict(server.os.environ, {"EVIMED_MEMORY_API_URL": "https://evimed.example/api/agent-memory/v1", "EVIMED_MEMORY_API_KEY": "evk_inline"}, clear=True):
+            self.assertEqual(server.call_tool("memory_status", {})["code"], "memory_adapter_unauthenticated")
+
+    def test_returned_credentials_are_redacted(self):
+        def opener(request, timeout=None):
+            return Response({"data": {"echo": "evk_x", "safe": "Use metric units."}})
+        with mock.patch.dict(server.os.environ, CONFIGURED, clear=True):
+            result = server.call_tool("memory_status", {}, opener)
+        self.assertNotIn("evk_x", json.dumps(result))
+        self.assertEqual(result["data"]["safe"], "Use metric units.")
+
+    def test_new_operations_and_history_use_server_capabilities(self):
+        seen = []
+        def opener(request, timeout=None):
+            seen.append((request.full_url, request.get_method(), json.loads(request.data) if request.data else None))
+            return Response({"data": {"capabilities": {
+                "openingContext": {"available": False}, "explicitRemember": {"available": False},
+                "statementForget": {"available": True}, "forgottenList": {"available": True}},
+                "removed": False, "historyRejected": True}})
+        with mock.patch.dict(server.os.environ, CONFIGURED, clear=True):
+            for tool in ("memory_context", "memory_remember"):
+                result = server.call_tool(tool, {"statement": "Use metric units."}, opener)
+                self.assertEqual(result["code"], "capability_unavailable")
+                self.assertEqual(seen[-1][1], "GET")
+            result = server.call_tool("memory_forget", {"statement": "Use metric units."}, opener)
+            self.assertTrue(result["data"]["historyRejected"])
+            self.assertFalse(result["data"]["removed"])
+            self.assertEqual(seen[-1][2], {"statement": "Use metric units."})
+            server.call_tool("memory_forgotten", {}, opener)
+            self.assertTrue(seen[-1][0].endswith("/forgotten"))
+            self.assertEqual(seen[-1][1], "GET")
+            server.call_tool("memory_recall", {"query": "units", "include": ["history"], "projectId": "p"}, opener)
+            self.assertEqual(seen[-1][2], {"query": "units", "include": ["history"], "projectId": "p"})
 
 
 if __name__ == "__main__":

@@ -2030,6 +2030,9 @@ export class NativeMemoryStore {
     const projectId = context.kind === 'geo-project' ? context.projectId : last.projectId;
     if (last.change === "deleted") {
       if (last.before === null) throw new HttpError(409, "memory_conflict", "A deleted memory keeps no text to restore.");
+      if (!live && expectedVersion > 0 && versionOfHash(contentHash(String(last.before))) !== expectedVersion) {
+        throw new HttpError(409, 'memory_conflict', 'This forgotten memory changed since it was read.');
+      }
       await this.#restoreText(userId, { uri, text: String(last.before), memoryType, projectId, revisionId: last.id, reason: "undo" });
       // A file forgotten with the lines elsewhere that said the same brings them back too.
       const act = actOf(last.reason);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { NativeMemoryStore } from '../src/nativeMemoryStore.mjs';
+import { NativeMemoryStore, nativeFileId, versionOfHash } from '../src/nativeMemoryStore.mjs';
 import { contentHash, lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { MemoryHistory, MemoryHistoryLedger } from '../src/memoryHistory.mjs';
 
@@ -430,4 +430,22 @@ test('AL8 a repeated statement keeps its undo act and a delayed sweep never sele
   f.store.rejectionJudge = {same:async()=>{assert.fail('a later version is outside the frozen withdrawal');}};
   await f.store.sweepForgottenMemory({owner_id:'u1',user_root:root,memory_sweep:queued[1]});
   assert.match(f.files.get(other),/Measures/);
+});
+
+
+test('undo of an absent file checks the version of its kept before-image before writing', async () => {
+  const f = fixture();
+  f.files.clear();
+  f.store.overlay.files = async () => new Map([[uri, {}]]);
+  const revision = { id: 'last', uri, change: 'deleted', before: body, memoryType: 'preferences', reason: 'forgotten', projectId: null };
+  f.store.overlay.revisionsOf = async () => [revision];
+  f.store.overlay.revision = async () => revision;
+  f.store.overlay.unreject = async () => {};
+  f.store.overlay.markUndone = async () => {};
+  f.store.getRecord = async () => ({ id: nativeFileId(uri), value: f.files.get(uri) });
+  await assert.rejects(f.store.undo('u1', nativeFileId(uri), { expectedVersion: 1 }), error => error.code === 'memory_conflict');
+  assert.equal(f.files.has(uri), false);
+  const version = versionOfHash(contentHash(body));
+  assert.equal((await f.store.undo('u1', nativeFileId(uri), { expectedVersion: version })).undone, 'restored');
+  assert.equal(f.files.get(uri), body);
 });

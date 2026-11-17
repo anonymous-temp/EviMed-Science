@@ -160,8 +160,9 @@ test("the acts on a memory are the page's acts on the file: a forget removes it 
   assert.deepEqual(called(calls, "native.update").at(-1).slice(1), ["u1", id, { value: "参考文献改用 Vancouver 格式。", expectedVersion: 77 }]);
   // What a file does not have is said by name.
   assert.equal((await rejected(run(`${AGENT_MEMORY_PATH}/records/${id}`, { expectedVersion: 77, summary: "引用" }, "PATCH")))?.code, "memory_engine_unsupported");
-  const restore = await rejected(run(`${AGENT_MEMORY_PATH}/records/${id}/restore`, { expectedVersion: 99 }, "POST"));
-  assert.deepEqual([restore.status, restore.code], [400, "memory_engine_unsupported"]);
+  const restore = await run(`${AGENT_MEMORY_PATH}/records/${id}/restore`, { expectedVersion: 99 }, "POST");
+  assert.equal(restore.status, 200);
+  assert.deepEqual(called(calls, "native.update").at(-1).slice(1), ["u1", id, { status: "active", expectedVersion: 99 }]);
   const confirm = await rejected(run(`${AGENT_MEMORY_PATH}/records/${id}/confirm`, { expectedVersion: 77 }, "POST"));
   assert.deepEqual([confirm.status, confirm.code], [409, "memory_not_pending"]);
   // A stale version is the engine's own conflict.

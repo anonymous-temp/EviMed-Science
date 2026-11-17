@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The memory MCP server: two tools, one HTTP API, no storage of its own.
+"""The memory MCP server: one HTTP API, no storage of its own.
 
 WHAT THIS IS FOR. `/api/agent-memory/v1` is the memory API an external agent
 calls. Most agents do not speak our HTTP; they speak MCP. This is the adapter
@@ -9,19 +9,17 @@ no memory, applies no policy, and decides nothing. Every rule — a note is alwa
 limit — is enforced by the control plane, and this file would be the wrong place
 to restate any of them. A second copy of a rule is a second opinion about it.
 
-TWO TOOLS, NOT TWENTY. The `dsh-pubmed` ruling (2026-09-15) applies to our own
-adapters as well: a tool per API verb is a catalogue the model pays for on every
-first turn. Recall and note are what an agent does with memory. Listing records
-and posting an episode are operator and integration actions, and they have an
-HTTP endpoint that a person or a script calls directly.
+CAPABILITIES FIRST. Opening, explicit remembering and targeted forgetting consult
+memory_status before acting; unavailable operations are never probed. Recalled
+text is context, and forgotten text is a management view only.
 
 ONE PERSON OR ANOTHER. With an integration key (`subjects: true`) a call may name the person it is for, as `subject` (or the process's
 `EVIMED_MEMORY_SUBJECT`), sent as `X-Subject`; every read and write is then that person's memory and nobody else's. The adapter sends it
 and asks nothing about it: whether the key may, and whether it is an identifier, are the service's to refuse.
 
 CREDENTIAL. An account API key, read from `EVIMED_MEMORY_API_KEY_FILE` (a file,
-so the key is not in a process listing or an MCP config a user shares) or, for a
-local profile, `EVIMED_MEMORY_API_KEY`. With neither, the tools report that the
+so the key is not in a process listing or an MCP config a user shares).
+Without that file, the tools report that the
 adapter is unconfigured — the one thing this file does decide, because the
 alternative is an unauthenticated call that fails less clearly.
 """
@@ -57,7 +55,7 @@ MAX_CAPSULE_IDS = 8
 SUBJECT_PROPERTY = {
     "type": "string", "minLength": 1, "maxLength": 128,
     "description": (
-        "Integration keys only: the opaque identifier of the person this call is for (the integrator's own id for one doctor, "
+        "Integration keys only: the opaque identifier of the person this call is for (the integrator's own id for one person, "
         "set by the host application and never chosen from the conversation). Absent, the call is for the key's own account."
     ),
 }
@@ -83,6 +81,7 @@ TOOLS = [
                 "query": {"type": "string", "minLength": 1, "maxLength": 2000},
                 "factKinds": {"type": "array", "maxItems": len(FACT_KINDS), "items": {"type": "string", "enum": list(FACT_KINDS)}},
                 "since": {"type": "string", "maxLength": 40},
+                "include": {"type": "array", "maxItems": 1, "items": {"type": "string", "enum": ["history"]}, "description": "Dated original conversations; requires rawConversationRecall in memory_status."},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50},
                 "capsuleIds": {
                     "type": "array", "minItems": 1, "maxItems": MAX_CAPSULE_IDS, "uniqueItems": True,
@@ -93,6 +92,7 @@ TOOLS = [
                     "type": "string", "enum": list(METHOD_MODES),
                     "description": "Which methods (做法) come back with the memory: the account's own, the capsules', both (default) or none.",
                 },
+                "projectId": {"type": "string"},
                 "subject": SUBJECT_PROPERTY,
             },
         },
@@ -112,11 +112,31 @@ TOOLS = [
             "properties": {
                 "factKind": {"type": "string", "enum": list(FACT_KINDS)},
                 "content": {"type": "string", "minLength": 1, "maxLength": 8000},
+                "projectId": {"type": "string"},
                 "subject": SUBJECT_PROPERTY,
             },
         },
     },
 ]
+
+
+# These adapters are available even when a server capability is closed; status
+# names that condition without probing an unsupported operation.
+for _name, _description, _properties, _required in [
+    ("memory_status", "Read this key's server capabilities and scopes before choosing an operation.", {}, []),
+    ("memory_context", "Read opening context once at session start when openingContext is available.", {"attended": {"type": "boolean"}}, []),
+    ("memory_remember", "Remember the person's verbatim words with their external source only when explicitRemember is available.", {
+        "statement": {"type": "string", "minLength": 1},
+        "source": {"type": "object", "additionalProperties": False, "required": ["client", "sessionId", "saidAt"], "properties": {
+            "client": {"type": "string"}, "sessionId": {"type": "string"}, "messageId": {"type": "string"}, "saidAt": {"type": "string", "format": "date-time"}}}}, ["statement", "source"]),
+    ("memory_forget", "Withdraw a statement or selected exact record lines at the person's request; report confirmed outcomes and pending checks exactly.", {
+        "statement": {"type": "string", "minLength": 1, "maxLength": 6000}, "recordId": {"type": "string"},
+        "lines": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 6000}}}, []),
+    ("memory_forgotten", "List withdrawn original text and restore actions for management, never as recalled context.", {}, []),
+]:
+    TOOLS.append({"name": _name, "description": _description, "inputSchema": {
+        "type": "object", "additionalProperties": False, "required": _required,
+        "properties": {**_properties, "projectId": {"type": "string"}, "subject": SUBJECT_PROPERTY}}})
 
 
 def _base_url():
@@ -137,7 +157,7 @@ def _api_key():
                 return handle.read().strip() or None
         except OSError:
             return None
-    return os.environ.get("EVIMED_MEMORY_API_KEY", "").strip() or None
+    return None
 
 
 def _timeout():
@@ -181,7 +201,7 @@ def _call(action, body, opener=None, subject=None):
         ])
     request = urllib.request.Request(
         "%s/%s" % (base, action),
-        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None,
         headers={
             "authorization": "Bearer %s" % key,
             "content-type": "application/json",
@@ -189,7 +209,7 @@ def _call(action, body, opener=None, subject=None):
             # Sent as given: the service decides whether this key may name a subject and whether the identifier is one.
             **({"x-subject": subject} if subject else {}),
         },
-        method="POST",
+        method="POST" if body is not None else "GET",
     )
     try:
         with (opener or urllib.request.urlopen)(request, timeout=_timeout()) as response:
@@ -202,26 +222,26 @@ def _call(action, body, opener=None, subject=None):
         message = "The memory service returned HTTP %d." % error.code
         try:
             failure = json.loads(error.read(64 * 1024).decode("utf-8"))
-            code = str(failure.get("error", {}).get("code") or code)
-            message = str(failure.get("error", {}).get("message") or message)
+            code = str(failure.get("error", {}).get("code") or code).replace(key, '[redacted]')
+            message = str(failure.get("error", {}).get("message") or message).replace(key, '[redacted]')
         except Exception:  # noqa: BLE001 - a non-JSON failure keeps the generic code
             pass
         return _envelope(False, code, issues=[{"severity": "required", "message": message}])
-    except (urllib.error.URLError, TimeoutError, OSError) as error:
+    except (urllib.error.URLError, TimeoutError, OSError):
         return _envelope(False, "memory_service_unavailable", issues=[
-            {"severity": "required", "message": "The memory service is unreachable: %s." % error},
+            {"severity": "required", "message": "The memory service is unreachable."},
         ])
     except (ValueError, UnicodeDecodeError):
         return _envelope(False, "memory_service_invalid_response", issues=[
             {"severity": "required", "message": "The memory service returned something that is not JSON."},
         ])
-    return _envelope(True, data=payload.get("data", payload))
+    return _envelope(True, data=json.loads(json.dumps(payload.get("data", payload)).replace(key, '[redacted]')))
 
 
 def call_tool(name, arguments, opener=None):
     if name == "memory_recall":
         body = {"query": arguments["query"]}
-        for field in ("factKinds", "since", "limit", "capsuleIds", "methods"):
+        for field in ("factKinds", "since", "limit", "capsuleIds", "methods", "include", "projectId"):
             if arguments.get(field) is not None:
                 body[field] = arguments[field]
         return _call("recall", body, opener, _subject(arguments))
@@ -229,7 +249,27 @@ def call_tool(name, arguments, opener=None):
         # `origin` is not sent and is not a parameter. The control plane records
         # every external note as inferred; sending a claim about it here would
         # be a claim the service is right to ignore.
-        return _call("note", {"factKind": arguments["factKind"], "content": arguments["content"]}, opener, _subject(arguments))
+        return _call("note", {field: arguments[field] for field in ("factKind", "content", "projectId") if field in arguments}, opener, _subject(arguments))
+    if name == "memory_status":
+        return _call("", None, opener, _subject(arguments))
+    operations = {
+        "memory_context": ("openingContext", "context", ("projectId", "attended"), True),
+        "memory_remember": ("explicitRemember", "remember", ("statement", "source", "projectId"), False),
+        "memory_forget": ("statementForget", "forget", ("recordId", "lines", "statement", "projectId"), False),
+        "memory_forgotten": ("forgottenList", "forgotten", ("projectId",), True),
+    }
+    if name in operations:
+        capability, action, fields, read = operations[name]
+        status = _call("", None, opener, _subject(arguments))
+        if not status["ok"]:
+            return status
+        offered = status.get("data", {}).get("capabilities", {}).get(capability, {})
+        if offered.get("available") is not True:
+            return _envelope(False, "capability_unavailable", data={"capability": capability, "reason": offered.get("reason")})
+        body = {field: arguments[field] for field in fields if field in arguments}
+        if read and body:
+            action += "?" + urllib.parse.urlencode({key: str(value).lower() if isinstance(value, bool) else value for key, value in body.items()})
+        return _call(action, None if read else body, opener, _subject(arguments))
     return _envelope(False, "unknown_tool", issues=[{"severity": "required", "message": "No such tool: %s." % name}])
 
 

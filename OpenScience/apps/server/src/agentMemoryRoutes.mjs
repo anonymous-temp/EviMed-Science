@@ -8,6 +8,7 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
 import { assertAgentSubject } from "./agentApiKeys.mjs";
 import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
 import { isPlatformAccount } from "./platformAccount.mjs";
+import { forgetForAgent, forgottenForAgent } from './agentMemoryForget.mjs';
 
 /**
  * The memory API an agent that is not ours calls.
@@ -67,6 +68,7 @@ const MAX_TRACKED_KEYS = 10_000;
  *  holds the OpenAPI description's paths to exactly this list. */
 export const AGENT_MEMORY_ENDPOINTS = Object.freeze([
   "POST /recall", "POST /note", "GET /records", "POST /episodes",
+  "POST /forget", "GET /forgotten",
   "POST /observations", "GET /dashboard", "PUT /settings",
   "PATCH /records/{id}", "POST /records/{id}/confirm", "POST /records/{id}/forget", "POST /records/{id}/restore", "POST /records/{id}/undo",
   "GET /methods/{id}", "POST /methods/{id}/retire", "POST /methods/{id}/restore", "POST /methods/{id}/rollback",
@@ -80,6 +82,7 @@ export const AGENT_MEMORY_REQUEST_FIELDS = Object.freeze({
   recall: Object.freeze(["query", "projectId", "limit", "factKinds", "since", "scope", "capsuleIds", "methods", "include"]),
   note: Object.freeze(["factKind", "content", "projectId"]),
   episodes: Object.freeze(["projectId", "sessionId", "messages"]),
+  forget: Object.freeze(["recordId", "lines", "statement", "projectId"]),
   observations: OBSERVATION_FIELDS,
 });
 
@@ -105,7 +108,7 @@ function fields(body, allowed) {
 /**
  * @param {{
  *   config: any, apiKeys: any, store: any, memorySettings: any, capsules: any,
- *   learning?: any, observations?: any, nativeMemory?: any, historySearch?: ((input: any) => Promise<any[]>) | null,
+ *   learning?: any, observations?: any, nativeMemory?: any, admission?: any, historySearch?: ((input: any) => Promise<any[]>) | null,
  *   deleteSubject?: ((ownerId: string, subjectAccountId: string) => Promise<number>) | null,
  *   audit?: ((event: string, status: string, details: Record<string, unknown>) => unknown) | null,
  * }} dependencies
@@ -113,7 +116,7 @@ function fields(body, allowed) {
  */
 export function createAgentMemoryRoutes({
   config, apiKeys, store, memorySettings, capsules, learning = null,
-  observations = null, nativeMemory = null, historySearch = null, deleteSubject = null, audit = null,
+  observations = null, nativeMemory = null, admission = null, historySearch = null, deleteSubject = null, audit = null,
 }) {
   /** @type {Map<string, {until: number, count: number}>} */
   const windows = new Map();
@@ -248,6 +251,30 @@ export function createAgentMemoryRoutes({
       }
       return { id, act: match[2] ?? "" };
     };
+
+    if (action === 'forget' && method === 'POST') {
+      requireScope('memory.manage');
+      const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.forget);
+      const user = await accountFor({ create: false });
+      if (!user) throw new HttpError(404, 'memory_not_found', 'No such memory.');
+      const projectId = await projectOf(user, input.projectId);
+      const project = await store.requireProject(user, projectId ?? 'default');
+      const native = await nativeFor(user);
+      const outcome = await forgetForAgent({ config, native, admission }, { user, project, boundProject: identity.projectId, input });
+      await trail('forget', user);
+      sendJson(res, 200, { data: outcome });
+      return true;
+    }
+
+    if (action === 'forgotten' && method === 'GET') {
+      requireScope('memory.read');
+      const user = await accountFor({ create: false });
+      const projectId = await projectOf(user, url.searchParams.get('projectId'));
+      const native = await nativeFor(user);
+      const items = user ? await forgottenForAgent(native, user, { projectId, canRestore: identity.scopes.includes('memory.manage') && !identity.projectId }) : [];
+      sendJson(res, 200, { data: { items } });
+      return true;
+    }
 
     if (action === "recall" && method === "POST") {
       requireScope("memory.read");
@@ -447,6 +474,9 @@ export function createAgentMemoryRoutes({
       if (!user) throw new HttpError(404, "memory_not_found", "Memory not found.");
       const act = record.act || "edit";
       const native = await nativeFor(user);
+      if (identity.projectId && act === 'restore') {
+        throw new HttpError(403, 'agent_key_project_denied', 'Restoring a withdrawal requires an account-scoped key.');
+      }
       if (identity.projectId) {
         const existing = await /** @type {any} */ (native).getRecord(user.id, record.id);
         if (privateByDefault(existing)) throw new HttpError(404, "memory_not_found", "No such memory.");
@@ -517,10 +547,12 @@ export function createAgentMemoryRoutes({
             requiredScopes: ['memory.read', 'memory.history.read'],
           },
           // Explicitly unavailable until the complete shared service path is exposed.
-          openingContext: { available: false },
-          explicitRemember: { available: false },
-          statementForget: { available: false },
-          forgottenList: { available: nativeMemory?.configured === true && identity.scopes.includes('memory.read'), requiredScopes: ['memory.read'], path: '/dashboard' },
+          openingContext: { available: false, requiredScopes: ['memory.read'], reason: 'complete_opening_composition_unavailable' },
+          explicitRemember: { available: false, requiredScopes: ['memory.write'], reason: 'external_source_admission_unavailable' },
+          statementForget: { available: config.memoryForgetTargetsEnabled === true && nativeMemory?.configured === true && nativeMemory?.forgetTargetsEnabled === true && Boolean(nativeMemory?.memoryContexts) && Boolean(admission)
+            && !identity.projectId && identity.scopes.includes('memory.manage'), requiredScopes: ['memory.manage'], path: '/forget',
+            ...(identity.projectId ? { reason: 'withdrawal_requires_account_scope' } : {}) },
+          forgottenList: { available: nativeMemory?.configured === true && Boolean(nativeMemory?.memoryContexts) && typeof nativeMemory?.forgotten === 'function' && identity.scopes.includes('memory.read'), requiredScopes: ['memory.read'], path: '/forgotten' },
           conversationIngest: { available: false },
           workSignals: { available: false },
           capsuleSharing: { available: false },

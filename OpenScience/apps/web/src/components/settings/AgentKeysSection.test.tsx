@@ -38,7 +38,7 @@ describe("external agent keys", () => {
     expect(screen.getByLabelText("读取记忆与做法")).toBeChecked();
     expect(screen.getByLabelText("读取原始对话（需同时允许读取记忆）")).not.toBeChecked();
     expect(screen.getByLabelText("提出待确认的记忆")).not.toBeChecked();
-    expect(screen.getByLabelText("管理记忆（确认、修改和忘记）")).not.toBeChecked();
+    expect(screen.getByLabelText("管理记忆（确认、修改、忘记和恢复）")).not.toBeChecked();
     expect(screen.getByRole("button", { name: "创建" })).toBeDisabled();
   });
   it("uses only scopes offered by this deployment and shows the last-use date", async () => {

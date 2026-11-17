@@ -155,17 +155,61 @@ infer capabilities from error responses.
 | Raw conversation recall | `POST /recall`, `include: ["history"]`, separately scoped. |
 | Complete opening context | Unavailable; native profile and gateway context have not been exposed. |
 | Direct explicit remember | Unavailable; `/note` remains a candidate. |
-| Statement forget and forgotten list | Statement form unavailable; existing `/dashboard` lists forgotten records and record-id operations remain unchanged. |
+| Statement forget and forgotten list | `POST /forget` uses native statement/line withdrawal; `GET /forgotten` returns original text and the web-equivalent restore action. Requires account-scoped manage authority for withdrawal/restore; see below. |
 | Trusted conversation ingest | Unavailable; `/episodes` still waits for confirmation. |
 | General work signals | Unavailable; existing prescription observations are unchanged. |
 | Capsule sharing / selected-capsule-only recall | Unavailable; `capsuleIds` retains additive semantics. Trials stay web-only. |
-| Clients | DSH status/history option supported; MCP and the remaining new operations are not implemented. |
+| Clients | DSH and MCP provide status, history recall, forget and forgotten tools. Context/remember adapters consult status and remain unavailable on this server. |
 
 This is a partial expansion, not full capsule parity. The next item is a complete
 opening-context read reusing both `ResidentProfiles` and the gateway's native
 profile/context readers. Returning only the resident supplement would omit the
 engine's profile/preferences; directly calling the engine would bypass protected
 URIs, summaries, project exclusions and withdrawal filters.
+
+### Targeted withdrawal and recovery
+
+`POST /forget` requires `memory.manage`, an **unbound account key**, and
+`OPEN_SCIENCE_MEMORY_FORGET_TARGETS_ENABLED=true`. It takes either
+`{"statement":"Use metric units."}` or
+`{"recordId":"nm_…","lines":["Use metric units."]}`. Omit `lines` to remove
+that record; a profile-line record removes only its own line. Empty `lines` is
+refused. A raw URI is never accepted. An optional owned `projectId` can label a
+record request; a bare statement accepts only the default namespace. The native
+withdrawal follows copies across that namespace, so project-bound keys cannot
+safely authorize it. Shared namespaces, private records and trial contexts are
+refused; learning/recall pause does **not** prevent the owner withdrawing text.
+
+The response is the native store's confirmation, without a synthetic success
+message: `removed`, `removedLines`, `fileRemoved`, `historyRejected`, and
+`historyScanPending` when present. A statement may record history rejection
+without removing a file. Pending means paraphrases/copies may still be recalled.
+Missing exact lines return `missingLines`; available-line hints are omitted for
+profile-line records so neighbouring profile text cannot leak. Errors leave no
+claim that forgetting completed. Clinical/automated admission does not prohibit
+withdrawal (the kernel has the same deletion rule); these are write-learning
+refusals, not reasons to deny the person's deletion request.
+
+`GET /forgotten` (`memory.read`) returns `data.items` with original `text`, `id`,
+`version`, `forgottenAt` and an optional `restore: {path, expectedVersion}`.
+Only an unbound key with `memory.manage` receives a restore action. Private and
+shared entries remain web-only. This is a deliberate management read of withdrawn
+text, never an opening or recall supplement. The optional `projectId` and key
+binding filter the list; a project-bound key cannot restore a cross-copy act.
+The list inherits the native store's 100-item bound and is not a full export.
+
+`POST /records/{id}/restore` with the returned `expectedVersion` uses exactly the
+web page's native status update. `/undo` remains last-change undo; an absent file
+now checks the kept before-image version too, returning 409 for a stale version.
+The dashboard reads forgotten revisions directly instead of filtering active
+files for an archived status they cannot have.
+
+Complete opening remains closed (`complete_opening_composition_unavailable`):
+no `/context` endpoint is shipped. External explicit writing remains closed
+(`external_source_admission_unavailable`): no `/remember` endpoint is shipped.
+`memory.write` already existed for candidates and is not expanded silently.
+Neither a partial resident supplement nor a candidate confirmation is advertised
+as the missing operation. No new configuration default or storage kind is added.
 
 ### The dashboard
 
@@ -180,7 +224,7 @@ come from that person's own clicks; it is never a default.
 | `PUT /settings` `{ "learningPaused"?, "recallPaused"? }` | `memory.manage` | The switches (功能开关). |
 | `POST /records/{id}/confirm` `{ "expectedVersion" }` | `memory.manage` | Answers `409 memory_not_pending`: a memory file is in force when it is written. A staged episode or note is confirmed at `/notes/{id}/confirm`. |
 | `PATCH /records/{id}` `{ "expectedVersion", "value" }` | `memory.manage` | The person's edit: the file's text is replaced. A summary edit without `value` is refused with `400 memory_engine_unsupported`. |
-| `POST /records/{id}/forget` · `/restore` · `/undo` `{ "expectedVersion" }` | `memory.manage` | Forget (the file leaves the engine; its text is kept only for the undo, and the learning loop is told not to write it back), or undo the last change. `restore` is the undo (`400 memory_engine_unsupported`: use `undo`). |
+| `POST /records/{id}/forget` · `/restore` · `/undo` `{ "expectedVersion" }` | `memory.manage` | Forget (the file leaves the engine; its text is kept only for the undo, and the learning loop is told not to write it back), or undo the last change. `restore` now uses the memory page status update with the version from `/forgotten`; `undo` reverses the last change. Restore requires an account-scoped key. |
 | `GET /methods/{id}` | `memory.read` | One habit and its versions — text changes only, earlier texts marked `wasTrue`. |
 | `POST /methods/{id}/retire` · `/restore` `{ "expectedRevision" }`, `/rollback` `{ "expectedRevision", "targetRevision" }` | `memory.manage` | Stop a habit, take the stop back (the last version in force), or go back to a named version. |
 | `POST /notes/{id}/confirm` · `/reject` `{ "expectedRevision" }` | `memory.manage` | A proposed note, confirmed or rejected. |
@@ -297,11 +341,9 @@ on demand. The API currently sends those bodies in recall itself; no new
 body-by-digest server route or stale plugin cache is introduced. A method outside
 that catalog's selection/budget cannot be loaded this way.
 `capsule_propose` calls `/note`; it always waits for the person's confirmation.
-The connector has no confirm, forget or share tools, and needs no `memory.manage`.
+`capsule_forget` uses `memory.manage`, and `capsule_forgotten` lists original withdrawn text with restore actions. Context and remember adapters first read status; this server keeps both capabilities closed. Call context at most once at session start, only when offered.
 
-**No raw-history recall or automatic external-work learning is provided. Forget
-and share stay on the web memory page** (`/app/memory`), as does proposal
-confirmation. This is a remote connector, not a local memory engine, transcript
+**Raw history is opt-in** with `include: ["history"]` and both read scopes. Automatic external-work learning is unavailable. Share and proposal confirmation stay on the web memory page (`/app/memory`). This is a remote connector, not a local memory engine, transcript
 collector, method mount or capsule-isolation mechanism. Ordinary work requires
 no recall and continues if memory is unavailable.
 
@@ -317,15 +359,11 @@ installing or publishing anything.
 
 ## The MCP adapter
 
-`runtime/mcp/evimed-memory/server.py` is a stdio MCP server with two tools —
-`memory_recall` and `memory_note` — over the API above. Listing records and
-posting episodes stay HTTP calls: they are integration actions, and a tool per
-verb is a catalogue the model pays for on every first turn.
+`runtime/mcp/evimed-memory/server.py` is a stdio MCP server with `memory_recall`, `memory_note`, `memory_status`, `memory_context`, `memory_remember`, `memory_forget` and `memory_forgotten`. New operations read server capabilities before calling their endpoint; closed capabilities return `capability_unavailable`. Listing ordinary records and posting episodes stay HTTP calls.
 
-`memory_recall` takes `query`, `factKinds`, `since`, `limit`, and the two
-that serve a clinical integration: `capsuleIds` (1–8, read these capsules instead
+`memory_recall` takes `query`, `factKinds`, `since`, `limit`, `projectId`, optional `include: ["history"]`, and `capsuleIds` (1–8, read these capsules instead
 of the ones in force: one school at a time) and `methods` (`all`, `own`,
-`capsules` or `none`). The fact kinds are the API's own fourteen. Both tools take an
+`capsules` or `none`). The fact kinds are the API's own sixteen. All tools take an
 optional `subject`, sent as `X-Subject`, for an integration key (one doctor behind
 an institution): set by the host application, not chosen from the conversation;
 the process's `EVIMED_MEMORY_SUBJECT` is the default when a call names none, and
@@ -336,8 +374,7 @@ It needs Python 3 and nothing else. Configure it with:
 | Variable | Meaning |
 |---|---|
 | `EVIMED_MEMORY_API_URL` | The API base, e.g. `https://evimed.example.org/api/agent-memory/v1`. |
-| `EVIMED_MEMORY_API_KEY_FILE` | A file holding the key (preferred: the key stays out of process listings and shared configs). |
-| `EVIMED_MEMORY_API_KEY` | The key itself, for a local profile only. |
+| `EVIMED_MEMORY_API_KEY_FILE` | Required file holding the key; inline environment credentials are no longer accepted. |
 | `EVIMED_MEMORY_SUBJECT` | The person calls are for when a call names none (integration keys only; absent, the key's own account). |
 | `EVIMED_MEMORY_TIMEOUT_SECONDS` | Per-call timeout, 1–60, default 20. |
 
@@ -367,7 +404,7 @@ Keep the key file readable by you alone (`chmod 600`), and give the key
 
 ## Candidates and admission
 
-The URL, key scopes, project binding and `X-Subject` rules are unchanged. Personal recall reads the engine through the shared recall port. Capsule and method selection retain their existing authorization and scope. Native edits change `value`; forgetting uses the rejection ledger, and restoration uses the undo action. Unsupported operations return `memory_engine_unsupported`.
+The URL, key scopes, project binding and `X-Subject` rules are unchanged. Personal recall reads the engine through the shared recall port. Capsule and method selection retain their existing authorization and scope. Native edits change `value`; forgetting uses the rejection ledger, and restoration uses the web-equivalent restore action (or last-change undo). Unsupported operations return `memory_engine_unsupported`.
 
 `POST /episodes` stores the submitted turns in the candidate-note ledger. It returns `202`, `state: "pending_confirmation"`, `extracted: 0`, `activated: 0`, `candidateId`, and `confirm: { path, expectedRevision }`. It opens no extracting engine session at this stage. The full role-labelled transcript stays only in that candidate as evidence. Confirmation sends only original user statements through the captured-message privacy filter; assistant statements, including assistant-authored role labels or quoted instructions, are never promoted into user facts. If no admissible user content remains, confirmation returns `admission.state: "skipped"` and `reason: "no_user_content"` without touching an extracting session. Confirm at the returned `/api/agent-memory/v1/notes/{id}/confirm` path with `expectedRevision`. There is no episode-confirm endpoint.
 

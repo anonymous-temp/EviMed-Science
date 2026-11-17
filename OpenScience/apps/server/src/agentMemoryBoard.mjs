@@ -184,6 +184,8 @@ export async function memoryBoard({ memorySettings, nativeMemory = null, learnin
   const all = (await nativeMemory.listRecords(user.id, { statuses: ["active", "pending", "superseded", "archived"], pageSize: 100, allowRecord: (record) => !privateByDefault(record) }))
     .filter((/** @type {any} */ record) => !privateByDefault(record) && record.kind !== "run_summary" && (!projectId || (record.scope === "project" && record.scopeId === projectId)));
   const row = (/** @type {any} */ record) => recordRow(record);
+  const forgotten = (await nativeMemory.forgotten?.(user.id) ?? []).filter((record) => !privateByDefault(record)
+    && record.sensitive !== true && (!projectId || (record.scope === 'project' && record.scopeId === projectId)));
 
   // What waits for the person: the notes and episodes an outside agent proposed (`/note`, `/episodes`), which are capsule candidates.
   /** @type {any[]} */
@@ -235,7 +237,7 @@ export async function memoryBoard({ memorySettings, nativeMemory = null, learnin
     switches: { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused },
     records: all.filter((/** @type {any} */ record) => record.status === "active").map(row),
     pending,
-    forgotten: all.filter((/** @type {any} */ record) => record.status === "archived").slice(0, 20).map(row),
+    forgotten: forgotten.slice(0, 20).map(row),
     habits,
     neverLearned: projectId ? [] : never,
     recentChanges: [...recordChanges, ...habitChanges]
@@ -265,7 +267,8 @@ async function nativeRecordAction(native, user, recordId, action, body) {
     return { record: result.record, event: `memory.record.undo.${result.undone}` };
   }
   if (action === "restore") {
-    throw new HttpError(400, "memory_engine_unsupported", "On the native memory engine a forgotten memory is brought back with undo, naming the version the forget answered with.");
+    const input = bodyOf(body, ['expectedVersion']);
+    return { record: await native.update(user.id, recordId, { status: 'active', expectedVersion: positive(input.expectedVersion, 'expectedVersion') }), event: 'memory.record.restore' };
   }
   const input = bodyOf(body, action === "edit" ? ["expectedVersion", "summary", "value"] : ["expectedVersion"]);
   const expectedVersion = positive(input.expectedVersion, "expectedVersion");
@@ -304,6 +307,12 @@ export async function recordAction({ nativeMemory = null }, user, recordId, acti
   const historical = !existing && nativeMemory.forgotten ? (await nativeMemory.forgotten(user.id)).find((record) => record.id === recordId) : null;
   if (privateByDefault(existing ?? historical) || (!existing && !historical)) {
     throw new HttpError(404, "memory_not_found", "No such memory.");
+  }
+  if (action === 'restore') {
+    const entry = existing ?? historical;
+    if (entry.sensitive === true || (nativeMemory.memoryContexts && (await nativeMemory.memoryContexts.forUri(user.id, entry.uri ?? entry.document?.uri)).kind !== 'owned')) {
+      throw new HttpError(404, 'memory_not_found', 'No such memory.');
+    }
   }
   return nativeRecordAction(nativeMemory, user, recordId, action, body);
 }
