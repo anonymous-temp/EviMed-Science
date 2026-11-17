@@ -500,7 +500,10 @@ test('account archive carries capsule input, edit and removal receipts without r
     assert.equal(native.admissions.length, 9);
     for (const row of native.admissions) assert.equal(row.text, ['completed', 'cancelled'].includes(row.state) ? undefined : `EX-PENDING-${row.state}`);
     assert.equal(native.imports.length, 3);
-    assert.equal(native.imports.find(row => row.state === 'offered').statements[0].text, 'EX-OFFERED-IMPORT');
+    // Two offered imports are seeded (one of them carries the forgotten statement). The archive orders imports by
+    // created_at (milliseconds) then id, and the ids are hashes: asking for "the first offered one" failed in CI when
+    // both rows landed in one millisecond. Every statement an offered import still exports is the allowed one.
+    assert.deepEqual(native.imports.filter(row => row.state === 'offered').flatMap(row => row.statements.map(statement => statement.text)), ['EX-OFFERED-IMPORT']);
     for (const value of [forgotten, withdrawn, foreign, 'EX-UNREGISTERED-NAMESPACE', 'EX-UNDONE-IMAGE', 'EX-OLD-ACCOUNT-INPUT']) {
       assert.equal(raw.includes(Buffer.from(value)), false, `${value} must be absent from every archive entry`);
       assert.equal(archive.includes(Buffer.from(value)), false);
