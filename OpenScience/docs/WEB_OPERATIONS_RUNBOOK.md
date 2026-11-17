@@ -2341,3 +2341,34 @@ session and commits the association before its first prompt, so proof does not w
 for prompt acknowledgement. The proof checks an exact registered secondary
 conversation before falling back to historical run roots. Evaluate this authorization change separately from lock
 isolation; either switch may be enabled without the other.
+
+### Memory read coverage and opt-in literal rescue (2026-11-17)
+
+`OPEN_SCIENCE_MEMORY_LITERAL_FALLBACK_ENABLED=false` is independent of
+`OPEN_SCIENCE_MEMORY_HISTORY_RETRIEVAL_V2_ENABLED` (still false). Enabling it rescues
+an empty file search using exact index names/headings within the same visible scope,
+and tokenizes/ranks the existing history grep channel (up to 500 candidates) before
+its existing vector fusion. V1 still returns at most eight fragments and uses its
+existing authorization/hydration. There is no extra model call. Source-status counts
+cover the returned candidate window; missing channels and deadlines are unavailable,
+not evidence of absence. A narrow target explicitly skips history and capsules.
+
+`OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED=false` remains off. Turning on the server
+reader alone does not create typed notes from legacy bodies. Build a separate template
+generation using `deploy/web/openviking/memory-templates-src/build.mjs --safety-notes
+--out <generation>`; configure the engine with `expectedOpenVikingConfiguration({
+safetyNotes: true, ... })`, which admits `safety_notes`, and restart that engine with
+the generation as part of a separately authorized release. Confirm existing-account
+memory type policy as well as server defaults. The template build refuses overwriting
+the deployed generation. Do not edit the runtime dump baseline.
+
+Dedicated safety files and marked profile/people/notes sections keep full statements
+and original subjects. Missing markers on legacy profiles/people/notes now produce a
+coverage warning; switching on is not a migration. Re-extract or explicitly review
+legacy records through the existing source/rejection machinery before claiming full
+safety coverage. Truncation/budget overflow and read failures always leave a lookup
+instruction, even for an experimental budget too small to hold a full block. Shared
+namespaces, sensitive data, withdrawal fences and recall pauses are unchanged.
+`OPEN_SCIENCE_MEMORY_PEOPLE_ACROSS_PROJECTS_ENABLED` controls existing portability;
+it does not open other accounts or shared projects. Typed facts about another person
+use the same layer and retain their subject. No answer is withheld by this feature.

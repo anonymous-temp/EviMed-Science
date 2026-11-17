@@ -1,5 +1,5 @@
 import { nativeIndexLine } from "./memoryOpeningIndex.mjs";
-import { renderSafetyNotes } from './memorySafetyNotes.mjs';
+import { renderSafetyNotes, SAFETY_NOTES_MORE } from './memorySafetyNotes.mjs';
 import { sourceReceiptState } from './memorySourceReceipts.mjs';
 import { contextPolicyIdentity, sameContextPolicy } from "./geoContextItems.mjs";
 import { createHash } from "node:crypto";
@@ -149,7 +149,7 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
   let entries = 0;
   for (const memo of candidates) {
     if (entries >= bound) break;
-    if (estimatePromptTokens(renderMemoryContext([...memos, memo])) + reserve + indexTokens + safetyTokens + standingTokens > room) continue;
+    if (estimatePromptTokens(renderMemoryContext([...memos.filter(item => item !== card), memo])) + reserve + indexTokens + safetyTokens + standingTokens > maxTokens) continue;
     memos.push(memo);
     entries += 1;
   }
@@ -161,7 +161,7 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
   if (safety.text) text = `${text || header}\n${safety.text}`;
   if (standing) text = [text, standing].filter(Boolean).join('\n');
   // A deliberately tiny experiment budget may not even hold the lookup line.
-  if (nativeIndex && !profile && estimatePromptTokens(text) > room) text = "";
+  if (nativeIndex && !profile && estimatePromptTokens(text) > room) text = safety.text ? SAFETY_NOTES_MORE : '';
   return { text, profile, memos: [...memos, ...safety.memos, ...standingMemos], omitted, index, safety: safety.text, standing };
 }
 
@@ -311,7 +311,7 @@ export class ResidentProfiles {
     const nativeIndex = !shared && this.config?.memoryEngineEnabled === true && this.config?.memoryOpeningIndexEnabled === true && this.nativeIndex
       ? await this.nativeIndex(userId, projectId).then(index => ({ ...index, historySearchEnabled: this.config.memoryHistorySearchEnabled !== false })).catch(() => null) : null;
     const safetyFiles = !shared && this.config?.memoryEngineEnabled === true && this.config?.memorySafetyNotesEnabled === true && this.safetyNotes
-      ? await this.safetyNotes(userId, projectId).catch(() => []) : [];
+      ? await this.safetyNotes(userId, projectId).catch(() => Object.assign([], { unavailable: true })) : [];
     const block = renderResidentProfile({ capsuleFacts, card, capsuleCount, maxRecords: this.maxRecords, nativeFiles, safetyFiles, config: this.config, nativeIndex });
     if (!block.text) return none("empty");
     if (block.omitted > 0) recordResidentOmitted(block.omitted);

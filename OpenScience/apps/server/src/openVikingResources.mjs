@@ -1,3 +1,5 @@
+import { readStatus, withReadStatus } from './memoryReadStatus.mjs';
+import { historyTokens, historyLexicalScorer } from './memoryHistoryRetrieval.mjs';
 import { createHash } from "node:crypto";
 import {
   OPENVIKING_SKILL_NAMES, libraryResourcesUri, nativeMemoryRoot, openVikingUserId, projectGraphUri, projectResourcesRoot, projectSourcesUri, projectWikiUri,
@@ -164,35 +166,54 @@ export class OpenVikingResources {
 
   /** Vector and literal keyword recall over this one proven root. Model text
    * never chooses a namespace. The ledger hydrates only registered exact URIs. */
-  async searchHistory(userId, root, query, { limit = 40, retrievalV2 = false } = {}) {
+  async searchHistory(userId, root, query, { limit = 40, retrievalV2 = false, literalFallback = false } = {}) {
     this.historyAddress(root);
     if (retrievalV2) return this.searchHistoryV2(userId,root,query);
     const bound = Math.max(1, Math.min(40, Number(limit) || 40));
-    const pattern = String(query).split(/\s+/).filter(Boolean).slice(0, 8).map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const pattern = (literalFallback ? [...new Set(historyTokens(query))].slice(0, 64) : String(query).split(/\s+/).filter(Boolean).slice(0, 8)).map(escapeGrepPattern).join('|');
     const results = await Promise.allSettled([
       this.client.request({ method: 'POST', path: '/api/v1/search/find', userId, timeoutMs: READ_TIMEOUT_MS,
         body: { query: String(query), target_uri: root, limit: bound } }),
-      this.grep(userId, root, pattern, { limit: bound, caseInsensitive: true }),
+      this.grep(userId, root, pattern, { limit: literalFallback ? 500 : bound, caseInsensitive: true }),
     ]);
     if (results.every(result => result.status === 'rejected')) throw /** @type {PromiseRejectedResult} */ (results[0]).reason;
     const found = new Map();
     const semantic = results[0].status === 'fulfilled' ? results[0].value?.result : null;
     const vector = Array.isArray(semantic?.resources) ? semantic.resources : [];
     const words = results[1].status === 'fulfilled' ? results[1].value.matches : [];
+    // Literal words and numbers are ranked by their actual chunk text before the
+    // existing fusion. This isolates lexical rescue; V2 hydration/budgets stay off.
+    let lexical = words;
+    if (literalFallback) {
+      const records = words.flatMap(hit => {
+        if (typeof hit.content !== 'string' || hit.content.length > 32_000) return [];
+        try {
+          const parsed = JSON.parse(hit.content);
+          return Array.isArray(parsed.messages) && parsed.messages.every(m => typeof m.text === 'string')
+            ? [{ ...hit, messages: parsed.messages }] : [];
+        } catch { return []; }
+      });
+      const scorer = historyLexicalScorer(records, query);
+      lexical = records.map(row => ({ ...row, lexicalScore: scorer.best(row.messages)?.score ?? 0 }))
+        .filter(row => row.lexicalScore > 0).sort((a, b) => b.lexicalScore - a.lexicalScore || a.uri.localeCompare(b.uri));
+    }
     // Reciprocal-rank fusion keeps either channel's first candidate near the
     // front; keyword matches are not buried by a full vector candidate page.
-    for (const channel of [vector, words]) for (const [rank, hit] of channel.entries()) {
+    for (const channel of [vector, lexical]) for (const [rank, hit] of channel.entries()) {
       if (typeof hit?.uri !== 'string' || !hit.uri.startsWith(`${root}/`)) continue;
       found.set(hit.uri, (found.get(hit.uri) ?? 0) + 1 / (60 + rank));
     }
-    return [...found].sort((a, b) => b[1] - a[1]).slice(0, bound * 2).map(([uri, score]) => ({ uri, score }));
+    const hits = [...found].sort((a, b) => b[1] - a[1]).slice(0, bound * 2).map(([uri, score]) => ({ uri, score }));
+    return withReadStatus(hits, Object.fromEntries(['semantic', 'literal'].map((name, index) => [name,
+      results[index].status === 'rejected' ? readStatus('unavailable', 'source_failed')
+        : readStatus((index ? words : vector).length ? 'searched' : 'empty', null, { candidates: (index ? words : vector).length,
+          limitReached: (index ? words : vector).length >= (index && literalFallback ? 500 : bound) })])));
   }
 
   /** Request-local BM25 over grep's actual resource text, fused with vectors.
    * This deliberately retains no corpus cache: every result is reauthorized and
    * re-read by MemoryHistory, including after a reset, rejection or secret edit. */
   async searchHistoryV2(userId, root, query) {
-    const { historyTokens, historyLexicalScorer } = await import('./memoryHistoryRetrieval.mjs');
     const terms = [...new Set(historyTokens(query))].slice(0,64);
     const channels = await Promise.allSettled([
       this.client.request({ method:'POST',path:'/api/v1/search/find',userId,timeoutMs:READ_TIMEOUT_MS,

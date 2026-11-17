@@ -59,7 +59,7 @@ describe("a memory kept as a file, opened from its row", () => {
     expect(within(screen.getByRole("dialog")).getByText("回答结构")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "编辑" }));
     const box = screen.getByRole("textbox", { name: "编辑这条记忆" });
-    expect(box).toHaveValue("- 先给结论，再给依据。\n- 表格不超过五列。");
+    expect(box).toHaveValue("# 回答结构\n- 先给结论，再给依据。\n- 表格不超过五列。");
     await userEvent.clear(box);
     await userEvent.type(box, "- 先给结论。");
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
@@ -79,7 +79,7 @@ describe("a memory kept as a file, opened from its row", () => {
     await waitFor(() => expect(toasts.error).toHaveBeenCalledWith("这条记忆刚刚被更新过，已按最新内容刷新，请再改一次。"));
     expect(onChanged).toHaveBeenCalled();
     // The words typed are still in the box.
-    expect(screen.getByRole("textbox", { name: "编辑这条记忆" })).toHaveValue("- 先给结论。再补一条");
+    expect(screen.getByRole("textbox", { name: "编辑这条记忆" })).toHaveValue("# 回答结构\n- 先给结论。再补一条");
   });
 
   it("forgets with the version the file has now, and the toast's undo names the version the forget returned", async () => {
@@ -221,4 +221,37 @@ describe("a line of the profile, opened from its row", () => {
 it('shows unverified source context without presenting it as a confirmed human fact',()=>{
   const file=nativeFile('来源记录','Assistant suggested an option.');Object.assign(file,{origin:'unknown',confidence:null,lastConfirmedAt:null,attribution:{schemaVersion:1,origins:['unknown'],confirmed:false}});
   show(file);expect(screen.getByText('来源尚未核实')).toBeInTheDocument();expect(screen.queryByText('已确认')).not.toBeInTheDocument();
+});
+
+it('a profile title uses the same editable row and forget action as its neighbouring facts', async () => {
+  vi.clearAllMocks(); client.fetchMemorySources.mockResolvedValue([]);
+  const title = nativeProfileLine('Mara Santos');
+  const corrected = nativeProfileLine('Mara Chen');
+  api.updateStructuredMemory.mockResolvedValue(corrected);
+  const onOpenRecord = vi.fn();
+  show(title, { onOpenRecord });
+  expect(screen.getByText('Mara Santos')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '忘记' })).toBeEnabled();
+  await userEvent.click(screen.getByRole('button', { name: '编辑' }));
+  const field = screen.getByRole('textbox', { name: '编辑这条记忆' });
+  await userEvent.clear(field); await userEvent.type(field, 'Mara Chen');
+  await userEvent.click(screen.getByRole('button', { name: '保存' }));
+  await waitFor(() => expect(onOpenRecord).toHaveBeenCalledWith(corrected.id));
+  expect(api.updateStructuredMemory.mock.calls[0][1].value).toBe('Mara Chen');
+  cleanup();
+});
+
+it('a filename-only topic is editable as the file heading without changing its independent facts', async () => {
+  vi.clearAllMocks(); client.fetchMemorySources.mockResolvedValue([]);
+  const file = nativeFile('Mara Santos', '- Designs reports.');
+  api.updateStructuredMemory.mockResolvedValue({ ...file, value: '# Mara Chen\n- Designs reports.' });
+  show(file);
+  await userEvent.click(screen.getByRole('button', { name: '编辑' }));
+  const field = screen.getByRole('textbox', { name: '编辑这条记忆' });
+  expect(field).toHaveValue('# Mara Santos\n- Designs reports.');
+  await userEvent.clear(field); await userEvent.type(field, '# Mara Chen\n- Designs reports.');
+  await userEvent.click(screen.getByRole('button', { name: '保存' }));
+  await waitFor(() => expect(api.updateStructuredMemory).toHaveBeenCalled());
+  expect(api.updateStructuredMemory.mock.calls[0][1].value).toBe('# Mara Chen\n- Designs reports.');
+  cleanup();
 });

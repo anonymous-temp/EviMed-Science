@@ -636,3 +636,15 @@ Five entrances replace the prior six-directory target; lower research/conversati
 ## November 8 navigation
 
 Modules whose pages have peer views (前沿动态, 医学检索, 知识库, 记忆胶囊) show them as nested sidebar directories under their row while the module is current, built from the shared `ModuleDirectoryNav` with the same indentation (`pl-7 pr-3`), `navItemClasses`, native `Link`s and `aria-current="page"` as the VCR and GEO directories; the in-page view switchers they replace are removed and old addresses keep landing on the same view. 科研工具 is retired (`/app/capabilities` redirects to `/app/home`; professional workflows are reached by asking or by `/<capability-id>`), superseding the October 14 and October 20 Research Tools sentences. The plugin and skill market is retired: 「技能与插件」 lists only what is added, is entered from 设置, and has no sidebar row, superseding the October 14 sentences that name 插件与技能 as a sidebar entry.
+
+### Memory title reachability (2026-11-17)
+
+关于你 includes a named profile H1 as an ordinary background row. The template's
+neutral unnamed heading is not a personal fact and contributes no row or count;
+the overview, 关于你 count and map agree with the visible active rows. Its name can be opened,
+corrected and forgotten through the same FactDrawer as body facts; surrounding facts
+survive. A file's current H1 takes precedence over its old filename as its visible
+title. A filename-only topic appears as an editable H1 in the existing text editor; opening or cancelling that editor alone changes nothing. Forgetting title text must also withdraw it from recall and extraction;
+derived summaries and old filenames may not reintroduce it. The forgotten drawer
+continues to offer explicit undo. Retain the existing shared left edge, row actions,
+status copy and `/api/me` feature admission; this adds no optional panel.

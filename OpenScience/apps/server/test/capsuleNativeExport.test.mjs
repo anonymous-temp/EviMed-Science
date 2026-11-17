@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
@@ -7,12 +8,12 @@ import { nativeMemoryRoot, openVikingUserId, userRootUri } from "../src/openViki
 
 const userId = "native-export-owner";
 const hash = (value) => createHash("sha256").update(value).digest("hex");
-function fixture({ unavailable = false, foreign = false, many = false, extra = [] } = {}) {
+function fixture({ unavailable = false, foreign = false, many = false, extra = [], profile = 'I am a researcher.' } = {}) {
   const root = nativeMemoryRoot(foreign ? "another-account" : userId);
   const body = "# Trial project\n\nThe supplied cohort contains exactly 123 participants.";
   const held = [
     ["preferences/writing.md", "Keep result tables concise.", null],
-    ["profile.md", "I am a researcher.", null],
+    ["profile.md", profile, null],
     ["projects/trial.md", body, "owned"],
     ["projects/paused.md", "Paused project secret.", "paused"],
     ["projects/foreign.md", "Foreign project secret.", "foreign"],
@@ -68,6 +69,15 @@ test("native engine failure and a foreign-account engine tree fail without legac
     const { service } = fixture(options);
     await assert.rejects(service.exportPreview(userId, "own-capsule"), { code: "memory_engine_unavailable" });
   }
+});
+
+test('a profile name is reachable in explicit profile export, never added to default sharing', async () => {
+  const { service } = fixture({ profile: '# Mara Chen\n- I am a researcher.' });
+  const ordinary = await service.exportPreview(userId, 'own-capsule');
+  assert.ok(!ordinary.entries.some(row => row.content.includes('Mara')));
+  const profile = await service.exportPreview(userId, 'own-capsule', { scopes: ['workstyle', '+profile'] });
+  assert.ok(profile.entries.some(row => row.content === 'Mara Chen' && row.origin === 'manual'));
+  assert.ok(profile.entries.some(row => row.content === 'I am a researcher.'));
 });
 
 test("native selected knowledge reports the 100-entry bound instead of silently claiming a complete pack", async () => {
@@ -182,4 +192,16 @@ test("the domain's share scopes and paths are exactly what the transfer service 
     }
   }
 
+});
+
+
+test('explicit profile export never turns a template heading into a personal fact', async () => {
+  for (const title of Object.values(MEMORY_PROFILE_NEUTRAL_TITLES)) {
+    for (const facts of ['', '\n- I am a researcher.']) {
+      const { service } = fixture({ profile: `# ${title}${facts}` });
+      const exported = await service.exportPreview(userId, 'own-capsule', { scopes: ['workstyle', '+profile'] });
+      assert.deepEqual(exported.entries.map(row => row.content).sort(),
+        ['Keep result tables concise.', ...(facts ? ['I am a researcher.'] : [])].sort());
+    }
+  }
 });

@@ -1,3 +1,4 @@
+import { readStatus, withReadStatus } from './memoryReadStatus.mjs';
 import { CAPSULE_FACT_KINDS, SOURCE_SCOPE_UNAVAILABLE_CONTEXT, identifierShapesIn } from "@evimed/domain";
 import { recordRecallTool } from "./memoryMetrics.mjs";
 import { recallAcrossMemory } from "./memoryRecall.mjs";
@@ -7,7 +8,8 @@ export const CAPSULE_GATEWAY_PATH = "/internal/capsules/v1";
 
 /** What a recall answers while the researcher has paused recall: an answer, not an error, and not "no memories". */
 const recallPaused = () => ({
-  items: [], mode: "paused", contextOnly: true, sources: { memory: 0, capsule: 0 },
+  items: [], mode: 'paused', contextOnly: true, sources: { memory: 0, capsule: 0 },
+  searchStatus: Object.fromEntries(['memoryFiles', 'earlierConversations', 'receivedCapsules'].map(key => [key, readStatus('skipped', 'paused')])),
   notice: "用户已暂停记忆（整个账号或本项目）：这里不读取，也不代表没有相关记忆。",
 });
 
@@ -26,17 +28,26 @@ const NOTHING_ABOVE_THE_FLOOR = "没有达到相关度下限的记忆。可以�
  */
 export function createNativeCapsuleSearch({ service, subscriptions = null, contextItems = null }) {
   return async ({ user, project, query, limit, contextPolicy = null }) => {
-    if(contextPolicy?.kind === "geo-project" && (contextPolicy.ownerId!==project.userId || contextPolicy.controlProjectId!==project.id)) return [];
-    if (!service || !String(query ?? "").trim()) return [];
-    const [capsule, reference] = await Promise.all([
-      (contextPolicy?.kind === "geo-project"
-        ? service.recall(project.userId,{query,projectId:project.id,limit,projectOnly:true,authorizeEntry:(activation,entry)=>contextItems?.capsule(contextPolicy,activation,entry) ?? false})
-        : recallAcrossMemory({ capsules: service }, user, { query, projectId: project.id, limit, standing: false, scope: "capsule" }))
-        .then((answer) => answer.items).catch(() => []),
-      subscriptions ? subscriptions.recall(contextPolicy?.kind === "geo-project" ? project.userId : user.id, project.id, query).catch(() => []) : [],
+    if (contextPolicy?.kind === 'geo-project' && (contextPolicy.ownerId !== project.userId || contextPolicy.controlProjectId !== project.id))
+      return withReadStatus([], readStatus('skipped', 'scope_fence'));
+    if (!service || !String(query ?? '').trim()) return withReadStatus([], readStatus('skipped', !service ? 'disabled' : 'empty_query'));
+    const channels = await Promise.allSettled([
+      contextPolicy?.kind === 'geo-project'
+        ? service.recall(project.userId, { query, projectId: project.id, limit, projectOnly: true,
+          authorizeEntry: (activation, entry) => contextItems?.capsule(contextPolicy, activation, entry) ?? false })
+        : recallAcrossMemory({ capsules: service }, user, { query, projectId: project.id, limit, standing: false, scope: 'capsule' }),
+      subscriptions ? subscriptions.recall(contextPolicy?.kind === 'geo-project' ? project.userId : user.id, project.id, query) : [],
     ]);
-    return [...capsule, ...reference];
+    const capsule = channels[0].status === 'fulfilled' ? channels[0].value : null;
+    const reference = channels[1].status === 'fulfilled' ? channels[1].value : [];
+    const items = [...(capsule?.items ?? []), ...reference];
+    const unavailable = channels.some(channel => channel.status === 'rejected');
+    return withReadStatus(items, readStatus(unavailable ? 'unavailable' : ['paused', 'disabled'].includes(capsule?.mode) ? 'skipped' : items.length ? 'searched' : 'empty',
+      unavailable ? 'partial_channels' : ['paused', 'disabled'].includes(capsule?.mode) ? capsule.mode : null,
+      { channels: { capsule: channels[0].status === 'rejected' ? 'unavailable' : capsule?.mode ?? 'searched',
+        references: !subscriptions ? 'skipped' : channels[1].status === 'rejected' ? 'unavailable' : reference.length ? 'searched' : 'empty' } }));
   };
+
 }
 
 /** The workload credential, never a caller-supplied field, fixes account and project.

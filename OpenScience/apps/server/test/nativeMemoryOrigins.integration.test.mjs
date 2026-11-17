@@ -3,6 +3,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
+import { nativeRecallSource } from '../src/agentMemoryRecall.mjs';
+import { nativeFileId } from '../src/nativeMemoryStore.mjs';
 import { lineFingerprint } from "../src/nativeMemoryOverlay.mjs";
 import { nativeMemoryCounters } from "../src/nativeMemoryMetrics.mjs";
 import { OPENVIKING_MEMORY_TYPES } from "../src/openVikingLayout.mjs";
@@ -208,3 +211,54 @@ test('sequential verification corrections bind each revision only to the source 
   await f.store.removeConversationSource(f.userId, 'default', ['a']);
   assert.equal(await f.sessions.read(f.userId, uri), '- Correct B.');
 });
+
+
+for (const title of [...Object.values(MEMORY_PROFILE_NEUTRAL_TITLES), 'Mara Santos', 'Profile']) {
+  test(`profile heading ${title}: worker origins, page, map, recall and forget agree`, options, async t => {
+    const neutral = Object.values(MEMORY_PROFILE_NEUTRAL_TITLES).includes(title);
+    const text = `# ${title}\n- Designs reports.`;
+    const f = await fixture(t, { extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/profile.md`, memory_type: 'profile', after: text }] }) });
+    await f.commitConversation('heading', [{ role: 'user', text: neutral ? 'I design reports.' : `Call me ${title}. I design reports.` }]);
+    await f.worker.processCommits({ userId: f.userId });
+    const uri = `${f.root}/profile.md`;
+    const page = await f.store.profile(f.userId);
+    const count = neutral ? 1 : 2;
+    assert.equal(page.activeCount, count);
+    assert.equal(page.groups.profile.length, count);
+    assert.equal(page.records.filter(row => row.status === 'active').length, count);
+    assert.equal((await f.store.mapMemories(f.userId)).records.length, count);
+    assert.equal((await nativeRecallSource(f.store).recall(f.userId, '')).length, count);
+    const origins = (await f.overlay.originsOf(f.userId, [uri])).get(uri);
+    assert.equal(origins.size, count);
+    assert.equal(origins.has(lineFingerprint(`# ${title}`)), !neutral);
+    const headingId = `${nativeFileId(uri)}_${lineFingerprint(`# ${title}`).slice(0, 12)}`;
+    if (neutral) {
+      const print = lineFingerprint(`# ${title}`);
+      await f.overlay.inheritOrigins(f.userId, uri, new Map([[print, [{ engineSession: 'dsh-legacy' }]]]));
+      assert.equal((await f.database.query('SELECT count(*)::int AS n FROM evimed_memory.native_line_origins WHERE user_id=$1 AND uri=$2 AND fingerprint=$3', [f.userId, uri, print])).rows[0].n, 0);
+      await f.database.query('INSERT INTO evimed_memory.native_line_origins(user_id,uri,fingerprint,added_at) VALUES($1,$2,$3,clock_timestamp())', [f.userId, uri, print]);
+      assert.equal((await f.overlay.originsOf(f.userId, [uri])).get(uri).size, 1, 'legacy neutral origins are invisible before the next rewrite');
+      await assert.rejects(f.store.remove(f.userId, headingId, { keepText: true }), error => error.code === 'memory_not_found');
+      // A legacy forget revision of scaffolding must not manufacture a forgotten fact.
+      await f.overlay.addRevision({ userId: f.userId, uri, memoryType: 'profile', change: 'updated', actor: 'user', reason: 'forgotten', before: text, after: '- Designs reports.' });
+      assert.deepEqual(await f.store.forgotten(f.userId), []);
+      const document = await f.store.getRecord(f.userId, nativeFileId(uri));
+      await f.store.update(f.userId, document.id, { value: '# Mara Chen\n- Designs reports.', expectedVersion: document.version });
+      const renamed = await f.store.profile(f.userId);
+      assert.equal(renamed.activeCount, 2, 'an edited name becomes a row without retaining neutral scaffolding');
+      assert.ok(renamed.records.some(row => row.value === 'Mara Chen'));
+      const map = await f.store.mapMemories(f.userId);
+      assert.equal(map.records.length, 2);
+      assert.ok(!map.replaced.some(row => row.text === title || row.text === `# ${title}`));
+      const renamedOrigins = (await f.overlay.originsOf(f.userId, [uri])).get(uri);
+      assert.equal(renamedOrigins.size, 2);
+      assert.ok(!renamedOrigins.has(lineFingerprint(`# ${title}`)));
+    } else {
+      await f.store.remove(f.userId, headingId, { keepText: true });
+      const [forgotten] = await f.store.forgotten(f.userId);
+      assert.equal(forgotten.value, title);
+      await f.store.update(f.userId, forgotten.id, { status: 'active', expectedVersion: forgotten.version });
+      assert.equal((await f.store.profile(f.userId)).activeCount, count);
+    }
+  });
+}

@@ -82,10 +82,25 @@ test("the page reads the engine's files, and the dispatch hands nothing of memor
 test("the map draws a native account from the engine's files, with the same document", options, async (t) => {
   const { base, headers, seed } = await fixture(t);
   seed("preferences/tone.md", "Plain language, no flattery.", { type: "preferences" });
-  seed("profile.md", "# Profile\n- A hospital pharmacist", { type: "profile" });
+  seed("profile.md", "# User\n- A hospital pharmacist", { type: "profile" });
   const map = await (await fetch(`${base}/api/memory/map?include=summary,nodes`, { headers })).json();
   assert.equal(map.data.summary.memories, 2, JSON.stringify(map.data.summary));
-  assert.ok(map.data.nodes.some((node) => node.type === "memory"));
+  const page = await (await fetch(`${base}/api/memory/profile`, { headers })).json();
+  const rows = page.data.records.filter(row => row.status === 'active');
+  assert.equal(page.data.activeCount, rows.length);
+  assert.equal(map.data.summary.memories, rows.length);
+  assert.equal(map.data.nodes.filter(node => node.type === 'memory').length, rows.length);
+  assert.equal(page.data.groups.profile.filter(row => row.status === 'active').length, 1);
+  assert.ok(!rows.some(row => row.value === 'User'));
+
+  seed('profile.md', '# Mara Santos\n- A hospital pharmacist', { type: 'profile' });
+  const named = (await (await fetch(`${base}/api/memory/profile`, { headers })).json()).data;
+  const namedMap = (await (await fetch(`${base}/api/memory/map?include=summary,nodes`, { headers })).json()).data;
+  assert.equal(named.activeCount, 3, 'a supplied name is an additional personal fact');
+  assert.equal(named.activeCount, named.records.filter(row => row.status === 'active').length);
+  assert.equal(named.groups.profile.length, 2, 'About you counts the name and the profession');
+  assert.equal(namedMap.summary.memories, named.activeCount);
+  assert.equal(namedMap.nodes.filter(node => node.type === 'memory').length, named.activeCount);
 });
 
 test("deleting a project takes the engine's memories tagged with it and its conversations; the account's own stay", options, async (t) => {

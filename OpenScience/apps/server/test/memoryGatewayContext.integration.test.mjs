@@ -30,15 +30,25 @@ const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposab
 
 test('opening-by-use leaves shared GEO listing unchanged and counts explicit reads in that namespace alone', options, async t => {
   const f = await fixture(t, { config: { memoryOpeningByUseEnabled: true, memoryOpeningMaxChars: 1 } });
-  let ranked = 0, used = 0;
-  f.overlay.files = async () => { ranked++; return new Map(); };
-  f.overlay.noteUsed = async () => { used++; };
+  let metadataReads = 0, used = 0;
+  const usedUris = [];
+  f.overlay.noteUsed = async (owner, uris) => { assert.equal(owner, f.owner.id); usedUris.push(...uris); used++; };
   const context = await f.contexts.forProject(f.a);
   const uri = f.stub.seedMemory(context.namespaceId, 'preferences/corrections/a.md', 'Shared correction');
+  const personal = `${f.sessions.memoryRoot(f.owner.id)}/preferences/corrections/a.md`;
+  f.overlay.files = async () => { metadataReads++; return new Map([
+    [uri, { uri, origin: 'engine', speaker: 'user' }],
+    [personal, { uri: personal, origin: 'private-owner-origin', usedCount: 99 }],
+  ]); };
   const listed = await f.call(f.a, 'GET', `/api/v1/fs/ls?uri=${encodeURIComponent(`${context.userRoot}/memories/preferences`)}&output=agent&recursive=true&abs_limit=512&node_limit=512`);
   assert.equal(listed.status, 200); assert.ok(listed.text.includes(uri));
+  assert.deepEqual([metadataReads, used], [0, 0], 'shared listing never reads ranking metadata or counts use');
   const read = await f.call(f.a, 'GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}`);
-  assert.equal(read.status, 200); assert.deepEqual([ranked, used], [0, 1]);
+  assert.equal(read.status, 200);
+  assert.deepEqual([metadataReads, used], [1, 1], 'the explicit read fetches source metadata, not startup ranking');
+  assert.equal(read.json.result, '[Memory source {"origin":"engine","speaker":"user"}]\nShared correction');
+  assert.ok(!read.text.includes('private-owner-origin'));
+  assert.deepEqual(usedUris, [uri], 'only the explicitly read shared URI is counted');
 });
 
 async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000, config = {}, poolMax = 4, sourceReceipt = null } = {}) {

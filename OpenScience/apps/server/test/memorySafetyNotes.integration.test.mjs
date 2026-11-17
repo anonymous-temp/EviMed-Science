@@ -101,4 +101,14 @@ test('switch off and non-health accounts remain identical through the database-b
   const scope = { projectId: 'default', sessionId: null };
   assert.equal((await make(true).forDispatch(f.userId, scope)).text, (await make(false).forDispatch(f.userId, scope)).text);
   assert.equal((await make(true).forDispatch(f.userId, scope)).text, '');
+  const marked = body('Parent', 'Reported allergy.');
+  const markedUri = f.seed('people/parent.md', marked, { type: 'people' });
+  await f.overlay.upsertFile({ userId: f.userId, uri: markedUri, memoryType: 'people', body: marked });
+  assert.match((await make(true).forDispatch(f.userId, scope)).text, /Reported allergy/);
+  assert.equal((await make(false).forDispatch(f.userId, scope)).text, '', 'switch off preserves the pre-safety bytes even with health history');
+  let reads = 0;
+  const disabled = new ResidentProfiles({ config: { ...f.config, memorySafetyNotesEnabled: false }, store: f.memorySettings,
+    safetyNotes: async () => { reads++; throw new Error('must not read'); } });
+  assert.equal((await disabled.forDispatch(f.userId, scope)).text, '');
+  assert.equal(reads, 0);
 });

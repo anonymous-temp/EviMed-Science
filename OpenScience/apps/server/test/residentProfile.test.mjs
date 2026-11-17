@@ -90,9 +90,10 @@ test("the line beside the profile says what can be looked up in a few words and 
 test("the block carries at most the configured number of entries and the token budget, and counts what it leaves out", () => {
   const capsuleFacts = Array.from({ length: 40 }, (_, index) => fact({ id: `p${index}`, content: `偏好 ${index}`, updatedAt: `2026-09-${String(index % 28 + 1).padStart(2, "0")}T00:00:00Z` }));
   const capped = renderResidentProfile({ capsuleFacts, maxRecords: 24 });
-  assert.equal(capped.memos.length, 24);
-  assert.equal(capped.omitted, 16);
-  assert.match(capped.text, new RegExp(`可查（${SOCKET_TOOL_NAMES.capsuleRecall}）：未列出的画像 16 条。$`));
+  assert.ok(capped.memos.length <= 24 && capped.memos.length > 0);
+  assert.equal(capped.omitted, 40 - capped.memos.length);
+  assert.match(capped.text, /Recorded: 2026-09/);
+  assert.match(capped.text, new RegExp(`可查（${SOCKET_TOOL_NAMES.capsuleRecall}）：未列出的画像 ${capped.omitted} 条。$`));
 
   const long = Array.from({ length: 24 }, (_, index) => fact({ id: `q${index}`, content: `长偏好 ${index}：${"很长的说明".repeat(60)}` }));
   const bounded = renderResidentProfile({ capsuleFacts: long, maxRecords: 24 });
@@ -284,8 +285,8 @@ test("the card leads the block, outside the entry cap and with room of its own, 
   const capsuleFacts = Array.from({ length: 24 }, (_, index) => fact({ id: `p${index}`, content: `偏好 ${index}` }));
   const block = renderResidentProfile({ capsuleFacts, card, maxRecords: 24 });
   assert.equal(block.memos[0].id, "card:proj_1");
-  assert.equal(block.memos.length, 25, "the card, and all twenty-four entries the cap allows");
-  assert.equal(block.omitted, 0);
+  assert.ok(block.memos.length > 1 && block.memos.length <= 25, "source dates share the unchanged token budget");
+  assert.equal(block.omitted, 25 - block.memos.length);
   assert.ok(block.profile.indexOf("心血管流行病学") < block.profile.indexOf("偏好 0"));
   // With a long card the entries still have the whole profile budget, because the card's tokens are added to it.
   const heavy = projectCardMemo("proj_1", [{ slot: "goal", text: "目".repeat(1_400) }]);

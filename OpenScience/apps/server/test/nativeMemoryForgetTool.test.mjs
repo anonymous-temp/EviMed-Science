@@ -464,3 +464,13 @@ for (const statement of ['2', '2026-11-17', 'Source: interview-132']) test(`an e
   await f.store.forget(user, project, null, { statement });
   assert.equal(f.files.get(other), before);
 });
+
+test('exact-title forget removes a profile name and keeps independent statements', async () => {
+  const f = fixture(), target = `${root}/memories/profile.md`;
+  f.files.clear(); f.files.set(target, '# Mara Santos\n## Work\n- Designs reports.');
+  f.store.files = async () => [...f.files].map(([uri, body]) => ({ uri, body, type: 'profile', hash: contentHash(body), projectId: null }));
+  await f.store.forget(user, project, target, { lines: ['# Mara Santos'] });
+  assert.doesNotMatch(f.files.get(target), /Mara/);
+  assert.match(f.files.get(target), /Designs reports/);
+  assert.ok(f.rejections.some(row => row.lines.includes('Mara Santos')));
+});

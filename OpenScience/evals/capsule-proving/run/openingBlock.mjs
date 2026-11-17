@@ -165,6 +165,7 @@ export function buildSystemPrompt({ model = "deepseek-flash", config = {} } = {}
   const guidance = buildGuidanceText(manifests, {
     askUserEnabled: true, capsuleActive: false, reviewEnabled: false, runPolicyEnabled: true,
     capsuleToolEnabled: false, openVikingMemory: true, memorySearchHint: config.memorySearchHintEnabled === true,
+    memoryStandingInstructions: config.memoryStandingInstructionsEnabled === true,
     memoryForgetToolHint: config.memoryForgetToolHintEnabled === true,
     memoryForgetTargets: config.memoryForgetTargetsEnabled === true,
   });

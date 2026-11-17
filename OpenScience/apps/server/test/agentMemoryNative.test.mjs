@@ -257,10 +257,12 @@ test("guessed people IDs cannot edit, forget or undo even after the file was for
 test("received and named capsule people stay private in external recall", async () => {
   const rows = [{ id: "person", factKind: "person", content: "Other person allergy" }, { id: "note", factKind: "note", content: "Ordinary note" }];
   const capsules = { async recall() { return { items: rows }; }, async get() { return { payload: { title: "Selected pack" } }; } };
+  const memory = nativeRecallSource({ search: async () => ({ items: [], readStatus: { state: 'unavailable', reason: 'partial_channels' } }) });
   for (const capsuleIds of [undefined, ["pack-a"]]) {
-    const found = await recallForAgent({ capsules }, { user: { id: "u1" } }, { query: "allergy", methods: "none", capsuleIds });
+    const found = await recallForAgent({ capsules, memory }, { user: { id: "u1" } }, { query: "allergy", methods: "none", capsuleIds });
     assert.deepEqual(found.items.map(item => item.id), ["note"]);
     assert.equal(found.sources.capsule, 1);
+    assert.equal(found.searchStatus.memoryFiles.state, 'unavailable', 'named capsule selection preserves a partial memory lookup failure');
   }
 });
 

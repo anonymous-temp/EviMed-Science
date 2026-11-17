@@ -91,3 +91,20 @@ test('V2 overlaps at most four validations and returns its proven prefix before 
     assert.equal(hits.length,4);assert.equal(maxActive,4);assert.equal(reads,8);
   }finally{release();await Promise.all(pending);await new Promise(resolve=>setImmediate(resolve));}
 });
+
+test('literal rescue is independently switchable and finds punctuation-bound numbers without V2', async () => {
+  const root = `viking://user/u-111111111111111111111111/resources/history/${'a'.repeat(24)}`;
+  const uri = `${root}/${'b'.repeat(24)}/${'c'.repeat(24)}-1.md`;
+  const calls = [];
+  const resources = new OpenVikingResources({ client: { async request(input) {
+    calls.push(input);
+    if (input.path.endsWith('/find')) return { result: { resources: [] } };
+    return { result: { matches: [{ uri, content: JSON.stringify({ messages: [message('The assistant suggested 2:3:3.', 0, 'assistant')] }) }] } };
+  } } });
+  const hits = await resources.searchHistory('u', root, 'Earlier ratio (2:3:3)?', { literalFallback: true });
+  assert.equal(hits[0].uri, uri);
+  assert.equal(hits.readStatus.semantic.state, 'empty');
+  assert.equal(hits.readStatus.literal.state, 'searched');
+  assert.equal(calls.find(call => call.path.endsWith('/find')).body.limit, 40);
+  assert.ok(calls.every(call => JSON.stringify(call).includes(root)));
+});

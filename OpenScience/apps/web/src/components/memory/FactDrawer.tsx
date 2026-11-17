@@ -112,13 +112,15 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
   const text = record ? memoryText(record) : entry?.payload.content ?? "";
   // A memory kept as a file is a topic with statements under it: the drawer shows the file as it is written and edits all of it.
   const file = record ? isFileMemory(record) : false;
+  // A filename-only topic is content too: expose it in the same editor as an H1.
+  const editableText = file && record && !/^#\s/mu.test(text) ? `# ${fileTopic(record)}\n${text}` : text;
   const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(text);
+  const [value, setValue] = useState(editableText);
   const [busy, setBusy] = useState(false);
-  const editGuard = useUnsavedGuard(editing && value !== text, () => setEditing(false), busy);
+  const editGuard = useUnsavedGuard(editing && value !== editableText, () => setEditing(false), busy);
   const [rejecting, setRejecting] = useState(false);
   const [removingFormer, setRemovingFormer] = useState<FormerStatement | null>(null);
-  useEffect(() => { if (!editing) setValue(text); }, [text, editing]);
+  useEffect(() => { if (!editing) setValue(editableText); }, [editableText, editing]);
   // 编辑 was a button a moment ago, so the field it opens takes the focus.
   const field = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (editing) field.current?.focus(); }, [editing]);
@@ -269,7 +271,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
         title={record ? kindTitle(record.kind) : kindTitle(entry?.payload.factKind ?? "")}
         description={[projectName, since, used].filter(Boolean).join(" · ")}
         onClose={onClose}
-        dirty={editing && value !== text}
+        dirty={editing && value !== editableText}
         busy={busy}
         actions={menu.length > 0 ? <Menu label="更多" items={menu} /> : undefined}
       >

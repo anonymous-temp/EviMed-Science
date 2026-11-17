@@ -1,3 +1,4 @@
+import { readStatus } from './memoryReadStatus.mjs';
 /**
  * One recall over an account's memory and its capsules.
  *
@@ -38,7 +39,7 @@ const CAPSULE_RECALL_MAX_LIMIT = 30;
  *   standing?: boolean }} input
  *   `standing: false`: the recall tool's reading — what the question reaches and nothing else, so that a lookup that finds
  *   nothing can say so (review M6). The agent API reads as it always did.
- * @returns {Promise<{ items: Record<string, any>[], mode: string, contextOnly: true, sources: { memory: number, capsule: number } }>}
+ * @returns {Promise<{ items: Record<string, any>[], mode: string, contextOnly: true, sources: { memory: number, capsule: number }, searchStatus: any }>}
  */
 export async function recallAcrossMemory({ capsules = null, memory = null }, user, input) {
   const scope = input.scope ?? "all";
@@ -52,7 +53,7 @@ export async function recallAcrossMemory({ capsules = null, memory = null }, use
   // configured, and nothing in the answer can be read as "this researcher
   // has no memories".
   if (memory && memory.recallEnabled === false) {
-    return { items: [], mode: "disabled", contextOnly: true, sources: { memory: 0, capsule: 0 } };
+    return { items: [], mode: "disabled", contextOnly: true, sources: { memory: 0, capsule: 0 }, searchStatus: { memoryFiles: readStatus('skipped', 'disabled'), receivedCapsules: readStatus('skipped', 'disabled'), earlierConversations: readStatus('skipped', 'external_recall') } };
   }
   const limit = Math.max(1, Math.min(MEMORY_RECALL_MAX_LIMIT, Math.trunc(Number(input.limit ?? 10)) || 10));
   const factKinds = Array.isArray(input.factKinds) ? input.factKinds : [];
@@ -86,6 +87,8 @@ export async function recallAcrossMemory({ capsules = null, memory = null }, use
       importance: memo.importance ?? null,
       // Whose statement a memory is — the person's (`explicit`, `manual`) or an inference (`inferred`) — when the store said.
       ...(memo.origin ? { origin: memo.origin } : {}),
+      attribution: memo.attribution, originalSources: memo.originalSources,
+      speaker: memo.speaker, statementKind: memo.statementKind, asOf: memo.asOf, earlierValue: memo.earlierValue,
       contextOnly: true,
     }));
   const capsuleItems = (Array.isArray(capsule?.items) ? capsule.items : [])
@@ -95,5 +98,11 @@ export async function recallAcrossMemory({ capsules = null, memory = null }, use
     mode: typeof capsule?.mode === "string" ? capsule.mode : "none",
     contextOnly: true,
     sources: { memory: memoryItems.length, capsule: capsuleItems.length },
+    searchStatus: {
+      memoryFiles: scope === 'capsule' || !memory ? readStatus('skipped', 'scope_or_disabled') : found.readStatus ?? readStatus(memoryItems.length ? 'searched' : 'empty'),
+      receivedCapsules: scope === 'conversation' || !capsules ? readStatus('skipped', 'scope_or_disabled')
+        : ['paused', 'disabled'].includes(capsule?.mode) ? readStatus('skipped', capsule.mode) : readStatus(capsuleItems.length ? 'searched' : 'empty'),
+      earlierConversations: readStatus('skipped', 'external_recall'),
+    },
   };
 }

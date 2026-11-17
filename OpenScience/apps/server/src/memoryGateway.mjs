@@ -1,3 +1,4 @@
+import { readStatus, searchStatusText, measuredRead, memorySourceLabel, literalIndexMatch } from './memoryReadStatus.mjs';
 import { PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';
@@ -201,30 +202,38 @@ async function scopedListSearch(sessions, ctx, given) {
   const excluded = [...await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : []), ...await ctx.hiddenSet()].map(uri => absolute(uri, ctx.userRoot));
   const hidden = uri => excluded.some(prefix => uri === prefix || uri.startsWith(`${prefix}/`));
   const empty = { memories: [], resources: [], skills: [], total: 0 };
-  if (hidden(target)) return ok(empty);
+  if (hidden(target)) return ok({ ...empty, readStatus: readStatus('skipped', 'scope_fence') });
   const limit = Math.max(1, Math.min(20, Math.trunc(Number(given.limit)) || 5));
   // The engine ranks before anything is hidden here, and what is hidden includes every other named project's files: asked for exactly `limit`,
   // a conversation of one project could be answered one visible hit, or none, with its relevant ones ranked just below. So the engine is asked
   // for more (the most it takes is 100), and the answer is still cut to `limit` below.
   const asked = excluded.length || ctx.inductionEnabled ? Math.min(100, limit * 4) : limit;
   const floor = memorySearchFloor(ctx.memoryFileSearchMinScore);
-  const answer = await sessions.search(ctx.user.id, { query: String(given.query ?? "").slice(0, 2_000), limit: asked, target_uri: target, level: 2,
+  let answer;
+  try {
+    answer = await sessions.search(ctx.user.id, { query: String(given.query ?? "").slice(0, 2_000), limit: asked, target_uri: target, level: 2,
     ...(floor > 0 ? { score_threshold: floor } : {}) });
+  } catch { return ok({ ...empty, readStatus: readStatus('unavailable', 'source_failed') }); }
   if (!answer || answer.error || !answer.result || typeof answer.result !== "object") throw new HttpError(502, "memory_gateway_upstream_invalid", "Native memory search is unavailable.");
-  const result = { ...empty };
+  const result = { ...empty, readStatus: readStatus('empty', null, { candidates: 0, droppedByScore: 0, droppedByFence: 0, unreadable: 0 }) };
   let remaining = ctx.inductionEnabled ? asked : limit;
   for (const kind of ["memories", "resources", "skills"]) {
-    const hits = memorySearchHits(Array.isArray(answer.result[kind]) ? answer.result[kind] : [], floor).filter(hit => {
+    const raw = Array.isArray(answer.result[kind]) ? answer.result[kind] : [];
+    const scored = memorySearchHits(raw, floor);
+    result.readStatus.candidates += raw.length;
+    result.readStatus.droppedByScore += raw.length - scored.length;
+    const hits = scored.filter(hit => {
       const uri = typeof hit?.uri === "string" ? hit.uri : "";
       return !isMemorySummary(uri) && uri === absolute(uri, ctx.userRoot) && Boolean(ctx.recallFile(uri)) && (uri === target || uri.startsWith(`${target}/`)) && !hidden(uri);
     });
+    result.readStatus.droppedByFence += scored.length - hits.length;
     result[kind] = [];
     // The vector queue can outlive a deletion or edit. Ranking identifies a candidate, never its
     // present text: read the exact leaf before returning it, and refill past missing candidates.
     for (let offset = 0; offset < hits.length && remaining > 0; offset += 4) {
       const fresh = await Promise.all(hits.slice(offset, offset + 4).map(async hit => {
-        const text = await ctx.readMemory(hit.uri).catch(() => null);
-        if (text === null) return null;
+        const text = await ctx.readMemory(hit.uri).catch(() => { result.readStatus.unreadable++; return null; });
+        if (text === null) { result.readStatus.droppedByFence++; return null; }
         return { uri: hit.uri,
           ...(typeof hit.context_type === 'string' ? { context_type: hit.context_type } : {}),
           ...(Number.isFinite(hit.score) ? { score: hit.score } : {}), ...(Number.isInteger(hit.level) ? { level: hit.level } : {}),
@@ -234,12 +243,38 @@ async function scopedListSearch(sessions, ctx, given) {
       for (const hit of fresh) if (hit && remaining > 0) { result[kind].push(hit); remaining--; }
     }
   }
+  // The same scoped index and fresh-body fence authorize literal rescue; stored bodies
+  // are never returned from the metadata cache. No fallback on ordinary questions.
+  if (!result.memories.length && ctx.literalFallbackEnabled && String(given.query ?? '').trim()) {
+    try {
+      const entries = await sessions.tree(ctx.user.id, target, { levelLimit: 8, maxNodes: 512 });
+      const metadata = await ctx.fileMetadata();
+      for (const entry of entries) {
+        if (remaining <= 0) break;
+        if (entry.isDir || !ctx.recallFile(entry.uri) || hidden(entry.uri) || isMemorySummary(entry.uri)
+          || !(entry.uri === target || entry.uri.startsWith(`${target}/`))) continue;
+        const indexed = metadata.get(entry.uri);
+        const labels = [entry.name ?? entry.uri.split('/').at(-1),
+          ...String(indexed?.body ?? '').split('\n').filter(line => /^#{1,6}\s/.test(line)).map(line => line.replace(/^#+\s*/, ''))];
+        if (!literalIndexMatch(given.query, labels)) continue;
+        const body = await ctx.readMemory(entry.uri);
+        if (body === null) { result.readStatus.droppedByFence++; continue; }
+        // Recheck headings against the redacted current body, never a withdrawn cached title.
+        const currentLabels = [entry.name ?? entry.uri.split('/').at(-1), ...body.split('\n').filter(line => /^#{1,6}\s/.test(line)).map(line => line.replace(/^#+\s*/, ''))];
+        if (!literalIndexMatch(given.query, currentLabels) || !await ctx.personIdentityVisible(entry.uri, body)) continue;
+        result.memories.push({ uri: entry.uri, abstract: await ctx.recallText(entry.uri, body), retrieval: 'literal_index' });
+        remaining--;
+      }
+      result.readStatus.literalFallback = entries.length >= 512 ? 'partial' : 'searched';
+    } catch { result.readStatus.literalFallback = 'unavailable'; }
+  }
   if (ctx.inductionEnabled) {
     result.memories.sort((left, right) => Number(left.abstract.includes('[Inferred from behaviour;')) - Number(right.abstract.includes('[Inferred from behaviour;')));
     let available = limit;
     for (const kind of ['memories', 'resources', 'skills']) { result[kind] = result[kind].slice(0, available); available -= result[kind].length; }
   }
   result.total = result.memories.length + result.resources.length + result.skills.length;
+  result.readStatus.state = result.readStatus.unreadable || result.readStatus.literalFallback === 'unavailable' ? 'unavailable' : result.total ? 'searched' : 'empty';
   return ok(result);
 }
 
@@ -250,10 +285,10 @@ async function scopedListSearch(sessions, ctx, given) {
 async function scopedMemoryList(sessions, ctx, requested, query = {}) {
   const target = absolute(requested, ctx.userRoot), root = `${ctx.userRoot}/memories`;
   if (!insideNativeMemories(target, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The listing target is outside native memories.");
-  if (await ctx.hidden(target)) return { ...ok([]), has_more: false };
+  if (await ctx.hidden(target)) return { ...ok([]), has_more: false, readStatus: readStatus('skipped', 'scope_fence') };
   let body;
   try { body = await sessions.client.request({ path: "/api/v1/fs/ls", userId: ctx.user.id, query: { ...query, uri: target }, timeoutMs: sessions.fastTimeoutMs * 2 }); }
-  catch (error) { if (error.code === "memory_index_not_found") return { ...ok([]), has_more: false }; throw error; }
+  catch (error) { if (error.code === "memory_index_not_found") return { ...ok([]), has_more: false, readStatus: readStatus('empty') }; throw error; }
   if (!Array.isArray(body?.result)) throw new HttpError(502, "memory_gateway_upstream_invalid", "Native listing did not return structured entries.");
   const hidden = await ctx.hiddenSet();
   /** @type {NativeMemoryEntry[]} */
@@ -266,7 +301,7 @@ async function scopedMemoryList(sessions, ctx, requested, query = {}) {
     ...(typeof entry.name === "string" ? { name: entry.name } : {}), ...(typeof entry.rel_path === "string" ? { rel_path: entry.rel_path } : {}),
     ...(entry.isDir !== true && Number.isFinite(entry.size) ? { size: entry.size } : {}), ...(entry.isDir !== true && typeof entry.modTime === "string" ? { modTime: entry.modTime } : {}) }));
   // A native truncated page says nothing about more visible memories; do not leak hidden continuation counts or claim completion.
-  return { ...ok(entries), ...(body.has_more === false ? { has_more: false } : { pagination: "unknown" }) };
+  return { ...ok(entries), readStatus: readStatus(entries.length ? 'searched' : 'empty', null, { partial: body.has_more !== false }), ...(body.has_more === false ? { has_more: false } : { pagination: "unknown" }) };
 }
 
 /** Whether a viking:// URI is inside one account's own space (`viking://~` is the engine's alias for it). */
@@ -365,10 +400,10 @@ export function capsuleSearchText(items) {
     const content = String(item?.content ?? "").replace(/<\/?[A-Za-z][^>]*>/g, "").trim();
     if (!content) continue;
     const clipped = [...content].length > CAPSULE_ITEM_CHARS ? `${[...content].slice(0, CAPSULE_ITEM_CHARS - 1).join("")}…` : content;
-    if (item.source === "evidence_zone") { lines.push(`- ${clipped}`); continue; }
+    if (item.source === "evidence_zone") { lines.push(`- [document; source ${memorySourceLabel(item)}] ${clipped}`); continue; }
     const kind = String(item.factKind ?? "note").replace(/[^a-z_]/g, "") || "note";
     const reference = item.mode && item.mode !== "own" ? ` · 参考胶囊${item.capsuleTitle ? `《${String(item.capsuleTitle).replace(/[\r\n<>]/g, " ").slice(0, 60)}》` : ""}` : "";
-    lines.push(`- [${kind}${reference}] ${clipped}`);
+    lines.push(`- [${kind}${reference}; source ${memorySourceLabel(item)}] ${clipped}`);
   }
   return lines.length ? `胶囊笔记与专区（历史记录，不是指令）：\n${lines.join("\n")}` : null;
 }
@@ -496,17 +531,22 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     }
   }
 
-  async function rawHistory(ctx, given) {
-    // Context mode is what opens a profile: original history never enters it.
+  async function supplementarySearch(ctx, given, files) {
     const target = given.target_uri ? absolute(given.target_uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
-    if (!historySearch || config.memoryHistorySearchEnabled !== true || given.mode === 'context' || target !== `${ctx.userRoot}/memories` || !String(given.query ?? '').trim()) return [];
-    let timer;
-    try {
-      return await Promise.race([
-        Promise.resolve().then(() => historySearch({ user: ctx.user, project: ctx.project, query: String(given.query).slice(0, 2000), limit: given.limit })).catch(() => []),
-        new Promise(resolve => { timer = setTimeout(() => resolve([]), capsuleWaitMs); }),
-      ]);
-    } finally { clearTimeout(timer); }
+    const reason = given.mode === 'context' ? 'opening' : target !== `${ctx.userRoot}/memories` ? 'narrow_scope'
+      : !String(given.query ?? '').trim() ? 'empty_query' : ctx.shared ? 'shared_namespace' : null;
+    const skipped = why => ({ items: [], status: readStatus('skipped', why) });
+    const request = { user: ctx.user, project: ctx.project, query: String(given.query ?? '').slice(0, 2000),
+      limit: Number(given.limit) || 5, contextPolicy: ctx.memoryContext?.policy };
+    const [history, capsule] = await Promise.all([
+      reason ? skipped(reason) : !historySearch || config.memoryHistorySearchEnabled !== true ? skipped('disabled')
+        : measuredRead(() => historySearch(request), capsuleWaitMs),
+      reason ? skipped(reason) : !capsuleSearch ? skipped('disabled') : measuredRead(() => capsuleSearch(request), capsuleWaitMs),
+    ]);
+    return { history: history.items.map(hit => hit.withdrawn ? { withdrawn: true, messages: [] } : hit), capsules: capsule.items, searchStatus: {
+      memoryFiles: files.readStatus ?? readStatus((files.memories?.length || files.entries?.length) ? 'searched' : 'empty'),
+      earlierConversations: history.status, receivedCapsules: files.capsuleReadStatus ?? capsule.status,
+    } };
   }
 
   /** @param {Map<string, { until: number, count: number }>} windows @param {string} key @param {number} span @param {number} limit */
@@ -672,21 +712,22 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     const result = body?.result;
     const candidates = context ? result?.entries : result?.memories;
     const kept = [];
+    let unreadable = 0;
     for (const entry of Array.isArray(candidates) ? candidates : []) {
       let uri;
       try { uri = await ctx.checkUri(String(entry?.uri ?? '')); } catch { continue; }
       if (!ctx.recallFile(uri) || await ctx.hidden(uri)
         || entry?.detail === 'overview' || entry?.level === 0 || entry?.level === 1) continue;
-      const text = await ctx.readMemory(uri).catch(() => null);
+      const text = await ctx.readMemory(uri).catch(() => { unreadable++; return null; });
       if (text === null) continue;
       const recallText = await ctx.recallText(uri, text);
       kept.push(context ? { uri, category: entry.category, score: entry.score, detail: entry.detail, text: recallText, origin: entry.origin }
         : { uri, context_type: 'memory', level: entry.level, score: entry.score, abstract: recallText, tags: [] });
     }
     if (ctx.inductionEnabled) kept.sort((left, right) => Number((left.text ?? left.abstract ?? '').includes('[Inferred from behaviour;')) - Number((right.text ?? right.abstract ?? '').includes('[Inferred from behaviour;')));
-    if (!context) return ok({ memories: kept, resources: [], skills: [], total: kept.length });
+    if (!context) return ok({ memories: kept, resources: [], skills: [], total: kept.length, readStatus: unreadable ? readStatus('unavailable', 'source_failed') : result?.readStatus ?? readStatus(kept.length ? 'searched' : 'empty') });
     const rendered = kept.map(entry => `<memory uri="${entry.uri}" type="${nativeMemoryFile(entry.uri, `${ctx.userRoot}/memories`)?.type ?? 'memories'}">\n${entry.text}\n</memory>`).join('\n');
-    return ok({ entries: kept, rendered, digest: '' });
+    return ok({ entries: kept, rendered, digest: '', readStatus: readStatus(unreadable ? 'unavailable' : kept.length ? 'searched' : 'empty', unreadable ? 'source_failed' : null, { candidates: candidates?.length ?? 0, droppedByFence: (candidates?.length ?? 0) - kept.length }) });
   }
 
   /** A project's shared search answer: leaf files only (`sharedSearchResult`), then the capsule's half for a search over the whole
@@ -695,21 +736,18 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
    */
   async function sharedProjectSearch(ctx, answer, context, body) {
     const safe = await sharedSearchResult(ctx, answer, context);
-    const target = typeof body?.target_uri === "string" && body.target_uri ? absolute(body.target_uri, ctx.userRoot) : null;
-    if (capsuleSearch && String(body?.query ?? "").trim() && (!target || target === `${ctx.userRoot}/memories`)) {
-      /** @type {ReturnType<typeof setTimeout> | undefined} */
-      let timer;
-      try {
-        const capsule = Promise.resolve().then(() => capsuleSearch({ user: ctx.user, project: ctx.project, query: String(body.query), limit: Number(body.limit) || 5, contextPolicy: ctx.memoryContext.policy })).catch(() => []);
-        const items = await Promise.race([capsule, new Promise((resolve) => { timer = setTimeout(() => resolve([]), capsuleWaitMs); })]);
-        const text = capsuleSearchText(/** @type {any} */ (items));
-        if (text) {
-          const result = /** @type {any} */ (safe.result);
-          if (context) result.rendered = [result.rendered, text].filter(Boolean).join("\n");
-          else result.capsuleContext = text;
-        }
-      } finally { clearTimeout(timer); }
-    }
+    const target = typeof body?.target_uri === 'string' && body.target_uri ? absolute(body.target_uri, ctx.userRoot) : null;
+    const result = /** @type {any} */ (safe.result);
+    if (capsuleSearch && String(body?.query ?? '').trim() && (!target || target === `${ctx.userRoot}/memories`)) {
+      const capsule = await measuredRead(() => capsuleSearch({ user: ctx.user, project: ctx.project,
+        query: String(body.query), limit: Number(body.limit) || 5, contextPolicy: ctx.memoryContext.policy }), capsuleWaitMs);
+      result.capsuleReadStatus = capsule.status;
+      const text = capsuleSearchText(capsule.items);
+      if (text) {
+        if (context) result.rendered = [result.rendered, text].filter(Boolean).join('\n');
+        else result.capsuleContext = text;
+      }
+    } else result.capsuleReadStatus = readStatus('skipped', target ? 'narrow_scope' : 'disabled_or_empty_query');
     return safe;
   }
 
@@ -865,7 +903,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const admitted = await ctx.admit(typeof given.session_id === "string" ? given.session_id : null);
       if (!admitted.recall) {
         recordGatewayWithheld(admitted.recallReason ?? "memory_off");
-        return { status: 200, json: ok(context ? { entries: [], rendered: "", digest: "" } : { memories: [], resources: [], skills: [], total: 0 }), outcome: "withheld" };
+        return { status: 200, json: ok({ ...(context ? { entries: [], rendered: '', digest: '' } : { memories: [], resources: [], skills: [], total: 0 }), searchStatus: Object.fromEntries(['memoryFiles', 'earlierConversations', 'receivedCapsules'].map(key => [key, readStatus('skipped', admitted.recallReason ?? 'admission')])) }), outcome: "withheld" };
       }
       if (given.target_uri !== undefined && (typeof given.target_uri !== "string" || !insideNativeMemories(given.target_uri, ctx.userRoot))) {
         throw new HttpError(403, "memory_gateway_uri_refused", "The search target is outside the caller's own space.");
@@ -878,8 +916,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         const listed = await scopedListSearch(ctx.sessions, ctx, given);
         const found = ctx.shared ? await sharedProjectSearch(ctx, listed, false, given) : listed;
         await noteRecalled(ctx, (/** @type {any} */ (found).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
-        const history = await rawHistory(ctx, given);
-        return { status: 200, json: history.length ? { ...found, result: { .../** @type {any} */ (found.result), history } } : found, outcome: "forwarded" };
+        const extra = await supplementarySearch(ctx, given, found.result);
+        return { status: 200, json: { ...found, result: { ...found.result, ...extra } }, outcome: "forwarded" };
       }
       if (given.target_uri !== undefined) throw new HttpError(400, "memory_gateway_body_invalid", "Context search does not accept a target URI.");
       const { purpose: _purpose, quotas: _quotas, peer_scope: _peerScope, ...rest } = given;
@@ -893,15 +931,17 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         answered = await sharedProjectSearch(ctx, await ctx.sessions.search(ctx.user.id, body), true, body);
       }
       await noteRecalled(ctx, [...(answered?.result?.entries ?? []), ...(answered?.result?.memories ?? [])].map((/** @type {any} */ hit) => hit?.uri));
-      return { status: 200, json: answered, outcome: "forwarded" };
+      const extra = await supplementarySearch(ctx, given, answered.result);
+      answered.result.searchStatus = extra.searchStatus;
+      return { status: 200, json: answered, outcome: 'forwarded' };
     },
     async read(ctx) {
       const given = String(ctx.query.get("uri") ?? "");
       if (!insideNativeMemories(given, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The URI is outside native memories.");
       let uri = await ctx.checkUri(given);
       const admitted = await ctx.admit(null);
-      const missing = { status: 404, json: refusal("NOT_FOUND", "File not found."), outcome: "withheld" };
-      if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "memory_off"); return missing; }
+      const missing = { status: 404, json: { ...refusal("NOT_FOUND", "File not found."), readStatus: readStatus('skipped', 'missing_or_fenced') }, outcome: "withheld" };
+      if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "memory_off"); return { ...missing, json: { ...missing.json, readStatus: readStatus('skipped', admitted.recallReason ?? 'admission') } }; }
       if (!ctx.recallFile(absolute(uri, ctx.userRoot)) || await ctx.hidden(absolute(uri, ctx.userRoot))) return { ...missing, outcome: "local" };
       if (ctx.shared) await ctx.ensureRegistered();
       let text = await ctx.readMemory(uri, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 });
@@ -935,8 +975,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // MCP profile reads always count and return the complete source.
       const startupProfile = !ctx.shared && uri === `${ctx.userRoot}/memories/profile.md` && ctx.query.get('model_use') !== 'true';
       if (!startupProfile) await noteUsed(ctx, [absolute(uri, ctx.userRoot)]);
-      return { status: 200, ...(ctx.origin === 'agent-api' && startupProfile ? { elided: openingProfileRead(text, `${ctx.userRoot}/memories`, config) !== text } : {}), json: ok(startupProfile
-        ? openingProfileRead(text, `${ctx.userRoot}/memories`, config) : await ctx.recallText(uri, text)), outcome: "forwarded" };
+      return { status: 200, ...(ctx.origin === 'agent-api' && startupProfile ? { elided: openingProfileRead(text, `${ctx.userRoot}/memories`, config) !== text } : {}), json: { ...ok(startupProfile
+        ? openingProfileRead(text, `${ctx.userRoot}/memories`, config) : await ctx.recallText(uri, text)), readStatus: readStatus('searched') }, outcome: "forwarded" };
     },
     async list(ctx) {
       let uri = String(ctx.query.get("uri") ?? "");
@@ -948,9 +988,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (!insideNativeMemories(uri, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The URI is outside native memories.");
       uri = await ctx.checkUri(uri);
       const admitted = await ctx.admit(null);
-      const empty = { status: 200, json: { ...ok([]), has_more: false } };
-      if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "memory_off"); return { ...empty, outcome: "withheld" }; }
-      if (await ctx.hidden(absolute(uri, ctx.userRoot), true)) return { ...empty, outcome: "local" };
+      const empty = { status: 200, json: { ...ok([]), has_more: false, readStatus: readStatus('empty') } };
+      if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "memory_off"); return { ...empty, json: { ...empty.json, readStatus: readStatus('skipped', admitted.recallReason ?? 'admission') }, outcome: "withheld" }; }
+      if (await ctx.hidden(absolute(uri, ctx.userRoot), true)) return { ...empty, json: { ...empty.json, readStatus: readStatus('skipped', 'scope_fence') }, outcome: "local" };
       /** @type {Record<string, string>} */
       const query = {};
       for (const name of ["uri", "output", "recursive", "abs_limit", "node_limit", "offset", "limit"]) {
@@ -981,7 +1021,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         // a hidden descendant. Listings carry navigation metadata alone.
         entries.push({ uri: entry.uri, name: String(entry.uri).split('/').at(-1), isDir: entry.isDir === true, size: entry.isDir === true ? 0 : Number(entry.size) || 0 });
       }
-      return { status: 200, json: { ...ok(entries), has_more: body.has_more === true,
+      return { status: 200, json: { ...ok(entries), readStatus: readStatus(entries.length ? 'searched' : 'empty', null, { partial: body.has_more === true }), has_more: body.has_more === true,
         next_offset: body.has_more === true ? (Number(query.offset) || 0) + listed.length : null }, outcome: "forwarded" };
     },
     // OpenViking's skill store is not part of this product's memory: the catalogue is empty and nothing is asked upstream.
@@ -1062,7 +1102,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         if (READ_TOOLS.has(name)) {
           if (!admitted.recall) {
             recordGatewayWithheld(admitted.recallReason ?? "memory_off");
-            local.push(toolText(message.id, /** @type {any} */ (NOT_READ)[admitted.recallReason ?? ""] ?? NOT_READ.other));
+            local.push(toolText(message.id, (/** @type {any} */ (NOT_READ)[admitted.recallReason ?? ""] ?? NOT_READ.other)
+              + '\n' + searchStatusText(Object.fromEntries(['memoryFiles', 'earlierConversations', 'receivedCapsules'].map(key => [key, readStatus('skipped', admitted.recallReason ?? 'admission')])))));
             continue;
           }
           const hiddenUris = await ctx.hiddenSet();
@@ -1073,32 +1114,22 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           };
           if (name === "read") {
             const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && ctx.recallFile(absolute(uri, ctx.userRoot)) && !isHidden(uri)).slice(0, 10).map(uri => absolute(uri, ctx.userRoot));
-            if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件。")); continue; }
-            if (overlay?.memoryForgetBody || config.memoryDeferredSummaryRebuildEnabled === true || (config.memoryObservationInductionEnabled === true || config.memoryObservationRecallEnabled === true) || config.memoryPersonAliasHintEnabled === true || config.memoryPersonMergeEnabled === true) {
-              const content = [];
-              for (const uri of uris) {
+            if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件；请求为空或在当前读取范围之外，不代表没有记录。")); continue; }
+            const content = [];
+            const statuses = [];
+            for (const uri of new Set(uris)) {
+              try {
                 const read = await handlers.read({ ...ctx, query: new URLSearchParams({ uri, model_use: 'true' }) });
-                if (read.status === 200 && read.json && typeof read.json === 'object'
-                  && 'result' in read.json && typeof read.json.result === 'string') content.push(`${uri}\n${read.json.result}`);
-              }
-              local.push(toolText(message.id, content.join('\n\n') || '没有可读取的记忆文件。'));
-              continue;
+                const value = read.json && typeof read.json === 'object' && 'result' in read.json ? read.json.result : null;
+                if (read.status === 200 && typeof value === 'string') {
+                  content.push(`${uri}\n${value}`); statuses.push(readStatus('searched'));
+                } else statuses.push(readStatus('skipped', 'missing_or_fenced'));
+              } catch { statuses.push(readStatus('unavailable', 'source_failed')); }
             }
-            forward.push({ ...message, params: { ...message.params, arguments: { uris } } });
-            afterCall.set(message.id, async (answer) => {
-              if (!answer?.error) await noteRecalled(ctx, uris);
-              if (config.memoryOpeningByUseEnabled !== true) return;
-              if (answer?.error || answer?.result?.isError === true || !answer?.result?.content?.some(part => part.type === 'text')) return;
-              // MCP read returns combined prose. Verify existence per URI rather than count a missing member of a batch.
-              const present = await Promise.all(uris.map(async uri => {
-                try { return await ctx.sessions.read(ctx.user.id, uri, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 }) !== null ? uri : null; }
-                catch { return null; }
-              }));
-              await noteUsed(ctx, present.filter(uri => uri !== null));
-            });
+            local.push(toolText(message.id, [...content, `Memory read status: ${JSON.stringify(statuses)}`].join('\n\n')));
           } else if (name === "list") {
             const uri = typeof args.uri === "string" && args.uri ? absolute(args.uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
-            if (isHidden(uri, true)) { local.push(toolText(message.id, "（空）")); continue; }
+            if (isHidden(uri, true)) { local.push(toolText(message.id, JSON.stringify({ items: [], readStatus: readStatus('skipped', 'scope_fence') }))); continue; }
             if (ctx.shared) {
               const offset = args.offset ?? 0, limit = args.limit ?? 100;
               if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
@@ -1124,24 +1155,13 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             // The engine's list mode is answered from its structured REST rows, filtered here (`scopedListSearch`).
             const result = await scopedListSearch(ctx.sessions, ctx, args);
             await noteRecalled(ctx, (/** @type {any} */ (result).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
-            const content = [ { type: "text", text: JSON.stringify(result.result) } ];
-            const target = typeof args.target_uri === "string" && args.target_uri ? absolute(args.target_uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
-            // The capsule's half (item 9 above): for a search over the whole of the person's memories and not for one that names a
-            // directory of its own. It is added to the answer, waited for as long as the engine is (`memoryGatewayTimeoutMs`) and no
-            // longer, and costs the answer nothing when it fails.
-            if (capsuleSearch && query.trim() && target === `${ctx.userRoot}/memories`) {
-              /** @type {ReturnType<typeof setTimeout> | undefined} */
-              let timer;
-              const items = await Promise.race([
-                Promise.resolve().then(() => capsuleSearch({ user: ctx.user, project: ctx.project, query, limit })).catch(() => []),
-                new Promise(resolve => { timer = setTimeout(() => resolve([]), capsuleWaitMs); }),
-              ]);
-              clearTimeout(timer);
-              const text = capsuleSearchText(/** @type {any} */ (items));
-              if (text) content.push({ type: "text", text });
-            }
-            const original = historySearchText(await rawHistory(ctx, args), { semanticSecrets: config.memoryHistorySecretRedactionEnabled === true });
-            if (original) content.push({ type: "text", text: original });
+            const extra = await supplementarySearch(ctx, args, result.result);
+            const content = [{ type: 'text', text: JSON.stringify(result.result) },
+              { type: 'text', text: searchStatusText(extra.searchStatus) }];
+            const capsuleText = capsuleSearchText(extra.capsules);
+            if (capsuleText) content.push({ type: 'text', text: capsuleText });
+            const original = historySearchText(extra.history, { semanticSecrets: config.memoryHistorySecretRedactionEnabled === true });
+            if (original) content.push({ type: 'text', text: original });
             local.push({ jsonrpc: "2.0", id: message.id, result: { content } });
           }
           continue;
@@ -1288,11 +1308,14 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       let hiddenList = null;
       /** @type {Promise<{uri:string,label:string,aliases:string[]}[]> | null} */
       let people = null;
+      let sourceFiles = null;
       // Only the authenticated bridge can set this header; model arguments and Mcp-Session-Id never bind a conversation.
       const toolSession = route === 'mcp' && typeof req.headers['x-evimed-memory-session'] === 'string'
         && /^[A-Za-z0-9_.@-]{1,180}$/.test(req.headers['x-evimed-memory-session']) ? req.headers['x-evimed-memory-session'] : null;
       const ctx = {
         memoryFileSearchMinScore: config.memoryFileSearchMinScore,
+        literalFallbackEnabled: config.memoryLiteralFallbackEnabled === true,
+        fileMetadata: () => overlay?.configured && typeof overlay.files === 'function' ? overlay.files(user.id) : Promise.resolve(new Map()),
         user, project, json, origin, query: url.searchParams, match: found.match, engineUser, userRoot, sessions: view, memoryContext, shared,
         account: /** @type {any} */ (view).client.account,
         readMemory: async (/** @type {string} */ uri, options = {}) => {
@@ -1330,6 +1353,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           return true;
         },
         recallText: async (/** @type {string} */ uri, /** @type {string} */ text) => {
+          sourceFiles ??= ctx.fileMetadata();
+          const metadata = (await sourceFiles).get(uri);
+          if (metadata && ['origin', 'attribution', 'speaker', 'asOf', 'updatedAt', 'earlierValue'].some(key => metadata[key] != null)) text = `[Memory source ${memorySourceLabel(metadata)}]\n${text}`;
           if (observationFile(uri, `${userRoot}/memories`)) return `[seen once — observed choice, not a standing preference]\n${text}`;
           if (config.memoryPersonAliasHintEnabled !== true || nativeMemoryFile(uri, `${userRoot}/memories`)?.type !== 'people') return text;
           if (!await ctx.personIdentityVisible(uri, text)) return text;

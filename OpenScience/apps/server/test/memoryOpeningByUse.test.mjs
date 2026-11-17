@@ -65,10 +65,10 @@ test('profile view honors a cap smaller than profile.md, preserving source bytes
   const profile = Array.from({ length: 100 }, (_, index) => `Line ${index}: ${'x'.repeat(30)}`).join('\n');
   const config = { ...enabled, memoryOpeningMaxChars: 600 };
   const view = openingProfileRead(profile, ROOT, config);
-  assert.match(view, /^Line 0/); assert.match(view, /Line 99/);
+  assert.match(view, /Profile is partial[\s\S]*Line 0/); assert.match(view, /Line 99/);
   assert.ok(`<user-profile uri="${ROOT}/profile.md">\n${view}\n</user-profile>`.length <= 600);
   assert.equal(openingProfileRead(profile, ROOT, {}), profile);
-  assert.equal(openingProfileRead(profile, ROOT, { ...enabled, memoryOpeningMaxChars: 1 }), '');
+  assert.match(openingProfileRead(profile, ROOT, { ...enabled, memoryOpeningMaxChars: 1 }), /Profile is partial/);
 });
 
 test('resident most-used slice has URI and first lines, top K, historical provenance, and shares the existing budget', () => {
@@ -159,7 +159,7 @@ test('counter failures are advisory and the disabled feature adds no engine read
   const other = off.seed('preferences/b.md', 'B fact');
   const before = off.stub.sent('GET', '/api/v1/content/read').length;
   await off.mcp('read', { uris: [other] });
-  assert.equal(off.stub.sent('GET', '/api/v1/content/read').length, before);
+  assert.equal(off.stub.sent('GET', '/api/v1/content/read').length, before + 1, 'one fresh read, no second metadata verification read');
   assert.deepEqual(off.used, []);
 });
 

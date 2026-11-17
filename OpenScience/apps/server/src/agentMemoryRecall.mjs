@@ -1,3 +1,4 @@
+import { readStatus, withReadStatus } from './memoryReadStatus.mjs';
 /**
  * `recall` as an integrator asks it: memory, the facts of the capsules in
  * force or of the ones named, and the methods (做法) that apply.
@@ -68,7 +69,7 @@ const NATIVE_RECALL_READ = 50;
  * The memory half of a recall, in the shape `recallAcrossMemory` takes it in: what the memory page's search finds (the words over
  * every memory's text, joined with the engine's own semantic search), the account's memories and this project's, never a
  * sensitive one. A native memory has no validity interval, so there is no time a question can be asked about.
- * @param {{ search: (userId: string, query: string) => Promise<{ items: any[] }> }} nativeMemory
+ * @param {{ search: (userId: string, query: string) => Promise<{ items: any[], readStatus?: any }> }} nativeMemory
  * @param {{ recallEnabled?: boolean }} [options] the deployment's recall switch (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED`)
  */
 export function nativeRecallSource(nativeMemory, { recallEnabled = true } = {}) {
@@ -77,7 +78,7 @@ export function nativeRecallSource(nativeMemory, { recallEnabled = true } = {}) 
     /** @param {string} userId @param {string} query @param {{ projectId?: string | null }} [scope] */
     async recall(userId, query, { projectId = null } = {}) {
       const found = await nativeMemory.search(userId, query);
-      return (found.items ?? [])
+      const items = (found.items ?? [])
         .filter((record) => !privateByDefault(record) && record.sensitive !== true && record.status === "active"
           && (record.scope === "user" || (record.scope === "project" && projectId != null && record.scopeId === projectId)))
         .slice(0, NATIVE_RECALL_READ)
@@ -91,7 +92,10 @@ export function nativeRecallSource(nativeMemory, { recallEnabled = true } = {}) 
           confidence: record.confidence ?? null,
           importance: record.importance ?? null,
           origin: record.origin,
+          attribution: record.attribution, originalSources: record.originalSources,
+          speaker: record.speaker, statementKind: record.statementKind, asOf: record.asOf, earlierValue: record.earlierValue,
         }));
+      return withReadStatus(items, found.readStatus ?? readStatus(items.length ? 'searched' : 'empty'));
     },
   };
 }
@@ -216,7 +220,7 @@ export async function recallForAgent({ capsules, memory = null, learning = null 
       return { ...found, items: (found.items ?? []).filter((item) => !privateByDefault(item) && item.sensitive !== true) };
     },
   } : null;
-  /** @type {{ items: any[], mode: string, contextOnly: true, sources: { memory: number, capsule: number } }} */
+  /** @type {{ items: any[], mode: string, contextOnly: true, sources: { memory: number, capsule: number }, searchStatus?: any }} */
   let recalled;
   if (!named) {
     recalled = user
@@ -253,6 +257,12 @@ export async function recallForAgent({ capsules, memory = null, learning = null 
       mode,
       contextOnly: true,
       sources: { memory: memories.items.length, capsule: capsuleItems.length },
+      searchStatus: {
+        memoryFiles: 'searchStatus' in memories ? memories.searchStatus.memoryFiles : readStatus('skipped', 'scope_or_no_account'),
+        receivedCapsules: scope === 'conversation' ? readStatus('skipped', 'scope')
+          : ['paused', 'disabled'].includes(mode) ? readStatus('skipped', mode) : readStatus(capsuleItems.length ? 'searched' : 'empty'),
+        earlierConversations: readStatus('skipped', 'external_recall'),
+      },
     };
   }
 
@@ -298,6 +308,11 @@ export async function recallForAgent({ capsules, memory = null, learning = null 
   return {
     ...recalled,
     methods,
+    ...(!('searchStatus' in recalled) ? { searchStatus: {
+      memoryFiles: memory?.recallEnabled === false ? readStatus('skipped', 'disabled') : !user || input.scope === 'capsule' || !memory ? readStatus('skipped', 'scope_or_no_account') : readStatus(recalled.sources.memory ? 'searched' : 'empty'),
+      receivedCapsules: ['paused', 'disabled'].includes(recalled.mode) ? readStatus('skipped', recalled.mode) : input.scope === 'conversation' || !capsules ? readStatus('skipped', 'scope_or_disabled') : readStatus(recalled.sources.capsule ? 'searched' : 'empty'),
+      earlierConversations: readStatus('skipped', 'external_recall'),
+    } } : {}),
     ...(named ? { capsules: named.map(({ ownerId: _ownerId, ...capsule }) => capsule) } : {}),
   };
 }
