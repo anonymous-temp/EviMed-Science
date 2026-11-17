@@ -73,6 +73,12 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       ].join("\n"),
     },
     servers: [{ url: basePath }],
+    'x-unavailable-operations': {
+      conversationIngest: { available: false, requiredScopes: ['memory.ingest'], internalOnly: true,
+        proposedPaths: ['POST /conversations/{externalSessionId}/turns', 'POST /conversations/{externalSessionId}/commit'],
+        reason: 'external_conversation_history_authority_unavailable',
+        description: 'Reserved, not served or mintable. Original history currently requires a canonical kernel conversation and run-ledger source. Engine-only ingestion would bypass the required recall and source-deletion contract. Episodes remain candidates.' },
+    },
     components: {
       parameters: {
         Subject: {

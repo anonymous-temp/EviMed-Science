@@ -156,7 +156,7 @@ infer capabilities from error responses.
 | Opening context | `GET /context` (`memory.read`), the resident supplement plus the gateway startup profile and listings. |
 | Direct explicit remember | `POST /remember` (`memory.remember`), page-origin direct statement with external source and durable idempotency. `/note` remains a candidate. |
 | Statement forget and forgotten list | `POST /forget` uses native statement/line withdrawal; `GET /forgotten` returns original text and the web-equivalent restore action. Requires account-scoped manage authority for withdrawal/restore; see below. |
-| Trusted conversation ingest | Unavailable; `/episodes` still waits for confirmation. |
+| Trusted conversation ingest | Unavailable: `external_conversation_history_authority_unavailable`; `/episodes` still waits for confirmation. |
 | General work signals | Unavailable; existing prescription observations are unchanged. |
 | Capsule sharing / selected-capsule-only recall | Unavailable; `capsuleIds` retains additive semantics. Trials stay web-only. |
 | Clients | DSH and MCP provide status, history recall, forget and forgotten tools. Context/remember adapters consult status; context and directly stated remember are offered. |
@@ -455,3 +455,22 @@ The URL, key scopes, project binding and `X-Subject` rules are unchanged. Person
 A confirmation returns `admission` alongside the candidate. Its immutable candidate ID and revision identify one durable admission. `queued` and `submitting` describe submission work; `pending` means the engine accepted the commit but settlement is outstanding; `completed` means the native worker read the resulting changes. `suspended` means current learning policy prevents a retry; `cancelled` means the candidate revision, the account or the project is no longer authorized. Every new engine write and replay rechecks that authority, so rejecting or editing a candidate prevents its older admission from silently learning later. `failed` retains the candidate and an error, while `uncertain` means a timed-out side effect is being inspected and must not be treated as success. The receipt includes `taskId` and `archiveUri` when known and `recordIds` after settlement; one conversation may produce several records. Repeating the same confirmation returns or recovers that admission, without appending the batch twice.
 
 Capsule snapshots record each selected file's hash, version and capture time. Export re-reads the selected engine bytes after the database snapshot and before publication; a concurrent change returns `409 capsule_native_snapshot_changed` so the caller can retry. This is an optimistic consistency check across two stores. Revoking a hosted share prevents future hosted downloads; it does not remotely erase bytes or independent copies already exported.
+
+
+### Reserved host conversation ingestion (not available)
+
+`memory.ingest` is a reserved, internal-host-only scope, not yet mintable or
+shown in the key panel. Neither `/conversations/{externalSessionId}/turns` nor
+its `/commit` sibling is served. The status and OpenAPI
+`x-unavailable-operations` disclose this without probing an absent endpoint.
+
+The existing history index accepts only canonical kernel conversations
+(`memoryHistory.mjs`, `indexArchive`), and `memoryHistorySources.mjs` proves their
+project incarnation, native session binding and live run-ledger records on
+both ingestion and recall. The worker cannot turn an arbitrary external engine
+session into that authority. A durable external conversation identity, batch
+idempotency/recovery, human/clinical admission and source-deletion integration
+must be completed together before this scope is offered to internal accounts.
+Sending turns to the engine alone would not satisfy that contract. `/episodes`
+retains its existing candidate-only behavior. No model tool or fabricated kernel
+conversation has been added for this operation.
