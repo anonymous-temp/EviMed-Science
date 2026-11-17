@@ -43,8 +43,8 @@ test('explicit store review changes prompt identity, preserves evidence and does
   const results = await judgePackets([typed], { key: 'synthetic-test-value', fetchImpl: fakeJudge(calls) });
   assert.equal(calls[0].messages[0].content, STORE_JUDGE_SYSTEM);
   assert.equal(mergeJudgeResults([raw], [typed], results)[0].stored, true, 'semantic retention can override a failed literal anchor');
-  await judgePackets([legacy], { key: 'synthetic-test-value', fetchImpl: fakeJudge(calls) });
-  assert.equal(calls[1].messages[0].content, JUDGE_SYSTEM, 'explicit legacy packets remain readable');
+  await assert.rejects(judgePackets([legacy], { key: 'synthetic-test-value', fetchImpl: fakeJudge(calls) }), /store_packet_upgrade_required/);
+  assert.equal(calls.length, 1, 'legacy store packets require rebinding before any request; never use the chat rubric');
   assert.equal(packet(raw).taskKind, 'store', 'new scores use the retention rubric by default');
 });
 
@@ -53,7 +53,7 @@ test('the opt-in rubric cannot be silently applied to answer packets or mixed ba
   answer.rowKey = JSON.stringify(['before', 'synthetic-users', 'dev', 'invented', 'answer', 'q']);
   assert.throws(() => memoryStoreJudgePacket(answer), /store_packet_required/);
   const legacy = legacyPacket(row('before'));
-  await assert.rejects(judgePackets([legacy, memoryStoreJudgePacket(legacy)], { key: 'synthetic-test-value', fetchImpl: fakeJudge([]) }), /judge_mixed_task_rubrics/);
+  await assert.rejects(judgePackets([legacy, memoryStoreJudgePacket(legacy)], { key: 'synthetic-test-value', fetchImpl: fakeJudge([]) }), /store_packet_upgrade_required/);
 });
 
 test('paired store review preserves both original score sets, denominators, and resumable model checkpoints', async t => {

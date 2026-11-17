@@ -52,6 +52,8 @@ export function askAnswer(item, args) {
 /** builders are injectable for offline tests; production defaults import the actual runner/product functions. */
 export async function answerTask({ item, arm, variant = '', memory, client, pluginTgz, maxRounds = 16, builders = {} }) {
   const started = performance.now();
+  // Each answer arm owns a fresh simulated world, including on resume.
+  const simulationTask = structuredClone(item);
   const b = { buildSystemPrompt, buildProfileBlock, buildTimeContext, buildSkillCatalog, ...builders };
   const input = item.arms[arm].input;
   const card = arm === 'memory+method' ? input.card ?? null : null;
@@ -110,7 +112,7 @@ export async function answerTask({ item, arm, variant = '', memory, client, plug
             else result = await memory.callTool(short,trace.args);
           } else {
             trace.kind = 'task'; trace.scoringCall = {tool:name,args:trace.args};
-            const simulated = taskNames.has(name) ? simulate(item,trace.scoringCall) : {ok:false,error:{code:'unknown_tool'}};
+            const simulated = taskNames.has(name) ? simulate(simulationTask,trace.scoringCall) : {ok:false,error:{code:'unknown_tool'}};
             result = {blocks:[JSON.stringify(simulated)],isError:!simulated.ok};
           }
           trace.blocks = result.blocks; trace.isError = Boolean(result.isError);

@@ -89,6 +89,7 @@ function realSummary() {
         byStep: { not_stored: 1, not_searched: 0, not_retrieved: 0, retrieved_but_wrong: 0 },
         store: { n: 2, pass: 1 },
         redlines: { secret_leak: 0, cross_patient: 1 },
+        redlineMembers: { secret_leak: [], cross_patient: [{ caseId: 'U01', id: 'U01-q001' }] },
       },
     },
     disputed: [
@@ -313,7 +314,7 @@ test('rowsFromSummary keeps per-set red-line denominators when a summary mixes s
         ci95: null,
         judged: { code: 10, judge: 0, unknown: 0, error: 0 },
         store: { n: 0, pass: 0 },
-        redlines: { secret_leak: 1 },
+        redlines: { secret_leak: 1 }, redlineMembers: { secret_leak: [{ caseId: 'A', id: 'q' }] },
       },
       beta: {
         n: 5,
@@ -452,7 +453,7 @@ test('rowsFromSummary accepts the scorer bySet/storeRecall shape as a fallback',
     redLines: { n: 3, count: 1 },
   };
   const rows = rowsFromSummary({ run, summary, scorer: 'score@3' });
-  assert.deepEqual(rows.map((row) => row.metric), ['accuracy', 'store_recall', 'redline_count']);
+  assert.deepEqual(rows.map((row) => row.metric), ['accuracy', 'store_recall', 'legacy_redline_count']);
   assert.equal(rows[0].set, 'synthetic-users');
   assert.equal(rows[1].value, 1);
   assert.equal(rows[2].value, 1);
@@ -833,7 +834,7 @@ test('the scoreboard CLI writes the generated Markdown', (t) => {
 test('live forget metrics reach the append-only ledger with separate action groups', () => {
   const summary = realSummary();
   summary.forget = { forgetToolCalled: { n: 3, count: 1, unknown: 1 }, forgottenReappeared: {
-    toolCalled: { n: 1, count: 1, unknown: 0 }, toolNotCalled: { n: 1, count: 0, unknown: 0 }, unobserved: { n: 1, count: 0, unknown: 1 },
+    toolCalled: { n: 1, count: 1, unknown: 0, members: [{ caseId: 'U01', id: 'q' }] }, toolNotCalled: { n: 1, count: 0, unknown: 0 }, unobserved: { n: 1, count: 0, unknown: 1 },
   } };
   const rows = rowsFromSummary({ run: inventedRun(), summary });
   const called = rows.find(row => row.metric === 'forget_tool_called');

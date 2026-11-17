@@ -7,7 +7,7 @@ import { answerTask, taskTools, askAnswer } from '../l8/answer_l8.mjs';
 import { runL8, parseArgs, retryOpen, labSessions, BOTH } from '../l8/run_l8.mjs';
 import { scoreCalls, summarize, scoreRun } from '../l8/score_l8.mjs';
 import { validateLedgerRow } from '../run/ledger.mjs';
-const step={tool:'get_exchange_rate',args:{from:'CNY',to:'USD'},output:{rate:2.78}};
+const step={tool:'get_exchange_rate',args:{from:'CNY',to:'USD'},output:{rate:1/7}};
 const direct={steps:[{tool:step.tool,args:step.args}],askedAboutKnown:['to']};
 const item={id:'L8-dev-fake',split:'dev',graph:'general',level:1,length:1,source:'sessions',steps:[step],removed:[{step:0,param:'to',value:'USD'}],arms:{}};
 for(const arm of ['no-memory','memory','memory+method']) item.arms[arm]={input:{request:'Convert CNY to my usual currency',sessions:[{messages:[{role:'user',content:'My currency is USD'}]}],card:arm==='memory+method' ? {title:'Currency habit',body:'Use USD.'} : null},gold:arm==='no-memory' ? {steps:[{ask:{params:['to']}},...direct.steps],askedAboutKnown:[]} : direct};
@@ -26,7 +26,7 @@ test('model loop uses product builders, memory tools, simulator and ordered scor
   assert.equal(row.score.memorySearchBeforeTask,true);assert.equal(row.score.memoryReadBeforeTask,false);
   assert.equal(row.usage.promptTokens,30);assert.equal(row.rounds,3);
   assert.equal(seen[0].messages[0].content,'product-system');assert.equal(seen[0].messages[2].content,'profile');
-  assert.match(seen[2].messages.at(-1).content,/2.78/);assert.equal(seen[2].messages.at(-2).reasoning_content,'kept');
+  assert.equal(JSON.parse(seen[2].messages.at(-1).content).output.rate,1/7);assert.equal(seen[2].messages.at(-2).reasoning_content,'kept');
   assert.equal(taskTools(item).length,4);assert.ok(!JSON.stringify(seen[0].tools).includes('CNY'));
 });
 test('TellOnce ask counts in memory arms but matches no-memory gold',async()=>{
@@ -105,5 +105,5 @@ test('L8 summary reports terminal task correctness separately and keeps legacy r
   const summary = summarize(rows);
   assert.equal(summary.arms.memory.passRate, 0, 'strict metric stays unchanged');
   assert.deepEqual(summary.arms.memory.finalTask, { n: 1, pass: 1, unknown: 1, passRate: 1 });
-  assert.equal(summary.scorer, 'l8-v2');
+  assert.equal(summary.scorer, 'l8-v3');
 });

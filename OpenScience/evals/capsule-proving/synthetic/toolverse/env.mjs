@@ -6,6 +6,11 @@
  * @module capsule-proving/synthetic/toolverse/env
  */
 import { KINDS } from './kinds.mjs';
+import { posix } from 'node:path';
+import { createHash } from 'node:crypto';
+import { GENERAL_TOOLS } from './generalTools.mjs';
+import { EVIMED_TOOLS } from './evimedTools.mjs';
+import { makeRng } from './rng.mjs';
 import { feedersFrom } from './samplers.mjs';
 
 /** Canonical form of an argument value: trimmed strings, numbers as numbers (also "5.0" and "5"), sorted keys, no nulls. */
@@ -24,6 +29,44 @@ export function canon(v) {
 }
 export const sameArgs = (a, b) => JSON.stringify(canon(a ?? {})) === JSON.stringify(canon(b ?? {}));
 
+const UNIT_ALIASES = Object.fromEntries([
+  ['m', ['metre', 'metres', 'meter', 'meters']], ['cm', ['centimeter', 'centimeters', 'centimetre', 'centimetres']],
+  ['km', ['kilometer', 'kilometers', 'kilometre', 'kilometres']], ['ft', ['foot', 'feet']], ['inch', ['in', 'inches']], ['mile', ['miles']],
+  ['kg', ['kilogram', 'kilograms']], ['g', ['gram', 'grams']], ['lb', ['lbs', 'pound', 'pounds']], ['oz', ['ounce', 'ounces']],
+].flatMap(([unit, names]) => [unit, ...names].map(name => [name, unit])));
+const DRUG_ALIASES = { '华法林': 'warfarin', '二甲双胍': 'metformin', '阿托伐他汀': 'atorvastatin', '氨氯地平': 'amlodipine', '奥美拉唑': 'omeprazole' };
+const drugName = value => DRUG_ALIASES[String(value).trim().toLowerCase()] ?? String(value).trim().toLowerCase();
+const DEFINITIONS = new Map([...GENERAL_TOOLS, ...EVIMED_TOOLS].map(t => [t.name, t]));
+/** Equality uses schema meaning: numeric IDs remain strings, unit aliases do not change quantities. */
+function semanticArgs(name, args) {
+  const definition = DEFINITIONS.get(name);
+  return Object.fromEntries(Object.entries(args ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => {
+    const param = definition?.inputs.find(p => p.name === key);
+    if (value == null) return [key, value];
+    if (param?.type === 'number' || param?.type === 'integer') return [key, /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(String(value).trim()) ? Number(value) : value];
+    if (typeof value === 'string') {
+      value = value.trim();
+      if (['lengthUnit', 'massUnit'].includes(param?.kind)) value = UNIT_ALIASES[value.toLowerCase()] ?? value;
+      else if (param?.kind === 'currency') value = value.toUpperCase();
+      else if (param?.kind === 'date' && /^\d{4}-\d{1,2}-\d{1,2}$/.test(value)) value = value.split('-').map((s, i) => i ? s.padStart(2, '0') : s).join('-');
+      else if (['filePath', 'dirPath'].includes(param?.kind)) value = posix.normalize(value);
+      else if (param?.kind === 'drugName') value = drugName(value);
+    }
+    return [key, value];
+  }));
+}
+export function sameToolArgs(name, a, b) {
+  if (!DEFINITIONS.has(name)) return sameArgs(a, b);
+  const left = semanticArgs(name, a), right = semanticArgs(name, b);
+  if (['convert_length', 'convert_mass'].includes(name)) {
+    const factors = name === 'convert_length' ? LENGTH_METRES : MASS_KILOGRAMS;
+    const x = Number(left.value) * factors.get(left.from), y = Number(right.value) * factors.get(right.from);
+    if (!Number.isFinite(x) || !Number.isFinite(y) || Number(x.toPrecision(15)) !== Number(y.toPrecision(15))) return false;
+    delete left.value; delete right.value; delete left.from; delete right.from;
+  }
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 const genValue = (rng, param) => {
   const k = KINDS[param.kind];
   if (param.type.endsWith('[]') && !Array.isArray(k.gen(rng))) {
@@ -40,12 +83,24 @@ const LENGTH_METRES = new Map([['cm', 0.01], ['inch', 0.0254], ['m', 1], ['ft', 
 const MASS_KILOGRAMS = new Map([['kg', 1], ['lb', 0.45359237], ['g', 0.001], ['oz', 0.028349523125]]);
 // A fictional fixed market, not a quotation of real exchange rates.
 const CURRENCY_PER_USD = new Map([['USD', 1], ['CNY', 7], ['EUR', 0.92], ['JPY', 150], ['GBP', 0.78]]);
-/** @typedef {{events: Map<string, Record<string, unknown>>, messages: Map<string, Record<string, unknown>>, files: Map<string, string>}} World */
+/** @typedef {{events: Map<string, Record<string, unknown>>, messages: Map<string, Record<string, unknown>>, files: Map<string, string>, today?: string}} World */
 
 /** Keep arithmetic and created objects consistent within this seeded task.
  * @param {string} name @param {Record<string, unknown>} args @param {Record<string, unknown>} output @param {World} world */
 function consistentOutput(name, args, output, world) {
-  if (name === 'convert_length' || name === 'convert_mass') {
+  if (name === 'get_current_date') {
+    world.today ??= String(output.today); output.today = world.today;
+  } else if (name === 'term_normalize' || name === 'drug_term_normalize') {
+    output.canonicalName = drugName(args.term);
+    if (name === 'term_normalize') output.normalizedQuery = output.canonicalName;
+    else output.rxcui = String(Number.parseInt(createHash('sha256').update(String(output.canonicalName)).digest('hex').slice(0, 8), 16));
+  } else if (name === 'list_directory') {
+    const root = String(args.dir).replace(/\/$/, '');
+    const found = [...world.files.keys()].filter(file => posix.dirname(file) === root);
+    output.firstFile = found[0] ?? `${root}/${posix.basename(String(output.firstFile))}`;
+    output.fileCount = found.length || 1;
+    if (!world.files.has(String(output.firstFile))) world.files.set(String(output.firstFile), `Fixture file ${output.firstFile}`);
+  } else if (name === 'convert_length' || name === 'convert_mass') {
     const factors = name === 'convert_length' ? LENGTH_METRES : MASS_KILOGRAMS;
     const from = factors.get(String(args.from)), to = factors.get(String(args.to));
     if (from === undefined || to === undefined) throw new Error('simulation_unit_unknown');
@@ -64,7 +119,10 @@ function consistentOutput(name, args, output, world) {
     Object.assign(output, world.events.get(String(args.eventId)));
     world.events.set(String(args.eventId), { ...output });
   } else if (name === 'send_email') world.messages.set(String(output.messageId), { body: args.body, recipient: args.to });
-  else if (name === 'get_message') Object.assign(output, world.messages.get(String(args.messageId)));
+  else if (name === 'get_message') {
+    Object.assign(output, world.messages.get(String(args.messageId)));
+    world.messages.set(String(args.messageId), { ...output });
+  }
   else if (name === 'write_file') {
     output.writtenPath = args.path;
     world.files.set(String(args.path), String(args.content));
@@ -78,7 +136,10 @@ function consistentOutput(name, args, output, world) {
     output.content = content;
     output.lineCount = content.split('\n').length;
     world.files.set(String(args.path), content);
-  } else if (name === 'file_stat' && world.files.has(String(args.path))) output.size = new TextEncoder().encode(world.files.get(String(args.path)) ?? '').length;
+  } else if (name === 'file_stat') {
+    if (!world.files.has(String(args.path))) world.files.set(String(args.path), `Fixture file ${args.path}`);
+    output.size = new TextEncoder().encode(world.files.get(String(args.path)) ?? '').length;
+  }
 }
 
 /**
@@ -127,17 +188,37 @@ export const intermediateValues = (task) => {
     .filter(value => !flat(value.value).every(part => known.has(part)));
 };
 
+const worlds = new WeakMap();
+/** Supported verification calls compute from the same world; unrelated lookup values still return not_found. */
 export function simulate(task, call) {
-  const known = task.steps.map((s) => s.tool);
-  if (!call || typeof call.tool !== 'string' || !known.includes(call.tool)) {
+  const known = task.steps.map(s => s.tool);
+  const definition = DEFINITIONS.get(call?.tool);
+  const computable = ['convert_length', 'convert_mass', 'convert_temperature', 'convert_currency', 'get_exchange_rate', 'add_days', 'term_normalize', 'drug_term_normalize'];
+  const objectReads = ['get_event', 'get_message', 'read_file', 'file_stat', 'list_directory', 'list_events'];
+  if (!call || typeof call.tool !== 'string' || !known.includes(call.tool) && !computable.includes(call.tool) && !objectReads.includes(call.tool))
     return { ok: false, error: { code: 'unknown_tool', message: `no such tool: ${call?.tool}` } };
-  }
-  const hit = task.steps.find((s) => s.tool === call.tool && sameArgs(s.args, call.args));
-  if (hit) return { ok: true, output: hit.output };
-  const step = task.steps.find((s) => s.tool === call.tool);
-  const want = Object.keys(step.args), got = Object.keys(call.args || {});
-  const missing = want.filter((k) => !got.includes(k)), extra = got.filter((k) => !want.includes(k));
+  const step = task.steps.find(s => s.tool === call.tool);
+  const want = definition?.inputs.map(p => p.name) ?? Object.keys(step?.args ?? {}), got = Object.keys(call.args ?? {});
+  const missing = want.filter(k => !got.includes(k)), extra = got.filter(k => !want.includes(k));
   if (missing.length || extra.length) return { ok: false, error: { code: 'invalid_arguments', message: `missing: [${missing}] unexpected: [${extra}]` } };
-  const bad = want.filter((k) => !sameArgs({ k: step.args[k] }, { k: call.args[k] }));
-  return { ok: false, error: { code: 'not_found', message: `no result for the given value of: [${bad}]` } };
+  const args = semanticArgs(call.tool, call.args);
+  const hit = task.steps.find(s => s.tool === call.tool && sameToolArgs(call.tool, s.args, args));
+  let world = worlds.get(task);
+  if (!world) { world = { events: new Map(), messages: new Map(), files: new Map(), outputs: new Map() }; worlds.set(task, world); }
+  const readAllowed = call.tool === 'get_event' ? world.events.has(String(args.eventId))
+    : call.tool === 'get_message' ? world.messages.has(String(args.messageId))
+    : ['read_file', 'file_stat'].includes(call.tool) ? world.files.has(String(args.path))
+    : call.tool === 'list_directory' ? [...world.files.keys()].some(f => posix.dirname(f) === args.dir)
+    : call.tool === 'list_events' ? [...world.events.values()].some(e => e.date === args.date) : false;
+  if (!hit && !computable.includes(call.tool) && !readAllowed)
+    return { ok: false, error: { code: 'not_found', message: 'no object for the supplied arguments' } };
+  const outputKey = JSON.stringify([call.tool, args]);
+  const rng = makeRng(JSON.stringify([task.id ?? task.steps, outputKey]));
+  const output = structuredClone(world.outputs.get(outputKey) ?? hit?.output ?? Object.fromEntries((definition?.outputs ?? []).map(p => [p.name, genValue(rng, p)])));
+  try {
+    consistentOutput(call.tool, args, output, world);
+    if (Object.values(output).some(v => typeof v === 'number' && !Number.isFinite(v))) throw new Error('invalid_number');
+  } catch { return { ok: false, error: { code: 'invalid_arguments', message: 'invalid value for the simulated operation' } }; }
+  world.outputs.set(outputKey, structuredClone(output));
+  return { ok: true, output };
 }

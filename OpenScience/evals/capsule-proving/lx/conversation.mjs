@@ -6,6 +6,7 @@
 import fs from 'node:fs/promises';
 import zlib from 'node:zlib';
 import { createHash } from 'node:crypto';
+import { productCall, runnerOutcome, projectRunName } from '../run/productLifecycle.mjs';
 import { digestTranscript, waitForMemoryTools } from '../../general-tasks/runner/cell.mjs';
 
 const RUNNING = new Set(['queued', 'running', 'planned', 'dispatching', 'starting', 'waiting']);
@@ -20,7 +21,8 @@ export async function ensureProject(api, projectId, name) {
   if (created.status === 200 || created.status === 201) return 'created';
   const list = await api.call('GET', '/api/projects', undefined, { project: null });
   const items = Array.isArray(list.json?.data) ? list.json.data : list.json?.data?.items ?? list.json?.data?.projects ?? [];
-  if (items.some(p => p?.id === projectId)) return 'exists';
+  if (items.some(p => p?.id === projectId && p?.name === (name ?? projectId))) return 'exists';
+  if (items.some(p => p?.id === projectId)) throw Object.assign(new Error('project_identity_conflict'), { code: 'project_identity_conflict', status: 409 });
   throw new Error(`project ${projectId}: ${created.status} ${created.raw.slice(0, 200)}`);
 }
 
@@ -44,8 +46,19 @@ export async function runConversation({ api, userId, projectId, projectName, ses
   const t0 = Date.now();
   if (resumeRecord && (resumeRecord.projectId !== projectId || resumeRecord.sessionId !== sessionId)) throw new Error('Conversation checkpoint identity mismatch');
   const record = resumeRecord ?? { schema: 'lx-conversation/1', projectId, sessionId, startedAt: new Date().toISOString(), turns: [] };
+  record.evalRunId ??= `eval-${createHash('sha256').update(JSON.stringify([userId, projectId, sessionId, record.startedAt])).digest('hex').slice(0, 16)}`;
   api.project = projectId;
-  record.project = await ensureProject(api, projectId, projectName);
+  try { record.project = await ensureProject(api, projectId, projectRunName(projectName ?? projectId, record.evalRunId)); }
+  catch (error) {
+    record.outcome = runnerOutcome({ status: error.status, code: error.code, missingRecords: ['owned-project'] });
+    record.missingRecords = ['owned-project']; record.errorCode = error.code ?? 'project_collection_failed';
+    record.finishedAt = new Date().toISOString(); return record;
+  }
+  const verifyOwnedProject = async () => {
+    const listed = await api.call('GET', '/api/projects', undefined, { project: null });
+    const items = Array.isArray(listed.json?.data) ? listed.json.data : listed.json?.data?.items ?? listed.json?.data?.projects ?? [];
+    return listed.status === 200 && items.some(p => p.id === projectId && p.name === projectRunName(projectName ?? projectId, record.evalRunId));
+  };
   const projectDir = `${dataDir}/users/${userId}/projects/${projectId}`;
   await fs.mkdir(outDir, { recursive: true });
   if (waitMemoryTools && process.env.OPEN_SCIENCE_OPENVIKING_URL) {
@@ -62,8 +75,10 @@ export async function runConversation({ api, userId, projectId, projectName, ses
     const turn = { index, text, startedAt: new Date().toISOString() };
     const t1 = Date.now();
     const dispatchId = `d_${sessionId}_${index}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120);
-    const dispatched = await api.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId, text });
-    if (dispatched.status !== 202) { turn.error = `dispatch ${dispatched.status} ${dispatched.raw.slice(0, 400)}`; record.turns.push(turn); break; }
+    const dispatch = await productCall({ call: () => api.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId, text }), verifyOwnedProject });
+    turn.dispatchLifecycle = dispatch;
+    const dispatched = dispatch.response;
+    if (dispatched?.status !== 202) { turn.outcome = dispatch.outcome; turn.missingRecords = dispatch.missingRecords ?? []; turn.error = `dispatch ${dispatched?.status ?? 'unobserved'}`; record.turns.push(turn); break; }
     let run = dispatched.json.data;
     turn.runId = run.id;
     const deadline = Date.now() + timeoutMs;
@@ -81,6 +96,8 @@ export async function runConversation({ api, userId, projectId, projectName, ses
     turn.run = Object.fromEntries(RUN_FIELDS.filter(k => k in run).map(k => [k, run[k]]));
     const lines = await readTranscript(projectDir, turn.runId);
     const digest = digestTranscript(lines);
+    turn.outcome = runnerOutcome({ timedOut: turn.timedOut, code: run.errorCode, missingRecords: lines ? [] : ['transcript'] });
+    if (!lines) turn.missingRecords = ['transcript'];
     turn.reply = digest.reply; turn.tools = digest.tools.map(t => ({ name: t.name, status: t.status, error: t.error, input: t.input.slice(0, 200) }));
     if (lines) await fs.writeFile(`${outDir}/t${index}-${turn.runId}.jsonl.gz`, zlib.gzipSync(lines.map(l => JSON.stringify(l)).join('\n')));
     turn.selection = await readSelection(projectDir);

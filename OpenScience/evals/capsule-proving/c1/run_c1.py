@@ -17,20 +17,25 @@ DATA = Path(os.environ.get("C1_DATA", "/srv/evimed/c1/data"))
 
 
 class AlfWorld:
-    instructions = ("Commands include look, inventory, go to <receptacle>, open <receptacle>, "
-                    "take <object> from <receptacle>, put <object> in/on <receptacle>, "
-                    "clean <object> with <sinkbasin>, heat <object> with <microwave>, "
-                    "cool <object> with <fridge>, use <lamp>. Use the numbered names observed.")
+    @property
+    def instructions(self):
+        commands = self.admissible_commands()
+        return "Use the numbered names observed. Admissible commands: " + "; ".join(commands or [])
+
+    def admissible_commands(self):
+        commands = getattr(getattr(self, "state", None), "admissible_commands", None)
+        return list(commands) if commands is not None else None
 
     def __init__(self, task_id, fold):
         import textworld
         from alfworld.agents.environment.alfred_tw_env import AlfredDemangler
         self.game = str(DATA / "alfworld/json_2.1.1" / task_id / "game.tw-pddl")
-        self.env = textworld.start(self.game, textworld.EnvInfos(won=True),
+        self.env = textworld.start(self.game, textworld.EnvInfos(won=True, admissible_commands=True),
                                    wrappers=[AlfredDemangler()])
 
     def reset(self):
         state = self.env.reset()
+        self.state = state
         observation = state.feedback
         # ALFWorld puts the task in the rendered initial observation.
         task = observation.split("Your task is to:")[-1].strip()
@@ -38,6 +43,7 @@ class AlfWorld:
 
     def step(self, action):
         state, score, done = self.env.step(action)
+        self.state = state
         won = bool(state.won)
         return state.feedback, float(score), bool(done or won), won
 
@@ -46,10 +52,13 @@ class AlfWorld:
 
 
 class ScienceWorld:
-    instructions = ("Commands include look around, inventory, task, open <door>, go to <room>, "
-                    "look at <object>, examine <object>, pick up <object>, move <object> to <container>, "
-                    "activate <object>, deactivate <object>, use <object> on <object>, "
-                    "focus on <object>, wait, wait1. Use observed names. Focus as the task requests.")
+    @property
+    def instructions(self):
+        return "Use observed names. Admissible commands: " + "; ".join(self.admissible_commands() or [])
+
+    def admissible_commands(self):
+        read = getattr(self.env, "get_valid_action_object_combinations", None)
+        return list(read()) if read else None
 
     def __init__(self, task_id, fold):
         from scienceworld import ScienceWorldEnv
@@ -156,7 +165,8 @@ def execute(job):
                              checkpoint=lambda row: write_json(path, row))
     except Exception as error:
         record = {"steps": [], "success": False, "score": 0, "promptTokens": 0,
-                  "completionTokens": 0, "error": first_line(error)}
+                  "completionTokens": 0, "error": first_line(error), "outcome": "unobserved",
+                  "terminationReason": "unobserved", "missingRecords": ["episode-record"]}
     finally:
         if env is not None:
             try:
@@ -171,7 +181,8 @@ def execute(job):
             "success": record["success"], "score": record["score"], "steps": len(record["steps"]),
             "promptTokens": record["promptTokens"], "completionTokens": record["completionTokens"],
             "cachedPromptTokens": cached, "cards": len(record.get("cards", [])),
-            "seconds": record["seconds"], "error": record["error"]}
+            "seconds": record["seconds"], "error": record["error"], "terminationReason": record.get("terminationReason", "unobserved"),
+            "terminationScore": record.get("terminationScore"), "outcome": record.get("outcome", "unobserved")}
 
 
 def append_sync(path, text):

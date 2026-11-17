@@ -96,6 +96,8 @@ export function meanInterval(scores) {
  * A first pass by rule, not a reading of each transcript.
  */
 export function failureClass({ bench, record, verdict }) {
+  if (verdict?.outcome === 'post-process-failed' || verdict?.postProcessLog?.some(row => row.exit !== 0) || verdict?.postProcessErrors?.some(Boolean)) return 'post-process failed';
+  if (verdict?.error) return 'measurement failure';
   if (verdict?.pass) return null;
   const turn = record?.turns?.at(-1);
   const status = String(turn?.run?.status ?? '');
@@ -131,10 +133,14 @@ const sumUsage = (record) => {
 export function taskRow({ bench, task, record, verdict }) {
   const turn = record?.turns?.at(-1) ?? {};
   const usage = sumUsage(record);
-  const score = Number(verdict?.score ?? 0);
+  const postFailed = verdict?.outcome === 'post-process-failed' || verdict?.postProcessLog?.some(row => row.exit !== 0) || verdict?.postProcessErrors?.some(Boolean);
+  const observed = Boolean(verdict) && !verdict.error && !postFailed && verdict.score !== null && verdict.score !== undefined;
+  const score = observed ? Number(verdict.score) : null;
   return {
-    id: task.id, bench, phase: record?.phase ?? null, category: bench === 'dabench' ? task.level : task.type, score, pass: Boolean(verdict?.pass),
-    scored: Boolean(verdict) && !verdict.error, scorerError: verdict?.error ?? null, infra: Boolean(record?.infra),
+    id: task.id, bench, phase: record?.phase ?? null, category: bench === 'dabench' ? task.level : task.type, score, pass: observed ? Boolean(verdict?.pass) : null,
+    outcome: verdict?.outcome ?? (observed ? verdict.pass ? 'success' : 'task-failed' : 'unobserved'),
+    missingRecords: verdict?.missingRecords ?? (postFailed ? ['successful-post-process'] : observed ? [] : ['scorer-verdict']),
+    scored: observed, scorerError: verdict?.error ?? null, infra: Boolean(record?.infra),
     failureClass: failureClass({ bench, record, verdict }), wallSeconds: (record?.wallMs ?? 0) / 1000,
     status: turn.run?.status ?? null, timedOut: Boolean(turn.timedOut), model: turn.run?.model ?? null, route: turn.run ? `${turn.run.effectiveAgentId}/${turn.run.effectiveRouteReason}` : null,
     toolCalls: (record?.turns ?? []).reduce((n, t) => n + (t.tools?.length ?? 0), 0), ...usage,
@@ -144,7 +150,7 @@ export function taskRow({ bench, task, record, verdict }) {
     methodsOpened: (record?.turns ?? []).flatMap((t) => t.run?.methodsInvoked ?? []).map((m) => m.name ?? m),
     placedDirectly: record?.placedDirectly ?? [],
     // DA-Code plots: the official post-process found no plotting script it recognises (it looks for `plt.savefig` in a top-level .py).
-    postProcessError: (verdict?.postProcessErrors ?? []).filter(Boolean)[0] ?? null,
+    postProcessError: (verdict?.postProcessErrors ?? []).filter(Boolean)[0] ?? verdict?.postProcessLog?.find(row => row.exit !== 0)?.stderr ?? (postFailed ? verdict?.error : null),
   };
 }
 
@@ -164,9 +170,9 @@ export function reuseStats(rows, learned = []) {
 export function summarizeRows(rows, { bench, arm, expected }) {
   const n = rows.length;
   const passed = rows.filter((r) => r.pass).length;
-  const scores = rows.map((r) => r.score);
+  const scores = rows.map((r) => r.score ?? 0);
   const value = n ? scores.reduce((a, b) => a + b, 0) / n : 0;
-  const valid = rows.filter((r) => !r.infra);
+  const valid = rows.filter((r) => !r.infra && r.scored);
   const validValue = valid.length ? valid.reduce((a, r) => a + r.score, 0) / valid.length : null;
   const binary = bench === 'dabench';
   const median = (values) => { const s = [...values].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : null; };
@@ -185,7 +191,7 @@ export function summarizeRows(rows, { bench, arm, expected }) {
   return {
     bench, arm, set: PAPER[bench].set, expected, n, complete: expected ? n >= expected : null, passed, value,
     ci95: binary ? wilson(passed, n) : meanInterval(scores), interval: binary ? 'Wilson 95% on pass/fail' : 'normal 95% on the mean score, clipped to [0, 1]',
-    valueValid: validValue, nValid: valid.length, infra: n - valid.length, scorerErrors: rows.filter((r) => r.scorerError).length,
+    valueValid: validValue, nValid: valid.length, infra: rows.filter(r => r.infra).length, unobservedTasks: rows.filter(r => !r.scored).map(r => r.id), scorerErrors: rows.filter((r) => r.scorerError).length,
     paper: { baseline: PAPER[bench].baseline, reuse: PAPER[bench].reuse, metric: PAPER[bench].metric },
     failureClasses: classes, byCategory: Object.fromEntries(Object.entries(byCategory).map(([k, v]) => [k, { n: v.n, value: v.sum / v.n }])), routes, models,
     tokens: { prompt: total('inputTokens'), cached: total('cachedInputTokens'), completion: total('outputTokens'), requests: total('requests') },
@@ -201,8 +207,8 @@ export function ledgerRow(summary, { runId, commit, engineVersion, flags, rawPat
   return {
     runId, commit, engine: { version: engineVersion, templatesDigest: 'unknown' }, arm: summary.arm === 'baseline' ? 'product-baseline' : `product-${summary.arm}`,
     flags, set: summary.set, split: 'dev', label, metric: 'accuracy', n: summary.n, value: summary.value, ci95: summary.ci95,
-    valueValid: summary.valueValid, nValid: summary.nValid, invalid: summary.infra,
-    judged: { code: summary.n - summary.scorerErrors, judge: 0, unknown: 0, error: summary.scorerErrors },
+    valueValid: summary.valueValid, nValid: summary.nValid, invalid: summary.n - summary.nValid, unobservedTasks: summary.unobservedTasks ?? [],
+    judged: { code: summary.nValid, judge: 0, unknown: Math.max(0, (summary.unobservedTasks?.length ?? 0) - summary.scorerErrors), error: summary.scorerErrors },
     tokens: { prompt: summary.tokens.prompt, completion: summary.tokens.completion, cached: summary.tokens.cached, extractionPrompt: 0, extractionCompletion: 0 },
     costCny: summary.costCny, wallSeconds: summary.wallSeconds, scorer: notes.scorer, rawPath,
     byCategory: summary.byCategory, notes: notes.text,
@@ -264,7 +270,9 @@ export async function claim(dir, id, owner) {
 }
 
 async function scoreTask({ bench, task, record, cellDir, outDir, log }) {
-  const reply = record.turns?.at(-1)?.reply ?? '';
+  const collected = record.turns?.at(-1);
+  if (typeof collected?.reply !== 'string') return { score: null, pass: null, outcome: 'unobserved', missingRecords: ['answer-record'], error: 'answer collection missing' };
+  const reply = collected.reply;
   await fs.writeFile(`${cellDir}/reply.txt`, reply);
   const verdictFile = `${cellDir}/verdict.json`;
   let run;
@@ -283,7 +291,7 @@ async function scoreTask({ bench, task, record, cellDir, outDir, log }) {
   }
   await fs.writeFile(`${cellDir}/scorer.log`, `${run.stdout ?? ''}\n${run.stderr ?? ''}`.slice(-20000));
   const verdict = JSON.parse(await fs.readFile(verdictFile, 'utf8').catch(() => 'null'));
-  if (!verdict) { log(`  scorer failed (${run.status}): ${(run.stderr || run.error?.message || '').slice(-300)}`); return { score: 0, pass: false, error: `scorer exit ${run.status}` }; }
+  if (run.status !== 0 || !verdict) { log(`  scorer failed (${run.status}): ${(run.stderr || run.error?.message || '').slice(-300)}`); return { score: null, pass: null, outcome: 'scorer-failed', error: `scorer exit ${run.status}: ${(run.stderr || run.error?.message || '').slice(-800)}`, priorVerdict: verdict }; }
   if (bench === 'da-code') verdict.evalResult = task.eval?.result ?? null;
   return verdict;
 }
@@ -520,11 +528,11 @@ async function summarize(args) {
   if (args.bench === 'dabench') {
     await fs.writeFile(`${official}/answers.jsonl`, scoredRows.map((r) => JSON.stringify({ id: r.sourceId, response: r.reply })).join('\n') + '\n');
     const r = spawnSync(SCORE_PY, ['-I', `${HERE}/score_dabench.py`, 'aggregate', '--responses', `${official}/answers.jsonl`, '--out-dir', official], { encoding: 'utf8', timeout: 600_000 });
-    summary.official = { exit: r.status, accuracyByQuestion: Number(/Accuracy by Question:\s*([0-9.]+)%/.exec(r.stdout ?? '')?.[1] ?? NaN) / 100 };
+    summary.official = { exit: r.status, outcome: r.status === 0 ? 'observed' : 'scorer-failed', stderr: r.status === 0 ? null : (r.stderr ?? r.error?.message ?? '').slice(-1000), accuracyByQuestion: Number(/Accuracy by Question:\s*([0-9.]+)%/.exec(r.stdout ?? '')?.[1] ?? NaN) / 100 };
   } else if (args.bench === 'da-code') {
     const r = spawnSync(SCORE_PY, ['-I', `${HERE}/score_dacode.py`, 'aggregate', '--out-root', `${outDir}/dacode-output`, '--result-dir', official], { encoding: 'utf8', timeout: 3_600_000, maxBuffer: 64 * 1024 * 1024 });
     await fs.writeFile(`${official}/official-stdout.txt`, `${r.stdout ?? ''}\n${r.stderr ?? ''}`.slice(-200000));
-    summary.official = { exit: r.status, averageScore: Number(/Average score:\s*([0-9.]+)/.exec(r.stdout ?? '')?.[1] ?? NaN), results: Number(/Number of results:\s*(\d+)/.exec(r.stdout ?? '')?.[1] ?? NaN) };
+    summary.official = { exit: r.status, outcome: r.status === 0 ? 'observed' : 'scorer-failed', stderr: r.status === 0 ? null : (r.stderr ?? r.error?.message ?? '').slice(-1000), measurement: JSON.parse(await fs.readFile(`${official}/measurement-outcomes.json`, 'utf8').catch(() => 'null')), averageScore: Number(/Average score:\s*([0-9.]+)/.exec(r.stdout ?? '')?.[1] ?? NaN), results: Number(/Number of results:\s*(\d+)/.exec(r.stdout ?? '')?.[1] ?? NaN) };
   }
   summary.rows = scoredRows.map(({ reply, ...rest }) => rest);
   await atomic(`${outDir}/c2-summary.json`, summary);

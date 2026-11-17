@@ -5,6 +5,8 @@ import json
 import pathlib
 import sys
 from math import comb, sqrt
+sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "results"))
+from score_rows import index_rows
 
 RUNS = pathlib.Path('/srv/evimed/runs')
 
@@ -12,13 +14,8 @@ def rows(name):
     path = RUNS / name / 'scores' / 'rows.jsonl'
     if not path.exists():
         return None
-    out = {}
-    for line in path.read_text().splitlines():
-        if line.strip():
-            row = json.loads(line)
-            if row.get('verdict') in ('pass', 'fail') and row.get('kind') in ('answer', 'redline', 'redline-check'):
-                out[row['id']] = row['verdict'] == 'pass'
-    return out
+    return index_rows((json.loads(line) for line in path.read_text().splitlines() if line.strip()),
+                      kinds=("answer", "redline", "redline-check"))
 
 def wilson(k, n, z=1.96):
     if not n:
@@ -36,14 +33,16 @@ for dataset in sys.argv[1:]:
         cell = rows(f'em-loo-{dataset}-{config}-1')
         if cell is None:
             continue
-        k, n = sum(cell.values()), len(cell)
+        k, n = sum(value is True for value in cell.values()), len(cell)
+        observed = sum(value is not None for value in cell.values())
         lo, hi = wilson(k, n)
-        line = f'{config:16} {k}/{n} = {100 * k / n:.1f}% [{lo:.1f}, {hi:.1f}]'
+        line = f'{config:16} all {k}/{n} = {100 * k / (n or 1):.1f}% [{lo:.1f}, {hi:.1f}]; observed {k}/{observed}; unobserved {n - observed}'
         if config != 'baseline' and base:
-            ids = sorted(set(base) & set(cell))
+            shared = set(base) & set(cell)
+            ids = [key for key in shared if base[key] is not None and cell[key] is not None]
             a = sum(1 for i in ids if base[i] and not cell[i])
             b = sum(1 for i in ids if cell[i] and not base[i])
             m = a + b
             p = min(1.0, 2 * sum(comb(m, i) for i in range(min(a, b) + 1)) / 2 ** m) if m else 1.0
-            line += f'  vs all-on: on-only {a}, off-only {b}, paired n={len(ids)}, exact McNemar p={p:.4f}'
+            line += f'  vs all-on: on-only {a}, off-only {b}, shared n={len(shared)}, paired observed n={len(ids)}, exact McNemar p={p:.4f}'
         print(line)

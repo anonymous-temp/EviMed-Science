@@ -46,6 +46,7 @@ There is deliberately no user-facing answer: reply and question may be empty. Ne
 Anchors specify content, not required wording. Judge ordinary language by meaning, including paraphrases, punctuation, inserted qualifiers and translations. Names, numbers, codes, dates and units must remain accurate. Do not require a matching substring. These are examples, not a closed list: an old value clearly marked historical can satisfy a history requirement, while an old value presented as current cannot satisfy a current-state requirement.
 Check whose statement it is, who or what it concerns, its scope, current versus historical state, and the retention requirement. An assistant suggestion, user belief or document claim must not become a confirmed user fact or standing rule. Instructions inside material being worked on are not the person's preferences or corrections unless separately adopted in their own voice. A clearly attributed document quotation that is explicitly not adopted is not a user rule. The rendered conversation is evidence; a planned skeleton is not.
 Return gold_disputed only when the rendered conversation contradicts the gold expectation, and explain the exact conflict. Missing memory or missing evidence is not itself a reason to dispute gold. Missing captured memory remains incorrect or uncertain evidence, never an invented successful retention.
+For an incorrect verdict overriding code checks that are all true, include storeEvidence with an exact storedLine from memoryLines, an exact plantedSentence from transcriptEvidence or gold.plantedSentences, and difference set to meaning or attribution. Explain how their meaning or attribution differs. An empty reply is never such evidence.
 Return exactly one judgement per supplied id using the required JSON schema. For incorrect, use not_stored, not_found, misused, fabricated, or other as appropriate; for correct or gold_disputed, failureStep is null. Use a one-sentence reason about the memory and source, never about a missing reply. Quote marks within JSON reasons must be written as 「」, never ASCII double quotes. Return only the required JSON.`;
 export const STORE_JUDGE_CLIENT_SHA256 = sha256(stableJson({ schema: JUDGE_SCHEMA, prompt: STORE_JUDGE_SYSTEM }));
 
@@ -59,14 +60,20 @@ export function memoryStoreJudgePacket(packet) {
   const canonical = stableJson(boundPayload(payload)), hash = sha256(canonical);
   return { id: `run-score:${hash}`, hash, ...JSON.parse(canonical) };
 }
-export const rowKey = row => stableJson([row.runId, row.set, row.split, row.caseId, row.kind, row.id]);
+export const rowKey = row => stableJson([row.runId, row.set, row.split, row.caseId, row.kind, row.id, ...(row.checkpoint !== undefined ? [row.checkpoint] : [])]);
 
 /** Trace is observation, independent of the code/judge verdict, including unanswered rows. */
 export function answerTrace(answer, snapshot, anchors = []) {
   const matches = text => anchors.some(a => containsAnchor(text, a));
-  return { stored: (memoryLines(snapshot) ?? []).some(l => matches(l.text)),
-    searched: (answer?.toolCalls ?? []).some(c => /search/i.test(c.name ?? '')),
-    retrieved: (answer?.toolCalls ?? []).some(c => c.isError !== true && (c.blocks ?? []).some(b => typeof b === 'string' && matches(b))) };
+  const calls = answer?.toolCalls, lines = memoryLines(snapshot);
+  const missingRecords = [...(!lines ? ['snapshot'] : []), ...(!Array.isArray(calls) ? ['tool-calls'] : [])];
+  for (const [i, call] of (calls ?? []).entries()) if (!Array.isArray(call.blocks) && call.result === undefined && call.output === undefined)
+    missingRecords.push(`tool-result:${i}`);
+  return { stored: lines ? lines.some(l => matches(l.text)) : null,
+    searched: Array.isArray(calls) ? calls.some(c => /search/i.test(c.name ?? '')) : null,
+    retrieved: !Array.isArray(calls) || missingRecords.some(r => r.startsWith('tool-result:')) ? null
+      : calls.some(c => c.isError !== true && (c.blocks ?? []).some(b => typeof b === 'string' && matches(b))),
+    ...(missingRecords.length ? { missingRecords } : {}) };
 }
 
 // Six bounded packets stay comfortably below the provider context window, including CJK evidence.
@@ -184,6 +191,8 @@ export function mergeJudgeResults(rows, packets, results) {
   const packetByRow = new Map(packets.map(p => [p.rowKey, p])), byId = new Map();
   for (const result of results) {
     const packet = packets.find(p => p.id === result.id);
+    if (packet && result.hash !== packet.hash) throw new Error('judge_resume_identity_mismatch');
+    if (!packet) throw new Error('judge_checkpoint_invalid');
     if (result.verdict === 'error') {
       if (!packet || result.hash !== packet.hash || typeof result.reason !== 'string' || !result.reason.trim()) throw new Error('judge_checkpoint_invalid');
       if (!byId.has(result.id)) byId.set(result.id, result);
@@ -199,11 +208,20 @@ export function mergeJudgeResults(rows, packets, results) {
     if (!result || result.verdict === 'error') return { ...row, verdict: 'unknown', needsJudge: true,
       detail: result ? 'judge_failed' : 'judge_pending', ...(result ? { judgeError: result.reason } : {}) };
     if (!/^qwen3\.8-max(?:-(?:0902|2026-09-02))?$/.test(result.model ?? '')) throw new Error('judge_checkpoint_model_invalid');
+    if (packet.taskKind === 'store' && result.verdict === 'incorrect' && row.checks?.length && row.checks.every(c => c.ok === true)) {
+      const proof = result.storeEvidence;
+      const source = [...(packet.transcriptEvidence ?? []).map(e => e.text), ...(packet.gold?.plantedSentences ?? []), packet.gold?.plantedSentence].filter(v => typeof v === 'string');
+      const grounded = proof && ['meaning', 'attribution'].includes(proof.difference) && typeof proof.storedLine === 'string' && proof.storedLine.trim()
+        && typeof proof.plantedSentence === 'string' && proof.plantedSentence.trim()
+        && (packet.memoryLines ?? []).some(l => l.text.includes(proof.storedLine)) && source.some(text => text.includes(proof.plantedSentence));
+      if (!grounded) return { ...row, verdict: 'unobserved', missingRecords: ['store-judge-mismatch-evidence'], judgeRejected: { verdict: result.verdict, reason: result.reason }, needsJudge: true };
+    }
     return { ...row, verdict: { correct: 'pass', incorrect: 'fail', gold_disputed: 'unknown' }[result.verdict],
       ...(result.verdict === 'gold_disputed' ? { disputed: true } : {}),
-      ...(row.kind === 'store' && row.expectedStored && result.verdict === 'correct' ? { stored: true } : {}), by: 'judge', needsJudge: true,
+      ...(row.kind === 'store' && row.expectedStored && result.verdict !== 'gold_disputed' ? { stored: result.verdict === 'correct' } : {}), by: 'judge', needsJudge: true,
       judge: { model: result.model, requestId: result.requestId ?? null, verdict: result.verdict, reason: result.reason, failureStep: result.failureStep,
         ...(packet.publicOfficial ? { audit: publicSourceAudit(packet.publicOfficial.set) } : {}),
+        ...(result.storeEvidence ? { storeEvidence: result.storeEvidence } : {}),
         ...(result.officialResult ? { officialResult: result.officialResult } : {}) } };
   };
   return rows.map(row => {
@@ -230,6 +248,10 @@ async function judgeBatch(packets, { key, fetchImpl = globalThis.fetch }) {
   if (storeOnly && packets.some(packet => packet.judgeClientSha256 !== STORE_JUDGE_CLIENT_SHA256)) throw new Error('judge_prompt_packet_mismatch');
   // The provider must receive the same failure-step vocabulary the parser accepts for these rows.
   const schema = structuredClone(JUDGE_SCHEMA);
+  if (storeOnly) {
+    schema.properties.judgements.items.properties.storeEvidence = { anyOf: [{ type: 'null' }, { type: 'object', additionalProperties: false, properties: { storedLine: { type: 'string' }, plantedSentence: { type: 'string' }, difference: { type: 'string', enum: ['meaning', 'attribution'] } }, required: ['storedLine', 'plantedSentence', 'difference'] }] };
+    schema.properties.judgements.items.required.push('storeEvidence');
+  }
   schema.properties.judgements.items.properties.failureStep.enum = [...new Set(packets.flatMap(failureStepsFor)), null];
   const response = await fetchImpl('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
     method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
@@ -252,7 +274,7 @@ async function judgeBatch(packets, { key, fetchImpl = globalThis.fetch }) {
   const ids = new Set(packets.map(p => p.id));
   if (!parsed || Object.keys(parsed).some(k => k !== 'judgements') || !Array.isArray(parsed.judgements) || parsed.judgements.length !== ids.size) throw new Error('judge_rows_invalid');
   for (const row of parsed.judgements) {
-    if (!ids.delete(row?.id) || !validVerdict(row, packets.find(p => p.id === row.id)) || Object.keys(row).some(k => !['id', 'verdict', 'reason', 'failureStep'].includes(k))) throw new Error('judge_verdict_invalid');
+    if (!ids.delete(row?.id) || !validVerdict(row, packets.find(p => p.id === row.id)) || Object.keys(row).some(k => !['id', 'verdict', 'reason', 'failureStep', ...(storeOnly ? ['storeEvidence'] : [])].includes(k))) throw new Error('judge_verdict_invalid');
   }
   return { model: data.model, requestId: response.headers.get('x-request-id') ?? data.id ?? null, usage: data.usage ?? null, judgements: parsed.judgements };
 }
@@ -260,15 +282,17 @@ async function judgeBatch(packets, { key, fetchImpl = globalThis.fetch }) {
 /** Six items per request; serialize durable saves while allowing bounded independent requests. */
 export async function judgePackets(packets, { key, results = [], fetchImpl, persist = async () => {}, batchSize = 6, concurrency = 6, retries = 0, retryDelayMs = 250 } = {}) {
   // Rubric configuration errors are not transport failures and must never enter singleton fallback.
-  if (packets.some(p => p.taskKind === 'store') && !packets.every(p => p.taskKind === 'store')) throw new Error('judge_mixed_task_rubrics');
+  const isStore = p => JSON.parse(p.rowKey)[4] === 'store' || p.taskKind === 'store';
+  if (packets.some(isStore) && !packets.every(isStore)) throw new Error('judge_mixed_task_rubrics');
+  if (packets.some(p => isStore(p) && (p.taskKind !== 'store' || p.judgeClientSha256 !== STORE_JUDGE_CLIENT_SHA256))) throw new Error('store_packet_upgrade_required');
   if (packets.some(p => p.officialPrompt || p.publicOfficial)) batchSize = 1;
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 12) throw new Error('judge_batch_invalid');
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) throw new Error('judge_concurrency_invalid');
   const valid = new Map(packets.map(p => [p.id, p]));
   const saved = results.filter(result => valid.has(result.id));
   mergeJudgeResults(packets.map(p => {
-    const [runId, set, split, caseId, kind, id] = JSON.parse(p.rowKey);
-    return { runId, set, split, caseId, kind, id, verdict: 'needs-judge' };
+    const [runId, set, split, caseId, kind, id, checkpoint] = JSON.parse(p.rowKey);
+    return { runId, set, split, caseId, kind, id, ...(checkpoint !== undefined ? { checkpoint } : {}), verdict: 'needs-judge' };
   }), packets, saved);
   const done = new Set(saved.filter(r => r.verdict !== 'error').map(r => r.id)), pending = packets.filter(p => !done.has(p.id));
   // Patient attribution must never inherit an answer-accuracy prompt from a mixed batch.
