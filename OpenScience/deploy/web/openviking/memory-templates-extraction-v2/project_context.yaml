@@ -11,7 +11,7 @@ description: |
   has been decided, where it stands and what is open, what limits it. A question the user
   asks, a paper, trial, product or law they ask about, a document they paste, a request
   scoped to one answer, or an assistant suggestion alone does not establish the project
-  as a fact. Retain useful sourced details or suggestions with attribution in NOTES. One deliverable asked for in a
+  as a fact. Retain useful sourced details or suggestions with attribution in NOTES; a view the user voices goes to NOTES ("用户认为："), never onto the card. One deliverable asked for in a
   single message (an email, a slide deck, a table, a poster) is a request, not a project: a
   card is written only when the conversation is held inside one of the user's named projects,
   or the user describes a piece of work that goes on beyond this one deliverable. The

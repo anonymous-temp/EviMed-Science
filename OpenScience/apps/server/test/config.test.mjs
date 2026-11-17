@@ -13,6 +13,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 
 for (const [key, property] of [
   ['OPEN_SCIENCE_MEMORY_PEOPLE_ACROSS_PROJECTS_ENABLED', 'memoryPeopleAcrossProjectsEnabled'],
+  ['OPEN_SCIENCE_MEMORY_LITERAL_FALLBACK_ENABLED', 'memoryLiteralFallbackEnabled'],
+  ['OPEN_SCIENCE_AGENT_MEMORY_API_INTERNAL_ENABLED', 'agentMemoryApiInternalEnabled'],
   ['OPEN_SCIENCE_MEMORY_NORMALIZE_NAMES_ENABLED', 'memoryNormalizeNamesEnabled'],
   ['OPEN_SCIENCE_MEMORY_COMMIT_VERIFICATION_ENABLED', 'memoryCommitVerificationEnabled'],
   ['OPEN_SCIENCE_MEMORY_OBSERVATION_RECALL_ENABLED', 'memoryObservationRecallEnabled'],
@@ -33,6 +35,17 @@ for (const [key, property] of [
     process.env[key] = 'true';
     assert.equal(loadConfig({ rootDir: repoRoot })[property], true);
     assert.equal(loadConfig({ rootDir: repoRoot, [property]: false })[property], false);
+  } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
+});
+
+test('internal agent-memory audience defaults empty and accepts exact account IDs and overrides', () => {
+  const key = 'OPEN_SCIENCE_AGENT_MEMORY_API_INTERNAL_USERS', saved = process.env[key];
+  try {
+    delete process.env[key];
+    assert.deepEqual(loadConfig({ rootDir: repoRoot }).agentMemoryApiInternalUsers, []);
+    process.env[key] = 'account-1, account-2,,';
+    assert.deepEqual(loadConfig({ rootDir: repoRoot }).agentMemoryApiInternalUsers, ['account-1', 'account-2']);
+    assert.deepEqual(loadConfig({ rootDir: repoRoot, agentMemoryApiInternalUsers: [] }).agentMemoryApiInternalUsers, []);
   } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
 });
 

@@ -37,7 +37,15 @@ const indentedBlock = text => text.split('\n').map(line => `  ${line}`).join('\n
 // History is now in the default sources. Only the optional machine-readable induction
 // and alias formats, plus explicit note labels, remain specific to this variant.
 const REPLACEMENTS = {
-  'preferences.yaml': [['\n  __NEVER_KEEP__', `\n${indentedBlock(STATED_CHOICE_RULE)}\n\n  __NEVER_KEEP__`]],
+  'preferences.yaml': [
+    ['Useful limited-scope context and attributed opinions belong in NOTES.',
+      'Useful limited-scope context and attributed opinions belong in NOTES. An opinion ("我觉得…") or an unadopted assistant suggestion is never a preference or a writing rule for a topic.'],
+    ['\n  __NEVER_KEEP__', `\n${indentedBlock(STATED_CHOICE_RULE)}\n\n  __NEVER_KEEP__`],
+  ],
+  'decisions.yaml': [['assistant made, and never an option still under discussion.',
+    'assistant made, never a view the user voices (NOTES, "用户认为："), and never an option still under discussion.']],
+  'project_context.yaml': [['Retain useful sourced details or suggestions with attribution in NOTES.',
+    'Retain useful sourced details or suggestions with attribution in NOTES; a view the user voices goes to NOTES ("用户认为："), never onto the card.']],
   'corrections.yaml': [['\n  __NEVER_KEEP__', `\n${indentedBlock(STATED_CHOICE_RULE)}\n\n  __NEVER_KEEP__`]],
   'observations.yaml': [['\n  __NEVER_KEEP__', `\n${indentedBlock(OBSERVATION_CHOICE_RULE)}\n\n  __NEVER_KEEP__`]],
   'people.yaml': [['\n  __NEVER_KEEP__', `\n${indentedBlock(ALIAS_RULE)}\n\n  __NEVER_KEEP__`]],

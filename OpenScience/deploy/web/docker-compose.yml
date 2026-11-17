@@ -389,6 +389,7 @@ services:
       # The code's budget, not a second one: a 30000 here overrode config.mjs's
       # 120000 in production (2026-09-19). The model calls this bounds are the memory side's (the map's topic grouping, the
       # rejection judge).
+      OPEN_SCIENCE_MEMORY_LITERAL_FALLBACK_ENABLED: ${OPEN_SCIENCE_MEMORY_LITERAL_FALLBACK_ENABLED:-false}
       OPEN_SCIENCE_MEMORY_NORMALIZE_NAMES_ENABLED: ${OPEN_SCIENCE_MEMORY_NORMALIZE_NAMES_ENABLED:-false}
       OPEN_SCIENCE_MEMORY_COMMIT_VERIFICATION_ENABLED: ${OPEN_SCIENCE_MEMORY_COMMIT_VERIFICATION_ENABLED:-false}
       OPEN_SCIENCE_MEMORY_OBSERVATION_RECALL_ENABLED: ${OPEN_SCIENCE_MEMORY_OBSERVATION_RECALL_ENABLED:-false}

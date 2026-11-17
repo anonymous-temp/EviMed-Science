@@ -1779,3 +1779,64 @@ test('REST read and listing distinguish paused recall from an empty completed li
   }
   assert.equal(f.stub.sent('GET', '/api/v1/content/read').length, 0);
 });
+
+test('public context preserves the merged opening layers and partial profile without delivery or use', async t => {
+  const { createAgentMemoryRoutes } = await import('../src/agentMemoryRoutes.mjs');
+  const { ResidentProfiles } = await import('../src/residentProfile.mjs');
+  const writes = [];
+  const config = { agentMemoryApiEnabled: true, memoryEngineEnabled: true, memoryOpeningByUseEnabled: true,
+    memoryOpeningMaxChars: 400, memoryStandingInstructionsEnabled: true, memoryOpeningIndexEnabled: true, memorySafetyNotesEnabled: true };
+  const f = await fixture(t, { config, sourceReceipt: async () => writes.push('receipt'), overlay: { configured: true,
+    files: async () => new Map(), sensitiveUris: async () => [], noteRecalled: async () => writes.push('recalled'), noteUsed: async () => writes.push('used') } });
+  f.stub.seedMemory(OV_USER, 'profile.md', '# User\n' + '- A long profile fact with a retained source date (as of 2026-11-17).\n'.repeat(100));
+  f.stub.seedMemory(OV_USER, 'preferences/self/units.md', '- Use metric units.');
+  const settings = { configured: true, settings: async () => ({ pausedProjects: [] }),
+    residentState: async () => { writes.push('state'); return null; }, noteResidentDelivered: async () => writes.push('delivered') };
+  const resident = new ResidentProfiles({ config, store: settings,
+    capsules: { profileFacts: async () => [{ id: 'pack', factKind: 'preference', content: 'Use tables.' }] },
+    projectCard: async () => [{ slot: 'goal', text: 'Compare sensors.' }],
+    nativeFiles: async () => [{ uri: `${ROOT}/memories/preferences/self/units.md`, body: '- Use metric units.', usedCount: 2 }],
+    nativeIndex: async () => ({ counts: { preferences: 1, notes: 1 } }),
+    safetyNotes: async () => [{ uri: `${ROOT}/memories/safety_notes/person.md`, type: 'safety_notes', body: '# Person\n- Reported reaction.', relPath: 'safety_notes/person.md' }] });
+  const routes = createAgentMemoryRoutes({ config, capsules: {}, memorySettings: settings,
+    apiKeys: { resolve: async () => ({ userId: USER, keyId: 'test', scopes: ['memory.read'] }) },
+    store: { userById: async () => ({ id: USER }), requireProject: async () => ({ id: 'p1', userId: USER }) },
+    nativeMemory: { configured: true, memoryContexts: { forProject: async () => ({ kind: 'owned' }), assertLive: async () => {} } },
+    admission: fixedAdmission(), openingContext: { resident, opening: f.handler.opening } });
+  const response = { data: null, writeHead() {}, end(text) { this.data = JSON.parse(text).data; } };
+  await routes({ method: 'GET', url: '/api/agent-memory/v1/context', headers: { authorization: 'Bearer test' } }, response);
+  assert.deepEqual(writes, []);
+  const result = response.data;
+  const profile = result.layers.find(layer => layer.name === 'profile');
+  assert.match(profile.text, /^Profile is partial;/);
+  assert.equal(profile.omissionReason, 'elided');
+  const kernel = await resident.forDispatch(USER, { projectId: 'p1', sessionId: null, attended: true });
+  assert.equal(result.platformText, kernel.text);
+  assert.equal(result.layers.find(layer => layer.name === 'listings').present, false, 'the shared opening budget omits the listings');
+  for (const name of ['projectCard', 'standingPreferences', 'index', 'safetyNotes', 'capsules', 'mostUsed']) {
+    assert.equal(result.layers.find(layer => layer.name === name).present, true, name);
+  }
+  const read = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(`${ROOT}/memories/profile.md`)}`);
+  assert.equal(profile.text, read.json.result);
+});
+
+test('literal and observation reads retain same-date neighbours through the shared withdrawal matcher', async t => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const removed = 'Worked temporary night shifts last month (as of 2026-11-17)';
+  const overlay = { configured: true, files: async () => new Map(), sensitiveUris: async () => [], noteRecalled: async () => {}, originsOf: async () => new Map(),
+    removals: async () => [{ text: removed, fingerprint: lineFingerprint(removed), origin: 'forget' }], instructionCheck: async () => null };
+  const history = new MemoryHistory({ config: {}, contexts: {}, ledger: { overlay, derivedSourcesRejected: async () => false } });
+  overlay.memoryForgetBody = (_user, uri, body) => history.fenceNativeBody({ ownerId: USER, kind: 'owned' }, uri, body);
+  const f = await fixture(t, { config: { memoryLiteralFallbackEnabled: true, memoryObservationRecallEnabled: true }, overlay });
+  const body = `- ${removed}\n- Spare keys are in the blue cabinet (as of 2026-11-17)`;
+  f.stub.seedMemory(OV_USER, 'notes/Keys.md', body);
+  f.stub.seedMemory(OV_USER, 'observations/Keys.md', body);
+  f.sessions.search = async () => ({ result: { memories: [], resources: [], skills: [] } });
+  const search = await f.call('POST', '/api/v1/search/search', { query: 'Keys' });
+  assert.equal(search.json.result.memories.length, 2);
+  const text = JSON.stringify(search.json);
+  assert.match(text, /blue cabinet/); assert.match(text, /seen once/); assert.doesNotMatch(text, /night shifts/);
+  const read = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read', arguments: { uris: [`${ROOT}/memories/observations/Keys.md`] } } });
+  assert.match(JSON.stringify(read.messages), /seen once/); assert.doesNotMatch(JSON.stringify(read.messages), /night shifts/);
+});

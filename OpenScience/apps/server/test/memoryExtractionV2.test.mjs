@@ -10,7 +10,7 @@ import { choiceRows, confirmedAliasRequest, confirmedAliases, personLabel } from
 
 const release = new URL('../../../deploy/web/openviking/', import.meta.url);
 const SHARED = 'A personal fact, number, name, date or opinion said in passing inside an unrelated request is extracted like any other statement. Copy names, numbers with units, dates and model numbers as the user wrote them, without reformatting (no added spaces; "3月18日" stays "3月18日").';
-const HISTORY_TYPES = ['profile.yaml', 'preferences.yaml', 'project_context.yaml', 'entities.yaml'];
+const HISTORY_TYPES = ['profile.yaml', 'preferences.yaml', 'project_context.yaml', 'entities.yaml', 'people.yaml', 'notes.yaml', 'decisions.yaml', 'follow_ups.yaml', 'project_facts.yaml'];
 /** The machine-read line rules kept from v2 and the types that carry each. */
 const LINE_RULES = /** @type {[string, string[]][]} */ ([[OBSERVATION_CHOICE_RULE, ['observations.yaml']],
   [STATED_CHOICE_RULE, ['preferences.yaml', 'corrections.yaml']], [ALIAS_RULE, ['people.yaml']]]);
@@ -36,12 +36,13 @@ test('extraction-v2.1 is the default text plus the five additions, each in its t
     // Rules 4 (asides) and 5 (exactness): once in the shared block of every type, never in the default.
     assert.equal(count(text, SHARED), 1, name);
     assert.equal(count(defaults[name], SHARED), 0, name);
-    // Rule 1 (changed values): only in the four types whose default text replaced or dropped the earlier value.
+    // Dated history is now shared by both variants in all nine state-bearing types.
     assert.equal(count(text, HISTORY_RULE), HISTORY_TYPES.includes(name) ? 1 : 0, name);
     // Rules 2 and 3 (opinions, unadopted suggestions): stated with their labels in NOTES only.
     assert.equal(count(text, OPINION_RULE), name === 'notes.yaml' ? 1 : 0, name);
     assert.equal(count(text, SUGGESTION_RULE), name === 'notes.yaml' ? 1 : 0, name);
-    for (const rule of [HISTORY_RULE, OPINION_RULE, SUGGESTION_RULE]) assert.ok(!defaults[name].includes(rule), name);
+    assert.equal(count(defaults[name], HISTORY_RULE), HISTORY_TYPES.includes(name) ? 1 : 0, name);
+    for (const rule of [OPINION_RULE, SUGGESTION_RULE]) assert.ok(!defaults[name].includes(rule), name);
     // The machine-read line formats kept from v2 are each in their own types only, never in the default.
     for (const [rule, types] of LINE_RULES) {
       assert.equal(count(unindent(text), rule), types.includes(name) ? 1 : 0, name);
@@ -67,7 +68,7 @@ test('extraction-v2.1 is the default text plus the five additions, each in its t
   }
 });
 
-test('extraction-v2.1 removes the per-type "replace" rules that contradict a dated earlier value; the default keeps them', () => {
+test('both template variants preserve dated earlier values without contradictory replacement rules', () => {
   const defaults = renderMemoryTemplates();
   const v2 = renderMemoryTemplates({ variant: 'extraction-v2' });
   /** @type {[string, RegExp][]} */
@@ -77,14 +78,14 @@ test('extraction-v2.1 removes the per-type "replace" rules that contradict a dat
     ['project_context.yaml', /decision replaces its line|Remove an item once/],
   ];
   for (const [name, pattern] of contradictions) {
-    assert.match(defaults[name], pattern, `${name}: the default still states it`);
+    assert.doesNotMatch(defaults[name], pattern, name);
     assert.doesNotMatch(v2[name], pattern, name);
   }
   assert.match(v2['profile.yaml'], /Every current bullet ends with the date/);
   assert.match(v2['profile.yaml'], /labels \(except 曾为 \/ earlier\)/);
   assert.match(v2['preferences.yaml'], /No dates \(except earlier-value bullets\), events or plans\./);
-  assert.match(v2['project_context.yaml'], /decision: the new choice is the current line, its earlier value kept as stated below\./);
-  assert.match(v2['project_context.yaml'], /Remove an open item once the user says it is done\./);
+  assert.match(v2['project_context.yaml'], /decision keeps the new choice first and its dated earlier value below/);
+  assert.match(v2['project_context.yaml'], /completed.*history/s);
   // The two wrappers the rule asks for are exactly what the readers treat as history.
   const filled = (/** @type {string} */ wrapper) => wrapper.replace('<earlier value>', '住在迎泽区').replace('YYYY-MM-DD', '2026-03-01');
   for (const wrapper of HISTORY_RULE.match(/"(曾为：[^"]+|earlier: [^"]+)"/g) ?? []) {
@@ -143,7 +144,8 @@ test('the stated-choice line in preferences and corrections reaches choiceRows t
 test('the alias marker pair the people rule asks for is what the alias readers accept (confirmedAliases, confirmedAliasRequest)', () => {
   const v2 = renderMemoryTemplates({ variant: 'extraction-v2' });
   assert.ok(unindent(v2['people.yaml']).includes(ALIAS_RULE));
-  assert.match(v2['people.yaml'], /Merge only when the conversation explicitly identifies the same\n {2}person; a shared name, diagnosis, role or similar story is not evidence of shared identity\.\n {2}When the user explicitly says/);
+  assert.match(v2['people.yaml'], /Merge only when the conversation explicitly identifies the same\n {2}person; a shared name, diagnosis, role or similar story is not evidence of shared identity\./);
+  assert.match(v2['people.yaml'], /When the user explicitly says two labels are one person/);
   const sentence = '王阿姨和小王阿姨其实是同一个人';
   const filled = ALIAS_RULE.split('\n').filter(line => line.startsWith('- '))
     .map(line => line.replace("<this card's label>", '王阿姨').replace('<the other label>', '小王阿姨')
