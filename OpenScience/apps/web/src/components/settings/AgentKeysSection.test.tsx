@@ -34,7 +34,8 @@ describe("external agent keys", () => {
     expect(screen.getByText(/尚未使用/)).toBeInTheDocument();
     expect(screen.queryByText("agk_hidden")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "创建密钥" }));
-    expect(screen.getAllByRole("checkbox")).toHaveLength(7);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(8);
+    expect(screen.getByLabelText("记住本人明确说过的话")).not.toBeChecked();
     expect(screen.getByLabelText("读取记忆与做法")).toBeChecked();
     expect(screen.getByLabelText("读取原始对话（需同时允许读取记忆）")).not.toBeChecked();
     expect(screen.getByLabelText("提出待确认的记忆")).not.toBeChecked();
@@ -54,9 +55,9 @@ describe("external agent keys", () => {
     await user.click(await screen.findByRole("button", { name: "创建密钥" }));
     await user.type(screen.getByLabelText("密钥名称"), "My DSH");
     await user.click(screen.getByLabelText("提出待确认的记忆"));
+    expect(screen.getByRole('checkbox', { name: '记住本人明确说过的话' })).not.toBeChecked();
     await user.click(screen.getByRole("button", { name: "创建" }));
     expect(await screen.findByLabelText("新密钥（仅显示这一次）")).toHaveValue(secret);
-    expect(screen.getByRole('checkbox', { name: '记住本人明确说过的话' })).not.toBeChecked();
     expect(mocks.create).toHaveBeenCalledWith({ name: "My DSH", scopes: ["memory.read", "memory.write"] });
     expect(screen.getByText(/保存到本机文件/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "复制密钥" }));
