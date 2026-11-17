@@ -193,3 +193,16 @@ test("the target of a privacy configuration is the session id when it is an engi
   assert.match(privacySessionTarget(twoAt), /^_[a-f0-9]{24}$/);
   assert.throws(() => privacySessionTarget("../x"), /memory session id is invalid/);
 });
+
+for (const withdrawn of [false, true]) test(`observations recall is read-only and independent of induction (withdrawn=${withdrawn})`, async t => {
+  const overlay = overlayDouble({ memoryForgetBody: async (_user, uri, body) => withdrawn && uri.includes('/observations/') ? null : body });
+  const { stub, call } = await fixture(t, { overlay, config: { memoryObservationRecallEnabled: true, memoryObservationInductionEnabled: false } });
+  const uri = stub.seedMemory(OV_USER, 'observations/time-of-day.md', '- 晚上处理家电维修记录。', { type: 'observations' });
+  const answer = await call('GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}`);
+  if (withdrawn) assert.equal(answer.status, 404);
+  else { assert.equal(answer.status, 200); assert.match(answer.text, /seen once.*not a standing preference/); }
+  const search = await call('POST', '/api/v1/search/search', { query: '维修' });
+  assert.equal(search.text.includes('晚上处理家电维修记录'), !withdrawn);
+  if (!withdrawn) assert.match(search.text, /seen once.*not a standing preference/);
+  assert.equal(stub.sent('POST', '/api/v1/sessions').length, 0, 'recall never starts a promotion or extraction');
+});

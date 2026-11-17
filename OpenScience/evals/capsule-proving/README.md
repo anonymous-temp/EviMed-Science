@@ -172,3 +172,19 @@ checks them verbatim and derives gold. `node run.mjs graphs|c3|l8 <dev|sealed>` 
 `node verify-data.mjs --data DIR` checks every manifest's sha256 against its files and that no question shown at run time
 already contains an answer its gold expects (an anchor the question names leaves the substring check for the judge,
 `expect.anchorInQuestion`). It prints counts only, so it is safe over sealed data.
+
+## Write classes replay (2026-11-17)
+
+`node evals/capsule-proving/replay/write-classes.mjs --packs /path/to/packs --verdicts evals/capsule-proving/replay/write-verdicts.example.json --out /path/to/write-replay.json`
+
+Run from `OpenScience/` with the normal workspace dependencies. The runner reads only supplied synthetic evidence; it makes no network calls or credential reads by default. It compares the exact P08 r2 snapshots 20/30 and r3 snapshots 8/30 and 12/30 against the guard at commit `717308708` and the changed guard, reports formatting-equal sibling files, renders the default templates, and runs `NativeMemoryVerification.assessCommit` on selected recorded source sessions and snapshot lines. The F03/F06 example verdicts are explicitly synthetic; absent recorded verdicts leave lines alone. Store-triage-2 rows 132, 158 and 194 exercise the unchanged basic pasted-instruction parser with a recorded-verdict fake; abbreviated source quotes do not establish real judge accuracy. ROBUST stays off.
+
+There are at most 40 cases, one source-review call per case, at most 32 new lines and 48,000 serialized input characters per call. Every excluded line stays present and is counted as omitted. Output includes exact restored/lost statement counts, findings, source paths, rendered template names, and prompt/completion/total token usage (zero offline). P08 bodies are full snapshots; other A packs are checkpoint reconstructions rather than exact extraction diffs and must not be scored as commit-level attribution accuracy. The tracked `apps/server/test/fixtures/memory-write-p08.json` preserves the synthetic 88-to-67-line regression.
+
+For a lab measurement, add `--adapter /path/to/lab-adapter.mjs`. Its optional exports are:
+
+- `judge({ caseId, userId, lines, maxAttempts })`: return `{ results: Map<number, {index, verdict, corrected}>, calls, usage: {prompt_tokens, completion_tokens, total_tokens} }`. Reuse `createVerificationJudge` with the lab's existing memory-extraction usage ledger; respect `maxAttempts: 1`. Local validation still checks every correction.
+- `extract({ caseId, sources, before, templates })`: run the existing engine extractor with these rendered templates in an isolated lab namespace and return `{ files: {relativePath: body}, usage }`. The replay reports original/extracted/extra statement counts and full extracted files for the W-MISS review. Without this adapter, extraction is explicitly **not measured**; rendering a prompt is not evidence it stores additional facts.
+- `basicCall(dependencies, request)`: the existing control-plane model-call interface, returning an OpenAI-shaped response with `usage`. The runner supplies the unchanged basic-check request. Use the lab's configured provider rather than the runner's placeholder model/key.
+
+Adapters own their lab configuration and usage ledger. The runner never deploys, writes serving memory, or guesses credentials. Confirm user statements, corrections, adoption and document-fact confirmations as negative controls; inspect additional lines rather than treating greater retention as an unconditional improvement. The report must distinguish fake/parser checks from actual model and PostgreSQL runs.

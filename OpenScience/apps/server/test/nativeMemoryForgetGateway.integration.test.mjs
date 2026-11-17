@@ -758,3 +758,45 @@ test('FT12 statement forgets of unstored remarks never mask kept lines from the 
   assert.match(restated, new RegExp(flightStatement));
   assert.match(restated, /对青霉素过敏/);
 });
+
+const runANight = '- 用户自述：上个月临时顶了两次夜班，属一次性事件，不是固定排班（2026-11-17 用户陈述）。';
+const runAKeys = '- 家里备用钥匙放在蓝色鞋柜第二层（用户 2026-11-17 说明）。';
+const runAProfile = '# 用户\n- 对青霉素过敏，用药需避开青霉素类 (as of 2026-11-17)\n- 每周三晚上去游泳 (as of 2026-11-17)';
+
+test('FORGETFIX run A: persisted date-bearing rejection heals read, search abstracts and opening profile without migration', options, async t => {
+  const f = await setup(t, { memoryDeferredSummaryRebuildEnabled: true });
+  const keyUri = f.seed('notes/家中备用钥匙位置.md', runAKeys, { type: 'notes' });
+  const profileUri = f.seed('profile.md', runAProfile, { type: 'profile' });
+  const nightUri = `${f.root}/notes/临时顶夜班.md`;
+  // Install the already-existing rejection, not a new forget whose retained-line receipts could conceal this defect.
+  await f.overlay.reject(f.userId, 'notes', nightUri, [removalText(runANight)]);
+  f.overlay.memoryForgetBody = (owner, uri, body) => f.history.fenceNativeBody(f.context, uri, body);
+  const before = JSON.stringify(await f.overlay.removals(f.userId));
+  const read = (await f.memory.callTool('read', { uris: [keyUri, profileUri] })).blocks.join('\n');
+  const search = (await f.memory.callTool('search', { query: '备用钥匙' })).blocks.join('\n');
+  const profile = (await f.memory.callTool('search', { query: '青霉素' })).blocks.join('\n');
+  const opening = await (await fetch(`${f.base}/api/v1/content/read?uri=${encodeURIComponent(profileUri)}`, { headers: { authorization: `Bearer ${f.token}` } })).text();
+  for (const output of [read, search]) assert.match(output, /蓝色鞋柜第二层/);
+  for (const output of [read, profile, opening]) { assert.match(output, /青霉素/); assert.match(output, /每周三晚上去游泳/); }
+  for (const output of [read, search, profile, opening]) assert.doesNotMatch(output, /夜班/);
+  assert.equal(await f.sessions.read(f.userId, keyUri), runAKeys);
+  assert.equal(JSON.stringify(await f.overlay.removals(f.userId)), before);
+  const copy = f.seed('notes/copy.md', runANight.replace('2026-11-17', '2026-12-01'), { type: 'notes' });
+  assert.doesNotMatch((await f.memory.callTool('read', { uris: [copy] })).blocks.join('\n'), /夜班/);
+});
+
+test('FORGETFIX p6c-shaped four-fact message keeps both neighbours after two statement forgets', options, async t => {
+  const f = await setup(t, { memoryDeferredSummaryRebuildEnabled: true });
+  const uri = f.seed('profile.md', ['# 用户', allergy, swimming, coffee, keys].join('\n'), { type: 'profile' });
+  f.overlay.memoryForgetBody = (owner, fileUri, body) => f.history.fenceNativeBody(f.context, fileUri, body);
+  for (const statement of [swimming, coffee]) {
+    const answer = await f.memory.callTool('forget', { statement: removalText(statement) });
+    assert.equal(answer.isError, false, answer.blocks.join('\n'));
+  }
+  const read = (await f.memory.callTool('read', { uris: [uri] })).blocks.join('\n');
+  const search = (await f.memory.callTool('search', { query: '青霉素' })).blocks.join('\n');
+  const opening = await (await fetch(`${f.base}/api/v1/content/read?uri=${encodeURIComponent(uri)}`, { headers: { authorization: `Bearer ${f.token}` } })).text();
+  for (const output of [read, search, opening]) {
+    assert.match(output, /青霉素/); assert.match(output, /蓝色鞋柜第二层/); assert.doesNotMatch(output, /游泳|咖啡/);
+  }
+});

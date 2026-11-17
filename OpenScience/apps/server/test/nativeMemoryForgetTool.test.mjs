@@ -282,6 +282,9 @@ test('formatting-only statements are rejected before any privacy mutation', asyn
 
 test('unavailable semantic matching records a statement and an undo-bound scan before answering', async () => {
   const f = fixture(), scans = [];
+  // A real paraphrase requires the judge; exact content containment no longer does.
+  f.store.history.search = async () => [{ origin: { archiveUri: `${root}/sessions/dsh-original/history/archive_001` },
+    originalMessages: [{ sourceRole: 'user', text: 'I prefer metric measurements.' }] }];
   f.ledger.queueForgetScan = async (context, type, fingerprint) => scans.push({ context, type, fingerprint });
   f.ledger.forgetScanPending = async () => scans.length > 0;
   f.store.rejectionJudge = { same: async () => { throw Object.assign(new Error('unavailable'), { code: 'memory_history_privacy_unavailable' }); } };
@@ -448,4 +451,16 @@ test('undo of an absent file checks the version of its kept before-image before 
   const version = versionOfHash(contentHash(body));
   assert.equal((await f.store.undo('u1', nativeFileId(uri), { expectedVersion: version })).undone, 'restored');
   assert.equal(f.files.get(uri), body);
+});
+
+for (const statement of ['2', '2026-11-17', 'Source: interview-132']) test(`an exact copy sweep never deletes neighbouring metadata or a generic token alone (${statement})`, async () => {
+  const f = fixture(), other = `${root}/memories/notes/other.md`;
+  f.files.set(other, `- ${statement}\n- Keep the spare key in the blue cabinet.`);
+  f.store.overlay.deferredSummaryRebuildEnabled = true;
+  f.store.rawFiles = f.store.files;
+  f.store.history.search = async () => [];
+  f.ledger.queueMemorySweep = async () => {};
+  const before = f.files.get(other);
+  await f.store.forget(user, project, null, { statement });
+  assert.equal(f.files.get(other), before);
 });

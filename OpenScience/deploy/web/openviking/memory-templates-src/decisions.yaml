@@ -16,6 +16,11 @@ description: |
   One file per subject; when the decision on that subject changes, update the file so it
   states the current decision (and, briefly, what it replaced).
 
+  __HISTORY__
+
+  A forget request is not a new fact or event: do not add a note that restates the withdrawn
+  content or names it as deleted, including when the user refers to it only by a label.
+
   __NEVER_KEEP__
 
   __DECIDE__

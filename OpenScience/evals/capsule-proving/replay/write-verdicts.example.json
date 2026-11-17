@@ -1,0 +1,4 @@
+{
+  "F03-synthetic": {"results": [{"index": 0, "verdict": "corrected", "corrected": "回复先结论后依据，200 字以内。"}]},
+  "F06-synthetic": {"results": [{"index": 0, "verdict": "attribution_wrong", "corrected": "用户认为患者依从性最难。"}]}
+}

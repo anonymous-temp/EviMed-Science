@@ -13,6 +13,9 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 
 for (const [key, property] of [
   ['OPEN_SCIENCE_MEMORY_PEOPLE_ACROSS_PROJECTS_ENABLED', 'memoryPeopleAcrossProjectsEnabled'],
+  ['OPEN_SCIENCE_MEMORY_NORMALIZE_NAMES_ENABLED', 'memoryNormalizeNamesEnabled'],
+  ['OPEN_SCIENCE_MEMORY_COMMIT_VERIFICATION_ENABLED', 'memoryCommitVerificationEnabled'],
+  ['OPEN_SCIENCE_MEMORY_OBSERVATION_RECALL_ENABLED', 'memoryObservationRecallEnabled'],
   ['OPEN_SCIENCE_MEMORY_OBSERVATION_INDUCTION_ENABLED', 'memoryObservationInductionEnabled'],
   ['OPEN_SCIENCE_MEMORY_PERSON_MERGE_ENABLED', 'memoryPersonMergeEnabled'],
   ['OPEN_SCIENCE_MEMORY_KEEP_UNEXPLAINED_LINES_ENABLED', 'memoryKeepUnexplainedLinesEnabled'],

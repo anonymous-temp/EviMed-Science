@@ -96,13 +96,13 @@ test('a stale extraction never overwrites a later engine body', options, async t
 /** @type {{name:string,before:string,after:string,expected:string,message:string,role?:string,outcome:'restored'|'kept_deleted_replaced'|'kept_deleted_grounded'}[]} */
 const revisedRules = [
   { name: 'd1 district update in place', before: `- 住在小店区\n${allergy}`, after: `- 住在迎泽区\n${allergy}`,
-    expected: `- 住在迎泽区\n${allergy}`, message: '我搬到迎泽区了', outcome: 'kept_deleted_replaced' },
+    expected: `- 住在迎泽区\n- 住在小店区\n${allergy}`, message: '我搬到迎泽区了', outcome: 'restored' },
   { name: 'd2 district update appended across an unchanged anchor', before: `- 住在小店区\n${allergy}`, after: `${allergy}\n- 住在迎泽区`,
-    expected: `${allergy}\n- 住在迎泽区`, message: '我搬到迎泽区了', outcome: 'kept_deleted_replaced' },
+    expected: `- 住在小店区\n${allergy}\n- 住在迎泽区`, message: '我搬到迎泽区了', outcome: 'restored' },
   { name: 'd3 earlier-value wrapper', before: `- 青\n${allergy}`, after: `${allergy}\n- 红（曾为：青）`,
     expected: `${allergy}\n- 红（曾为：青）`, message: '你好。', outcome: 'kept_deleted_replaced' },
   { name: 'e user coffee grounds', before: `${coffee}\n${allergy}`, after: allergy,
-    expected: allergy, message: '我已经不喝咖啡了', outcome: 'kept_deleted_grounded' },
+    expected: `${coffee}\n${allergy}`, message: '我已经不喝咖啡了', outcome: 'restored' },
   { name: 'unrelated deletion and addition in separate hunks', before: `${key}\n${allergy}`, after: `${allergy}\n- 周末参加陶艺课程`,
     expected: `${key}\n${allergy}\n- 周末参加陶艺课程`, message: '你好。', outcome: 'restored' },
   ...['我的', '了的'].map(text => ({ name: `stop-set overlap ${text}`, before: `- ${text}\n${allergy}`, after: allergy,

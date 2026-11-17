@@ -1,4 +1,4 @@
-import { removalRefusals, removalText, removalStatement, retainedRemovalKey, lineDecisionKey, decisionCovers } from './nativeMemoryRejections.mjs';
+import { removalContentMatch, removalRefusals, removalText, removalStatement, retainedRemovalKey, lineDecisionKey, decisionCovers } from './nativeMemoryRejections.mjs';
 import { recordNativeMaintenance } from './nativeMemoryMetrics.mjs';
 import { lineFingerprint, nativeMemoryRejectionType, originalSources } from './nativeMemoryOverlay.mjs';
 import { hardTokens, sourceHasToken } from './nativeMemoryHardTokens.mjs';
@@ -324,13 +324,17 @@ export class MemoryHistory {
 
   async matchRemoved(context,text,messages,judge,tokens=hardTokens(removalStatement(text))) {
     const statement = removalStatement(text);
-    if(tokens.length)return messages.filter(message=>tokens.every(token=>sourceHasToken(token,message,{ignoreWhitespace:this.config.memoryForgetRequestCheckEnabled === true})));
-    if(!messages.length)return [];
+    const literal = new Set(messages.filter(message => removalContentMatch(message.text, statement,
+      { ignoreWhitespace: this.config.memoryForgetRequestCheckEnabled === true })));
+    const pending = messages.filter(message => !literal.has(message)
+      && (!tokens.length || tokens.every(token => sourceHasToken(token, { text: removalStatement(message.text) },
+        { ignoreWhitespace: this.config.memoryForgetRequestCheckEnabled === true }))));
+    if (!pending.length) return [...literal];
     if(!judge?.same)throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
     const fingerprint=lineFingerprint(text);
     const verdict=await judge.same({userId:context.ownerId,originMessages:true,
-      candidates:messages.map(message=>({text:message.text,removed:[{fingerprint,text:statement}]}))});
-    return messages.filter((_message,index)=>verdict?.same.has(index));
+      candidates:pending.map(message=>({text:message.text,removed:[{fingerprint,text:statement}]}))});
+    return [...literal, ...pending.filter((_message,index)=>verdict?.same.has(index))];
   }
 
   /** A refused extraction already proves that this source packet cannot authorize the removed

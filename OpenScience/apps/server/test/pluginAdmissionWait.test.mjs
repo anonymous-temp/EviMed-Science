@@ -145,3 +145,18 @@ test('a permit retry receives only the remaining admission deadline', async () =
   assert.equal(remaining.length, 2);
   assert.ok(remaining[0] <= 150 && remaining[1] < 100, JSON.stringify(remaining));
 });
+
+test('memory maintenance exceeding the admission bound returns the retryable code without claiming a conversation was deleted', async () => {
+  const database = lockedDatabase(0, Infinity), service = serviceOn(database, 120);
+  let ran = 0;
+  const began = Date.now();
+  await assert.rejects(service.withAdmission(project, async () => { ran++; }, { prompt: true }), error => {
+    assert.equal(error.status, 409);
+    assert.equal(error.code, 'memory_source_cleanup_busy');
+    assert.equal(error.definitivelyRejected, true);
+    assert.doesNotMatch(error.message, /deleted conversation/);
+    return true;
+  });
+  assert.ok(Date.now() - began >= 100);
+  assert.equal(ran, 0); assert.equal(database.state.inserted, 0);
+});
