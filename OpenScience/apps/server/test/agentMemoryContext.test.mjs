@@ -5,9 +5,9 @@ import { createMemoryAdmission } from '../src/memoryAdmission.mjs';
 import { ResidentProfiles } from '../src/residentProfile.mjs';
 
 export function contextFixture() {
-  const state = { scopes: ['memory.read'], bound: null, paused: false, trial: false, shared: false, allowed: true, reads: 0, version: 0 };
+  const state = { scopes: ['memory.read'], bound: null, paused: false, learningPaused: false, trial: false, shared: false, allowed: true, reads: 0, version: 0 };
   const user = { id: 'u' }, config = { agentMemoryApiInternalUsers: ['u'], memoryEngineEnabled: true };
-  const settings = { configured: true, settings: async () => ({ recallPaused: state.paused, pausedProjects: [] }),
+  const settings = { configured: true, settings: async () => ({ recallPaused: state.paused, learningPaused: state.learningPaused, pausedProjects: [] }),
     sessionState: async () => ({ trialCapsuleId: state.trial ? 'pack' : null }) };
   const admission = createMemoryAdmission({ config, memorySettings: settings,
     conversations: { running: async () => [{ sessionId: 'one' }], runsOf: async () => [] } });
@@ -48,7 +48,7 @@ test('paused and trial openings return omissions and never read producers; learn
     const result = await f.call();
     assert.ok(result.layers.every(layer => !layer.present && layer.reason === reason));
     assert.equal(f.state.reads, 0); assert.equal(result.platformText, '');
-    f.state[reason] = false;
+    f.state[reason] = false; f.state.learningPaused = true;
     assert.equal((await f.call()).layers[0].text, 'Profile text');
   }
 });

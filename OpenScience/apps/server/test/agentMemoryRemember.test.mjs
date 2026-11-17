@@ -8,7 +8,8 @@ function fixture() {
   const user = { id: 'owner' }, project = { id: 'default', userId: 'owner', name: 'My project' };
   const config = { agentMemoryApiInternalUsers: ['owner'] };
   const memorySettings = { configured: true, settings: async () => ({ learningPaused: state.reason === 'paused', pausedProjects: [] }),
-    sessionState: async () => ({ trialCapsuleId: state.reason === 'trial' ? 'pack' : null }) };
+    sessionState: async () => ({ trialCapsuleId: state.reason === 'trial' ? 'pack' : null }),
+    resetInstant: async () => state.reason === 'before_reset' ? '2026-11-17T02:00:00Z' : null };
   const admission = createMemoryAdmission({ config, memorySettings,
     conversations: { running: async () => [{ sessionId: 's', id: 'r' }], runsOf: async () => [{ id: 'r', sessionId: 's', status: 'running', automated: state.reason === 'automated_run' }] },
     clinicalContext: async () => state.reason === 'clinical_context', engineReady: () => ({ ok: state.reason !== 'engine_unavailable', code: null }) });
@@ -38,7 +39,7 @@ test('explicit remember calls the page store with verbatim words and an external
 test('existing write scope cannot directly remember; every admission refusal prevents the page write', async () => {
   const f = fixture(); f.state.scopes = ['memory.write'];
   await assert.rejects(f.call(input), error => error.code === 'agent_key_scope_denied'); assert.equal(f.state.calls.length, 0);
-  for (const reason of ['paused', 'trial', 'automated_run', 'clinical_context', 'engine_unavailable']) {
+  for (const reason of ['paused', 'trial', 'automated_run', 'clinical_context', 'engine_unavailable', 'before_reset']) {
     const f = fixture(); f.state.reason = reason;
     await assert.rejects(f.call(input), error => error.details?.reason === reason);
     assert.equal(f.state.calls.length, 0);

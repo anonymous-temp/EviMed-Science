@@ -64,3 +64,13 @@ test('uncertain append is never resent, and paused retry is fenced', async () =>
   assert.equal(f.calls.length, 1);
   f.deny(); await f.remember(); assert.equal(f.calls.length, 1);
 });
+
+test('a source without a message id deduplicates the exact statement while retaining a new statement', async () => {
+  const f = fixture();
+  const { messageId: _messageId, ...reference } = source;
+  const first = await f.remember('Use metric units.', reference);
+  assert.equal((await f.remember('Use metric units.', reference)).pending.id, first.pending.id);
+  const second = await f.remember('Keep green folders.', reference);
+  assert.notEqual(second.pending.id, first.pending.id);
+  assert.equal(f.calls.length, 2);
+});
