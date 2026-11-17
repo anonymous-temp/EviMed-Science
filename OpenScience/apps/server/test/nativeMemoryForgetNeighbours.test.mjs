@@ -208,3 +208,18 @@ test('complete quoted filenames are withdrawn independently of digest prefix and
   assert.equal(removalContentMatch('132', 'Creatinine "132".'), false);
   assert.equal(removalContentMatch('Sodium 132', 'Creatinine "132".'), false);
 });
+
+test('a complete quoted name supplies the subject only with every content value, never provenance or a quoted generic value', async () => {
+  const removed = 'The “North Star” project uses 12 mg.';
+  const matches = ['North Star, 12 mg', '“North Star”, １２ mg'];
+  const neighbours = ['North Star, 12mg', 'North Star, 112 mg', 'North Starlight, 12 mg', 'Other, 12 mg'];
+  const refused = await removalRefusals({ userId: 'u', overlay: overlayFor(removed),
+    candidates: [...matches, ...neighbours].map((/** @type {string} */ text) => ({ text })) });
+  assert.deepEqual([...refused.keys()], matches.map(lineFingerprint));
+  assert.equal(removalContentMatch('North Star, 12mg', removed, { ignoreWhitespace: true }), true, 'spacing normalization remains opt-in');
+  for (const [withdrawn, neighbour] of [
+    ['Dose unit “mg”.', 'Other mg'], ['Creatinine “132”.', 'Sodium 132'], ['Drug dose “12 mg”.', 'Other dose 12 mg'],
+    ['Surgery “2026-11-17”.', 'Visit 2026-11-17'],
+    ['Source: “North Star”; Creatinine 132.', 'North Star, sodium 132'],
+  ]) assert.equal(removalContentMatch(neighbour, withdrawn), false, `${withdrawn} / ${neighbour}`);
+});

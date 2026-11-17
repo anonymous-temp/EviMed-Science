@@ -172,6 +172,6 @@ test("two accounts, end to end: preview, send, receive, try once, enable, B's co
   const again = await mounted("upgraded");
   assert.equal(again.count, 2, "the profile line is context, not a mounted method");
   assert.match(await search("系统综述") ?? "", /临床流行病学家/, "the new profile line is found by a native conversation's search, labelled as a reference");
-  assert.match(await search("随机对照") ?? "", /\[decision · 参考胶囊《Ada 的工作方式》; source \{"origin":"imported","attribution":\{"origins":\["imported","explicit"\],"confirmed":false,"schemaVersion":1\}\}\] 本项目只纳入近十年的随机对照试验/, "and so is a project fact: not only the four kinds a runtime mounts as methods");
+  assert.match(await search("随机对照") ?? "", /\[decision · 参考胶囊《Ada 的工作方式》\] 本项目只纳入近十年的随机对照试验/, "and so is a project fact: not only the four kinds a runtime mounts as methods");
   assert.doesNotMatch((await opening()).text ?? "", /临床流行病学家/, "and is still not B's own identity");
 });

@@ -287,6 +287,11 @@ export function removalContentMatch(written, removed, options = {}) {
   // but never supplies the non-date content token required above.
   // A complete identifier is distinctive; number/unit pairs and generic hyphenated words are not.
   if (tokens.some(token => /^(?=[a-z0-9_.:/-]*[a-z])(?=[a-z0-9_.:/-]*\d)[a-z][a-z0-9_.:/-]*$/i.test(token))) return true;
+  // A complete quoted name meeting the content-length floor supplies the subject when the candidate omits
+  // framing such as "the project uses". All values above must still match; a
+  // quoted dose, date or number alone cannot supply this subject.
+  if (quotedHardTokens(statement).some((/** @type {string} */ value) => /\p{L}/u.test(value) && hardTokens(value).length === 0
+    && [...compact(value)].length >= MIN_CONTAINED)) return true;
   // Remove value shapes from both sides before checking the remaining subject words.
   const remainder = value => hardTokens(value).reduce((text, token) => text.split(token).join(' '), value);
   const left = remainder(statement), right = remainder(candidate);

@@ -135,7 +135,8 @@ function escapeContext(value) {
  * user's statements, the user's edits, inferences and platform or source records apart (principle 18), and the model weighs
  * them by it. Nothing in the block explains the attribute or warns about a value of it: a sentence about how a memory came
  * to be is a sentence the model can say back to the researcher, and the block's one header says only what the block is
- * (review R1/R4, 2026-10-10). `lookup` is the line beside the profile that says what else can be looked up, last.
+ * (review R1/R4, 2026-10-10). Extra speaker, record-date and earlier-value metadata stays on the memo;
+ * it cannot add prose or extend this closed vocabulary. `lookup` is the line beside the profile that says what else can be looked up, last.
  * @param {readonly any[]} memories
  * @param {{ lookup?: string }} [options]
  * @returns {string}
@@ -152,9 +153,6 @@ export function renderMemoryContext(memories, { lookup = "" } = {}) {
       const caveats = Array.isArray(memo.caveats) ? memo.caveats.filter((item) => typeof item === "string") : [];
       return [
         `<evimed-memory index="${index + 1}" id="${escapeContext(memo.id)}" type="${escapeContext(memo.memoryType ?? "manual")}" kind="${escapeContext(memo.kind ?? "note")}" scope="${escapeContext(memo.scope ?? "user")}" origin="${originOf(memo.origin) ?? "unrecorded"}"${caveats.length ? ` caveats="${escapeContext(caveats.join(","))}"` : ""}>`,
-        ...(memo.speaker || memo.attribution?.origins ? [`Source: ${escapeContext(memo.speaker ?? memo.attribution.origins.join(', '))}`] : []),
-        ...(memo.asOf || memo.updatedAt ? [`Recorded: ${escapeContext(memo.asOf ?? memo.updatedAt)}`] : []),
-        ...(memo.earlierValue ? ['Earlier value, not necessarily current.'] : []),
         escapeContext(memo.content),
         ...(memo.validity?.from || memo.validity?.until
           ? [`有效期：${escapeContext(memo.validity.from ?? "起点未知")} 起，${escapeContext(memo.validity.until ?? "至今")} 止`] : []),

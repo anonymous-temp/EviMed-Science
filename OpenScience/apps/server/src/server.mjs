@@ -5073,7 +5073,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     learningTriggers = new LearningTriggers({
       contextProvenance,
       jobs: productJobs, agentRuns, memory: memorySettings, canReuseRun, canReuseRuns,
-      evidence: learningEvidence, funnel: event => learningMetrics.observeFunnel(event), onRefused: (reason) => learningMetrics.observeTriggerRefused(reason),
+      evidence: learningEvidence, onRefused: (reason) => learningMetrics.observeTriggerRefused(reason),
+      funnel: (/** @type {any} */ event) => learningMetrics.observeFunnel(event),
       // A run that drew on a received pack no other account has vouched for still learns for its own account and is kept from
       // every platform-level consumer (capsuleShareTrust.mjs, plan §7).
       guestInfluence: productDatabase ? createGuestInfluence({ database: productDatabase, documents: productDocuments,

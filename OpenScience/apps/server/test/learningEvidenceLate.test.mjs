@@ -140,3 +140,32 @@ test('a gateway budget refusal has its own content-free funnel reason', async ()
   assert.equal(observed[0].reason, 'judge_over_budget');
   assert.doesNotMatch(JSON.stringify(observed), /private|must not reach/);
 });
+
+test('with late follow-up off, delivery queues the original half-hour job and only its worker settles the timely reaction', async () => {
+  const state = lateFixture({ enabled: false, age: 1_799_000, answer: boundAcceptance(message) });
+  /** @type {any[]} */
+  const jobs = [];
+  /** @type {any[]} */
+  const broughtForward = [];
+  state.evidence.jobs = {
+    enqueue: async (/** @type {string} */ owner, /** @type {string} */ kind, /** @type {any} */ payload, /** @type {any} */ options) => {
+      jobs.push({ owner, kind, payload, options });
+    },
+    bringForward: async (/** @type {string} */ owner, /** @type {string} */ key) => { broughtForward.push({ owner, key }); return true; },
+  };
+  state.evidence.readDeliveryBindings = async () => { throw new Error('Disabled late follow-up must not read delivery bindings'); };
+  await state.snapshot();
+  assert.deepEqual(state.rows, []);
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].kind, 'learning-evidence');
+  assert.equal(jobs[0].options.runAfter.getTime(), Date.parse(state.run.finishedAt) + 1_800_000);
+  assert.equal((await state.turn(message)).verdict, 'accept');
+  assert.equal(state.calls[0].mode, undefined);
+  assert.equal(state.rows.length, 1);
+  assert.equal(state.rows[0].detail.lateFollowUp, undefined);
+  assert.equal(broughtForward.length, 1);
+  assert.equal(state.funnel.some((/** @type {any} */ event) => event.reason === 'clean'), false, 'a timely turn brings the worker job forward, never settles directly');
+  const settled = await state.evidence.settle({ job: { userId: 'owner', projectId: 'project', payload: { runId: state.run.id } } });
+  assert.equal(settled.outcome, 'clean');
+  assert.equal(state.funnel.some((/** @type {any} */ event) => event.reason === 'clean'), true);
+});
