@@ -5016,11 +5016,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (feedbackEvents) {
       learningEvidence = new LearningEvidence({
       contextProvenance,
+        lateFollowUpEnabled: config.learningLateFollowUpEnabled,
+        funnel: event => learningMetrics.observeFunnel(event),
         toolchainEnabled: config.learningToolchainRoutineEnabled,
         toolchainMinSimilarity: config.learningToolchainMinSimilarity,
         similarity: methodSimilarity,
         feedback: feedbackEvents, jobs: productJobs, agentRuns, triggers: () => learningTriggers,
-        judge: new FollowUpJudge(config, { usageLedger, fetchImpl: overrides.followUpFetch ?? globalThis.fetch }),
+        judge: new FollowUpJudge(config, { usageLedger, fetchImpl: overrides.followUpFetch ?? globalThis.fetch,
+          onFailure: (reason, owner) => learningMetrics.observeFunnel({ ...owner, scope: "unknown", period: -1, reason }) }),
         // The few examples a reading is shown beside the judge's fixed contrasts, chosen by the meaning of the message with the methods' own
         // embedder, and by character n-grams when it is down (`followUpExamples.mjs`).
         examples: createFollowUpExamples({ embed: methodEmbed, logger: { warn: (message) => process.stderr.write(`${message}\n`) } }),
@@ -5064,7 +5067,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     learningTriggers = new LearningTriggers({
       contextProvenance,
       jobs: productJobs, agentRuns, memory: memorySettings, canReuseRun, canReuseRuns,
-      evidence: learningEvidence, onRefused: (reason) => learningMetrics.observeTriggerRefused(reason),
+      evidence: learningEvidence, funnel: event => learningMetrics.observeFunnel(event), onRefused: (reason) => learningMetrics.observeTriggerRefused(reason),
       // A run that drew on a received pack no other account has vouched for still learns for its own account and is kept from
       // every platform-level consumer (capsuleShareTrust.mjs, plan §7).
       guestInfluence: productDatabase ? createGuestInfluence({ database: productDatabase, documents: productDocuments,
@@ -8910,15 +8913,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /**
    * Enqueue one night's consolidation per project that has methods to consolidate.
    *
-   * This did not exist, and its absence made the whole learning loop a one-way
-   * street. `MethodConsolidation.sleep` is the only code path that calls
-   * `learning.approve`, and `approve` is the only way a `candidate` method ever
-   * becomes `approved` — which is the only status `capsuleMethods.mjs` will
-   * mount. It is also the only caller of `retirementProposals`. Distillation
-   * therefore wrote candidates forever, nothing was ever promoted, nothing was
-   * ever retired, and every test of the promotion rule passed because they all
-   * call `sleep` directly. A producer nobody writes is invisible to unit tests
-   * by construction: there is no assertion to fail.
+   * New methods without unresolved conflicts take effect during distillation (`LearningService`, `promotionVerdict`).
+   * This pass relates existing methods, rechecks promotion after revisions and proposes retirements; an empty library means
+   * no methods were produced upstream, not that methods are waiting for manual approval.
    *
    * One pass per researcher per `learningConsolidationIntervalMs` (an hour),
    * plus the one distillation queues after every method it writes. It was

@@ -1566,3 +1566,5 @@ lifecycle evidence are recorded in
 Synthetic-data fidelity remains limited. Live conversation acceptance and
 exact-candidate CI have separate terminal records; no deployment, main merge,
 production migration or public package-registry publication is implied.
+
+- 2026-11-17: Added opt-in version-bound late human follow-up evidence (30 minutes–24 hours), content-free grouped learning funnel diagnostics, a 28-case recorded replay and export/erasure coverage; silence remains unknown, the three-clean-run threshold and fixed periods remain unchanged, and the new switch defaults off.

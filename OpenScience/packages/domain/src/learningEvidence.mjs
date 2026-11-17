@@ -63,8 +63,8 @@ export const LEARNING_RULE_VERDICTS = Object.freeze([...LEARNING_CORRECTION_VERD
 export const LEARNING_STEER_VERDICTS = Object.freeze(['correction', 'preference', 'rejection', 'accept', 'none'])
 
 /**
- * How long after a run finished its next turn is read as a reaction to it, and how long a run waits for one before it counts as
- * accepted in silence. Provisional (no distribution yet): long enough for a person to read a result and answer it, short enough
+ * How long after a run finished its next turn is read as a reaction to it, and how long a run waits for one before it is settled as
+ * unknown after silence. Provisional (no distribution yet): long enough for a person to read a result and answer it, short enough
  * that the next message is still about it.
  */
 export const LEARNING_FOLLOW_UP_WINDOW_MS = 30 * 60 * 1000
@@ -83,6 +83,8 @@ const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, 
  * @param {unknown} value
  * @returns {{ evidence: string, verdict: string, rule: string | null, quote: string | null, concerns: { id: string, digest: string }[],
  *   sourceProjectId?: string, sourceRunIds?: string[], inputReceiptRefs?: string[],
+ *   deliveries?: { path: string, sha256: string }[], artifact?: { path: string, sha256: string },
+ *   lateFollowUp?: boolean, inputDigest?: string, relation?: string,
  *   sessionId: string | null, at: string, scope?: string, endedAt?: string, shape?: import('./artifactShape.mjs').ArtifactShape[], toolchain?: import('./toolchainShape.mjs').ToolchainFingerprint } | null}
  */
 export function cleanLearningEvidence(value) {
@@ -119,9 +121,19 @@ export function cleanLearningEvidence(value) {
     && record.sourceRunIds.every(identifier)
   const trace = refs && runs && identifier(record.sourceProjectId) ? {sourceProjectId:record.sourceProjectId,
     sourceRunIds:[...new Set(record.sourceRunIds)],inputReceiptRefs:[...new Set(record.inputReceiptRefs)]} : {}
+  const delivery = item => item && typeof item.path === 'string' && item.path.length <= 200 && item.path.length > 0
+    && !item.path.startsWith('/') && !item.path.split(/[\\/]/).includes('..') && /^[a-f0-9]{64}$/.test(item.sha256 ?? '')
+    ? { path: item.path, sha256: item.sha256 } : null
+  const deliveries = (Array.isArray(record.deliveries) ? record.deliveries : []).slice(0, 4).map(delivery).filter(Boolean)
+  const artifact = delivery(record.artifact)
   const detail = {
     evidence,
     verdict,
+    ...(deliveries.length ? { deliveries } : {}),
+    ...(record.lateFollowUp === true ? { lateFollowUp: true } : {}),
+    ...(/^[a-f0-9]{64}$/.test(record.inputDigest ?? '') ? { inputDigest: record.inputDigest } : {}),
+    ...(artifact ? { artifact } : {}),
+    ...(['build', 'convert', 'cite'].includes(record.relation) ? { relation: record.relation } : {}),
     ...trace,
     rule: text(record.rule, limits.rule) || null,
     quote: text(record.quote, limits.quote) || null,

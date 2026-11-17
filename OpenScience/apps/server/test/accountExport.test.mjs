@@ -355,6 +355,10 @@ test("the archive carries the account's own feedback ledger", async () => {
       recordedAt: "2026-09-06T00:00:01.000Z",
     },
   ];
+  events.push({ id: "feedback:late", projectId: "one", runId: "late-run", trigger: "learning-evidence",
+    subjectType: "run", subjectId: "late-run", detail: { evidence: "follow-up", verdict: "accept", lateFollowUp: true,
+      inputDigest: "a".repeat(64), deliveries: [{ path: "report/final.md", sha256: "b".repeat(64) }], quote: "Convert this report.", relation: "convert", artifact: { path: "report/final.md", sha256: "b".repeat(64) } },
+    occurredAt: "2026-11-17T00:00:00.000Z", recordedAt: "2026-11-17T00:00:01.000Z" });
   const user = { id: "user-1", accountCreatedAt: "2026-09-06 00:00:00+00" };
   const database = fakeDatabase([], [], events);
   const state = await withAccountExportSnapshot(

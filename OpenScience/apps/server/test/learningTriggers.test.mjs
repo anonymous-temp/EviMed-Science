@@ -555,3 +555,14 @@ test("an adoption passes the gates every other lesson passes, and is queued once
   assert.deepEqual(refused, ["run_unavailable", "paused", "clinical_context", "not_eligible"], "every refusal is counted by its reason");
   assert.equal(enqueued.length, 1);
 });
+
+test('admission refusals keep their account/scope/period reason in the structured funnel', async () => {
+  const observed = [];
+  const original = { id: 'funnel-run', effectiveAgentId: 'open-domain-answer', status: 'succeeded', automated: false,
+    finishedAt: '2026-11-17T00:00:00.000Z', transcript: { completeness: 'partial' } };
+  const triggers = new LearningTriggers({ jobs: { enqueue: async () => {} }, agentRuns: { list: async () => [original] },
+    funnel: entry => observed.push(entry) });
+  assert.equal(await triggers.refusalFor({ userId: 'owner', id: 'project' }, original), 'transcript_incomplete');
+  assert.deepEqual(observed.map(entry => entry.reason), ['admission_refused', 'transcript_incomplete']);
+  assert.ok(observed.every(entry => entry.userId === 'owner' && entry.runId === original.id && entry.scope === 'conversation' && Number.isFinite(entry.period)));
+});

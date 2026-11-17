@@ -1258,3 +1258,15 @@ test('native memory search floor defaults to zero and supports environment and o
     assert.equal(loadConfig({ rootDir: repoRoot, memoryFileSearchMinScore: 0 }).memoryFileSearchMinScore, 0);
   } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
 });
+
+test('late follow-up learning defaults off and is selectable by environment and override', () => {
+  const key = 'OPEN_SCIENCE_LEARNING_LATE_FOLLOW_UP_ENABLED';
+  const previous = process.env[key];
+  try {
+    delete process.env[key];
+    assert.equal(loadConfig({ rootDir: repoRoot }).learningLateFollowUpEnabled, false);
+    process.env[key] = 'true';
+    assert.equal(loadConfig({ rootDir: repoRoot }).learningLateFollowUpEnabled, true);
+    assert.equal(loadConfig({ rootDir: repoRoot, learningLateFollowUpEnabled: false }).learningLateFollowUpEnabled, false);
+  } finally { if (previous === undefined) delete process.env[key]; else process.env[key] = previous; }
+});

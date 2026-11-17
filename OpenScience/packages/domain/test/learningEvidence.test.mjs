@@ -94,3 +94,21 @@ test("a run is kept when it was accepted, adopted or its file taken, and nothing
   assert.equal(learningRunOutcome([{ evidence: "used" }, { evidence: "result-corrected" }]), "corrected");
   assert.equal(learningRunOutcome(/** @type {any} */ (null)), "unknown");
 });
+
+test('late evidence preserves bounded version/input bindings inside the existing 4 KiB allowance', () => {
+  const lateAt = new Date().toISOString();
+  const sha256 = 'a'.repeat(64);
+  const delivery = { path: 'report/final.md', sha256 };
+  const detail = cleanLearningEvidence({ evidence: 'follow-up', verdict: 'accept', at: lateAt, quote: 'Convert this report.',
+    lateFollowUp: true, inputDigest: sha256, deliveries: [delivery], artifact: delivery, relation: 'convert' });
+  assert.equal(detail.lateFollowUp, true);
+  assert.deepEqual(detail.artifact, delivery);
+  assert.equal(detail.inputDigest, sha256);
+  assert.ok(Buffer.byteLength(JSON.stringify(detail)) <= 4096);
+  const oversized = cleanLearningEvidence({ evidence: 'follow-up', verdict: 'accept', at: lateAt, quote: '中'.repeat(600), rule: '中'.repeat(300),
+    deliveries: Array.from({ length: 8 }, (_, i) => ({ path: `${i}${'中'.repeat(199)}`, sha256 })), inputDigest: sha256, lateFollowUp: true,
+    shape: [{ format: 'md', labels: Array.from({ length: 16 }, () => '中'.repeat(40)) }] });
+  assert.ok(oversized && Buffer.byteLength(JSON.stringify(oversized)) <= 4096);
+  const unbound = cleanLearningEvidence({ evidence: 'silent', at: lateAt, deliveries: [{ path: '../escape', sha256 }, { path: 'file', sha256: 'invalid' }] });
+  assert.equal(unbound.deliveries, undefined);
+});

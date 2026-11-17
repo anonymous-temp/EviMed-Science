@@ -82,6 +82,12 @@ test("the feedback table is append-only, owner-scoped and refuses an unknown tri
     (id,user_id,project_id,run_id,trigger_kind,subject_type,subject_id,detail,occurred_at)
     VALUES ($1,$2,NULL,NULL,'user-was-happy','deliverable','x','{}'::jsonb,now())`, [`feedback:x:${randomUUID()}`, userId]));
 
+  const late = await feedback.recordLearningEvidence(userId, { runId: "late-run", projectId: "default", key: "late-follow-up",
+    detail: { evidence: "follow-up", verdict: "accept", at: new Date().toISOString(), lateFollowUp: true,
+      inputDigest: "a".repeat(64), quote: "Convert this report.", relation: "convert", artifact: { path: "report/final.md", sha256: "b".repeat(64) } } });
+  assert.equal(late.event.detail.lateFollowUp, true);
+  assert.equal((await feedback.learningEvidenceOf(userId, "late-run"))[0].detail.artifact.sha256, "b".repeat(64));
+
   // Deleting the account takes its feedback with it.
   await database.query("DELETE FROM evimed_control.users WHERE id=$1", [userId]);
   const remaining = await database.query("SELECT count(*)::integer AS count FROM evimed_product.feedback_events WHERE user_id=$1", [userId]);

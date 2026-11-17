@@ -121,3 +121,25 @@ alsoAcceptable?, tag?, methodsOpened?, concerns? }] }`. `quote` is the gold quot
 required for correction, preference, rejection and adopt, a substring of the message, null otherwise). `methodsOpened` lists learned
 methods the run opened (`{ id, title, whenToUse }`) and `concerns` the ids the message is about (`[]` when none). Every request,
 deliverable and message is invented. `score.mjs` holds the case-shape check and all the scoring; the tests pin both.
+
+## Late follow-up replay (2026-11-17)
+
+```bash
+cd OpenScience
+node evals/follow-up-judge/replay-late.mjs
+```
+
+This offline replay uses exactly the 28 previously recorded cases listed in REPORT-GAPS B3, through the actual `LearningEvidence`
+producer and an injectable judge function (`replayLate({ judge })`). It never calls a provider. Timings cover 30 minutes minus/plus
+one second, exactly 24 hours and beyond; receipts cover no delivery, multiple versions, deletion, reset, automated refusal, an
+intervening failed run and another conversation. Repeated callbacks must write one late reaction per run; later corrections override.
+Unrelated, corrected or rejected cases must never become clean, and withdrawn sources must never revive; assertions fail the process.
+
+The first pass preserves the recorded model text unchanged. Those recordings lack the new late-accept quotation, relation and artifact
+bond, so fj-062 and fj-069 are printed individually as missed positives. The second pass supplies deterministic **synthetic protocol
+metadata** for these two cases only, preserving the recorded verdict; fj-062 binds the unique delivery, fj-069 binds the selected version
+among two. It verifies transport and local validation, not that a real judge will choose the new fields correctly. Late thanks and bare
+acknowledgements remain unknown. fj-071 exercises the unchanged half-hour path. The late mode never turns `adopt` into adoption.
+
+A live judge check, if separately run on the lab, must use only these same 28 cases and report false clean decisions and missed positives
+individually. The replay is synthetic labelled material, not 28 production conversations and not evidence of production benefit.

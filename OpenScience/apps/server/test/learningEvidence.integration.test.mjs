@@ -298,3 +298,42 @@ test("an amended method replays accepted text-only runs and restores a regressiv
   assert.equal(result.replayed, 2);
   assert.equal((await learning.getMethod(owner, original.id)).payload.contentDigest, original.payload.contentDigest);
 });
+
+test('a version-bound late reaction settles after the real settle job succeeded, is idempotent, and yields to correction/withdrawal', options, async () => {
+  const { lateFixture, boundAcceptance } = await import('../../../evals/follow-up-judge/late-fixtures.mjs');
+  const message = 'Convert this report to PDF.';
+  const userId = `late_${randomUUID().replaceAll('-', '')}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Late evidence','development')", [userId]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'project','Late',1048576)", [userId]);
+  try {
+    const ledger = new FeedbackEvents({ database });
+    const queue = new ProductJobs({ database });
+    const state = lateFixture({ answer: boundAcceptance(message) });
+    state.project.userId = userId;
+    state.evidence.feedback = ledger; state.evidence.jobs = queue;
+    const runs = { list: async () => [state.run] };
+    state.evidence.triggers = new LearningTriggers({ jobs: queue, agentRuns: runs });
+    await state.snapshot();
+    await database.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp() WHERE user_id=$1 AND kind='learning-evidence'", [userId]);
+    const job = await queue.claim(['learning-evidence'], 'late-test', { ownerId: userId });
+    assert.ok(job);
+    const settled = await state.evidence.settle({ job });
+    assert.equal(settled.outcome, 'unknown');
+    await queue.finish(userId, job.id, job.leaseToken, settled);
+    assert.equal((await queue.get(userId, job.id)).status, 'succeeded');
+    assert.equal((await state.turn(message)).verdict, 'accept');
+    assert.equal((await queue.get(userId, job.id)).status, 'succeeded', 'no replay of the completed settle job');
+    await state.turn(message);
+    let evidence = await ledger.learningEvidenceOf(userId, state.run.id);
+    assert.equal(evidence.filter(row => row.detail.lateFollowUp).length, 1);
+    assert.equal(learningRunOutcome(evidence.map(row => row.detail)), 'clean');
+    state.evidence.judge.read = async () => JSON.stringify({ verdict: 'correction', rule: 'Fix the totals', quote: 'Fix the totals', concerns: [] });
+    assert.equal((await state.turn('Fix the totals', { requestId: 'later-correction' })).verdict, 'correction');
+    evidence = await ledger.learningEvidenceOf(userId, state.run.id);
+    assert.equal(learningRunOutcome(evidence.map(row => row.detail)), 'corrected');
+    assert.equal((await ledger.cleanSettledRuns(userId, { scope: 'conversation', from: new Date(0), to: new Date('2100-01-01') })).length, 0);
+    ledger.memoryForgetReader = async () => false;
+    assert.equal((await state.turn(message, { requestId: 'after-withdrawal' })).recorded, false);
+    assert.equal((await ledger.learningEvidenceOf(userId, state.run.id)).length, 0);
+  } finally { await database.query('DELETE FROM evimed_control.users WHERE id=$1', [userId]); }
+});

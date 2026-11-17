@@ -21,7 +21,8 @@
  *
  * Labels are closed sets only: the distillation triggers, the job statuses,
  * the method statuses and the result operations, with anything else as
- * `other`. The same reads, scoped to one account, are the read-only summary
+ * `other`. The bounded process-local funnel additionally groups by account/shape hashes, scope and period; it stores no words or raw run ids.
+ * The same reads, scoped to one account, are the read-only summary
  * `GET /api/methods` carries (`learningSummary`).
  *
  * @module learningMetrics
@@ -31,6 +32,7 @@ import { createHash } from "node:crypto";
 
 import { LEARNING_EVIDENCE_KINDS, LEARNING_EVIDENCE_VERDICTS, METHOD_APPLIED_OUTCOMES, METHOD_MOUNT_REASONS, METHOD_RELATION_TYPES } from "@evimed/domain";
 
+import { LEARNING_FUNNEL_REASONS, funnelHash } from "./learningFunnel.mjs";
 import { FOLLOW_UP_JUDGE_OUTCOMES, LEARNING_EVIDENCE_FAILURES } from "./learningEvidence.mjs";
 import { LEARNING_REFUSAL_REASONS } from "./learningTriggers.mjs";
 import { REPLAY_OUTCOMES, REPLAY_VERDICTS } from "./methodReplay.mjs";
@@ -69,6 +71,9 @@ const count = (value) => {
 /** The launch- and run-time counters nothing durable records. */
 export class LearningMetrics {
   constructor() {
+    /** @type {Map<string, any>} Bounded, process-local unique run observations. No words or raw identities. */
+    this.funnelRuns = new Map();
+    this.funnelClean = new Map();
     this.mounts = { withMethods: 0, without: 0 };
     this.mountedMethods = 0;
     this.mountedBytes = 0;
@@ -102,6 +107,46 @@ export class LearningMetrics {
     this.mountRanking = Object.fromEntries([...MOUNT_RANKING, "other"].map((mode) => [mode, 0]));
     /** @type {Record<string, number>} */
     this.applied = Object.fromEntries([...METHOD_APPLIED_OUTCOMES, "other"].map((outcome) => [outcome, 0]));
+  }
+
+  /** One evidence/trigger decision, deduplicated per run and reason; reset on process restart.
+   * @param {{ userId: string, runId: string, scope: string, period: number, reason: string, shape?: unknown,
+   *   clean?: boolean, cleanRuns?: number }} event */
+  observeFunnel(event) {
+    const account = funnelHash(["learning-funnel", event.userId]);
+    const key = funnelHash([account, event.runId]);
+    const held = this.funnelRuns.get(key);
+    const labels = { account, scope: String(event.scope).slice(0, 80), period: String(event.period),
+      shape: event.shape ? funnelHash(event.shape) : held?.labels.shape ?? "unknown" };
+    const group = JSON.stringify(labels);
+    if (!this.funnelClean.has(group)) this.funnelClean.set(group, 0);
+    const reason = closed(event.reason, LEARNING_FUNNEL_REASONS);
+    const reasons = held?.reasons ?? new Set(); reasons.add(reason);
+    if (event.clean === false && held?.clean === true) {
+      const oldGroup = JSON.stringify(held.labels);
+      this.funnelClean.set(oldGroup, Math.max(0, (this.funnelClean.get(oldGroup) ?? 0) - 1));
+    }
+    if (Number.isSafeInteger(event.cleanRuns) && event.cleanRuns >= 0) this.funnelClean.set(group, event.cleanRuns);
+    else if (event.clean === true && held?.clean !== true) this.funnelClean.set(group, (this.funnelClean.get(group) ?? 0) + 1);
+    this.funnelRuns.set(key, { labels, reasons, clean: event.clean ?? held?.clean ?? false });
+    while (this.funnelRuns.size > 10_000) this.funnelRuns.delete(this.funnelRuns.keys().next().value);
+    const live = new Set([...this.funnelRuns.values()].map(row => JSON.stringify(row.labels)));
+    for (const groupKey of this.funnelClean.keys()) if (!live.has(groupKey)) this.funnelClean.delete(groupKey);
+  }
+
+  funnelFamilies() {
+    const counts = new Map();
+    for (const run of this.funnelRuns.values()) for (const reason of run.reasons) {
+      const labels = { ...run.labels, reason };
+      const key = JSON.stringify(labels);
+      const held = counts.get(key);
+      counts.set(key, { labels, value: (held?.value ?? 0) + 1 });
+    }
+    return [
+      { name: "open_science_learning_funnel_runs", type: "gauge", help: "Unique observed runs by account hash, scope, fixed period, shape hash and decision reason; bounded to 10000 runs since process start.", series: [...counts.values()] },
+      { name: "open_science_learning_group_clean_runs", type: "gauge", help: "Latest eligible matching clean-run count observed at settling, by account/scope/period/shape; process-local, not a lifetime total.",
+        series: [...this.funnelClean].map(([labels, value]) => ({ labels: JSON.parse(labels), value })) },
+    ];
   }
 
   /** One run's reaction recorded against a method it opened (`foldApplied`): the researcher corrected it, or moved on.
@@ -216,9 +261,10 @@ export class LearningMetrics {
     this.runMethodsInvoked += count(invoked);
   }
 
-  /** @returns {{name: string, help: string, type: "counter", series: {value: number, labels?: Record<string, string>}[]}[]} */
+  /** @returns {{name: string, help: string, type: "counter" | "gauge", series: {value: number, labels?: Record<string, string>}[]}[]} */
   families() {
     return [
+      ...this.funnelFamilies(),
       { name: "open_science_learning_mounts_total", help: "Runtime launches, by whether they mounted any learned method.", type: "counter", series: [
         { value: this.mounts.withMethods, labels: { mounted: "true" } },
         { value: this.mounts.without, labels: { mounted: "false" } },
