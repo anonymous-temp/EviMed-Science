@@ -118,3 +118,60 @@ test('the agreements are not the only basis: a recorded permission still stands,
   assert.deepEqual((await vcr.dataPlane.tabFor(target, { id: 'owner' })).sources.find(entry => entry.id === source.id).cloud, { state: 'restricted', basis: null });
   assert.deepEqual((await without.dataPlane.tabFor(target, { id: 'owner' })).sources.find(entry => entry.id === source.id).cloud, { state: 'restricted', basis: null });
 });
+
+async function sharedProjectEgress() {
+  const first = await study();
+  const caller = { userId: 'owner', projectId: first.projectId, sessionId: 'session_egress' };
+  const second = await vcr.store.taskContext({ ...caller, rootSessionId: caller.sessionId });
+  assert.notEqual(second.id, first.id);
+  const egress = createVcrCloudEgress({ store: vcr.store, resolveSession: async identity => identity.sessionId,
+    destinations: () => [origin], deployment: () => deploymentCloudPermission(config) });
+  return { first, second, check: (...ids) => egress(caller, { messages: [{ role: 'tool', content: ids.join(' ') }] }) };
+}
+
+test('request-body references resolve to their owning studies in a shared project', options, async () => {
+  const { first, second, check } = await sharedProjectEgress();
+  const { file } = await upload(second);
+  const { file: firstFile } = await upload(first);
+  const projection = await vcr.dataPlane.createDocumentProjection({ studyId: first.id, documentId: firstFile.id, actor: 'owner',
+    sourceHash: projectionHash(chart), spans: [], attestation: 'Reviewed synthetic fixture' });
+  assert.match(file.id, /^sfl_[a-f0-9]{22}$/);
+  assert.match(projection.id, /^prj_[a-f0-9]{48}$/);
+
+  await assert.doesNotReject(check(file.id), 'a source-file reference in the second study is allowed');
+  await check(file.id, projection.id);
+  const inherited = await vcr.store.rows('SELECT study_id, projection_id FROM evimed_vcr.cloud_reads WHERE study_id=ANY($1::text[])',
+    [[first.id, second.id]]);
+  assert.deepEqual(inherited.sort((left, right) => left.projection_id.localeCompare(right.projection_id)),
+    [{ study_id: first.id, projection_id: projection.id }, { study_id: second.id, projection_id: file.id }]);
+});
+
+test('request-body references still fail closed in a shared project', options, async t => {
+  const denied = { status: 403, code: 'vcr_cloud_processing_not_authorized' };
+  await t.test('unowned references, including files in another project', async () => {
+    const { check } = await sharedProjectEgress();
+    const { file } = await upload(await study());
+    await assert.rejects(check(`sfl_${'0'.repeat(22)}`), denied);
+    await assert.rejects(check(file.id), denied);
+  });
+  await t.test('references owned by a soft-deleted study', async () => {
+    const { second, check } = await sharedProjectEgress();
+    const { file } = await upload(second);
+    await vcr.store.softDeleteStudy(second.id, 'owner');
+    await assert.rejects(check(file.id), denied);
+  });
+  await t.test('references to a revoked source', async () => {
+    const { second, check } = await sharedProjectEgress();
+    const { source, file } = await upload(second);
+    await vcr.dataPlane.setCloudPermission({ studyId: second.id, sourceId: source.id, actor: 'owner', permission: { status: 'revoked' } });
+    await assert.rejects(check(file.id), denied);
+  });
+  await t.test('references and session reads of a deleted source', async () => {
+    const { second, check } = await sharedProjectEgress();
+    const { source, file } = await upload(second);
+    await vcr.dataStore.recordCloudRead(second.id, file.id, { runId: 'run_egress', sessionId: 'session_egress' });
+    await vcr.store.query('DELETE FROM evimed_vcr.sources WHERE id=$1 AND study_id=$2', [source.id, second.id]);
+    await assert.rejects(check(file.id), denied);
+    await assert.rejects(check(), denied);
+  });
+});
