@@ -13,13 +13,13 @@ async function status() {
   return res.data.capabilities;
 }
 
-test('conversation ingestion discloses its missing history authority instead of offering a partial importer', async () => {
+test('conversation ingestion requires a wired host admission and a separately minted scope', async () => {
   const capability = (await status()).conversationIngest;
   assert.equal(capability.available, false);
-  assert.equal(capability.reason, 'external_conversation_history_authority_unavailable');
+  assert.equal(capability.path, '/conversations');
   assert.deepEqual(capability.requiredScopes, ['memory.ingest']);
-  assert.equal(capability.internalOnly, true);
-  assert.equal(AGENT_KEY_SCOPES.includes('memory.ingest'), false, 'an unimplemented host scope is not mintable');
+  assert.equal(capability.internalOnly, false);
+  assert.equal(AGENT_KEY_SCOPES.includes('memory.ingest'), true, 'a host must explicitly mint the ingestion scope');
 });
 
 test('the current history producer refuses an external session before reading an archive', async () => {
@@ -36,12 +36,12 @@ test('the current history producer refuses an external session before reading an
   assert.equal(native.sessionId, 'one'); assert.equal(native.conversationTitle, 'Keep green folders.');
 });
 
-test('work signals disclose missing run evidence and cannot mint a model self-report scope', async () => {
+test('work signals require a wired evidence reader before becoming available', async () => {
   const capability = (await status()).workSignals;
   assert.equal(capability.available, false);
-  assert.equal(capability.reason, 'external_run_evidence_unproven');
-  assert.deepEqual(capability.requiredScopes, ['learning.signal']); assert.equal(capability.internalOnly, true);
-  assert.equal(AGENT_KEY_SCOPES.includes('learning.signal'), false);
+  assert.equal(capability.path, '/work-events');
+  assert.deepEqual(capability.requiredScopes, ['learning.signal']); assert.equal(capability.internalOnly, false);
+  assert.equal(AGENT_KEY_SCOPES.includes('learning.signal'), true);
 });
 
 test('a minimal external ledger row cannot bypass the learning transcript refusal', async () => {
@@ -51,4 +51,53 @@ test('a minimal external ledger row cannot bypass the learning transcript refusa
   assert.equal(learningRefusal({ run }), 'transcript_incomplete');
   const native = { ...run, external: false, transcript: { completeness: 'complete' } };
   assert.equal(learningRefusal({ run: native }), null);
+});
+
+test('attended transcripts preserve roles, reject caller identity and keep only message digests in provenance', async () => {
+  const { ingestConversation } = await import('../src/agentMemoryHost.mjs');
+  const rows = [];
+  const context = { kind: 'owned', projectCreatedAt: '2026-01-01' };
+  const deps = { native: { memoryContexts: { forProject: async () => context, assertLive: async () => {} },
+    overlay: { queueAdmission: async (_id, row) => { rows.push(row); return row; } }, processAdmission: async () => ({state:'pending',recordIds:[]}) },
+    admission: { admit: async () => ({learn:true}) } };
+  const input = { sessionId:'outside', attended:true, messages:['user','assistant'].map(role => ({ role, text: role + ' words', saidAt:'2026-01-02T00:00:00Z' })) };
+  const args = { user:{id:'u'}, project:{id:'p'}, identity:{keyId:'k',keyName:'Codex'}, billing:{keyId:'k'}, input };
+  const one = await ingestConversation(deps, args);
+  const two = await ingestConversation(deps, args);
+  assert.equal(one.conversationId, two.conversationId);
+  assert.deepEqual(JSON.parse(rows[0].text).map(m => m.role), ['user','assistant']);
+  assert.equal(rows[0].externalSource.client, 'Codex');
+  assert.doesNotMatch(JSON.stringify(rows[0].externalSource), / words/);
+  assert.notEqual((await ingestConversation(deps, {...args,user:{id:'another'}})).conversationId, one.conversationId);
+  await assert.rejects(ingestConversation(deps, {...args,input:{...input,attended:false}}), {status:400});
+  context.kind = 'geo-project';
+  await assert.rejects(ingestConversation(deps,args), {status:403});
+});
+
+test('sharing resolves the signed-in owner, strips sharer identifiers and rejects impersonation', async () => {
+  const { shareForAgent } = await import('../src/agentMemorySharing.mjs');
+  const calls = [];
+  const deps = { service:{}, transfers:{}, links:{}, sharing:{ openLink: async (...a) => { calls.push(a); return {share:{authorId:'private',title:'Shared'}}; } } };
+  const result = await shareForAgent(deps,{id:'reader',accountCreatedAt:'stamp'},{action:'previewLink',token:'opaque'});
+  assert.equal(calls[0][0], 'reader'); assert.deepEqual(result,{share:{title:'Shared'}});
+  await assert.rejects(shareForAgent(deps,{id:'reader'},{action:'previewLink',token:'opaque',authorId:'other'}),{status:400});
+});
+
+test('a work signal is bound to an admitted human turn and account resource and cannot activate a method', async () => {
+  const { recordWorkSignal, hostDigest } = await import('../src/agentMemoryHost.mjs');
+  const saidAt = '2026-01-02T00:00:00.000Z', text = 'I accepted the date column.';
+  const source = { operation:'ingest',projectCreatedAt:'p1',saidAt,billing:{keyId:'k'},messages:[hostDigest(['user',text,saidAt])] };
+  let event;
+  const deps = {native:{ overlay:{admission: async () => ({state:'completed',projectId:'p',externalSource:source})},
+    history:{ledger:{rejected:async()=>false}}, memoryContexts:{forProject:async()=>({kind:'owned',projectCreatedAt:'p1'}),assertLive:async()=>{} }},
+    admission:{admit:async()=>({learn:true})}, learning:{getMethod:async()=>({projectId:'p',payload:{status:'approved',contentDigest:'d',frontmatter:{name:'Date column'}}})},
+    feedback:{learningEvidenceOf:async()=> event ? [event] : [],recordLearningEvidence:async(_id,row)=>({event:event={id:'e',detail:row.detail}})},
+    judge:{read:async()=>'{"verdict":"accept"}'} };
+  const args = {user:{id:'u'},project:{id:'p'},identity:{keyId:'k'},input:{conversationId:'1'.repeat(64),saidAt,text,messageIndex:0,methodId:'m',digest:'d'}};
+  await assert.rejects(recordWorkSignal(deps,{...args,identity:{keyId:'foreign'}}),{status:404});
+  await assert.rejects(recordWorkSignal(deps,{...args,input:{...args.input,text:'The model approved.'}}),{status:400});
+  assert.equal((await recordWorkSignal(deps,args)).verdict,'accept');
+  assert.equal((await recordWorkSignal(deps,args)).eventId,'e');
+  deps.native.history.ledger.rejected = async()=>true;
+  await assert.rejects(recordWorkSignal(deps,args),{status:403});
 });

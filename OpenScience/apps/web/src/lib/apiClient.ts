@@ -629,7 +629,7 @@ export interface WebStructuredMemory {
     /** What a memory the platform itself wrote was written from, in the person's words (「从其他 AI 导入」, 「你在两次对话里都这样做」): the
      *  control plane names it for an import and for a choice two conversations made, where there is no conversation to link to. */
     label?: string;
-    externalSource?: { client: string; sessionId: string; messageId?: string; saidAt: string };
+    externalSource?: { operation?: 'ingest'; client: string; sessionId: string; messageId?: string; saidAt: string };
   }>;
   revisions: Array<{
     version: number;
@@ -2743,7 +2743,7 @@ export async function stageVcrConversationReference(sessionId: string, projectId
 }
 
 /** Account credentials for external agents; secrets exist only in the create response. */
-export type WebAgentKeyScope = "memory.read" | "memory.history.read" | "memory.write" | "memory.remember" | "memory.manage" | "memory.observe" | "analysis.read" | "analysis.write";
+export type WebAgentKeyScope = "memory.read" | "memory.history.read" | "memory.write" | "memory.remember" | "memory.manage" | "memory.observe" | "memory.share" | "learning.signal" | "memory.ingest" | "analysis.read" | "analysis.write";
 export interface WebAgentKey {
   id: string;
   name: string;
@@ -2754,7 +2754,7 @@ export interface WebAgentKey {
   expiresAt: string | null;
   revokedAt: string | null;
 }
-export interface WebAgentKeyList { keys: WebAgentKey[]; scopes: string[] }
+export interface WebAgentKeyList { keys: WebAgentKey[]; scopes: string[]; usage?: { keyId: string; settledCalls: number; uncertainCalls: number; costCny: string }[] }
 export async function fetchWebAgentKeys(): Promise<WebAgentKeyList> {
   const res = await fetchWithWebAuth(apiUrl("/agent-keys"), { cache: "no-store" });
   return parseApiResponse<WebAgentKeyList>(res);

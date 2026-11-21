@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evimed-memory-mcp"
+version = "1.1.0"
+description = "Stdio MCP connector for the EviMed account memory API"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+evimed-memory-mcp = "evimed_memory_mcp.server:main"
+
+[tool.setuptools]
+packages = ["evimed_memory_mcp"]
+
+[tool.setuptools.package-dir]
+evimed_memory_mcp = "."
+
+[tool.setuptools.package-data]
+evimed_memory_mcp = ["operations.json"]

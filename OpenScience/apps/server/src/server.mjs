@@ -1,4 +1,5 @@
 import { createPasteRangeIndex } from './memoryPasteRanges.mjs';
+import { createMemoryBilling } from './agentMemoryBilling.mjs';
 import { rememberAdmission } from './agentMemoryRemember.mjs';
 import { recallHistoryForAgent } from './agentMemoryRecall.mjs';
 import { agentMemoryAvailable } from './agentMemoryAvailability.mjs';
@@ -1835,7 +1836,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const deleteAgentSubjects = (ownerId, only = null) => deleteSubjectAccounts(
     { apiKeys: agentApiKeys, store, memoryIndexing, capsuleTransfers: capsuleTransferService,
       nativeMemory: { erase: async (/** @type {string} */ userId) => { await memoryHistory?.eraseAccount(userId); if (await nativeMemoryHeldBy(userId)) await nativeMemory.eraseAccount(userId); } } }, ownerId, { only });
-  const agentKeyRoutes = createAgentKeyRoutes({ config, apiKeys: agentApiKeys, context, audit });
+  const agentKeyRoutes = createAgentKeyRoutes({ config, apiKeys: agentApiKeys, context, audit, usageLedger });
   // 「知识页」 (knowledgePageService.mjs): composed further down, once the run ledger and the runtime exist. The hooks below reach it
   // through these, so a deployment without it (or with it switched off) behaves as it always did.
   /** @type {KnowledgePageService | null} */
@@ -3604,7 +3605,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   });
   // The external agent-memory API (`/api/agent-memory/v1`): reads and acts on an account's memory through the store the memory page
   // uses, and stages an episode as a pending candidate that the owner confirms (`agentMemoryRoutes.mjs`).
+  const memoryBilling = createMemoryBilling({ config, ledger: usageLedger, store, wallet: () => credits?.service });
+  nativeMemory.agentBilling = memoryBilling;
   const agentMemoryRoutes = createAgentMemoryRoutes({
+    meter: memoryBilling,
+    workEvidence: () => learningEvidence?.judge?.available && feedbackEvents ? { judge: learningEvidence.judge, feedback: feedbackEvents } : null,
+    shareServices: capsuleTransferService ? { service: capsuleService, sharing: capsuleSharing, transfers: capsuleTransferService, links: capsuleShareLinks } : null,
     openingContext: { resident: residentProfiles, opening: input => /** @type {any} */ (memoryGatewayHandler).opening(input), get sourceDeletion() { return sourceDeletion; } },
     admission: { admit: input => memoryAdmission.admit(input) },
     config, apiKeys: agentApiKeys, store, memorySettings, capsules: capsuleService,
@@ -5255,13 +5261,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   if (feedbackEvents && productDocuments) feedbackEvents.memoryForgetReader = productDocuments.memoryForgetReader;
   nativeMemoryOverlay.externalAdmissionPolicy = async (userId, row) => {
-    if (row.externalSource?.operation !== 'remember') return { allowed: false, state: 'cancelled', reason: 'external_operation_unknown' };
+    if (!['ingest', 'remember'].includes(row.externalSource?.operation)) return { allowed: false, state: 'cancelled', reason: 'external_operation_unknown' };
     try {
       const user = await store.userById(userId);
       if (!user) return { allowed: false, state: 'cancelled', reason: 'account_unavailable' };
       const project = await store.requireProject(user, row.projectId ?? 'default');
       const rememberContext = await rememberAdmission({ native: nativeMemory, admission: memoryAdmission },
-        { user, project, at: Date.parse(row.externalSource.saidAt) });
+        { user, project, at: Date.parse(row.externalSource.saidAt), engineSessionId: row.externalSource.operation === 'ingest' ? row.engineSession : null });
       if ((rememberContext.projectCreatedAt ?? null) !== row.externalSource.projectCreatedAt) return { allowed: false, state: 'cancelled', reason: 'project_changed' };
       return { allowed: true, state: null, reason: null };
     } catch (error) {
@@ -10192,6 +10198,9 @@ async function securityAudit(config, action, status, details = {}) {
     username: details.username ?? null,
     userId: details.userId ?? null,
     code: details.code ?? null,
+    ...(details.keyId ? { keyId: safeLogId(details.keyId) } : {}),
+    ...(details.subjectAccountId ? { subjectAccountId: safeLogId(details.subjectAccountId) } : {}),
+    ...(action === "agent-memory.request" ? { operation: details.operation } : {}),
     ...(detail ? { detail } : {}),
   };
   const file = path.join(config.dataDir, ".openscience", "security.jsonl");

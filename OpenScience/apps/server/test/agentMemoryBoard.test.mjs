@@ -218,3 +218,14 @@ test('the dashboard reads forgotten revisions instead of asking active files for
   assert.equal(board.forgotten[0]?.id, id);
   assert.equal(board.forgotten[0]?.value, 'Use metric units.');
 });
+
+test('the pending episode list does not expose captured human or assistant turns to a read-only key', async () => {
+  const { memorySettings, nativeMemory } = memoryDouble([]);
+  const text = 'Original private conversation text.';
+  const episode = { id:'episode',revision:1,payload:{status:'candidate',content:text,externalSession:{messages:[{role:'user',text}]}} };
+  const capsules = {documents:{list:async()=>({items:[episode]})}};
+  const board = await memoryBoard({memorySettings,nativeMemory,capsules},{id:'u1'});
+  assert.equal(board.pending[0].id,'episode');
+  assert.equal(board.pending[0].summary,'待确认的外部会话（1 条消息）');
+  assert.doesNotMatch(JSON.stringify(board),/Original private conversation text/);
+});

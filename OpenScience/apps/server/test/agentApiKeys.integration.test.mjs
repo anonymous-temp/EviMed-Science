@@ -113,3 +113,29 @@ test('a persisted key loses internal API access when its owner leaves the allowl
   await keys.revoke(hospital, created.id);
   await assert.rejects(routes(req(created.key), res), error => error.code === 'agent_memory_disabled' && error.status === 503);
 });
+
+test('public clients share one atomic key budget and minute budget', options, async () => {
+  const { AGENT_KEY_LIMIT, AGENT_KEY_REQUESTS_PER_MINUTE, AGENT_ACCOUNT_REQUESTS_PER_MINUTE } = await import('../src/agentApiKeys.mjs');
+  const owner = `clients_${randomUUID()}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Clients','development')", [owner]);
+  try {
+    const results = await Promise.allSettled(Array.from({ length: AGENT_KEY_LIMIT + 2 }, (_, i) => keys.create(owner, { name: `Client ${i}` })));
+    const active = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+    assert.equal(active.length, AGENT_KEY_LIMIT);
+    assert.ok(results.filter(r => r.status === 'rejected').every(r => r.reason.code === 'agent_key_limit'));
+    assert.ok((await keys.list(owner)).every(key => !key.key && !key.key_digest));
+    const [first, second] = active;
+    assert.deepEqual(first.scopes, ['memory.read']);
+    assert.equal((await keys.resolve(second.key)).userId, owner);
+    const seed = (ids, count) => database.query(`UPDATE evimed_agent.api_keys SET request_count=$2,
+      request_minute=floor(extract(epoch FROM clock_timestamp()) / 60) WHERE id=ANY($1::text[])`, [ids, count]);
+    await seed([first.id], AGENT_KEY_REQUESTS_PER_MINUTE);
+    await assert.rejects(keys.countMemoryRequest(owner, first.id), { code: 'agent_memory_rate_limited' });
+    await keys.countMemoryRequest(owner, second.id);
+    await seed(active.slice(0, AGENT_ACCOUNT_REQUESTS_PER_MINUTE / AGENT_KEY_REQUESTS_PER_MINUTE).map(key => key.id), AGENT_KEY_REQUESTS_PER_MINUTE);
+    await assert.rejects(keys.countMemoryRequest(owner, active.at(-1).id), { code: 'agent_memory_rate_limited' });
+    await keys.revoke(owner, first.id);
+    await assert.rejects(keys.resolve(first.key), { code: 'agent_key_invalid' });
+    assert.ok(await keys.create(owner, { name: 'Replacement' }));
+  } finally { await database.query('DELETE FROM evimed_control.users WHERE id=$1', [owner]); }
+});

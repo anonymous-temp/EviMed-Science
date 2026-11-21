@@ -1,3 +1,4 @@
+import { memoryPayer } from './agentMemoryBilling.mjs';
 import { MEMORY_PROFILE_STRUCTURAL_TITLES, profileMemoryStatements } from '@evimed/domain';
 import { personalMemoryTravels } from './openVikingLayout.mjs';
 import { createHash, randomUUID } from "node:crypto";
@@ -236,10 +237,10 @@ export class NativeMemoryOverlay {
    * @param {string} userId @param {any} input */
   async queueAdmission(userId, input) {
     const insert = () => this.#query(`INSERT INTO evimed_memory.native_admissions
-      (user_id,candidate_id,candidate_revision,engine_session,project_id,pending_text,account_created_at,external_source)
-      SELECT id,$2,$3,$4,$5,$6,created_at,$7::jsonb FROM evimed_control.users WHERE id=$1
+      (user_id,candidate_id,candidate_revision,engine_session,project_id,pending_text,account_created_at,external_source,billing)
+      SELECT id,$2,$3,$4,$5,$6,created_at,$7::jsonb,$8::jsonb FROM evimed_control.users WHERE id=$1
       ON CONFLICT (user_id,candidate_id,candidate_revision) DO UPDATE SET candidate_id=EXCLUDED.candidate_id
-      RETURNING *`, [owner(userId), input.candidateId, input.revision, input.engineSession, input.projectId ?? null, input.text, input.externalSource ? JSON.stringify(input.externalSource) : null]);
+      RETURNING *`, [owner(userId), input.candidateId, input.revision, input.engineSession, input.projectId ?? null, input.text, input.externalSource ? JSON.stringify(input.externalSource) : null, memoryPayer()?.payer ?? null]);
     let result;
     try { result = await insert(); } catch (error) {
       // ON CONFLICT arbitrates the candidate revision only. An identical submission committing at the same moment can trip the
@@ -293,7 +294,7 @@ export class NativeMemoryOverlay {
 
   /** @param {string} userId */
   async openAdmissions(userId) {
-    const result = await this.#query(`SELECT * FROM evimed_memory.native_admissions WHERE user_id=$1 AND state NOT IN ('completed','cancelled')
+    const result = await this.#query(`SELECT * FROM evimed_memory.native_admissions WHERE user_id=$1 AND state NOT IN ('completed','cancelled') AND error IS DISTINCT FROM 'billing_refused'
       ORDER BY created_at LIMIT 50`, [owner(userId)]);
     return result.rows.map(admissionRow);
   }
@@ -1615,7 +1616,7 @@ export class NativeMemoryOverlay {
 /** @param {any} row */
 function admissionRow(row) {
   return { userId: row.user_id, candidateId: row.candidate_id, revision: row.candidate_revision,
-    engineSession: row.engine_session, projectId: row.project_id, text: row.pending_text, externalSource: row.external_source ?? null,
+    engineSession: row.engine_session, projectId: row.project_id, text: row.pending_text, billing: row.billing ?? null, externalSource: row.external_source ?? null,
     state: row.state, phase: row.phase, archiveUri: row.archive_uri, taskId: row.task_id,
     recordIds: row.record_ids ?? [], error: row.error, createdAt: instant(row.created_at), updatedAt: instant(row.updated_at) };
 }

@@ -17,7 +17,7 @@ assert.equal(plugin.versions[0].version, manifest.version);
 assert.equal(plugin.versions[0].engines.dsh, manifest.engines.dsh);
 assert.equal(marketInstallTarget(plugin.name, plugin.versions[0]).spec, `${manifest.name}@${manifest.version}`);
 assert.equal(manifest.dsh.manifestVersion, 1);
-assert.equal(manifest.private, true);
+assert.equal(manifest.publishConfig.access, 'public');
 assert.ok(!manifest.dependencies && !manifest.peerDependencies, 'standalone package has no install-time dependencies');
 const pin = JSON.parse(await readFile(new URL('../../../deps-version.json', import.meta.url), 'utf8'));
 assert.equal(manifest.engines.dsh, pin.dsh.version ?? pin.dsh);

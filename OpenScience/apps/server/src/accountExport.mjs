@@ -88,7 +88,7 @@ const nativeQueries = [
     FROM evimed_memory.native_revisions WHERE user_id=$1
       AND EXISTS(SELECT 1 FROM unnest($2::text[]) AS roots(root) WHERE starts_with(uri,root||'/memories/')) ORDER BY native_revisions.id`],
   ["nativeAdmissions", `SELECT candidate_id AS "candidateId",candidate_revision AS revision,project_id AS "projectId",state,
-    pending_text AS "pendingText",external_source AS "externalSource",error,created_at AS "createdAt",updated_at AS "updatedAt"
+    pending_text AS "pendingText",external_source AS "externalSource",billing->>'keyId' AS "agentKeyId",error,created_at AS "createdAt",updated_at AS "updatedAt"
     FROM evimed_memory.native_admissions WHERE user_id=$1
       AND account_created_at=(SELECT created_at FROM evimed_control.users WHERE id=$1) ORDER BY created_at,candidate_id,candidate_revision`],
   ["nativeImports", `SELECT id,state,statements,saved,left_out AS "leftOut",created_at AS "createdAt",expires_at AS "expiresAt"
@@ -142,7 +142,7 @@ const queries = [
     FROM evimed_inbox.preferences WHERE user_id=$1`],
   // `purpose` says what each call was for; an `engine` row is a specialist
   // job's own model spend, which no cap counts and the job's price covers.
-  ["usage", `SELECT id,project_id AS "projectId",run_id AS "runId",purpose,model,price_version AS "priceVersion",currency,status,
+  ["usage", `SELECT id,project_id AS "projectId",run_id AS "runId",purpose,CASE WHEN module='agent-memory' THEN task_id END AS "agentKeyId",model,price_version AS "priceVersion",currency,status,
     reserved_cost::text AS "reservedCost",actual_cost::text AS "actualCost",priced,cache_hit_tokens::text AS "cacheHitTokens",
     cache_miss_tokens::text AS "cacheMissTokens",output_tokens::text AS "outputTokens",error_code AS "errorCode",created_at AS "createdAt",settled_at AS "settledAt"
     FROM evimed_usage.model_requests WHERE user_id=$1 ORDER BY created_at,id`],
@@ -190,6 +190,8 @@ export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
   "evimed_memory.map_edge_dismissals": "opaque account-scoped map corrections and confirmed distinct-person pairs; hashes name deployment-local file paths and are not portable identity facts",
   "evimed_memory.native_person_merges": "deployment-local exact-path redirects and two-file undo before-images; current merged content leaves through native-memory.zip and the operation through native revisions; snapshots can contain withdrawn facts and are not exported",
   "evimed_memory.native_accounts": "engine registration, safety migration rate limits, scan and consolidation scheduling state; the account's memory files leave through memory/native-memory.zip, not the engine's maintenance authority",
+  "evimed_agent.api_keys": "credential hashes, revocation state and transient per-minute security counters; credentials cannot be restored from an account export",
+  "evimed_agent.subjects": "institution-scoped pseudonymous identity routing; exporting this mapping would disclose other principals and cannot restore their credentials",
   "evimed_memory.native_summary_invalidations": "generation tickets for rebuilding engine directory summaries after writes; an operational outbox, not authored memory content",
   "evimed_memory.native_source_copies": "derived archive-to-copy bindings used to prevent a synthetic memory write from manufacturing new source authority; not portable customer content",
   "evimed_memory.native_sessions": "deployment-local engine session and project-incarnation bindings; the owned native conversation journals leave through the project archive",

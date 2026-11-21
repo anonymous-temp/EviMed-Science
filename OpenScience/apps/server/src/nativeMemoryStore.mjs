@@ -1,5 +1,6 @@
 import { withdrawSafetyProjection } from './memorySafetyMigration.mjs';
 import { statementSource, visibleStatementSources } from './memoryStatementSources.mjs';
+import { withMemoryPayer } from './agentMemoryBilling.mjs';
 import { filterCapturedMessage } from './memoryGateway.mjs';
 import { isNeutralProfileHeading, profileMemoryStatements, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
 import { readStatus } from './memoryReadStatus.mjs';
@@ -266,6 +267,7 @@ const BODIES_PER_ACCOUNT = 400;
  */
 /** The sessions the platform itself opens to write a memory, and what the drawer says of what they wrote: 「从其他 AI 导入」 and 「你在两次对话里都这样做」. */
 export const PLATFORM_SESSION_SOURCES = Object.freeze([
+  { prefix: "dsh-external_", sourceType: "external", label: "外部智能体" },
   { prefix: "evimed-stated-", sourceType: "external", label: "来自外部助手" },
   { prefix: "evimed-import-", sourceType: "import", label: "从其他 AI 导入" },
   { prefix: "evimed-promote-", sourceType: "repetition", label: "你在两次对话里都这样做" },
@@ -280,7 +282,7 @@ export const PLATFORM_SESSION_SOURCES = Object.freeze([
 function sessionEvidence({ engineSession, archiveUri, observedAt, fingerprint }, projectId) {
   const session = String(engineSession ?? "");
   const conversationId = platformSessionOf(session);
-  if (conversationId) {
+  if (conversationId && !/^external_[a-f0-9]{64}$/.test(conversationId)) {
     return {
       sourceType: "conversation", sourceRef: `sessions/${conversationId}/commits/${String(archiveUri ?? "").split("/").at(-1) || "archive"}`,
       quote: "", observedAt: observedAt ?? null, weight: 1, fingerprint, conversationId, ...(projectId ? { projectId } : {}),
@@ -470,6 +472,7 @@ export class NativeMemoryStore {
     this.memoryContexts = memoryContexts;
     /** Durable raw-history lifecycle fences, set by the composition root. */
     this.history = null;
+    /** @type {any} */ this.agentBilling = null;
     /** Composed by the native worker: every direct page edit and restore shares instruction attribution. @type {any} */
     this.instructionWriteCheck = null;
     /** @type {any} */ this.sourceDeletion = null;
@@ -495,6 +498,12 @@ export class NativeMemoryStore {
   #personalContext(userId) {
     return { kind: 'owned', ownerId: userId, namespaceId: this.sessions.engineUser(userId), projectId: null,
       userRoot: this.sessions.userRoot(userId), sessions: this.sessions };
+  }
+
+  async #ownedContext(userId) {
+    return this.memoryContexts
+      ? this.memoryContexts.withOwner(userId, created => this.memoryContexts.view(userId, created))
+      : null;
   }
 
   async #contexts(userId) {
@@ -667,7 +676,7 @@ export class NativeMemoryStore {
       const source = external.get(item.archiveUri);
       if (!source) return [];
       const { archiveUri: _archive, ...evidence } = item;
-      return [{ ...evidence, observedAt: source.saidAt, externalSource: { client: source.client, sessionId: source.sessionId,
+      return [{ ...evidence, ...(source.operation === 'ingest' ? { label: `外部智能体 ${source.client}` } : {}), observedAt: source.saidAt, externalSource: { ...(source.operation === 'ingest' ? { operation: 'ingest' } : {}), client: source.client, sessionId: source.sessionId,
         ...(source.messageId ? { messageId: source.messageId } : {}), saidAt: source.saidAt } }];
     });
     for (const record of records) record.evidenceCount = record.evidence.length;
@@ -1069,12 +1078,12 @@ export class NativeMemoryStore {
 
   /**
    * The page's list read with filters (`GET /api/memory/records`): scopes, kinds and a project.
-   * @param {string} userId @param {{ scopes?: string[], statuses?: string[], kinds?: string[], scopeId?: string, query?: string, pageSize?: number, allowRecord?: (record: any) => boolean }} filters
+   * @param {string} userId @param {{ scopes?: string[], statuses?: string[], kinds?: string[], scopeId?: string, query?: string, pageSize?: number, ownedOnly?: boolean, allowRecord?: (record: any) => boolean }} filters
    */
-  async listRecords(userId, { scopes = [], statuses = [], kinds = [], scopeId = "", query = "", pageSize = 100, allowRecord = () => true } = {}) {
+  async listRecords(userId, { scopes = [], statuses = [], kinds = [], scopeId = "", query = "", pageSize = 100, ownedOnly = false, allowRecord = () => true } = {}) {
     const words = String(query ?? "").trim().toLowerCase();
-    const view = scopeId ? await this.#projectContext(userId, scopeId) : null;
-    return (await this.records(userId, { context: view?.kind === 'geo-project' ? view : null }))
+    const view = ownedOnly ? await this.#ownedContext(userId) : scopeId ? await this.#projectContext(userId, scopeId) : null;
+    return (await this.records(userId, { context: ownedOnly || view?.kind === 'geo-project' ? view : null }))
       .filter(allowRecord)
       .filter((record) => !statuses.length || statuses.includes(record.status))
       .filter((record) => !scopes.length || scopes.includes(record.scope))
@@ -1089,17 +1098,18 @@ export class NativeMemoryStore {
    * resolved back to the record the page lists (a hit on the profile is the profile lines that share a word of the query).
    * @param {string} userId @param {string} query
    */
-  async search(userId, query) {
+  async search(userId, query, { ownedOnly = false } = {}) {
     const text = String(query ?? "").trim();
-    const records = (await this.#withConversationTitles(userId, await this.records(userId))).records;
+    const owned = ownedOnly ? await this.#ownedContext(userId) : null;
+    const records = (await this.#withConversationTitles(userId, await this.records(userId, { context: owned }))).records;
     const lower = text.toLowerCase();
     const items = text ? records.filter((record) => `${record.summary}\n${record.value}`.toLowerCase().includes(lower)) : records;
     const seen = new Set(items.map((record) => record.id));
     let semantic = 0, failedChannels = 0;
     if (text) {
-      const views = await this.#contexts(userId);
+      const views = owned ? [owned] : await this.#contexts(userId);
       const hits = (await mapLimit(views, 4, context => this.#engine(() => context.sessions.find(userId, text,
-        { target: context.sessions.memoryRoot(userId), limit: 25 })).catch(() => { failedChannels++; return []; }))).flat();
+        { target: context.sessions.memoryRoot(userId), limit: 25 })).catch(error => { if (ownedOnly && error?.status === 402) throw error; failedChannels++; return []; }))).flat();
       const words = lower.split(/\s+/).filter((word) => word.length >= 2);
       for (const hit of hits) {
         for (const record of records.filter((candidate) => candidate.uri === hit.uri)) {
@@ -2352,9 +2362,10 @@ export class NativeMemoryStore {
 
   /** @param {string} userId @param {any} admission */
   async processAdmission(userId, admission) {
-    return admission.externalSource
+    const scope = admission.billing && this.agentBilling ? { payer: admission.billing, meter: this.agentBilling } : null;
+    return withMemoryPayer(scope, () => admission.externalSource
       ? withNativeMemoryWrite(this.overlay.database, userId, () => this.#processAdmission(userId, admission))
-      : this.#processAdmission(userId, admission);
+      : this.#processAdmission(userId, admission));
   }
 
   async #processAdmission(userId, admission) {
@@ -2365,6 +2376,7 @@ export class NativeMemoryStore {
     let row = typeof this.overlay.claimAdmission === "function"
       ? await this.overlay.claimAdmission(userId, admission.candidateId, admission.revision) : admission;
     if (!row) return receipt((await this.overlay.admission(userId, admission.candidateId, admission.revision)) ?? admission);
+    const conversation = row.externalSource?.operation === 'ingest' && row.text ? JSON.parse(row.text) : null;
     const save = async (/** @type {any} */ patch) => {
       row = await this.overlay.updateAdmission(userId, admission.candidateId, admission.revision, patch);
       return row;
@@ -2376,7 +2388,7 @@ export class NativeMemoryStore {
       if (policy.allowed) {
         if (row.externalSource && row.text) {
           const refused = await removalRefusals({ userId, overlay: this.overlay, projectId: row.projectId, judge: this.rejectionJudge,
-            candidates: memoryLines(row.text).map(text => ({ text, sources: [] })) });
+            candidates: (conversation ? conversation.flatMap(m => memoryLines(m.parts[0].text)) : memoryLines(row.text)).map(text => ({ text, sources: [] })) });
           if (refused.size) { await save({ state: 'cancelled', error: 'rejected_line', release: true }); return false; }
         }
         return true;
@@ -2390,6 +2402,7 @@ export class NativeMemoryStore {
       if (!row.archiveUri && commits.length) await save({ archiveUri: commits[0].archiveUri, taskId: commits[0].taskId, state: "pending" });
       if (!row.archiveUri) {
         if (!await authorized()) return receipt(row);
+        if (row.billing && this.agentBilling) await this.agentBilling.reserveExtraction(row.billing, row);
         await this.sessions.register(userId);
         if (!await authorized()) return receipt(row);
         await this.sessions.createSession(userId, row.engineSession);
@@ -2402,35 +2415,54 @@ export class NativeMemoryStore {
             || !parsed.rest && parsed.userRoot === this.sessions.userRoot(userId) && parsed.session === row.engineSession))?.archiveUri;
           if (!archive) { await save({ state: "uncertain", error: "commit_archive_not_visible", release: true }); return receipt(row); }
           const commit = await this.overlay.recordCommit({ userId, archiveUri: archive, engineSession: row.engineSession, projectId: row.projectId, origin: row.externalSource ? "page" : "tool",
-            ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt, pendingText: row.text } : {}) });
+            ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt, pendingText: conversation ? null : row.text } : {}) });
           await save({ archiveUri: archive, taskId: commit.taskId, state: "pending" });
         } else {
           if (!status || !Number.isFinite(Number(status.message_count))) throw new HttpError(503, "memory_engine_unavailable", "The session state could not be inspected.");
           let messageCount = Number(status.message_count);
-          const projectLine = row.externalSource?.projectLine;
-          const expectedCount = projectLine ? 2 : 1;
-          if (projectLine && messageCount === 0) {
-            if (['context_submitting', 'message_submitting', 'commit_submitting'].includes(row.phase)) {
-              await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true }); return receipt(row);
+          if (conversation) {
+            if (messageCount > conversation.length || !Number.isInteger(messageCount)) throw new HttpError(409, 'memory_conflict', 'Unexpected external transcript length.');
+            while (messageCount < conversation.length) {
+              const phase = `turn:${messageCount}`;
+              if (row.phase === phase || row.phase === 'commit_submitting') {
+                await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true }); return receipt(row);
+              }
+              const previous = row.phase;
+              await save({ state: 'submitting', phase });
+              if (!await authorized(previous)) return receipt(row);
+              await this.sessions.addMessage(userId, row.engineSession, conversation[messageCount]);
+              messageCount++;
             }
-            const priorPhase = row.phase;
-            await save({ state: 'submitting', phase: 'context_submitting' });
-            if (!await authorized(priorPhase)) return receipt(row);
-            await this.sessions.addMessage(userId, row.engineSession, { role: 'assistant', parts: [{ type: 'text', text: projectLine }] });
-            messageCount++;
+          } else {
+            const projectLine = row.externalSource?.projectLine;
+            const expectedCount = projectLine ? 2 : 1;
+            if (projectLine && messageCount === 0) {
+              if (['context_submitting', 'message_submitting', 'commit_submitting'].includes(row.phase)) {
+                await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true }); return receipt(row);
+              }
+              const priorPhase = row.phase;
+              await save({ state: 'submitting', phase: 'context_submitting' });
+              if (!await authorized(priorPhase)) return receipt(row);
+              await this.sessions.addMessage(userId, row.engineSession, { role: 'assistant', parts: [{ type: 'text', text: projectLine }] });
+              messageCount++;
+            }
+            if (messageCount === expectedCount - 1) {
+              // A timed-out append may still finish; a short read cannot authorize resending it.
+              if (['message_submitting', 'commit_submitting'].includes(row.phase)) {
+                await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true }); return receipt(row);
+              }
+              const priorPhase = row.phase;
+              await save({ state: 'submitting', phase: 'message_submitting', error: '' });
+              if (!await authorized(priorPhase)) return receipt(row);
+              await this.sessions.addMessage(userId, row.engineSession, { role: 'user', created_at: row.externalSource?.saidAt ?? row.createdAt,
+                parts: [{ type: 'text', text: row.externalSource ? `请记住：${row.text}` : maskIdentifiers(row.text) }] });
+            } else if (messageCount !== expectedCount) {
+              await save({ state: 'uncertain', error: 'unexpected_session_messages', release: true }); return receipt(row);
+            }
           }
-          if (messageCount === expectedCount - 1) {
-            // A timed-out append may still finish; a short read cannot authorize resending it.
-            if (['message_submitting', 'commit_submitting'].includes(row.phase)) {
-              await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true }); return receipt(row);
-            }
-            const priorPhase = row.phase;
-            await save({ state: 'submitting', phase: 'message_submitting', error: '' });
-            if (!await authorized(priorPhase)) return receipt(row);
-            await this.sessions.addMessage(userId, row.engineSession, { role: 'user', created_at: row.externalSource?.saidAt ?? row.createdAt,
-              parts: [{ type: 'text', text: row.externalSource ? `请记住：${row.text}` : maskIdentifiers(row.text) }] });
-          } else if (messageCount !== expectedCount) {
-            await save({ state: 'uncertain', error: 'unexpected_session_messages', release: true }); return receipt(row);
+          if (row.externalSource && row.phase === 'commit_submitting') {
+            await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true });
+            return receipt(row);
           }
           const priorPhase = row.phase;
           await save({ state: "submitting", phase: "commit_submitting" });
@@ -2442,7 +2474,7 @@ export class NativeMemoryStore {
             throw new HttpError(403, 'memory_scope_denied', 'The archive does not belong to the submitted statement.');
           }
           const commit = await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: row.engineSession,
-            projectId: row.projectId, ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt } : {}), origin: row.externalSource ? "page" : "tool", pendingText: row.externalSource ? row.text : null, taskId: result.task_id ?? null });
+            projectId: row.projectId, ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt } : {}), origin: row.externalSource ? "page" : "tool", pendingText: row.externalSource && !conversation ? row.text : null, taskId: result.task_id ?? null });
           await save({ state: "pending", archiveUri: commit.archiveUri, taskId: commit.taskId, error: "" });
           this.#touch(userId);
         }
@@ -2454,6 +2486,7 @@ export class NativeMemoryStore {
         commit = await this.overlay.commit(userId, commit.replayedAs);
       }
       if (commit?.state === "completed") {
+        if (row.billing && this.agentBilling) await this.agentBilling.extraction(row.billing, { userId, sessions: this.sessions, commit, createdAt: row.createdAt, engineSession: row.engineSession });
         const revisions = await this.overlay.admissionRevisions(userId, commit.archiveUri);
         await save({ state: "completed", recordIds: [...new Set(revisions.filter((revision) => revision.change !== "deleted").map((revision) => nativeFileId(revision.uri)))], error: "", release: true });
       } else {
@@ -2462,7 +2495,11 @@ export class NativeMemoryStore {
       return receipt(row);
     } catch (error) {
       if (/** @type {any} */ (error)?.code === "memory_admission_gone") throw error;
-      await save({ state: ["context_submitting","message_submitting","commit_submitting"].includes(row.phase) ? "uncertain" : "failed",
+      if (error?.status === 402) {
+        await save({ state: 'suspended', error: 'billing_refused', release: true });
+        throw error;
+      }
+      await save({ state: (String(row.phase ?? "").startsWith("turn:") || ["context_submitting","message_submitting","commit_submitting"].includes(row.phase)) ? "uncertain" : "failed",
         error: String(/** @type {any} */ (error)?.code ?? "memory_admission_failed").slice(0,200), release: true });
       return receipt(row);
     }

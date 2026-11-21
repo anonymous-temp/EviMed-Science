@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { platformSessionOf } from './openVikingSessions.mjs';
 import { isPlatformStartedRun } from './memoryDispatch.mjs';
 import { isInternalProjectOf } from './internalProjects.mjs';
@@ -29,6 +30,15 @@ export function createMemoryHistorySources({ config, store, productDatabase, nat
       if (!commit.engineSession) return base;
       const sessionId = platformSessionOf(commit.engineSession);
       if (!sessionId) return null;
+      const external = /^external_([a-f0-9]{64})$/.exec(sessionId);
+      if (external) {
+        if (memoryContext.kind !== 'owned') return null;
+        const admitted = await nativeMemoryOverlay.admission(user.id, `host:${external[1]}`, 1);
+        if (!admitted || admitted.projectId !== projectId || admitted.engineSession !== commit.engineSession || admitted.state === 'cancelled'
+          || admitted.externalSource?.operation !== 'ingest' || admitted.externalSource.projectCreatedAt !== base.projectCreatedAt) return null;
+        return { ...base, sessionId, runs: [], external: admitted.externalSource,
+          conversationTitle: `外部智能体 ${admitted.externalSource.client}`, projectTitle: historyTitle(project.name, 'Project'), conversationUrl: '/app/memory' };
+      }
       if (memoryContext.kind === 'geo-project') {
         const bound = await nativeMemoryContexts.session(memoryContext, commit.engineSession);
         if (!bound || bound.payload.source.kind !== 'dsh' || bound.payload.source.childAddress || bound.payload.source.rootSessionId !== sessionId) return null;
@@ -52,7 +62,14 @@ export function createMemoryHistorySources({ config, store, productDatabase, nat
         source.runs.map(run => ({ sessionId: source.sessionId, runId: run.id })))) return false;
       return true;
     },
-    admitMessage: async (memoryContext, source, message) => (await memoryAdmission.admit({ user: { id: memoryContext.ownerId }, project: source.project,
-      engineSessionId: `dsh-${source.sessionId}`, at: Number.isFinite(Date.parse(message.created_at ?? '')) ? Date.parse(message.created_at) : null })).learn,
+    admitMessage: async (memoryContext, source, message) => {
+      if (source.external) {
+        const text = message.parts?.map(part => part.text).join('') ?? message.content;
+        const at = Date.parse(message.created_at);
+        if (!Number.isFinite(at) || !source.external.messages.includes(createHash('sha256').update(JSON.stringify([message.role, text, new Date(at).toISOString()])).digest('hex'))) return false;
+      }
+      return (await memoryAdmission.admit({ user: { id: memoryContext.ownerId }, project: source.project,
+      engineSessionId: `dsh-${source.sessionId}`, at: Number.isFinite(Date.parse(message.created_at ?? '')) ? Date.parse(message.created_at) : null })).learn;
+    },
   };
 }

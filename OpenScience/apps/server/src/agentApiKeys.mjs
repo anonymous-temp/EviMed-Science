@@ -55,7 +55,11 @@ const migrations = new WeakMap();
  * person's own clicks, and it is never a default. `memory.observe` posts what
  * a person actually did — a prescription edit — which the platform counts
  * into habits that take effect (agentMemoryObservations.mjs). */
-export const AGENT_KEY_SCOPES = Object.freeze(["memory.read", "memory.history.read", "memory.write", "memory.remember", "memory.manage", "memory.observe", "analysis.read", "analysis.write"]);
+export const AGENT_KEY_SCOPES = Object.freeze(["memory.read", "memory.history.read", "memory.write", "memory.remember", "memory.manage", "memory.observe", "memory.share", "memory.ingest", "learning.signal", "analysis.read", "analysis.write"]);
+
+export const AGENT_KEY_LIMIT = 20;
+export const AGENT_KEY_REQUESTS_PER_MINUTE = 120;
+export const AGENT_ACCOUNT_REQUESTS_PER_MINUTE = 360;
 
 const KEY_PREFIX = "evk_";
 const PREFIX_LENGTH = KEY_PREFIX.length + 8;
@@ -82,6 +86,8 @@ CREATE INDEX IF NOT EXISTS agent_api_keys_project_fk_idx ON evimed_agent.api_key
 -- 2026-09-27. An integration key speaks for the people behind an institution,
 -- one account each, so it cannot also be pinned to one of the institution's
 -- projects: those are the institution's, not the doctors'.
+ALTER TABLE evimed_agent.api_keys ADD COLUMN IF NOT EXISTS request_minute bigint;
+ALTER TABLE evimed_agent.api_keys ADD COLUMN IF NOT EXISTS request_count integer NOT NULL DEFAULT 0;
 ALTER TABLE evimed_agent.api_keys ADD COLUMN IF NOT EXISTS subjects boolean NOT NULL DEFAULT false;
 ALTER TABLE evimed_agent.api_keys DROP CONSTRAINT IF EXISTS api_keys_subjects_unbound;
 ALTER TABLE evimed_agent.api_keys ADD CONSTRAINT api_keys_subjects_unbound CHECK (NOT subjects OR project_id IS NULL);
@@ -197,11 +203,17 @@ export class AgentApiKeyStore {
     const secret = `${KEY_PREFIX}${randomBytes(32).toString("base64url")}`;
     const id = `agk_${randomBytes(9).toString("base64url")}`;
     const expiresAt = days == null ? null : new Date(Date.now() + days * 86_400_000).toISOString();
-    const { rows } = await this.database.query(
-      `INSERT INTO evimed_agent.api_keys (id,user_id,project_id,name,key_prefix,key_digest,scopes,expires_at,subjects)
-       VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9) RETURNING *`,
-      [id, userId, input.projectId ?? null, name, secret.slice(0, PREFIX_LENGTH), digestOf(secret), JSON.stringify(scopes), expiresAt, subjects],
-    );
+    const { rows } = await this.database.transaction(async (/** @type {any} */ client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`agent-key-limit:${userId}`]);
+      const active = await client.query(`SELECT count(*)::int AS count FROM evimed_agent.api_keys
+        WHERE user_id=$1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > clock_timestamp())`, [userId]);
+      if (active.rows[0].count >= AGENT_KEY_LIMIT) throw new HttpError(409, "agent_key_limit", "Revoke an active API key before creating another.");
+      return client.query(
+        `INSERT INTO evimed_agent.api_keys (id,user_id,project_id,name,key_prefix,key_digest,scopes,expires_at,subjects)
+         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9) RETURNING *`,
+        [id, userId, input.projectId ?? null, name, secret.slice(0, PREFIX_LENGTH), digestOf(secret), JSON.stringify(scopes), expiresAt, subjects],
+      );
+    });
     // The one time. Every later read of this row returns the record without it.
     return { ...record(rows[0]), key: secret };
   }
@@ -210,7 +222,7 @@ export class AgentApiKeyStore {
   async list(userId) {
     await migrateAgentApiKeys(this.database);
     const { rows } = await this.database.query(
-      "SELECT * FROM evimed_agent.api_keys WHERE user_id=$1 ORDER BY created_at DESC, id DESC LIMIT 200",
+      "SELECT * FROM evimed_agent.api_keys WHERE user_id=$1 ORDER BY (revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())) DESC, created_at DESC, id DESC LIMIT 200",
       [userId],
     );
     return rows.map(record);
@@ -227,6 +239,23 @@ export class AgentApiKeyStore {
     return record(rows[0]);
   }
 
+  /** Serialize the minute budget across API replicas and all of the owner's subjects and keys. */
+  async countMemoryRequest(userId, keyId) {
+    await this.database.transaction(async (/** @type {any} */ client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`agent-rate:${userId}`]);
+      const { rows: [window] } = await client.query(`WITH clock AS (SELECT floor(extract(epoch FROM clock_timestamp()) / 60)::bigint AS minute)
+        SELECT minute, (SELECT coalesce(sum(request_count),0)::int FROM evimed_agent.api_keys
+          WHERE user_id=$1 AND request_minute=clock.minute) AS total FROM clock`, [userId]);
+      if (window.total >= AGENT_ACCOUNT_REQUESTS_PER_MINUTE) throw new HttpError(429, "agent_memory_rate_limited", "Account request limit reached.");
+      const result = await client.query(`UPDATE evimed_agent.api_keys SET request_minute=$3,
+        request_count=CASE WHEN request_minute=$3 THEN request_count+1 ELSE 1 END WHERE user_id=$1 AND id=$2
+        AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > clock_timestamp())
+        AND (request_minute IS DISTINCT FROM $3 OR request_count < $4) RETURNING id`,
+      [userId, keyId, window.minute, AGENT_KEY_REQUESTS_PER_MINUTE]);
+      if (!result.rowCount) throw new HttpError(429, "agent_memory_rate_limited", "Key request limit reached.");
+    });
+  }
+
   /**
    * Resolve a presented secret, or refuse.
    *
@@ -238,7 +267,7 @@ export class AgentApiKeyStore {
    * cannot get from their own key list.
    *
    * @param {string | null | undefined} presented
-   * @returns {Promise<{ userId: string, keyId: string, projectId: string | null, scopes: string[], subjects: boolean }>}
+   * @returns {Promise<{ userId: string, keyId: string, keyName: string, projectId: string | null, scopes: string[], subjects: boolean }>}
    */
   async resolve(presented) {
     const secret = String(presented ?? "");
@@ -262,6 +291,7 @@ export class AgentApiKeyStore {
     return {
       userId: row.user_id,
       keyId: row.id,
+      keyName: row.name,
       projectId: row.project_id ?? null,
       scopes: Array.isArray(row.scopes) ? row.scopes : [],
       subjects: row.subjects === true,

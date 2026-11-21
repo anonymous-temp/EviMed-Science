@@ -157,3 +157,16 @@ test("a newer snapshot is taken in place of the one the recipient holds, with wh
   assert.equal((await capsules.documents.list(recipient, "capsule", {})).items.filter((item) => item.payload.imported).length, packsBefore,
     "the upgrade made no second pack");
 });
+
+test('an external share uses the same owner snapshot and recipient checks as the web file channel', options, async () => {
+  const {shareForAgent} = await import('../src/agentMemorySharing.mjs');
+  const own = await makeCapsule(capsules,sender,{title:'External file channel'});
+  await method(own.id,'First show sources and then conclusions.');
+  const services = {service:capsules,transfers,links:null,sharing:null};
+  const owner = {id:sender}, reader = {id:recipient};
+  const exported = await shareForAgent(services,owner,{action:'exportFile',capsuleId:own.id,password});
+  await assert.rejects(shareForAgent(services,{id:bystander},{action:'download',capsuleId:own.id,snapshotId:exported.snapshot.id}));
+  const preview = await shareForAgent(services,reader,{action:'previewFile',archive:exported.archive,password});
+  assert.equal(preview.archiveSha256,(await transfers.preview(recipient,{archive:exported.archive,password})).archiveSha256);
+  await assert.rejects(shareForAgent(services,owner,{action:'createLink',capsuleId:own.id}),{code:'capsule_share_not_enabled'});
+});

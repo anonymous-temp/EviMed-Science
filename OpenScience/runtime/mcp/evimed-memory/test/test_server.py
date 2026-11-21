@@ -47,10 +47,23 @@ def tearDownModule():
 
 class AdapterTests(unittest.TestCase):
     def test_supported_tools(self):
-        # The catalogue is a first-turn cost. Recall and note are what an agent
-        # does with memory; records and episodes are operator actions with an
-        # HTTP endpoint of their own.
-        self.assertEqual([tool["name"] for tool in server.TOOLS], ["memory_recall", "memory_note", "memory_status", "memory_context", "memory_remember", "memory_forget", "memory_forgotten"])
+        names = [tool["name"] for tool in server.TOOLS]
+        self.assertEqual(names, ["memory_recall", "memory_note", "memory_status", "memory_context", "memory_remember", "memory_forget", "memory_forgotten", *server.OPERATIONS])
+        self.assertTrue({"memory_conversations", "memory_work_events", "memory_sharing", "memory_records_edit"}.issubset(names))
+
+    def test_host_transcript_and_revision_management(self):
+        calls = []
+        def opener(request, timeout):
+            calls.append(request)
+            return Response({"data": {"capabilities": {"conversationIngest": {"available": True}}}})
+        with mock.patch.dict(server.os.environ, CONFIGURED, clear=True):
+            args = {"sessionId": "one", "attended": True, "messages": [{"role": "user", "text": "hello"}], "userId": "forged"}
+            self.assertTrue(server.call_tool("memory_conversations", args, opener)["ok"])
+            self.assertEqual(len(calls), 2)
+            self.assertNotIn("userId", json.loads(calls[-1].data))
+            server.call_tool("memory_records_edit", {"id": "r:a"}, opener)
+            self.assertEqual(calls[-1].method, "PATCH")
+            self.assertTrue(calls[-1].full_url.endswith("/records/r%3Aa"))
 
     def test_descriptions_support_general_work_without_mandatory_recall(self):
         recall = server.TOOLS[0]["description"]
@@ -137,7 +150,7 @@ class AdapterTests(unittest.TestCase):
         initialize = server.handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
         self.assertEqual(initialize["result"]["serverInfo"]["name"], "evimed-memory")
         listed = server.handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
-        self.assertEqual(len(listed["result"]["tools"]), 7)
+        self.assertEqual(len(listed["result"]["tools"]), 27)
         missing = server.handle_request({
             "jsonrpc": "2.0", "id": 3, "method": "tools/call",
             "params": {"name": "memory_note", "arguments": {"factKind": "preference"}},

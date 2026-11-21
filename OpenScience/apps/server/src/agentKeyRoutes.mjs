@@ -22,10 +22,10 @@ export const AGENT_KEY_PATH = "/api/agent-keys";
 
 /**
  * @param {{ config: any, apiKeys: any, context: (req: any, res: any) => Promise<any>,
- *           audit: (ctx: any, action: string, status: string, details?: any) => Promise<void> }} dependencies
+ *           usageLedger?: any, audit: (ctx: any, action: string, status: string, details?: any) => Promise<void> }} dependencies
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
-export function createAgentKeyRoutes({ config, apiKeys, context, audit }) {
+export function createAgentKeyRoutes({ config, apiKeys, context, audit, usageLedger = null }) {
   return async function agentKeyRoutes(req, res) {
     const url = new URL(req.url ?? "/", "http://evimed.local");
     if (url.pathname !== AGENT_KEY_PATH && !url.pathname.startsWith(`${AGENT_KEY_PATH}/`)) return false;
@@ -37,7 +37,7 @@ export function createAgentKeyRoutes({ config, apiKeys, context, audit }) {
     const rest = url.pathname.slice(AGENT_KEY_PATH.length).replace(/^\//, "");
 
     if (!rest && method === "GET") {
-      sendJson(res, 200, { data: { keys: await apiKeys.list(ctx.user.id), scopes: AGENT_KEY_SCOPES } });
+      sendJson(res, 200, { data: { keys: await apiKeys.list(ctx.user.id), scopes: AGENT_KEY_SCOPES, usage: await usageLedger?.byAgentKey?.(ctx.user.id) ?? [] } });
       return true;
     }
     if (!rest && method === "POST") {

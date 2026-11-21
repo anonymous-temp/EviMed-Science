@@ -7,9 +7,8 @@
 的 socket 或 universal preset，也没有 npm 运行时依赖；Cordis 注入工具和提示词服务，
 模块只导入 Node 的文件 API，并使用原生 fetch。
 
-**当前是未发布的候选包。** `private: true` 防止误发布。TODO：是否发布、发布到哪里、
-何时发布由所有者决定；发布前再移除 `private`、确定版本、填写示例索引的实际发布时间
-和安装来源，并验证干净 profile 的安装。当前不声称 npm 包或线上索引已经可用。
+在包目录运行 `npm pack --ignore-scripts`，用生成的 tgz 在独立配置中安装验证。业主可用自己的 npm 账号运行
+`npm publish ./evimed-dsh-memory-capsule-0.2.0.tgz --access public`，再填写实际发布时间，校验并提交市场索引。
 
 ## 从零到可回忆
 
@@ -24,7 +23,7 @@
 4. 所有者发布后，向你实际使用的 profile 安装：
 
    ```sh
-   dsh plugin --profile web add @evimed/dsh-memory-capsule@0.1.0
+   dsh plugin --profile web add @evimed/dsh-memory-capsule@0.2.0
    ```
 
    发布前可用相同命令的 `add <local-path>` 形式安装提供的本地包目录或所有者提供的
@@ -62,13 +61,10 @@
 一个做法时重新取当前目录，没有缓存旧正文，也没有虚构按摘要取正文的 HTTP 路由。
 不在当前目录或预算内的做法暂时不可读。
 
-Raw history is opt-in with `include: ["history"]` and both read scopes.
-`capsule_forget` and `capsule_forgotten` use the public API; withdrawal requires
-an account-scoped manage key. `capsule_context` and `capsule_remember` check
-server capabilities first and remain unavailable on the current server.
-Automatic transcript upload, external-work learning, method mounting, capsule
-isolation and a local engine remain unavailable. Share and proposal confirmation
-stay on the web memory page `/app/memory`.
+工具与服务端 OpenAPI 一致。经本人授权的宿主可用 `capsule_conversations` 转交真实对话，
+用 `capsule_work_events` 引用该对话中的人类反馈，用 `capsule_sharing` 分享或接收胶囊。
+设置、确认、恢复等操作分别使用对应权限。集成密钥由宿主在配置里绑定 `subject`。
+原文检索要显式传 `include: ["history"]` 并持有两项读取权限。
 
 未配置时说明配置步骤并指向密钥页。断网、401、403、429、关闭或不可用的 503 都用
 一句话说明，不显示服务端错误正文和堆栈。请求 15 秒超时，不跟随重定向，不自动重试

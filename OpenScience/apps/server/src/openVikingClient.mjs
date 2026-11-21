@@ -1,3 +1,4 @@
+import { memoryPayer } from './agentMemoryBilling.mjs';
 import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { openVikingPeerId, openVikingScopedId, openVikingUserId } from "./openVikingLayout.mjs";
@@ -486,6 +487,11 @@ export class OpenVikingClient {
    */
   async request(input) {
     const method=String(input.method??'GET').toUpperCase(), route=String(input.path??'');
+    const billing = memoryPayer();
+    if (billing && route === '/api/v1/search/find') {
+      const body = /** @type {any} */ (input.body);
+      return billing.meter.search(billing.payer, String(body?.query ?? ''), () => this.performRequest({ ...input, body: { ...body, telemetry: true } }));
+    }
     const reads=route.startsWith('/api/v1/search/') || route==='/api/v1/fs/attrs/stat'
       || method === 'POST' && route === '/mcp' && isReadOnlyMcpHandshake(input.body);
     if(this.writeAdmission && input.userId && !['GET','HEAD'].includes(method) && !reads) return this.writeAdmission(input.userId,()=>this.performRequest(input));
