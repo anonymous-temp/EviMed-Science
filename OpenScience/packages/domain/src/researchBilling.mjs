@@ -248,7 +248,7 @@ function tokenCount(value) {
  * multiplication: the confirmed model calls that were billed, their tokens by
  * kind, and the price lists they were priced under. Tokens are summed as
  * bigint and returned as digit strings.
- * @param {Array<{id:string,status:string,priced?:boolean,currency?:string,purpose?:string,actual_cost?:string|number|null,price_version?:string,billing_eligible?:boolean,not_billable_reason?:string,cache_hit_tokens?:string|number|bigint|null,cache_miss_tokens?:string|number|bigint|null,output_tokens?:string|number|bigint|null}>} rows
+ * @param {Array<{id:string,status:string,priced?:boolean,currency?:string,purpose?:string,module?:string|null,run_id?:string|null,actual_cost?:string|number|null,price_version?:string,billing_eligible?:boolean,not_billable_reason?:string,cache_hit_tokens?:string|number|bigint|null,cache_miss_tokens?:string|number|bigint|null,output_tokens?:string|number|bigint|null}>} rows
  * @param {{owned?:boolean, mode?:string}} [options] */
 export function researchTaskCharge(rows, { owned = true, mode = WALLET_CONTRACT_WHOLE_CREDIT } = {}) {
   if (![WALLET_CONTRACT_WHOLE_CREDIT, WALLET_CONTRACT_EXACT].includes(mode)) throw new RangeError('Unsupported wallet contract.');
@@ -266,12 +266,16 @@ export function researchTaskCharge(rows, { owned = true, mode = WALLET_CONTRACT_
   for (const row of rows) {
     if (seen.has(row.id)) continue;
     seen.add(row.id);
+    // External memory accounting stamps both fields at admission. Background memory
+    // retains its ordinary purpose, and an amu_ receipt was metered with the wallet off.
+    const billablePurpose = row.module === 'agent-memory' ? row.run_id?.startsWith('amc_') === true
+      : RESEARCH_BILLABLE_PURPOSES.includes(String(row.purpose));
     const confirmed = row.status === 'settled' && row.priced === true && row.currency === 'CNY' && row.actual_cost != null;
     const amount = confirmed ? researchMoneyUnits(/** @type {string|number} */ (row.actual_cost)) : 0n;
-    const chargeable = confirmed && owned && row.billing_eligible !== false && RESEARCH_BILLABLE_PURPOSES.includes(String(row.purpose));
+    const chargeable = confirmed && owned && row.billing_eligible !== false && billablePurpose;
     actual += amount;
-    if (row.billing_eligible !== false && RESEARCH_BILLABLE_PURPOSES.includes(String(row.purpose))) eligible += amount;
-    if (!RESEARCH_BILLABLE_PURPOSES.includes(String(row.purpose)) || row.not_billable_reason === 'platform_task') overhead += amount;
+    if (row.billing_eligible !== false && billablePurpose) eligible += amount;
+    if (!billablePurpose || row.not_billable_reason === 'platform_task') overhead += amount;
     if (chargeable) {
       billable += amount;
       calls += 1;
@@ -280,7 +284,7 @@ export function researchTaskCharge(rows, { owned = true, mode = WALLET_CONTRACT_
       output += tokenCount(row.output_tokens);
       if (row.price_version) priceVersions.add(String(row.price_version));
     }
-    evidence.push({ id: row.id, status: row.status, purpose: row.purpose ?? 'other', priceVersion: row.price_version ?? '', actualCny: confirmed ? researchMoneyDecimal(amount) : null, billable: chargeable, notBillableReason: row.not_billable_reason ?? (chargeable ? null : !confirmed ? 'provider_unconfirmed' : !RESEARCH_BILLABLE_PURPOSES.includes(String(row.purpose)) ? 'platform_overhead' : !owned ? 'task_waived' : null) });
+    evidence.push({ id: row.id, status: row.status, purpose: row.purpose ?? 'other', priceVersion: row.price_version ?? '', actualCny: confirmed ? researchMoneyDecimal(amount) : null, billable: chargeable, notBillableReason: row.not_billable_reason ?? (chargeable ? null : !confirmed ? 'provider_unconfirmed' : !billablePurpose ? 'platform_overhead' : !owned ? 'task_waived' : null) });
   }
   const exact = mode === WALLET_CONTRACT_EXACT;
   const charged = exact ? billable : billable / RESEARCH_MONEY_SCALE * RESEARCH_MONEY_SCALE;

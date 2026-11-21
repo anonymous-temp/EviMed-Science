@@ -791,4 +791,6 @@ test('external memory usage survives revocation and wallet retry debits each mea
   assert.equal(totals[0].settledCalls,1); assert.equal(Number(totals[0].costCny),0.25);
   assert.equal(Number((await w.balance()).balance),199.75);
   assert.equal((await w.service.statements(w.userId)).items.filter(i=>i.runId===id).length,1);
+  const { detail } = await w.service.statementDetail(w.userId, id);
+  assert.deepEqual([detail.calls, detail.amount, detail.walletContract], [1, '0.25000000', 'precision-v1']);
 });
