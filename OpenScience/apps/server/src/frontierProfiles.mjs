@@ -112,6 +112,7 @@ import { createHash } from "node:crypto";
 import { isAccountStorageProject, isInternalProject } from "./internalProjects.mjs";
 import { tsqueryLiteral } from "./kbChunker.mjs";
 import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
+import { frontierSourcedInterests } from './frontierSourcedInterests.mjs';
 import { SOURCE_LABEL_PREFIX } from "./nativeMemoryStore.mjs";
 import { migrateNativeMemory } from "./nativeMemoryPersistence.mjs";
 
@@ -566,7 +567,7 @@ function codeOf(error) {
 export class FrontierProfiles {
   /**
    * @param {{ database: any, memorySettings?: any, nativeMemory?: { configured?: boolean, files: (userId: string) => Promise<any[]> } | null,
-   *           editor?: any, embedder?: any, config?: Record<string, any>,
+   *           ownedLines?: ((userId:string, files:any[], classify:(text:string)=>unknown)=>Promise<any[]>) | null, editor?: any, embedder?: any, config?: Record<string, any>,
    *           budget?: (() => Promise<{ state: string }>) | null, now?: () => Date, dimension?: number,
    *           conversations?: ((userId: string) => Promise<Array<{ projectId: string, run: Record<string, any> }>>) | null,
    *           entityVocabulary?: { enabled?: boolean, keysForText: (input: { texts: string[] }) => Promise<string[]>,
@@ -584,10 +585,11 @@ export class FrontierProfiles {
    *   `random` the exploration draw's source of [0, 1), `ranking` the constants (`FRONTIER_RANKING`; a test narrows them).
    */
   constructor({ database, memorySettings = null, nativeMemory = null, editor = null, embedder = null, config = {}, budget = null,
-    now = () => new Date(), dimension = 1024, conversations = null, entityVocabulary = null, tags = null, random = Math.random, ranking = FRONTIER_RANKING }) {
+    ownedLines = null, now = () => new Date(), dimension = 1024, conversations = null, entityVocabulary = null, tags = null, random = Math.random, ranking = FRONTIER_RANKING }) {
     if (!database) throw new TypeError("The frontier profiles need the product database.");
     this.database = database;
     this.subscriptions = new FrontierSubscriptions({ database });
+    this.ownedLines = ownedLines;
     this.memorySettings = memorySettings;
     this.nativeMemory = nativeMemory;
     this.editor = editor;
@@ -634,6 +636,12 @@ export class FrontierProfiles {
   async #memoryFiles(userId) {
     if (!this.nativeMemory?.configured) return [];
     return this.nativeMemory.files(userId);
+  }
+
+  async #sourcedInterests(userId, settings, files = null) {
+    if (!this.config.frontierSourcedInterestsEnabled || !this.ownedLines || settings.recallPaused) return [];
+    return frontierSourcedInterests({ userId, files: files ?? await this.#memoryFiles(userId), pausedProjects: settings.pausedProjects,
+      ownedLines: this.ownedLines, vocabulary: this.entityVocabulary });
   }
 
   /** Whether this deployment can personalize at all: the account's switches to honour and a model to read with. */
@@ -1259,7 +1267,11 @@ export class FrontierProfiles {
     const capabilities = await this.ready();
     const now = this.now();
     const profile = (await this.database.query(`SELECT phrases, specialties FROM evimed_frontier.user_profiles WHERE user_id = $1`, [userId])).rows?.[0];
-    const phrases = Array.isArray(profile?.phrases) ? profile.phrases : [];
+    const phrases = Array.isArray(profile?.phrases) ? [...profile.phrases] : [];
+    const sourced = this.config.frontierSourcedInterestsEnabled
+      ? await this.#settings(userId).then(settings => this.#sourcedInterests(userId,settings)).catch(() => []) : [];
+    const firstInterest = phrases.length;
+    phrases.push(...sourced);
     const prefs = await this.#prefsRow(userId);
     const vectors = phrases.map((phrase) => decodeVector(phrase.vector, this.dimension));
     const vectorsHere = Boolean(capabilities.vector && this.embedder?.configured);
@@ -1294,15 +1306,15 @@ export class FrontierProfiles {
           .filter((pair) => Number.isFinite(pair.score) && pair.score >= FRONTIER_FOR_YOU_MIN_COSINE);
       }
     }
-    if (basis === "tags" && ids.length) {
-      const queries = phrases.map((phrase, index) => ({ index, query: tsqueryLiteral(String(phrase.text ?? "")) })).filter((entry) => entry.query);
+    if ((basis === "tags" || sourced.length) && ids.length) {
+      const queries = phrases.map((phrase, index) => ({ index, query: tsqueryLiteral(String(phrase.text ?? "")) })).filter((entry) => entry.query && (basis === "tags" || entry.index >= firstInterest));
       if (queries.length) {
         const rows = (await this.database.query(`SELECT i.id, p.idx, ts_rank(i.lexemes, p.q::tsquery, 1) AS rank
           FROM evimed_frontier.items i CROSS JOIN unnest($1::text[], $2::integer[]) AS p(q, idx)
           WHERE i.id = ANY($3::bigint[]) AND i.lexemes @@ p.q::tsquery`,
         [queries.map((entry) => entry.query), queries.map((entry) => entry.index), ids])).rows ?? [];
         // A keyword hit is no cosine: a moderate match, ordered among hits by its rank.
-        phrasePairs = rows.map((row) => ({ itemId: String(row.id), reason: Number(row.idx), score: this.ranking.match.keyword + Math.min(0.1, Number(row.rank) || 0) }));
+        phrasePairs.push(...rows.map((row) => ({ itemId: String(row.id), reason: Number(row.idx), score: this.ranking.match.keyword + Math.min(0.1, Number(row.rank) || 0) })));
       }
     }
     // The reader's own specialties win over the ones the model read off their memory (principle 18: a statement over an inference).
@@ -1403,7 +1415,11 @@ export class FrontierProfiles {
       try {
         // A line the reader deleted, took out of its file, or whose project they paused since is no reason any more: the lines the
         // files hold now are the ones that count (`frontierProfileMemories`, the same cut a profile is made from).
-        alive = new Set(frontierProfileMemories(await this.#memoryFiles(user.id), { pausedProjects: settings.pausedProjects }).map((memory) => memory.id));
+        const files = await this.#memoryFiles(user.id);
+        alive = new Set(frontierProfileMemories(files, { pausedProjects: settings.pausedProjects }).map((memory) => memory.id));
+        if (remembered.some(id => String(id).startsWith('interest:'))) {
+          for (const phrase of await this.#sourcedInterests(user.id, settings, files)) alive.add(phrase.memoryId);
+        }
       } catch {
         // The memory engine cannot say whether a reason still stands: no reason
         // is shown rather than one that may no longer be true.

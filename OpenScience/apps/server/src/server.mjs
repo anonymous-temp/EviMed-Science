@@ -494,6 +494,10 @@ import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget
 import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler, createNativeCapsuleSearch } from "./capsuleGateway.mjs";
 import { MEMORY_GATEWAY_PATH, filterCapturedMessage, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
+import { createGoalStatusReader } from './memoryGoalStatus.mjs';
+import { createClinicalSegments } from './memoryClinicalSegments.mjs';
+import { createAccountProjections } from './memoryAccountProjections.mjs';
+import { humanInputReceipt } from './memoryHumanSegments.mjs';
 import { createMemoryAdmission } from "./memoryAdmission.mjs";
 import { isPlatformStartedRun } from "./memoryDispatch.mjs";
 import { OpenVikingSessions } from "./openVikingSessions.mjs";
@@ -1728,7 +1732,27 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The password derivation's gate is the process's one, and its limits are the deployment's (review C4e).
   configurePasswordKdfGate({ concurrency: config.capsuleKdfConcurrency, maxWaiting: config.capsuleKdfMaxWaiting, maxWaitMs: config.capsuleKdfMaxWaitMs });
   // The researcher's standing profile and the decision whether a dispatch hands it over (review M6, `residentProfile.mjs`).
+  const accountProjections = createAccountProjections({ config, native: nativeMemory, overlay: nativeMemoryOverlay, methods: learningService,
+    provenance: contextProvenance, settings: memorySettings, contexts: nativeMemoryContexts,
+    projectFor: async (userId, projectId) => store.requireProject(await store.userById(userId), projectId),
+    projectRuns: project => agentRuns.researcherRuns(project),
+    deleted: (project, sessionId) => sourceDeletion?.ledger.get(project, sessionId),
+    clinical: (userId, projectId, refs) => vcrPrivacyStore?.hasClinicalContext(userId, projectId, refs) ?? false });
+  const goalStatus = createGoalStatusReader({ config, documents: productDocuments, contexts: nativeMemoryContexts,
+    projectFor: async (userId, projectId) => store.requireProject(await store.userById(userId), projectId),
+    runsOf: project => agentRuns.conversationIndex(project),
+    resetInstant: userId => memorySettings.resetInstant(userId),
+    permitted: async (project, sessionId, rows = []) => {
+      if (isInternalProjectOf(config, project.userId, project.id) || config.memoryRecallEnabled === false) return false;
+      if ((await memoryPausedFor(memorySettings, project.userId, project.id, sessionId)).recall) return false;
+      if (!sessionId) return true;
+      if (!sourceDeletion || await sourceDeletion.ledger.get(project, sessionId) || !vcrPrivacyStore) return false;
+      return !await vcrPrivacyStore.hasClinicalContext(project.userId, project.id, [{sessionId}, ...rows.map(run => ({sessionId,runId:run.id}))]);
+    } });
+  const goalCardRows = async (userId, projectId, sessionId = null) =>
+    (await goalStatus(userId,projectId,sessionId)).map(item => item.row);
   const residentProfiles = new ResidentProfiles({
+    presentation: (userId,projectId,sessionId) => accountProjections.presentation(userId,projectId,sessionId),
     config, store: memorySettings, capsules: capsuleService, contextPolicies: sharedContextPolicies,
     nativeFiles: config.memoryEngineEnabled ? (userId, projectId, limit) => nativeMemory.openingFiles(userId, projectId, limit) : null,
     nativeIndex: config.memoryEngineEnabled ? (userId, projectId) => nativeMemory.openingIndex(userId, projectId) : null,
@@ -1737,7 +1761,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // conversation a person is in (`ResidentProfiles.forDispatch`); a deployment without the engine has no card to hand over.
     // What a conversation of the project is handed up front is the card and the project's other standing files (`residentCard`); the
     // 项目 tab keeps reading the card alone (`projectCard`). A shared GEO project's card is read from its own namespace.
-    projectCard: config.memoryEngineEnabled ? (userId, projectId) => nativeMemory.residentCard(userId, projectId) : null,
+    projectCard: config.memoryEngineEnabled ? async (userId, projectId, sessionId) => [
+      ...await nativeMemory.residentCard(userId, projectId),
+      ...await goalCardRows(userId,projectId,sessionId).catch(() => []),
+    ] : null,
   });
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
     nativeMemory: config.memoryEngineEnabled ? nativeMemory : null,
@@ -1822,7 +1849,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // 「从其他 AI 导入」: one Flash call splits a pasted text, the person reviews it, the engine writes what they keep (`nativeMemoryImport.mjs`).
   const nativeMemoryImport = new NativeMemoryImport({ config, overlay: nativeMemoryOverlay, nativeMemory, memorySettings, usageLedger });
   const memoryRoutes = createMemoryRoutes({
-    config, memorySettings, nativeMemory, nativeMemoryImport, store, context, audit, decodeRouteComponent,
+    config, memorySettings, nativeMemory, nativeMemoryImport, store, context, audit, decodeRouteComponent, goalCardRows, accountProjections,
     // 「重置记忆」 clears what the page shows: the methods and capsule notes live in the product ledger.
     resetProduct: productDatabase ? userId => resetLearnedMemory(productDatabase, userId) : null,
     resetHistory: userId => memoryHistory?.reset(userId),
@@ -2421,7 +2448,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       notifications: notificationService, weekly, config, workerId: randomId("frontier-notify-") });
     // What each reader was served and did (frontierInteractions.mjs): list ids for every list answer, and the page's events.
     const interactions = new FrontierInteractions({ database: productDatabase, config });
-    const profiles = new FrontierProfiles({ database: productDatabase, memorySettings, nativeMemory: config.memoryEngineEnabled ? nativeMemory : null, editor, embedder, config, budget, entityVocabulary, tags: tagStore,
+    const profiles = new FrontierProfiles({ database: productDatabase, ownedLines: accountProjections.ownedLines, memorySettings, nativeMemory: config.memoryEngineEnabled ? nativeMemory : null, editor, embedder, config, budget, entityVocabulary, tags: tagStore,
       // 与我相关 reads a reader's own recent questions: their runs across
       // their projects, the platform's internal ones left out. Asked in the
       // background, a few readers a round, never on a request.
@@ -4493,6 +4520,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // conversation reaches extraction while the runtime lives. Arms a timer and is not waited for (it never throws, and
       // its one settings read is not a reason for the rest of this completion to wait).
       await step("memory.native_turn_commit", () => { void nativeTurnCommit.noteRunFinished(project, run); });
+      if (config.memoryClinicalSegmentsEnabled && config.memoryEngineEnabled && !isPlatformStartedRun(run)) {
+        await step("memory.clinical_segments", () => clinicalSegments.capture(project, run));
+      }
       try {
       const gapCode = evolutionLedger && !internalFor(project.userId, project.id) && run.status === "failed" ? evolutionRunGap(run) : null;
       if (gapCode) {
@@ -5301,7 +5331,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
   }
   if (feedbackEvents && productDocuments) feedbackEvents.memoryForgetReader = productDocuments.memoryForgetReader;
+  const clinicalSegments = createClinicalSegments({ config, contexts: nativeMemoryContexts, admission: memoryAdmission,
+    overlay: nativeMemoryOverlay, native: nativeMemory, store, runsOf: (project, sessionId) => agentRuns.conversationRuns(project, sessionId),
+    transcript: (project, sessionId) => runtimeManager.sessionTranscript(project, sessionId, { wake: false }),
+    firstRead: vcrPrivacyStore ? (userId, projectId, refs) => vcrPrivacyStore.firstClinicalRead(userId, projectId, refs) : null });
   nativeMemoryOverlay.externalAdmissionPolicy = async (userId, row) => {
+    if (row.externalSource?.operation === 'clinical-segment') {
+      const allowed = await clinicalSegments.authorize(userId, row);
+      return { allowed, state: allowed ? null : 'suspended', reason: allowed ? null : 'segment_unavailable' };
+    }
     if (!['ingest', 'remember'].includes(row.externalSource?.operation)) return { allowed: false, state: 'cancelled', reason: 'external_operation_unknown' };
     try {
       const user = await store.userById(userId);
@@ -5745,6 +5783,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     return resolveConversationSourceScope(researchSessions, project, sessionId);
   };
   const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex,
+    goalStatus: async (identity, sessionId, query, limit) =>
+      (await goalStatus(identity.userId,identity.projectId,sessionId,query,limit)).map(item => item.record),
     ...(sharedKnowledgeContext ? { contextFor: identity => sharedKnowledgeContext.forWorkload(identity) } : {}),
     sourceScope: conversationSourceScope,
   });
@@ -8062,7 +8102,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           });
           // The profile is the conversation's from here: the next dispatch finds it there (`ResidentProfiles`).
           await acknowledgeResident(ctx.project, dispatchedRun, resident);
-        });
+        }, { memoryInput: !automated && ctx.user.id === ctx.project.userId && (config.memoryHumanSegmentsEnabled || config.memoryClinicalSegmentsEnabled || config.memoryAccountPresentationEnabled || config.frontierSourcedInterestsEnabled)
+          ? humanInputReceipt(text) : null });
         const run = pluginService ? await pluginService.withAdmission(ctx.project, dispatch) : await dispatch();
         if (researchGoal) await researchGoals?.register(ctx.project, { sessionId: body.sessionId }).catch(() => {});
         sendJson(res, 202, { data: run });
@@ -8892,6 +8933,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     createDelegatedPolicy: async ({ user, project, claims }) => new GeoNativeFramePolicy({ authority: geoNativeAuthority,
       runtimeManager, config, user, project, claims, acceptInput: null, nativeInputs: geoNativeInputs }),
     prepareSelections: async (user, project, request) => {
+      if ((config.memoryHumanSegmentsEnabled || config.memoryClinicalSegmentsEnabled || config.memoryAccountPresentationEnabled || config.frontierSourcedInterestsEnabled)
+        && user.id === project.userId && request?.content?.length === 1 && request.content[0]?.type === 'text') {
+        const receipt = humanInputReceipt(request.content[0].text);
+        if (receipt) nativeInputRoute.originalInputs.set(request, receipt);
+      }
       if (!geoNativeSelections) return;
       const policy = await sharedContextPolicies.forProject(project);
       if (policy.kind !== "geo-project") return;

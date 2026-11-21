@@ -666,6 +666,19 @@ export class VcrStore extends VcrStoreBase {
     return found.length > 0;
   }
 
+  /** Earliest controlled read, including dependencies inherited by run identity. */
+  async firstClinicalRead(userId, projectId, contexts) {
+    if (!contexts.length) return null;
+    const rows = await this.clinicalHistoryRows(`SELECT MIN(r.created_at) AS first_read FROM ${VCR_SCHEMA}.cloud_reads r
+      JOIN ${VCR_SCHEMA}.studies s ON s.id=r.study_id
+      WHERE s.project_id=$1 AND (s.user_id=$2 OR EXISTS
+        (SELECT 1 FROM ${VCR_SCHEMA}.members m WHERE m.study_id=s.id AND m.user_id=$2))
+        AND (r.session_id=ANY($3::text[]) OR r.run_id=ANY($4::text[]))`,
+    [projectId, userId, contexts.map(row => row.sessionId), contexts.map(row => row.runId)]);
+    const at = rows[0]?.first_read;
+    return at == null ? null : new Date(at).getTime();
+  }
+
   /**
    * `hasClinicalContext` for a list: which of `contexts` hold a clinical source dependency, in the order given, in one
    * statement. Asked once per project where it used to be asked once per run (2026-10-10 review D7). A context that names

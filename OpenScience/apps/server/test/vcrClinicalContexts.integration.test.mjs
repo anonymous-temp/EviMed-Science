@@ -81,3 +81,17 @@ test("a deployment that never created the VCR schema answers every conversation 
     await empty.drop();
   }
 });
+
+test('the first controlled read uses the earliest scoped session or run dependency',options,async()=>{
+  const projectId = 'first_read_' + Date.now();
+  const study = await vcr.store.createStudy({userId:'owner',projectId,name:'First read',question:'q',dataTier:'T0'});
+  const stamp = '2026-11-01T12:11:00.000Z';
+  await database.query(`INSERT INTO evimed_vcr.cloud_reads(study_id,session_id,run_id,projection_id,created_at)
+    VALUES ($1,'s','r1','p1',$2),($1,'other','r2','p2','2026-11-01T12:12Z'),($1,'other','r3','p3','2026-10-31T12:11Z')`,
+  [study.id,stamp]);
+  const contexts = [{sessionId:'s',runId:'r2'}];
+  assert.equal(await vcr.store.firstClinicalRead('owner',projectId,contexts),Date.parse(stamp));
+  for (const [user,id,refs] of [['stranger',projectId,contexts],['owner',projectId,[{sessionId:'fresh'}]],['owner','another',contexts]]) {
+    assert.equal(await vcr.store.firstClinicalRead(user,id,refs),null);
+  }
+});

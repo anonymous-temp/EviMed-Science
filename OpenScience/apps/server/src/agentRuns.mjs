@@ -803,6 +803,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
         ...(event.dispatchFingerprint != null ? { dispatchFingerprint: normalizeDispatchFingerprint(event.dispatchFingerprint) } : {}),
         dispatchStatus,
         ...(Object.hasOwn(event, "baselineCursor") ? { baselineCursor: event.baselineCursor } : {}),
+        ...(event.memoryInput ? { memoryInput: event.memoryInput } : {}),
         ...(event.nativeTurn ? { nativeTurn: validateNativeTurn(event.nativeTurn) } : {}),
         ...(event.kernelRequestIds ? { kernelRequestIds: event.kernelRequestIds.map(storedKernelRequestId) } : {}),
         ...(event.personalSkillGeneration ? { personalSkillGeneration: normalizePersonalSkillGeneration(event.personalSkillGeneration) } : {}),
@@ -5476,6 +5477,7 @@ export class AgentRunStore {
     effectiveRouteReason = session.mode === "specialist" ? "session-binding" : null,
     effectiveProducts = null,
     nativeTurn = null,
+    memoryInput = null,
     kernelRequestIds = null,
     legacyRunId = null,
     startedAt = null,
@@ -5565,6 +5567,7 @@ export class AgentRunStore {
         id,
         dispatchId,
         ...(dispatchFingerprint != null ? { dispatchFingerprint } : {}),
+        ...(memoryInput ? { memoryInput } : {}),
         dispatchStatus: dispatchId ? "dispatching" : "accepted",
         ...(nativeTurn ? { nativeTurn } : {}),
         kernelRequestIds: kernelRequestIds ?? (dispatchId ? [randomId("req_")] : []),
@@ -5635,7 +5638,7 @@ export class AgentRunStore {
     if (snapshot) await this.recordLearning(project, runId, { personalSkillGeneration: snapshot });
   }
 
-  async dispatch(project, input, sendPrompt, {beforeReserve=null} = {}) {
+  async dispatch(project, input, sendPrompt, {beforeReserve=null, memoryInput=null} = {}) {
     const {
       sessionId,
       dispatchId,
@@ -5680,7 +5683,7 @@ export class AgentRunStore {
     const pinned = routedOverBinding && session.mode === "specialist"
       ? { ...session, agentId: selected.effectiveAgentId, agentVersion: selected.effectiveAgentVersion, runtimeAgent: selected.effectiveRuntimeAgent }
       : session;
-    const reservation = await this.reserveRun(project, pinned, { baselineCursor, dispatchId, dispatchFingerprint, automated, estimatedMinutes, question, ...selected, effectiveProducts,beforeReserve });
+    const reservation = await this.reserveRun(project, pinned, { baselineCursor, dispatchId, dispatchFingerprint, automated, estimatedMinutes, question, ...selected, effectiveProducts,beforeReserve, memoryInput });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
@@ -8588,6 +8591,7 @@ export class AgentRunStore {
         const reservation = await this.reserveRun(project, pinned ?? {
           sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null,
         }, {
+          ...(routed.memoryInput && !continuation && !scheduled && !reply ? { memoryInput: routed.memoryInput } : {}),
           baselineCursor: `seq_${first.seq}`,
           nativeTurn: { startSeq: turn.startSeq, userSeq: first.seq },
           startedAt: turn.time > 0 ? new Date(turn.time).toISOString() : null,

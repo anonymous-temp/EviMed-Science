@@ -1322,3 +1322,25 @@ test('method library link diagnostics default off and support the environment an
     assert.equal(loadConfig({ rootDir: repoRoot, linkCheckEnabled: false }).linkCheckEnabled, false);
   } finally { if (previous === undefined) delete process.env[key]; else process.env[key] = previous; }
 });
+
+for (const [key, variable] of [
+  ['memoryHumanSegmentsEnabled', 'OPEN_SCIENCE_MEMORY_HUMAN_SEGMENTS_ENABLED'],
+  ['memoryClinicalSegmentsEnabled', 'OPEN_SCIENCE_MEMORY_CLINICAL_SEGMENTS_ENABLED'],
+  ['memoryAccountPresentationEnabled', 'OPEN_SCIENCE_MEMORY_ACCOUNT_PRESENTATION_ENABLED'],
+  ['frontierSourcedInterestsEnabled', 'OPEN_SCIENCE_FRONTIER_SOURCED_INTERESTS_ENABLED'],
+  ['memoryGoalStatusEnabled', 'OPEN_SCIENCE_MEMORY_GOAL_STATUS_ENABLED'],
+]) {
+  test(`${variable} defaults off and respects an explicit override`, () => {
+    const saved = process.env[variable];
+    try {
+      delete process.env[variable];
+      assert.equal(loadConfig({ rootDir: repoRoot })[key], false);
+      process.env[variable] = 'true';
+      assert.equal(loadConfig({ rootDir: repoRoot })[key], true);
+      assert.equal(loadConfig({ rootDir: repoRoot, [key]: false })[key], false);
+    } finally {
+      if (saved === undefined) delete process.env[variable];
+      else process.env[variable] = saved;
+    }
+  });
+}

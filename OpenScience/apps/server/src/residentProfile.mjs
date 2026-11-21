@@ -112,11 +112,11 @@ export function lookupLine({ omitted = 0, capsule = 0 }) {
  * later, shorter one may still fit; the rest is counted in the line beside the profile.
  *
  * @param {{ capsuleFacts?: readonly any[], card?: any | null, capsuleCount?: number, maxRecords?: number, maxTokens?: number,
- *   nativeFiles?: any[], safetyFiles?: any[], config?: any, nativeIndex?: { counts: Record<string, number>, historySearchEnabled?: boolean } | null }} input
+ *   presentation?: any[], nativeFiles?: any[], safetyFiles?: any[], config?: any, nativeIndex?: { counts: Record<string, number>, historySearchEnabled?: boolean } | null }} input
  * @returns {{ text: string, profile: string, memos: any[], omitted: number, index: string, safety: string, standing: string }}
  *   `profile` is the memos alone; `index`, when opted in, also participates in the delivery digest.
  */
-export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleCount = 0, maxRecords = 24, maxTokens = CAPSULE_PROFILE_MAX_TOKENS, nativeFiles = [], safetyFiles = [], config = {}, nativeIndex = null }) {
+export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleCount = 0, maxRecords = 24, maxTokens = CAPSULE_PROFILE_MAX_TOKENS, nativeFiles = [], safetyFiles = [], presentation = [], config = {}, nativeIndex = null }) {
   const sourceBound = config.memorySourceEnvelopeEnabled === true;
   const render = (items, lookup = '') => renderMemoryContext(items, { lookup, sourceBound });
   const candidates = [...mostUsedMemos(nativeFiles, config), ...capsuleFactMemos(capsuleFacts, sourceBound)];
@@ -129,20 +129,32 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
     : { text: '', memos: [] };
   const standingMemos = standingPreferenceMemos(nativeFiles, config);
   const standingHeader = sourceBound ? '持续偏好记录（按每条来源与适用范围使用）：' : '用户本人的持续偏好（保留原适用范围，本次明确要求优先）：';
-  const standing = standingMemos.length ? [standingHeader,
-    ...render(standingMemos).split('\n').slice(1)].join('\n') : '';
+  const renderStanding = memos => memos.length ? [standingHeader, ...render(memos).split('\n').slice(1)].join('\n') : '';
+  let standing = renderStanding(standingMemos);
+  const localTokens = estimatePromptTokens(standing);
+  // The account projection spends ordinary profile tokens. Local standing cards and safety retain their own budgets.
+  let presentationTokens = 0;
+  for (const memo of presentation) {
+    if (standingMemos.some(item => item.content.includes(memo.content))) continue;
+    const next = renderStanding([...standingMemos, memo]);
+    const tokens = estimatePromptTokens(next) - localTokens;
+    if (tokens + reserve + estimatePromptTokens(header) > maxTokens) continue;
+    standingMemos.push(memo);
+    standing = next;
+    presentationTokens = tokens;
+  }
   // Supplying nativeIndex is the pure renderer's opt-in; production supplies it
   // only behind memoryOpeningIndexEnabled and only for an owned namespace.
-  const index = nativeIndex ? nativeIndexLine(nativeIndex, maxTokens - reserve - estimatePromptTokens(header)) : "";
+  const index = nativeIndex ? nativeIndexLine(nativeIndex, maxTokens - presentationTokens - reserve - estimatePromptTokens(header)) : "";
   const indexTokens = index ? estimatePromptTokens(`\n${index}`) : 0;
   /** @type {any[]} */
   const memos = card ? [card] : [];
   // The card's own room: what it takes is not taken from the profile's.
-  const room = maxTokens + (card ? estimatePromptTokens(render([card])) : 0);
+  const room = maxTokens - presentationTokens + (card ? estimatePromptTokens(render([card])) : 0);
   let entries = 0;
   for (const memo of candidates) {
     if (entries >= bound) break;
-    if (estimatePromptTokens(render([...memos.filter(item => item !== card), memo])) + reserve + indexTokens > maxTokens) continue;
+    if (estimatePromptTokens(render([...memos.filter(item => item !== card), memo])) + reserve + indexTokens + presentationTokens > maxTokens) continue;
     memos.push(memo);
     entries += 1;
   }
@@ -212,7 +224,7 @@ export function nativeSessionResident({ residentProfiles, activeRuns, startedByP
 export class ResidentProfiles {
   /**
    * @param {{ config: any, store: any, capsules?: { profileFacts: Function, lookupCount?: Function } | null,
-   *   contextPolicies?: any, projectCard?: ((userId: string, projectId: string) => Promise<readonly any[]>) | null,
+   *   presentation?: ((userId:string, projectId:string, sessionId:string)=>Promise<any[]>) | null, contextPolicies?: any, projectCard?: ((userId: string, projectId: string, sessionId?: string | null) => Promise<readonly any[]>) | null,
    *   nativeFiles?: ((userId: string, projectId: string, limit: number) => Promise<any[]>) | null,
    *   nativeIndex?: ((userId: string, projectId: string) => Promise<{ counts: Record<string, number> }>) | null,
    *   safetyNotes?: ((userId: string, projectId: string) => Promise<any[]>) | null }} dependencies
@@ -221,11 +233,12 @@ export class ResidentProfiles {
    *   项目 tab shows); without it no card is handed over. `contextPolicies` says whether the project is a shared GEO project, whose
    *   conversations are handed the project's card and none of the owner's personal capsule profile.
    */
-  constructor({ config, store, capsules = null, projectCard = null, contextPolicies = null, nativeFiles = null, nativeIndex = null, safetyNotes = null }) {
+  constructor({ config, store, capsules = null, projectCard = null, presentation = null, contextPolicies = null, nativeFiles = null, nativeIndex = null, safetyNotes = null }) {
     this.config = config;
     this.store = store;
     this.capsules = capsules;
     this.projectCard = projectCard;
+    this.presentation = presentation;
     this.contextPolicies = contextPolicies;
     this.nativeFiles = nativeFiles;
     this.nativeIndex = nativeIndex;
@@ -238,9 +251,9 @@ export class ResidentProfiles {
   /**
    * The project's card as a memo, when this dispatch is one a person is in, inside a project that has a subject of its own.
    * Any failure of the read is no card: the conversation goes on without it.
-   * @param {string} userId @param {string} projectId @param {boolean} attended
+   * @param {string} userId @param {string} projectId @param {boolean} attended @param {string | null} sessionId
    */
-  async #card(userId, projectId, attended) {
+  async #card(userId, projectId, attended, sessionId) {
     if (!attended || !this.projectCard || !projectId || projectId === CATCH_ALL_PROJECT_ID || isInternalProjectOf(this.config, userId, projectId)) return null;
     // Bounded: the card is a read of the engine, and a dispatch is not to wait on an engine that hangs
     // (`OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS`). A card read late is not read; the next message asks again.
@@ -249,7 +262,7 @@ export class ResidentProfiles {
     let timer;
     try {
       const rows = await Promise.race([
-        this.projectCard(userId, projectId),
+        this.projectCard(userId, projectId, sessionId),
         new Promise((_resolve, reject) => { timer = setTimeout(() => reject(Object.assign(new Error("the project card was not read in time"), { code: "resident_card_timeout" })), deadline); }),
       ]);
       const memo = projectCardMemo(projectId, /** @type {any} */ (rows), { sourceBound: this.config.memorySourceEnvelopeEnabled === true });
@@ -291,7 +304,7 @@ export class ResidentProfiles {
     const pause = await memoryPausedFor(this.store, userId, projectId, sessionId);
     if (pause.recall) return none("paused");
 
-    const card = await this.#card(userId, projectId, attended);
+    const card = await this.#card(userId, projectId, attended, sessionId);
     if (shared && !sameContextPolicy(policy, await this.contextPolicies.forProject({ userId, id: projectId }))) throw new Error("Project context policy changed");
     // A shared GEO project's conversation is the project's, not its owner's: none of the owner's personal capsule profile.
     const capsuleFacts = !shared && this.capsules ? await this.capsules.profileFacts(userId, projectId, CAPSULE_PROFILE_FACT_KINDS).catch(() => []) : [];
@@ -305,7 +318,9 @@ export class ResidentProfiles {
       ? await this.nativeIndex(userId, projectId).then(index => ({ ...index, historySearchEnabled: this.config.memoryHistorySearchEnabled !== false })).catch(() => null) : null;
     const safetyFiles = !shared && this.config?.memoryEngineEnabled === true && this.config?.memorySafetyNotesEnabled === true && this.safetyNotes
       ? await this.safetyNotes(userId, projectId).catch(() => Object.assign([], { unavailable: true })) : [];
-    const block = renderResidentProfile({ capsuleFacts, card, capsuleCount, maxRecords: this.maxRecords, nativeFiles, safetyFiles, config: this.config, nativeIndex });
+    const presentation = attended && !shared && sessionId && !pause.trial && this.config.memoryEngineEnabled && this.config.memoryAccountPresentationEnabled && this.presentation
+      ? await this.presentation(userId, projectId, sessionId).catch(() => []) : [];
+    const block = renderResidentProfile({ capsuleFacts, card, capsuleCount, maxRecords: this.maxRecords, nativeFiles, safetyFiles, presentation, config: this.config, nativeIndex });
     if (!block.text) return none("empty");
     if (block.omitted > 0) recordResidentOmitted(block.omitted);
 

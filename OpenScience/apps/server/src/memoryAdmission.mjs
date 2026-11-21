@@ -87,7 +87,7 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
    *   captured message was spoken (epoch milliseconds): it decides which turn the message belongs to.
    * @returns {Promise<MemoryAdmission>}
    */
-  async function admit({ user, project, engineSessionId = null, at = null, allowRunningFallback = true }) {
+  async function decide({ user, project, engineSessionId = null, at = null, allowRunningFallback = true }, segmentRunId = null) {
     const userId = String(user.id);
     const projectId = String(project.id);
     /** @param {string} reason @returns {MemoryAdmission} */
@@ -117,7 +117,7 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
 
     if (pause.learning) return answer("paused");
     // What was said before the account reset its memory is not learned from again, whenever it reaches the engine.
-    const resetAt = typeof memorySettings.resetInstant === "function" ? await memorySettings.resetInstant(userId).catch(() => null) : null;
+    const resetAt = typeof memorySettings.resetInstant === "function" ? await memorySettings.resetInstant(userId).catch(error => { if (segmentRunId) throw error; return null; }) : null;
     if (resetAt && typeof at === "number" && Number.isFinite(at) && at < Date.parse(resetAt)) return answer("before_reset");
 
     // Whether the turn the message was spoken in set a research goal: its first message carries the gesture that started it.
@@ -131,13 +131,15 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
       const runs = await conversations.runsOf(project, policySession).catch(() => []);
       // The turn the message was spoken in when its time says so, else the turn in progress, else the last one.
       const current = runAt(runs, typeof at === "number" && Number.isFinite(at) ? at : null) ?? runs.find((run) => run.status === "running") ?? runs[0] ?? null;
+      if (segmentRunId && (!named || current?.id !== segmentRunId || !current.memoryInput || current.deleted || current.forkedFrom)) return answer("unproven_segment");
+      if (segmentRunId && resetAt && !(Date.parse(current.memoryInput.at) >= Date.parse(resetAt))) return answer("before_reset");
       if (isPlatformStartedRun(current)) return answer("automated_run");
       // No time on the message: a conversation whose last turn was over before the reset is over. A turn still running is not.
       if (resetAt && !(typeof at === "number" && Number.isFinite(at)) && current && current.status !== "running" && endedBeforeReset(current, resetAt)) return answer("before_reset");
       researchGoal = isResearchGoalRun(current);
       const agentId = String(current?.effectiveAgentId ?? current?.agentId ?? "");
-      if (agentId && internalAgent && await internalAgent(agentId).catch(() => false)) return answer("internal_project");
-      if (clinicalContext && runs.length) {
+      if (agentId && internalAgent && await internalAgent(agentId).catch(error => { if (segmentRunId) throw error; return false; })) return answer("internal_project");
+      if (!segmentRunId && clinicalContext && runs.length) {
         const read = await clinicalContext(userId, projectId, runs.slice(0, 20).map((run) => ({ sessionId: policySession, runId: String(run.id) }))).catch(() => true);
         if (read) return answer("clinical_context");
       }
@@ -148,5 +150,9 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
     return { ...answer(null), ...(researchGoal ? { researchGoal } : {}) };
   }
 
-  return { admit };
+  return {
+    admit: caller => decide(caller),
+    admitSegment: caller => config.memoryClinicalSegmentsEnabled === true && caller.runId && caller.engineSessionId && Number.isFinite(caller.at) && conversations
+      ? decide(caller, caller.runId) : Promise.resolve({ learn: false, recall: false, learnReason: "unproven_segment", recallReason: "unproven_segment", sessionId: null }),
+  };
 }

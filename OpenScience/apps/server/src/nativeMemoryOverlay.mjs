@@ -490,7 +490,7 @@ export class NativeMemoryOverlay {
         AND s.project_id=c.project_id AND s.project_created_at::timestamptz=c.project_created_at::timestamptz
         AND split_part(s.archive_uri,'/sessions/',1)=split_part(c.archive_uri,'/sessions/',1)
       WHERE c.user_id=$1 AND (s.archive_uri=$2 OR c.archive_uri=$2)
-        AND s.engine_session LIKE 'dsh-%'
+        AND s.engine_session LIKE 'dsh-%' AND c.engine_session NOT LIKE 'evimed-segment-%'
       ON CONFLICT DO NOTHING`,[owner(userId),archiveUri]);
   }
 
@@ -1023,21 +1023,27 @@ export class NativeMemoryOverlay {
     scopedRoot(userRoot);
     const ids=sessionIds.map(id=>`dsh-${id}`);
     const commits=await this.#query(`WITH RECURSIVE source AS (
-      SELECT archive_uri,engine_session,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[]) AND left(archive_uri,length($4)+10)=$4||'/sessions/'
+      SELECT archive_uri,engine_session,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND (engine_session=ANY($3::text[]) OR engine_session LIKE 'evimed-segment-%' AND source_session=ANY($3::text[])) AND left(archive_uri,length($4)+10)=$4||'/sessions/'
       UNION SELECT c.archive_uri,c.engine_session,c.replayed_as FROM evimed_memory.native_commits c JOIN source s ON (c.archive_uri=s.replayed_as OR EXISTS
         (SELECT 1 FROM evimed_memory.native_source_copies x WHERE x.user_id=c.user_id AND x.source_archive_uri=s.archive_uri AND x.copy_archive_uri=c.archive_uri)) WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
     ) SELECT c.* FROM evimed_memory.native_commits c WHERE c.user_id=$1 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
       AND (c.engine_session=ANY($3::text[]) OR c.engine_session IN (SELECT engine_session FROM source))`,[owner(userId),projectId,ids,userRoot]);
-    const sessionIdsFound=[...new Set([...ids,...commits.rows.map(row=>String(row.engine_session))])];
+    // An append may have reached the engine before its archive receipt. The
+    // admission still names that one deterministic session for erasure.
+    const segments = userRoot === userRootUri(userId) ? (await this.#query(`SELECT engine_session,project_id,
+      external_source->>'projectCreatedAt' AS project_created_at FROM evimed_memory.native_admissions
+      WHERE user_id=$1 AND project_id=$2 AND external_source->>'operation'='clinical-segment'
+      AND external_source->>'sessionId'=ANY($3::text[])`, [owner(userId),projectId,sessionIds])).rows : [];
+    const sessionIdsFound=[...new Set([...ids,...commits.rows.concat(segments).map(row=>String(row.engine_session))])];
     const registry=userRoot===userRootUri(userId)?(await this.#query('SELECT project_id,project_created_at FROM evimed_memory.native_sessions WHERE user_id=$1 AND engine_session=ANY($2::text[])',[owner(userId),sessionIdsFound])).rows:[];
     const origins=(await this.#query(`SELECT o.project_id,o.project_created_at FROM evimed_memory.native_line_origins o WHERE o.user_id=$1 AND left(o.uri,length($2)+1)=$2||'/' AND o.engine_session=ANY($3::text[])`,[owner(userId),userRoot,sessionIdsFound])).rows;
-    const rows=[...commits.rows,...registry,...origins];
+    const rows=[...commits.rows,...segments,...registry,...origins];
     let verified=!rows.some(row=>row.project_id!==projectId||!row.project_created_at);
     for(const epoch of new Set(rows.map(row=>row.project_created_at).filter(Boolean))) {
       if(!(await this.#query('SELECT $1::timestamptz=$2::timestamptz AS same',[epoch,projectCreatedAt])).rows[0].same)verified=false;
     }
     if(!verified)throw new HttpError(409,'memory_source_lineage_unverified','The native source session has unknown or conflicting incarnation authority.');
-    return {archiveUris:commits.rows.map(row=>String(row.archive_uri)),engineSessions:[...new Set([...commits.rows.map(row=>String(row.engine_session)),...(registry.length?ids:[])])]};
+    return {archiveUris:commits.rows.map(row=>String(row.archive_uri)),engineSessions:[...new Set([...commits.rows.concat(segments).map(row=>String(row.engine_session)),...(registry.length?ids:[])])]};
   }
 
   /** Pending extractions and their replay text cannot re-enrol a deliberately deleted source.
@@ -1047,7 +1053,7 @@ export class NativeMemoryOverlay {
     scopedRoot(userRoot);
     const sessions = sessionIds.map(id => `dsh-${id}`);
     const removed = await this.#query(`WITH RECURSIVE sources AS (
-      SELECT archive_uri,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])
+      SELECT archive_uri,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND (engine_session=ANY($3::text[]) OR engine_session LIKE 'evimed-segment-%' AND source_session=ANY($3::text[]))
         AND left(archive_uri,length($4)+10)=$4||'/sessions/'
       UNION SELECT c.archive_uri,c.replayed_as FROM evimed_memory.native_commits c JOIN sources s ON (c.archive_uri=s.replayed_as OR EXISTS
         (SELECT 1 FROM evimed_memory.native_source_copies x WHERE x.user_id=c.user_id AND x.source_archive_uri=s.archive_uri AND x.copy_archive_uri=c.archive_uri))
@@ -1055,7 +1061,8 @@ export class NativeMemoryOverlay {
     ) UPDATE evimed_memory.native_commits SET native_ingested_at=CASE WHEN state='completed' THEN COALESCE(native_ingested_at,ingested_at,clock_timestamp()) ELSE native_ingested_at END,state='abandoned',pending_text=NULL,error='source_conversation_deleted',updated_at=clock_timestamp()
       WHERE user_id=$1 AND archive_uri IN (SELECT archive_uri FROM sources) AND ($5::text[] IS NULL OR archive_uri=ANY($5::text[])) RETURNING engine_session`, [owner(userId), projectId, sessions, userRoot,proof?.archiveUris??null]);
     if (userRoot === userRootUri(userId)) await this.#query(`UPDATE evimed_memory.native_admissions SET state='cancelled',pending_text=NULL,error='source_conversation_deleted',
-      updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])`, [owner(userId), projectId, sessions]);
+      updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND (engine_session=ANY($3::text[])
+        OR (external_source->>'operation'='clinical-segment' AND external_source->>'sessionId'=ANY($4::text[])))`, [owner(userId), projectId, sessions, sessionIds]);
     return [...new Set(removed.rows.map(row => row.engine_session))];
   }
 
@@ -1071,7 +1078,7 @@ export class NativeMemoryOverlay {
     scopedRoot(userRoot);
     const result = await this.#query(`WITH RECURSIVE sources AS (
       SELECT archive_uri,engine_session,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2
-        AND engine_session=ANY($3::text[]) AND left(archive_uri,length($4)+10)=$4||'/sessions/'
+        AND (engine_session=ANY($3::text[]) OR engine_session LIKE 'evimed-segment-%' AND source_session=ANY($3::text[])) AND left(archive_uri,length($4)+10)=$4||'/sessions/'
         AND ($5::timestamptz IS NULL OR project_created_at::timestamptz=$5::timestamptz OR project_created_at IS NULL AND created_at>=$5::timestamptz AND NOT EXISTS(SELECT 1 FROM evimed_control.projects p WHERE p.user_id=$1 AND p.id=$2 AND p.created_at>$5::timestamptz AND native_commits.created_at>=p.created_at))
       UNION SELECT c.archive_uri,c.engine_session,c.replayed_as FROM evimed_memory.native_commits c JOIN sources s ON (c.archive_uri=s.replayed_as OR EXISTS
         (SELECT 1 FROM evimed_memory.native_source_copies x WHERE x.user_id=c.user_id AND x.source_archive_uri=s.archive_uri AND x.copy_archive_uri=c.archive_uri))

@@ -80,6 +80,13 @@ class KbSearchTests(unittest.TestCase):
         self.assertEqual(result["data"]["hits"][0]["page"], 2)
         self.assertIn("verbatim", " ".join(result["next_actions"]))
 
+    def test_a_sourced_goal_remains_searchable_in_an_empty_document_library(self):
+        _Gateway.answer = (200, {"data": {"mode": "empty", "researchGoals": [{"sourceId": "goal-s", "runId": "r"}]}})
+        result = kb_search.search({"query": "goal status"}, execution_context={"sessionId": "s"})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["data"]["researchGoals"][0]["sourceId"], "goal-s")
+        self.assertIn("goal status", result["summary"])
+
     def test_a_small_library_answer_tells_the_model_to_read_the_files(self):
         _Gateway.answer = (200, {"data": {"mode": "small-library", "library": {"documents": 2, "searchable": 2, "tokens": 9000},
             "hits": [], "files": [{"sourceId": SOURCE, "title": "指南", "path": ".evimed-knowledge/.evimed-derived/x/index.md"}]}})
