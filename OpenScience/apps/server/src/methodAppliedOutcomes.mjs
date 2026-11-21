@@ -79,6 +79,7 @@ export async function* learningPassAccounts(database, { now = Date.now(), window
  *   resolveProject: (userId: string, projectId: string) => Promise<any | null>,
  *   runsOf: (project: any) => Promise<any[]>,
  *   now?: () => number, windowMs?: number,
+ *   onNamedFailure?: ((userId: string, projectId: string, run: any, methodId: string, digest: string) => Promise<void>) | null,
  *   onApplied?: ((outcome: "corrected" | "clean") => void) | null,
  *   audit?: ((event: string, detail: Record<string, unknown>) => unknown) | null,
  *   official?: { methods: (userId: string, options?: { ensure?: boolean }) => Promise<{ key: string, name: string, sha: string, digest: string }[]>,
@@ -89,7 +90,7 @@ export async function* learningPassAccounts(database, { now = Date.now(), window
  *   (`ensure: false`): a settlement makes no copy, and an account that holds none was offered none. The record is bounded, so it is told when the
  *   run began (`since`) and where this window starts (`keepSince`), which together keep a run it let go of from being counted again (`foldApplied`).
  */
-export function createMethodAppliedOutcomes({ learning, feedback, resolveProject, runsOf, now = () => Date.now(), windowMs = DEFAULT_WINDOW_MS, onApplied = null, audit = null, official = null }) {
+export function createMethodAppliedOutcomes({ learning, feedback, resolveProject, runsOf, now = () => Date.now(), windowMs = DEFAULT_WINDOW_MS, onApplied = null, onNamedFailure = null, audit = null, official = null }) {
   /** @param {string} event @param {Record<string, unknown>} detail */
   const say = (event, detail) => { try { void Promise.resolve(audit?.(event, detail)).catch(() => {}); } catch { /* an audit line never decides */ } };
 
@@ -189,6 +190,9 @@ export function createMethodAppliedOutcomes({ learning, feedback, resolveProject
               ? await learning.recordApplied(userId, methodId, { runId, outcome, at: appliedAt }, payload.contentDigest)
               : await /** @type {any} */ (official).recordApplied({ key: methodId, sha: /** @type {any} */ (platform).sha, runId, outcome, at: appliedAt, userId,
                 since: runStart(run) ?? appliedAt, keepSince });
+            if (own && onNamedFailure && named.some(event => ["correction", "rejection"].includes(event.detail.verdict))) {
+              await onNamedFailure(userId, projectId, run, methodId, payload.contentDigest);
+            }
             if (changed) {
               result[outcome] += 1;
               try { onApplied?.(outcome); } catch { /* a counter never decides */ }

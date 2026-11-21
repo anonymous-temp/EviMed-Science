@@ -820,3 +820,40 @@ test("corrective rewrites keep their dates across counter resets, general edits 
   assert.equal(learnedMethodCardEntry(base).length, 2, "no evidence switch, no evidence lines");
   assert.ok(learnedMethodCardEntry({ ...base, card }).some(line => line.includes("2 次")));
 });
+
+test("consecutive task failures demote then retire one revision, with restoration and replay protection", async () => {
+  let now = new Date("2026-11-01T00:00:00Z");
+  const learning = new LearningService({ documents: productDocumentsDouble(), now: () => now });
+  const original = await create(learning);
+  const digest = original.payload.contentDigest;
+  const sample = n => ({ runId: "run-" + n, startedAt: original.payload.createdAt,
+    at: new Date(now.getTime() + 1000 * n).toISOString(), opened: n % 2 === 0, failed: true });
+  const record = n => learning.recordTaskOutcome("u1", original.id, digest, sample(n), 3);
+  await Promise.all([record(2), record(1), record(3), record(1)]);
+  const held = await learning.getMethod("u1", original.id);
+  assert.equal(held.payload.status, "approved");
+  assert.equal(held.payload.taskOutcomes.demoted, true);
+  assert.deepEqual(held.payload.taskOutcomes.samples.map(row => row.runId), ["run-3", "run-2", "run-1"]);
+  await learning.recordTaskOutcome("u1", original.id, "old digest", sample(4), 3);
+  await Promise.all([record(4), record(6), record(5)]);
+  const stopped = await learning.getMethod("u1", original.id);
+  assert.equal(stopped.payload.status, "retired");
+  now = new Date("2026-11-02T00:00:00Z");
+  const restored = await learning.rollback("u1", original.id, { expectedRevision: stopped.revision, targetRevision: original.revision });
+  assert.equal(restored.payload.status, "approved");
+  assert.equal(restored.payload.taskOutcomes, undefined);
+  await record(6);
+  assert.equal((await learning.getMethod("u1", original.id)).revision, restored.revision);
+});
+
+test("task failures leave a person's corrected method in force", async () => {
+  const { learning } = service();
+  const original = await create(learning);
+  const fixed = await learning.amendMethod("u1", original.id, { expectedRevision: original.revision, personCorrection: true,
+    frontmatter: original.payload.frontmatter, body: BODY + "\nKeep the corrected step." });
+  for (let n = 0; n < 6; n++) await learning.recordTaskOutcome("u1", original.id, fixed.payload.contentDigest,
+    { runId: String(n), startedAt: fixed.payload.updatedAt, at: fixed.payload.updatedAt, failed: true, opened: true }, 3);
+  const held = await learning.getMethod("u1", fixed.id);
+  assert.equal(held.revision, fixed.revision);
+  assert.equal(held.payload.body, fixed.payload.body);
+});

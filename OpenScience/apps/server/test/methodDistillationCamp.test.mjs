@@ -381,3 +381,12 @@ test("two-stage: an empty frame writes nothing, and a lesson in a one-step deplo
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("outcome-aware lessons exclude interface syntax and retain verified corrections", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "distill-portable-"));
+  try {
+    const [request] = await dispatchedFor(MethodDistillationRuns, dir, identityFixtures()[0], { taskOutcomes: true });
+    assert.match(request.question, /Never teach interface wording, command syntax/);
+    assert.match(request.question, /Preserve the researcher's verified corrections/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

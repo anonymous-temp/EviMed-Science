@@ -510,7 +510,7 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
  *   learnedFamily?: "geo" | "research" | null, scopeId?: string | null, query?: string | null, similarity?: { nearest: Function, pairs: Function } | null,
  *   keep?: Iterable<string> | null, keepDirectory?: boolean, contextPolicy?:any, contextItems?:any, maxPromptBytes?: number, writeFile?: typeof writeFileAtomicNoFollow,
- *   methodSelection?: { pyramid?: boolean, minSimilarity?: number, officialInLoop?: boolean, cardEvidence?: boolean, skipPendingRetirements?: boolean } | null }} options
+ *   methodSelection?: { pyramid?: boolean, minSimilarity?: number, officialInLoop?: boolean, cardEvidence?: boolean, taskOutcomes?: boolean, skipPendingRetirements?: boolean } | null }} options
  * `capsule` is what the capsule half mounted, as the conversation panel shows
  * it (`memorySessions.mjs`): recorded here so a read of the panel does not
  * select the whole capsule again.
@@ -581,6 +581,7 @@ export async function materializeCapsuleMethods({
       keep,
       ...(switches.pyramid === true ? { pyramid: true } : {}),
       ...(Number(switches.minSimilarity) > 0 ? { minSimilarity: Number(switches.minSimilarity) } : {}),
+      taskOutcomes: switches.taskOutcomes,
       ...(switches.cardEvidence === true ? { cardEvidence: true } : {}),
       ...(switches.skipPendingRetirements === true ? { skipPendingRetirements: true } : {}),
     })

@@ -12,6 +12,7 @@ import { parseByteSize } from "../src/runtimeManager.mjs";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 for (const [key, property] of [
+  ["OPEN_SCIENCE_METHOD_TASK_OUTCOMES_ENABLED", "methodTaskOutcomesEnabled"],
   ['OPEN_SCIENCE_MEMORY_PEOPLE_ACROSS_PROJECTS_ENABLED', 'memoryPeopleAcrossProjectsEnabled'],
   ['OPEN_SCIENCE_MEMORY_LITERAL_FALLBACK_ENABLED', 'memoryLiteralFallbackEnabled'],
   ['OPEN_SCIENCE_AGENT_MEMORY_API_INTERNAL_ENABLED', 'agentMemoryApiInternalEnabled'],
@@ -1285,4 +1286,10 @@ test('late follow-up learning defaults off and is selectable by environment and 
     assert.equal(loadConfig({ rootDir: repoRoot }).learningLateFollowUpEnabled, true);
     assert.equal(loadConfig({ rootDir: repoRoot, learningLateFollowUpEnabled: false }).learningLateFollowUpEnabled, false);
   } finally { if (previous === undefined) delete process.env[key]; else process.env[key] = previous; }
+});
+
+test("method failure streak uses a bounded positive run count", () => {
+  assert.equal(loadConfig({ rootDir: repoRoot }).methodFailureStreak, 3);
+  assert.equal(loadConfig({ rootDir: repoRoot, methodFailureStreak: 4 }).methodFailureStreak, 4);
+  for (const n of [1, 21, 3.5]) assert.throws(() => loadConfig({ rootDir: repoRoot, methodFailureStreak: n }), /METHOD_FAILURE_STREAK/);
 });

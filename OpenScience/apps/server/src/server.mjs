@@ -170,6 +170,7 @@ import { createMethodSimilarity } from "./methodSimilarity.mjs";
 import { NativeInputRoute } from "./nativeInputRoute.mjs";
 import { createResearchDispatchContext } from "./researchDispatchContext.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
+import { methodTaskOutcomes } from "./methodTaskOutcomes.mjs";
 import { methodObservationSessionsForRun, runMethodObservations } from "./methodObservations.mjs";
 import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "./learningMetrics.mjs";
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
@@ -1614,6 +1615,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         methodsLoaded: derived.methodsLoaded,
         methodsInvoked: derived.methodsInvoked,
       });
+    }
+    if (config.methodTaskOutcomesEnabled && learningTriggers && !run.automated && !internalFor(project.userId, project.id)
+      && !await learningTriggers.refusalFor(project, run)) {
+      for (const entry of methodTaskOutcomes(run, derived, methods)) {
+        await learningService.recordTaskOutcome(project.userId, entry.methodId, entry.digest, entry.sample, config.methodFailureStreak)
+          .catch(error => securityAudit(config, "learning.task_outcome", "failed", { runId: run.id, code: error?.code ?? "method_outcome_failed" }));
+      }
     }
     // A read with no proven mount stays a read. Mounted ordinary conversations
     // already earned one run observation above, even without a workflow receipt.
@@ -4959,6 +4967,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       officialMethods: officialInLoop,
       // Lab switches, both off by default: the training camp's lesson and two-stage distillation.
       camp: config.learningCampEnabled === true,
+      taskOutcomes: config.methodTaskOutcomesEnabled === true,
       twoStage: config.methodTwoStageDistillationEnabled === true,
       concise: config.methodConciseDistillationEnabled === true,
     });
@@ -5062,6 +5071,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         return user ? store.requireProject(user, projectId).catch(() => null) : null;
       },
       runsOf: (project) => agentRuns.list(project),
+      onNamedFailure: config.methodTaskOutcomesEnabled ? async (userId, projectId, run, methodId, digest) => {
+        if (run.automated || run.terminalConflict || !Number.isFinite(Date.parse(run.finishedAt)) || !learningTriggers) return;
+        const user = await store.userById(userId);
+        const project = user && await store.requireProject(user, projectId);
+        if (!project || internalFor(userId, projectId) || await learningTriggers.refusalFor(project, run)) return;
+        await learningService.recordTaskOutcome(userId, methodId, digest, { runId: run.id, at: run.finishedAt,
+          startedAt: run.startedAt ?? run.createdAt, opened: true, failed: true, corrected: true }, config.methodFailureStreak);
+      } : null,
       onApplied: (outcome) => learningMetrics.observeApplied(outcome),
       audit: (event, detail) => securityAudit(config, event, "failed", detail),
       // The platform's official methods a run opened are counted in their own, platform-wide records (`OfficialPacks.recordApplied`), never in the account's.
