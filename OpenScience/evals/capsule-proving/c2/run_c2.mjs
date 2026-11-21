@@ -409,7 +409,7 @@ async function worker(args) {
       infraStreak = record.infra ? infraStreak + 1 : 0;
       if (record.infra && h) { const old = h; h = null; await stopHarness(old); }
       if (infraStreak >= 4) throw new Error(`${infraStreak} harness failures in a row; stopping so the wrapper restarts this slot (records are kept, infra ones rerun)`);
-      status(`${phase} ${task.id} ${record.row.pass ? 'PASS' : 'fail'} score=${record.row.score.toFixed(3)} class=${record.row.failureClass ?? '-'} wall=${Math.round(record.row.wallSeconds)}s tools=${record.row.toolCalls} cost=${record.row.costCny.toFixed(4)}`);
+      status(`${phase} ${task.id} ${record.row.pass ? 'PASS' : 'fail'} score=${record.row.score?.toFixed(3) ?? 'unobserved'} class=${record.row.failureClass ?? '-'} wall=${Math.round(record.row.wallSeconds)}s tools=${record.row.toolCalls} cost=${record.row.costCny.toFixed(4)}`);
       return 'ran';
     } finally {
       await fs.rm(`${outDir}/claims/${task.id}.json`, { force: true });
