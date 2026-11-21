@@ -69,7 +69,7 @@ const NATIVE_RECALL_READ = 50;
  * The memory half of a recall, in the shape `recallAcrossMemory` takes it in: what the memory page's search finds (the words over
  * every memory's text, joined with the engine's own semantic search), the account's memories and this project's, never a
  * sensitive one. A native memory has no validity interval, so there is no time a question can be asked about.
- * @param {{ search: (userId: string, query: string) => Promise<{ items: any[], readStatus?: any }> }} nativeMemory
+ * @param {{ search: (userId: string, query: string, options?: { ownedOnly?: boolean }) => Promise<{ items: any[], readStatus?: any }> }} nativeMemory
  * @param {{ recallEnabled?: boolean }} [options] the deployment's recall switch (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED`)
  */
 export function nativeRecallSource(nativeMemory, { recallEnabled = true } = {}) {

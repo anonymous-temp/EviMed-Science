@@ -63,7 +63,7 @@ export async function recordWorkSignal({ native, admission, learning, feedback, 
   if (!Number.isFinite(saidAt) || source.messages[input.messageIndex] !== hostDigest(['user', input.text, new Date(saidAt).toISOString()])) {
     throw new HttpError(400, 'agent_memory_payload_invalid', 'The signal must quote a complete captured human message and its UTC timestamp.');
   }
-  let target, digest;
+  let target, digest, whenToUse = '';
   async function verifyTarget() {
     if (input.recordId) {
       const record = await native.getRecord(user.id, input.recordId);
@@ -79,6 +79,7 @@ export async function recordWorkSignal({ native, admission, learning, feedback, 
         || method.payload.contentDigest !== input.digest) throw new HttpError(404, 'method_not_found', 'Method version unavailable.');
       target = method.payload.frontmatter?.name ?? method.id;
       digest = method.payload.contentDigest;
+      whenToUse = String(method.payload.frontmatter?.whenToUse ?? '');
     }
   }
   await verifyTarget();
@@ -89,7 +90,7 @@ export async function recordWorkSignal({ native, admission, learning, feedback, 
     throw new HttpError(409, 'memory_conflict', 'This feedback was already recorded for another target.');
   }
   if (prior) return { recorded: true, eventId: prior.id, verdict: prior.detail.verdict };
-  const verdict = await readFollowUp({ judge }, { message: input.text, previousRequest: target, methods: [{ id, digest, title: target }], adoptable: false },
+  const verdict = await readFollowUp({ judge }, { message: input.text, previousRequest: target, methods: [{ id, digest, title: target, whenToUse }], adoptable: false },
     { userId: user.id, projectId: project.id, runId });
   if ('failure' in verdict) return { recorded: false, reason: verdict.failure };
   await check();

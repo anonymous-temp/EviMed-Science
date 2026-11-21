@@ -201,7 +201,8 @@ export async function memoryBoard({ memorySettings, nativeMemory = null, learnin
       if (note.projectId && nativeMemory.memoryContexts && (await nativeMemory.memoryContexts.forProject({ id:note.projectId, userId:user.id })).kind !== 'owned') continue;
       const admission = await nativeMemory.overlay.admission(user.id, note.id, note.revision);
       if (admission?.state === "completed") continue;
-      pending.push({ ...(admission ? { admission: { state: admission.state, taskId: admission.taskId, recordIds: admission.recordIds } } : {}), type: "note", id: note.id, capsuleId: note.payload.capsuleId, kind: note.payload.factKind, summary: note.payload.content,
+      pending.push({ ...(admission ? { admission: { state: admission.state, taskId: admission.taskId, recordIds: admission.recordIds } } : {}), type: "note", id: note.id, capsuleId: note.payload.capsuleId, kind: note.payload.factKind, summary: note.payload.externalSession
+          ? `待确认的外部会话（${note.payload.externalSession.messages?.length ?? 0} 条消息）` : note.payload.content,
         revision: note.revision, source: "inferred", sourceLabel: BOARD_SOURCES.inferred, createdAt: note.createdAt });
     }
   }
