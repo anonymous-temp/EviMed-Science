@@ -17,6 +17,8 @@ export const learnedDirectory = methodId => `_lm${createHash('sha256').update(St
 
 /** @param {any} api @param {string} projectId @param {string} name */
 export async function ensureProject(api, projectId, name) {
+  // The catch-all is provisioned by the product; creating a named substitute changes memory scope.
+  if (projectId === 'default') return 'default';
   const created = await api.call('POST', '/api/projects', { id: projectId, name: name ?? projectId }, { project: null });
   if (created.status === 200 || created.status === 201) return 'created';
   const list = await api.call('GET', '/api/projects', undefined, { project: null });
@@ -40,13 +42,23 @@ async function readSelection(projectDir) {
 /**
  * @param {{ api: any, userId: string, projectId: string, projectName?: string, sessionId: string, first: string, next: (turn: any, index: number) => Promise<string|null>|string|null,
  *   dataDir: string, outDir: string, timeoutMs: number, log: (m: string) => void, observeMethods?: (identity: any) => Promise<any>, waitMemoryTools?: boolean, maxTurns?: number,
- *   resumeRecord?: any, onTurn?: (record: any) => Promise<void> }} o
+ *   resumeRecord?: any, keepRuntime?: boolean, automated?: boolean, memoryBusyRetryMs?: number, continueAfterTimeout?: boolean, onTurn?: (record: any) => Promise<void> }} o
  */
-export async function runConversation({ api, userId, projectId, projectName, sessionId, first, next, dataDir, outDir, timeoutMs, log, observeMethods = null, waitMemoryTools = true, maxTurns = 8, resumeRecord = null, onTurn = null }) {
+export async function runConversation({ api, userId, projectId, projectName, sessionId, first, next, dataDir, outDir, timeoutMs, log, observeMethods = null, waitMemoryTools = true, maxTurns = 8, resumeRecord = null, keepRuntime = false, automated = false, memoryBusyRetryMs = 0, continueAfterTimeout = false, onTurn = null }) {
   const t0 = Date.now();
   if (resumeRecord && (resumeRecord.projectId !== projectId || resumeRecord.sessionId !== sessionId)) throw new Error('Conversation checkpoint identity mismatch');
   const record = resumeRecord ?? { schema: 'lx-conversation/1', projectId, sessionId, startedAt: new Date().toISOString(), turns: [] };
   record.evalRunId ??= `eval-${createHash('sha256').update(JSON.stringify([userId, projectId, sessionId, record.startedAt])).digest('hex').slice(0, 16)}`;
+  const admission = async (route, body) => {
+    const deadline = Date.now() + memoryBusyRetryMs;
+    while (true) {
+      const response = await api.call('POST', route, body, route === '/api/commands/start_runtime' ? { timeoutMs: 300_000 } : undefined);
+      if (response.status !== 409 || response.json?.code !== 'memory_source_cleanup_busy' || Date.now() >= deadline) return response;
+      (record.admissionRetries ??= []).push({ at: new Date().toISOString(), route, code: response.json.code, requestId: response.json.requestId });
+      log(`memory admission busy; retrying in 5s requestId=${response.json.requestId}`);
+      await sleep(5000);
+    }
+  };
   api.project = projectId;
   try { record.project = await ensureProject(api, projectId, projectRunName(projectName ?? projectId, record.evalRunId)); }
   catch (error) {
@@ -64,7 +76,7 @@ export async function runConversation({ api, userId, projectId, projectName, ses
   if (waitMemoryTools && process.env.OPEN_SCIENCE_OPENVIKING_URL) {
     // A project reused across conversations keeps the previous kernel's tool list: wait for the new kernel's.
     await fs.rm(`${projectDir}/eval-memory-tools.json`, { force: true });
-    const start = await api.call('POST', '/api/commands/start_runtime', {}, { timeoutMs: 300_000 });
+    const start = await admission('/api/commands/start_runtime', {});
     if (start.status !== 200) throw new Error(`start runtime: ${start.status} ${start.raw.slice(0, 200)}`);
     record.memoryToolsWait = await waitForMemoryTools(`${projectDir}/eval-memory-tools.json`);
   }
@@ -75,7 +87,7 @@ export async function runConversation({ api, userId, projectId, projectName, ses
     const turn = { index, text, startedAt: new Date().toISOString() };
     const t1 = Date.now();
     const dispatchId = `d_${sessionId}_${index}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120);
-    const dispatch = await productCall({ call: () => api.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId, text }), verifyOwnedProject });
+    const dispatch = await productCall({ call: () => admission('/api/agent-runs/dispatch', { sessionId, dispatchId, text, ...(automated ? { automated: true } : {}) }), verifyOwnedProject });
     turn.dispatchLifecycle = dispatch;
     const dispatched = dispatch.response;
     if (dispatched?.status !== 202) { turn.outcome = dispatch.outcome; turn.missingRecords = dispatch.missingRecords ?? []; turn.error = `dispatch ${dispatched?.status ?? 'unobserved'}`; record.turns.push(turn); break; }
@@ -93,6 +105,7 @@ export async function runConversation({ api, userId, projectId, projectName, ses
     await sleep(2500);
     const settled = await api.call('GET', '/api/agent-runs');
     run = (settled.json?.data ?? []).find(item => item.id === turn.runId) ?? run;
+    if (turn.timedOut && RUNNING.has(String(run.status))) turn.error = 'cancel_not_confirmed';
     turn.run = Object.fromEntries(RUN_FIELDS.filter(k => k in run).map(k => [k, run[k]]));
     const lines = await readTranscript(projectDir, turn.runId);
     const digest = digestTranscript(lines);
@@ -109,10 +122,10 @@ export async function runConversation({ api, userId, projectId, projectName, ses
     record.turns.push(turn);
     if (onTurn) await onTurn(record);
     log(`    turn ${index}: ${run.status} route=${run.effectiveAgentId}/${run.effectiveRouteReason} tools=${turn.tools.map(t => t.name).join('>') || '-'} wall=${Math.round(turn.wallMs / 1000)}s`);
-    if (turn.timedOut) break;
+    if (turn.error || (turn.timedOut && !continueAfterTimeout)) break;
     text = await next(turn, index);
   }
-  await api.call('POST', '/api/commands/stop_runtime', {}).catch(() => null);
+  if (!keepRuntime) await api.call('POST', '/api/commands/stop_runtime', {}).catch(() => null);
   record.finishedAt = new Date().toISOString();
   record.wallMs = Date.now() - t0;
   return record;
