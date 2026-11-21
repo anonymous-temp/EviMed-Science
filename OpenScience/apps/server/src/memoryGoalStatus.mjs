@@ -29,22 +29,26 @@ export function createGoalStatusReader({ config, contexts, documents, projectFor
       // A person can replace a goal in the same conversation. Never attribute
       // the old goal's outputs to the new one, even with the same status.
       const start = rows.find(setsResearchGoal);
-      const source = rows.find(run => isGoalContinuation(run) && validId(run.id) && run.status === 'succeeded'
+      const rounds = rows.filter(run => isGoalContinuation(run) && validId(run.id) && run.status === 'succeeded'
         && Number.isFinite(Date.parse(run.finishedAt)) && (!start || Date.parse(run.startedAt) >= Date.parse(start.startedAt))
-        && (!goal.goalId || !run.goal?.id || run.goal.id === goal.goalId)
+        && (!goal.goalId || run.goal?.id === goal.goalId)
         && (!reset || Date.parse(run.startedAt) >= Date.parse(reset)));
-      if (!source || !await permitted(project, goal.sessionId, rows)) continue;
+      const requestedRound = query && rounds.find(run => query.includes(run.id));
+      const source = requestedRound || rounds[0];
+      if (!source) continue;
       const progress = goal.progress;
       const fraction = Number.isSafeInteger(progress?.processed) && Number.isSafeInteger(progress?.total)
         && progress.processed >= 0 && progress.total >= progress.processed ? {processed:progress.processed,total:progress.total} : null;
+      const output = requestedRound ? (roundProducedFiles(source) ? source : null) : rounds.find(roundProducedFiles);
       const record = { sourceId:doc.id, runId:source.id, sessionId:goal.sessionId, status:goal.status, progress:fraction,
-        hasOutput:roundProducedFiles(source), finishedAt:source.finishedAt, conversationUrl:'/app/chat/' + encodeURIComponent(goal.sessionId) };
-      if (query && ![doc.id,source.id,goal.sessionId,goal.status,labels.get(goal.status),'目标状态','研究进展','近期工作','研究目标','goal status','research progress','recent work']
+        hasOutput:Boolean(output), outputRunId:output?.id ?? null, finishedAt:source.finishedAt, conversationUrl:'/app/chat/' + encodeURIComponent(goal.sessionId) };
+      if (query && ![doc.id,source.id,...(output ? [output.id] : []),goal.sessionId,goal.status,labels.get(goal.status),'目标状态','研究进展','近期工作','研究目标','goal status','research progress','recent work']
         .some(term => query.toLowerCase().includes(term))) continue;
+      if (!await permitted(project, goal.sessionId, rows)) continue;
       const text = '自动研究' + labels.get(goal.status) + (fraction ? `（${fraction.processed}/${fraction.total}）` : '');
-      results.push({record,row:{slot:'recent_work',label:'近期工作',text,updatedAt:source.finishedAt,
+      results.push({record,row:{slot:'recent_work',recordId:doc.id,label:'近期工作',text,updatedAt:source.finishedAt,
         originalSources:[{id:doc.id,contentDigest:inputDigest(JSON.stringify(record)),attribution:{origins:['system']},
-          sourcePrivacy:{schemaVersion:1,classification:'ordinary',reasons:['owned-goal-status']}}]}});
+          sourcePrivacy:{schemaVersion:1,classification:'unclassified',reasons:['automated-goal-status']}}]}});
     }
     await contexts.assertLive(context);
     return results.sort((a,b)=>Date.parse(b.record.finishedAt)-Date.parse(a.record.finishedAt)).slice(0,limit);

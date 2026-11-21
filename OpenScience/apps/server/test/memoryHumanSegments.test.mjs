@@ -28,3 +28,32 @@ test('kernel input requires its digest, request, user seq and root turn', () => 
     assert.equal(provenTranscriptInput(run, [{ ...msg, ...patch }]), null);
   }
 });
+
+test('both indexed windows and a previously mixed cached window rebuild their titles and text from the dated owner input', async()=>{
+  const {createMemoryHistorySources}=await import('../src/memoryHistorySources.mjs');
+  const {MemoryHistory,historyChunks}=await import('../src/memoryHistory.mjs');
+  const {inputDigest}=await import('../src/memoryHumanSegments.mjs');
+  const root='viking://user/u', project={id:'default',userId:'u'}, context={userRoot:root,ownerId:'u',ownerCreatedAt:stamp(0),kind:'owned',namespaceId:'u'};
+  const archive=root+'/sessions/dsh-session/history/archive_001', config={memoryHumanSegmentsEnabled:true,memoryHistorySearchEnabled:true};
+  const messages=[spoken,{...spoken,role:'assistant',content:'PRIVATE_RESPONSE'}, {...spoken,content:'AUTOMATIC_ONLY',created_at:stamp(6)}];
+  const raw=messages.map(JSON.stringify).join('\n'), files=new Map();
+  context.sessions={read:async()=>raw};
+  const sources=createMemoryHistorySources({config,store:{userById:async()=>({id:'u'}),requireProject:async()=>project},
+    productDatabase:{query:async()=>({rows:[{stamp:stamp(0)}]})},nativeMemoryContexts:{assertLive:async()=>{}},
+    nativeMemoryOverlay:{projectOfSession:async()=>'default'},agentRuns:{conversationRuns:async()=>[{...machine,title:'AUTOMATIC_ONLY'},run]},
+    memorySettings:{sessionState:async()=>({})},agentRegistry:new Map(),memoryAdmission:{admit:async()=>({learn:true})}});
+  const resources={writeHistory:async(_u,uri,body)=>files.set(uri,body),readHistory:async(_u,uri)=>files.get(uri),
+    searchHistory:async()=>[...files.keys()].map(uri=>({uri}))};
+  const history=new MemoryHistory({config,...sources,contexts:{forProject:async()=>context},resourcesFor:()=>resources,
+    ledger:{bindArchive:async()=>true,overlay:{removals:async()=>[]},rejected:async()=>false,alreadyIndexed:async()=>false,reserve:async()=>true,ready:async()=>true,
+      lookup:async(_u,_epoch,_ns,_p,_pe,uri)=>({project_id:'default',project_created_at:stamp(0),session_id:'session',archive_uri:archive,digest:inputDigest(files.get(uri))}),
+      archiveSourceHash:async()=>inputDigest(raw)}});
+  const outcome=await history.indexArchive({userId:'u',projectId:'default',engineSession:'dsh-session',archiveUri:archive},context,raw);
+  assert.equal(outcome.state,'complete'); assert.equal(outcome.messages,1);
+  const [uri,body]=[...files.entries()][0];assert.doesNotMatch(body,/PRIVATE|AUTOMATIC/);
+  const search=query=>history.search({user:{id:'u'},project,query});
+  const [hit]=await search('decisions');assert.equal(hit.conversationTitle,text);assert.deepEqual(hit.messages.map(m=>m.text),[text]);
+  files.set(uri,JSON.stringify({messages:historyChunks(messages)[0].messages}));
+  const [legacy]=await search('decisions');assert.equal(legacy.conversationTitle,text);assert.doesNotMatch(JSON.stringify(legacy),/PRIVATE|AUTOMATIC/);
+  assert.deepEqual([...(await search('AUTOMATIC_ONLY'))],[]);
+});

@@ -1268,7 +1268,8 @@ export class FrontierProfiles {
     const now = this.now();
     const profile = (await this.database.query(`SELECT phrases, specialties FROM evimed_frontier.user_profiles WHERE user_id = $1`, [userId])).rows?.[0];
     const phrases = Array.isArray(profile?.phrases) ? [...profile.phrases] : [];
-    const sourced = this.config.frontierSourcedInterestsEnabled ? await this.#sourcedInterests(userId, await this.#settings(userId)) : [];
+    const sourced = this.config.frontierSourcedInterestsEnabled
+      ? await this.#settings(userId).then(settings => this.#sourcedInterests(userId,settings)).catch(() => []) : [];
     const firstInterest = phrases.length;
     phrases.push(...sourced);
     const prefs = await this.#prefsRow(userId);

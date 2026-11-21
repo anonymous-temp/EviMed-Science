@@ -58,10 +58,9 @@ export function createMemoryHistorySources({ config, store, productDatabase, nat
       if (isInternalProjectOf(config, memoryContext.ownerId, source.projectId)) return false;
       const state = await memorySettings.sessionState(memoryContext.ownerId, source.projectId, source.sessionId);
       if (state.trialCapsuleId) return false;
-      // Raw archives cannot reliably date an undated message into a mixed
-      // automated conversation, so exclude that entire conversation here.
+      // Mixed archives need individual source receipts before they can be read.
       for (const run of source.runs) {
-        if (run.deleted || (isPlatformStartedRun(run) && !source.projectMessage) || (await agentRegistry)?.get?.(run.effectiveAgentId ?? run.agentId)?.visibility === 'internal') return false;
+        if (run.deleted || (source.projectMessage && run.forkedFrom) || (isPlatformStartedRun(run) && !source.projectMessage) || (await agentRegistry)?.get?.(run.effectiveAgentId ?? run.agentId)?.visibility === 'internal') return false;
       }
       if (!(source.projectMessage && Number.isFinite(source.clinical)) && vcrPrivacyStore && await vcrPrivacyStore.hasClinicalContext(memoryContext.ownerId, source.projectId,
         source.runs.map(run => ({ sessionId: source.sessionId, runId: run.id })))) return false;

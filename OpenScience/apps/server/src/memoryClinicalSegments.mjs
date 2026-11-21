@@ -1,7 +1,13 @@
+import { isPlatformStartedRun } from './memoryDispatch.mjs';
 import { filterCapturedMessage } from './memoryGateway.mjs';
 import { inputDigest, provenTranscriptInput } from './memoryHumanSegments.mjs';
-import { presentationStatements } from './memoryPresentation.mjs';
+import { presentationRule, presentationStatements } from './memoryPresentation.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
+
+export function clinicalSegmentDigest(userId, projectId, ref, quote) {
+  return inputDigest(JSON.stringify([userId, projectId, ref.projectCreatedAt, ref.sessionId, ref.runId,
+    ref.inputSeq, ref.inputDigest, ref.saidAt, quote]));
+}
 
 export function clinicalStatements(input, firstRead) {
   if (!input || !Number.isFinite(firstRead)) return [];
@@ -24,8 +30,8 @@ export function createClinicalSegments({ config, contexts, admission, overlay, n
     if (!Number.isFinite(boundary)) return null;
     return { context, runs, boundary };
   }
-  async function candidates(project, sessionId, source, runId = null) {
-    const eligible = source.runs.filter(run => run.memoryInput && (!runId || run.id === runId));
+  async function candidates(project, sessionId, source) {
+    const eligible = source.runs.filter(run => run.memoryInput && !isPlatformStartedRun(run));
     if (!eligible.length) return [];
     const page = await transcript(project, sessionId);
     if (!page?.exhausted) return [];
@@ -37,10 +43,11 @@ export function createClinicalSegments({ config, contexts, admission, overlay, n
       if (!policy.learn) continue;
       for (const quote of clinicalStatements(input, source.boundary)) {
         if (!quote || quote.length > 2000) continue;
-        const digest = inputDigest(JSON.stringify([project.userId, project.id, source.context.projectCreatedAt, sessionId, run.id, input.seq, quote]));
-        entries.push({ text: quote, candidateId: `segment:${digest}`, revision: 1, projectId: project.id, engineSession: `evimed-segment-${digest}`,
-          externalSource: { operation: 'clinical-segment', digest, projectCreatedAt: source.context.projectCreatedAt, sessionId, runId: run.id,
-            inputSeq: input.seq, inputDigest: run.memoryInput.digest, saidAt: new Date(input.time).toISOString() } });
+        const ref = {operation:'clinical-segment', projectCreatedAt:source.context.projectCreatedAt, sessionId, runId:run.id,
+          inputSeq:input.seq, inputDigest:run.memoryInput.digest, saidAt:new Date(input.time).toISOString()};
+        const digest = clinicalSegmentDigest(project.userId,project.id,ref,quote);
+        entries.push({text:quote,candidateId:'segment:' + digest, revision:1,projectId:project.id,engineSession:'evimed-segment-' + digest,
+          externalSource:{...ref,digest}});
       }
     }
     return entries;
@@ -63,8 +70,17 @@ export function createClinicalSegments({ config, contexts, admission, overlay, n
       const ref = row.externalSource;
       const source = await scope(project, ref.sessionId);
       if (!source || source.context.projectCreatedAt !== ref.projectCreatedAt) return false;
-      return (await candidates(project, ref.sessionId, source, ref.runId)).some(entry =>
-        entry.candidateId === row.candidateId && entry.externalSource.digest === ref.digest && entry.text === row.text);
+      // The queue's immutable first-party receipt was minted from a complete
+      // kernel transcript. Retries can verify it even after the runtime stops.
+      const run = source.runs.find(item => item.id === ref.runId);
+      const time = Date.parse(ref.saidAt);
+      const digest = clinicalSegmentDigest(userId,project.id,ref,row.text);
+      if (!run?.memoryInput || isPlatformStartedRun(run) || !run.kernelRequestIds?.length || run.memoryInput.digest !== ref.inputDigest
+        || !Number.isSafeInteger(ref.inputSeq) || run.nativeTurn && run.nativeTurn.userSeq !== ref.inputSeq
+        || !(Date.parse(run.memoryInput.at) <= time) || digest !== ref.digest || row.candidateId !== 'segment:' + digest
+        || row.engineSession !== 'evimed-segment-' + digest || !row.text) return false;
+      if (time >= source.boundary && !presentationRule(row.text)) return false;
+      return (await admission.admitSegment({user:{id:userId},project,engineSessionId:'dsh-' + ref.sessionId,at:time,runId:run.id})).learn;
     },
   };
 }

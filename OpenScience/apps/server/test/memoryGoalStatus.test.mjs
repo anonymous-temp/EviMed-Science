@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { sourceAllowsEgress } from '@evimed/domain';
 import { createGoalStatusReader } from '../src/memoryGoalStatus.mjs';
 
 test('business state and recent work reopen only the current owned goal and its automatic round', async () => {
@@ -13,7 +14,7 @@ test('business state and recent work reopen only the current owned goal and its 
   const query = term => read('u','p','destination',term);
   const [{row,record}] = await query('研究进展');
   assert.equal(record.runId,source.id); assert.equal(record.hasOutput,true);assert.equal(record.sourceId,goal.id);
-  assert.equal(row.slot,'recent_work');assert.match(row.text,/2\/5/);assert.doesNotMatch(JSON.stringify([row,record]),/PRIVATE|SECRET/);
+  assert.equal(sourceAllowsEgress(row,{purpose:'method'}),false); assert.equal(row.slot,'recent_work');assert.match(row.text,/2\/5/);assert.doesNotMatch(JSON.stringify([row,record]),/PRIVATE|SECRET/);
   assert.equal((await query(source.id)).length,1); assert.deepEqual(await query('unrelated'),[]);
   goal.payload.status='finished'; assert.equal((await query('目标状态'))[0].record.status,'finished');
   for (const [key,value] of [['allowed',false],['context','geo-project'],['reset','2026-12-01']]) {

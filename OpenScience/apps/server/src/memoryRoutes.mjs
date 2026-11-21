@@ -56,6 +56,7 @@ import {
  *   resetHistory?: ((userId: string) => Promise<unknown>) | null,
  *   resetProduct?: ((userId: string) => Promise<{ methods: number, entries: number, jobs: number, feedback: number }>) | null,
  *   releasePausedRuntimes?: ((userId: string) => Promise<unknown>) | null,
+ *   accountProjections?: any,
  *   goalCardRows?: ((userId:string, projectId:string)=>Promise<any[]>) | null,
  *   projectWork?: ((user: any, project: any, options: { timeZone: string }) => Promise<{ capabilities: any[], works: any[] }>) | null,
  *   store: any,
@@ -66,7 +67,7 @@ import {
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createMemoryRoutes({
-  config, memorySettings, nativeMemory = null, nativeMemoryImport = null, resetProduct = null, resetHistory = null, releasePausedRuntimes = null, projectWork = null, goalCardRows = null,
+  config, memorySettings, nativeMemory = null, nativeMemoryImport = null, resetProduct = null, resetHistory = null, releasePausedRuntimes = null, projectWork = null, goalCardRows = null, accountProjections = null,
   store, context, audit, decodeRouteComponent,
 }) {
   const enabled = config.memoryEnabled !== false;
@@ -95,6 +96,23 @@ export function createMemoryRoutes({
     // nothing: learning paused means no run writes a memory, recall paused
     // means no run is handed one, and a paused project is both, for that
     // project only. They are PostgreSQL's, so they answer without the engine.
+    if (config.memoryAccountPresentationEnabled && accountProjections) {
+      if (pathname === '/api/memory/account-presentation' && req.method === 'GET') {
+        const ctx = await context(req,res);
+        sendJson(res,200,{data:await accountProjections.list(ctx.user.id)});
+        return true;
+      }
+      const projection = /^\/api\/memory\/account-presentation\/(presentation:[a-f0-9]{64})$/.exec(pathname);
+      if (projection && req.method === 'PUT') {
+        const ctx = await context(req,res);
+        const body = assertObject(await readJson(req,config.maxJsonBytes),'account presentation');
+        if (typeof body.enabled !== 'boolean') throw new HttpError(400,'memory_settings_invalid','Expected an enabled boolean.');
+        if (!await accountProjections.setEnabled(ctx.user.id,projection[1],body.enabled)) throw new HttpError(404,'not_found','Projection unavailable.');
+        sendJson(res,200,{data:{id:projection[1],enabled:body.enabled}});
+        return true;
+      }
+    }
+
     if (pathname === "/api/memory/settings" && req.method === "GET") {
       const ctx = await context(req, res);
       sendJson(res, 200, { data: await memorySettings.settings(ctx.user.id) });

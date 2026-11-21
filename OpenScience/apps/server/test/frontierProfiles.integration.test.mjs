@@ -572,3 +572,19 @@ test("「看过了」 keeps an item out and counts against no genre; any other h
   await database.query("UPDATE evimed_frontier.interactions SET detail = NULL WHERE user_id = $1 AND type = 'hide'", [users.fresh]);
   assert.deepEqual(await order(), ["Cardiology trial", "Cardiology news"], "the same four hides with no reason are four failures of the genre, and the trial passes");
 });
+
+test('a sourced note can rank an item without entering the profile, and withdrawal removes the cached reason',options,async()=>{
+  const user=users.fresh, topic='semaglutide';
+  const file=await writeFile(user,'notes/interests.md','notes','I follow semaglutide.');
+  const reader=new FrontierProfiles({database,memorySettings:memory,nativeMemory,config:{...CONFIG,frontierSourcedInterestsEnabled:true},
+    now:()=>NOW,random:()=>0,entityVocabulary:{keysForText:async()=>['drug:semaglutide'],describe:async()=>[{key:'drug:semaglutide',label:topic}]},
+    ownedLines:async(_u,files)=>files.map(row=>({quote:row.body.slice(2),source:{id:row.uri,contentDigest:row.hash}}))});
+  await insertComposedItem(database,{sourceId:'nejm',title:'Semaglutide follow-up',visibleAt:hoursAgo(1),timelineAt:hoursAgo(1),scoreTotal:72});
+  const first=await reader.forYou({id:user},hydrate);
+  assert.ok(first.items.some(item=>item.reason.topic===topic && item.reason.memoryId.startsWith('interest:')));
+  const profile=(await database.query('SELECT phrases FROM evimed_frontier.user_profiles WHERE user_id=$1',[user])).rows[0];
+  assert.doesNotMatch(JSON.stringify(profile.phrases),/semaglutide/);
+  await dropFile(user,file.uri);
+  const next=await reader.forYou({id:user},hydrate);
+  assert.ok(next.items.every(item=>item.reason.topic!==topic));
+});

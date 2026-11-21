@@ -59,3 +59,32 @@ test('the ordinary gateway stays sealed when only source-bound segment admission
   f.config.memoryClinicalSegmentsEnabled=false;
   assert.equal((await admission.admitSegment(caller)).learn,false);
 });
+
+test('the extracting engine receives exactly the admitted bytes and a source reference',async()=>{
+  const f=fixture();
+  await f.service.capture(f.project,f.runs[1]);
+  const {NativeMemoryStore}=await import('../src/nativeMemoryStore.mjs');
+  const messages=[],commits=[];
+  const root='viking://user/u-'+'a'.repeat(24);
+  for (const entry of f.writes) {
+    let row={...entry,state:'queued'};
+    const store=new NativeMemoryStore({overlay:{
+      admissionAuthority:async(_u,current)=>({allowed:await f.service.authorize('u',current)}),removals:async()=>[],
+      updateAdmission:async(_u,_id,_rev,patch)=>(row={...row,...patch}),commitsOfSession:async()=>[],noteSession:async()=>{},
+      recordCommit:async input=>{commits.push(input);return input;}},
+    sessions:{userRoot:()=>root,register:async()=>{},createSession:async()=>{},readSession:async()=>({result:{message_count:0,commit_count:0}}),
+      addMessage:async(_u,_id,message)=>messages.push(message),commit:async(_u,id)=>({result:{status:'accepted',archive_uri:root+'/sessions/'+id+'/history/archive_001'}})}});
+    assert.equal((await store.processAdmission('u',row)).state,'pending');
+  }
+  assert.deepEqual(messages.map(m=>m.parts[0].text),[f.submitted[0],'以后报告用表格。','说简短点。']);
+  assert.ok(commits.every(c=>c.sourceSession==='dsh-s'));
+  assert.doesNotMatch(JSON.stringify([messages,commits]),/CASE_XQ9|NE-Z71|SEALED_RESULT|英文|检测|记录写着/);
+});
+
+test('form-only table details, ordering, tone and language stay verbatim; data-dependent variants stay sealed',async()=>{
+  const {presentationStatements}=await import('../src/memoryPresentation.mjs');
+  for(const words of ['以后表格保留两位小数。','以后报告先结论后依据。','以后用中文回复。','以后语气客观一点。','By default, use 2 decimal places in tables.']) {
+    assert.deepEqual(presentationStatements(words),[words]);
+  }
+  for(const words of ['以后报告先病例结论后依据。','以后表格保留病例的两位数字。','报告的引文写着：以后表格保留两位小数。']) assert.deepEqual(presentationStatements(words),[]);
+});

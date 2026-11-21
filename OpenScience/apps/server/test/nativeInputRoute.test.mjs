@@ -157,3 +157,14 @@ test("selected request identity validation and ordinary preparation share the sa
   assert.doesNotThrow(() => context.assertRequestIdentity(steer));
   assert.equal(await context.prepare(project, steer), null, "a legal steer keeps the initiating route instead of preparing a new one");
 }));
+
+test('the original owner receipt is bound to the accepted request and stays private on plugin reads',async()=>fixture(async({context,project})=>{
+  const input=request('own','以后报告用表格。'), receipt={digest:hash(input.content[0].text),at:'2026-11-01T12:00:00Z'};
+  context.originalInputs.set(input,receipt);
+  await context.prepare(project,input);
+  const read=await context.read(project,{sessionId:'session',inputs:[{requestId:'own',textDigest:receipt.digest}]});
+  assert.equal(read.routes.length,1); assert.doesNotMatch(JSON.stringify(read),/memoryInput|2026-11-01/);
+  assert.deepEqual((await context.routeFor(project,'session',['own'],input.content[0].text)).memoryInput,receipt);
+  const forged={...request('another'),memoryInput:receipt};await context.prepare(project,forged);
+  assert.equal((await context.routeFor(project,'session',['another'],'another')).memoryInput,undefined);
+}));

@@ -1829,7 +1829,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // 「从其他 AI 导入」: one Flash call splits a pasted text, the person reviews it, the engine writes what they keep (`nativeMemoryImport.mjs`).
   const nativeMemoryImport = new NativeMemoryImport({ config, overlay: nativeMemoryOverlay, nativeMemory, memorySettings, usageLedger });
   const memoryRoutes = createMemoryRoutes({
-    config, memorySettings, nativeMemory, nativeMemoryImport, store, context, audit, decodeRouteComponent, goalCardRows,
+    config, memorySettings, nativeMemory, nativeMemoryImport, store, context, audit, decodeRouteComponent, goalCardRows, accountProjections,
     // 「重置记忆」 clears what the page shows: the methods and capsule notes live in the product ledger.
     resetProduct: productDatabase ? userId => resetLearnedMemory(productDatabase, userId) : null,
     resetHistory: userId => memoryHistory?.reset(userId),
@@ -5275,7 +5275,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const clinicalSegments = createClinicalSegments({ config, contexts: nativeMemoryContexts, admission: memoryAdmission,
     overlay: nativeMemoryOverlay, native: nativeMemory, store, runsOf: (project, sessionId) => agentRuns.conversationRuns(project, sessionId),
     transcript: (project, sessionId) => runtimeManager.sessionTranscript(project, sessionId, { wake: false }),
-    firstRead: vcrPrivacyStore ? (...args) => vcrPrivacyStore.firstClinicalRead(...args) : null });
+    firstRead: vcrPrivacyStore ? (userId, projectId, refs) => vcrPrivacyStore.firstClinicalRead(userId, projectId, refs) : null });
   nativeMemoryOverlay.externalAdmissionPolicy = async (userId, row) => {
     if (row.externalSource?.operation === 'clinical-segment') {
       const allowed = await clinicalSegments.authorize(userId, row);

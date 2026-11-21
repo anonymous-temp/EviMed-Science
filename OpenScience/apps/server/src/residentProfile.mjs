@@ -314,7 +314,7 @@ export class ResidentProfiles {
       ? await this.nativeIndex(userId, projectId).then(index => ({ ...index, historySearchEnabled: this.config.memoryHistorySearchEnabled !== false })).catch(() => null) : null;
     const safetyFiles = !shared && this.config?.memoryEngineEnabled === true && this.config?.memorySafetyNotesEnabled === true && this.safetyNotes
       ? await this.safetyNotes(userId, projectId).catch(() => Object.assign([], { unavailable: true })) : [];
-    const presentation = !shared && sessionId && !pause.trial && this.config.memoryEngineEnabled && this.config.memoryAccountPresentationEnabled && this.presentation
+    const presentation = attended && !shared && sessionId && !pause.trial && this.config.memoryEngineEnabled && this.config.memoryAccountPresentationEnabled && this.presentation
       ? await this.presentation(userId, projectId, sessionId).catch(() => []) : [];
     const block = renderResidentProfile({ capsuleFacts, card, capsuleCount, maxRecords: this.maxRecords, nativeFiles, safetyFiles, presentation, config: this.config, nativeIndex });
     if (!block.text) return none("empty");

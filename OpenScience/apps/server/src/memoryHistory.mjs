@@ -8,7 +8,7 @@ import { MemoryHistorySecrets, createHistorySecretJudge } from './memoryHistoryS
 import { privateByDefault } from '@evimed/domain';
 import { filterCapturedMessage } from './memoryGateway.mjs';
 import { OpenVikingResources } from './openVikingResources.mjs';
-import { diverseHistoryCandidates, historyLexicalScorer, compactHistoryMessages } from './memoryHistoryRetrieval.mjs';
+import { diverseHistoryCandidates, historyTokens, historyLexicalScorer, compactHistoryMessages } from './memoryHistoryRetrieval.mjs';
 import { parseArchiveUri, platformSessionOf } from './openVikingSessions.mjs';
 export { MemoryHistoryLedger } from './memoryHistoryPersistence.mjs';
 
@@ -478,6 +478,7 @@ export class MemoryHistory {
     if (!await this.ledger.bindArchive(commit, context, source, hash(raw), bytes)) throw Object.assign(new Error('memory_history_source_changed'), { code: 'memory_history_source_changed' });
     if (bytes > MAX_ARCHIVE_BYTES) throw new MemoryHistoryLimitError('archive_bytes');
     const messages = [], sourceIndices = [];
+    let projected = 0;
     const sourceLines = raw.split('\n').filter(line=>line.trim());
     if (sourceLines.length > MAX_MESSAGES) throw new MemoryHistoryLimitError('source_messages');
     for (const [sourceIndex,line] of sourceLines.entries()) {
@@ -486,10 +487,12 @@ export class MemoryHistory {
       if (source.projectMessage) {
         message = source.projectMessage(message);
         if (!message) continue;
+        projected++;
       }
       if (await this.admitMessage(context, source, message)) { messages.push(message); sourceIndices.push(sourceIndex); }
       if (messages.length > MAX_MESSAGES) throw new MemoryHistoryLimitError('source_messages');
     }
+    if (source.projectMessage && !projected) return { state:'excluded', reason:'unproven_human_segment', messages:0, chunks:0 };
     let redact = text => text;
     if (this.secretRedaction) {
       if (!await this.ledger.secretReviewed(context,commit.archiveUri)) {
@@ -612,7 +615,7 @@ export class MemoryHistory {
       const body = await resources.readHistory(user.id, candidate.uri);
       if (body === null || Buffer.byteLength(body) > 32_000 || hash(body) !== meta.digest) return null;
       let parsed; try { parsed = JSON.parse(body); } catch { return null; }
-      const messages = hydrateMessages(parsed.messages,this.secretRedaction);
+      let messages = hydrateMessages(parsed.messages,this.secretRedaction);
       if (!messages.length) return null;
       // Full source messages, not fragments, decide whether a removed statement
       // is present. This also protects legacy chunks cut across a deletion.
@@ -632,8 +635,24 @@ export class MemoryHistory {
       })());
       const archiveMessages = await originals.get(meta.archive_uri);
       const original = verified.projectMessage ? archiveMessages.map(verified.projectMessage) : archiveMessages;
+      if (verified.projectMessage) {
+        const allowed = [];
+        for (const part of messages) {
+          const own = original[part.index];
+          const text = own && messageText(own,this.secretRedaction);
+          if (text && own.role === part.sourceRole && await this.admitMessage(context, verified, own)
+            && redact(text).includes(redact(part.text))) allowed.push(part);
+        }
+        if (!allowed.length) return null;
+        // An old resource can have been retrieved on a machine-only neighbour.
+        // Require a match in the surviving text before returning a partial window.
+        if (allowed.length < messages.length) {
+          const terms = new Set(historyTokens(allowed.map(part => part.text).join(' ')));
+          if (!historyTokens(query).some(term => terms.has(term))) return null;
+        }
+        messages = allowed;
+      }
       const touched = [...new Set(messages.map(message=>message.index))].map(index=>original[index]);
-      if (verified.projectMessage && touched.some(message => !message)) return null;
       if (touched.some(message=>!message)) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
       const originalTexts = touched.map(message=>messageText(message,this.secretRedaction)).filter(Boolean);
       const proven = messages.every(message => {
@@ -658,7 +677,7 @@ export class MemoryHistory {
       if (!await this.ledger.lookup(user.id,context.ownerCreatedAt,context.namespaceId,verified.projectId,verified.projectCreatedAt,candidate.uri)) return null;
       return { meta,hit:{ conversationTitle: redact(title), conversationUrl: verified.conversationUrl, projectId: verified.projectId, projectTitle: redact(projectTitle), scope: 'project',
         sessionId: meta.session_id, messages: this.secretRedaction ? messages.map(message=>({...message,text:redact(message.text)})) : messages, contextOnly: true, confirmed: false, privateByDefault: privateByDefault({ nativeType: 'people' }),
-        ...(forRemoval ? {originalMessages:original.filter(Boolean).map(message=>{
+        ...(forRemoval ? {originalMessages:(verified.projectMessage ? touched : original).filter(Boolean).map(message=>{
           const text=messageText(message,this.secretRedaction)??'';
           return {sourceRole:message.role,date:message.created_at,text:redact(text),messageHash:lineFingerprint(text)};
         }).filter(message=>message.text)} : {}),

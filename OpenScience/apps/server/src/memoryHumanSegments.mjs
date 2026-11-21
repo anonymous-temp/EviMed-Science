@@ -40,7 +40,12 @@ export function provenTranscriptInput(run, messages) {
     && message.sourceRequestId === run.kernelRequestIds[0] && Number.isSafeInteger(message.seq)
     && (!run.nativeTurn || run.nativeTurn.userSeq === message.seq && run.nativeTurn.startSeq === message.turnStartSeq));
   if (matches.length !== 1) return null;
-  const message = matches[0], text = plainInput(message);
+  const message = matches[0];
+  // A selected module can append separate text parts after the signed human
+  // input. Only its exact original first part can then be copied.
+  const first = message.parts?.[0];
+  const text = first?.type === 'text' && typeof first.text === 'string' && inputDigest(first.text) === run.memoryInput.digest
+    ? first.text : plainInput(message);
   if (!text || inputDigest(text) !== run.memoryInput.digest || !Number.isSafeInteger(message.time)
     || !(Date.parse(run.memoryInput.at) <= message.time)) return null;
   return { run, text, time: message.time, seq: message.seq };
