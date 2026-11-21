@@ -193,7 +193,8 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // 0.2.2 added 51 and retired two: the forge's, liveshare's, plugin details' and action cards' (denied on the proxy as well), the
   // automation tasks' and the session-state reads the page uses; the adapter calls `schedule/list` alone of them.
   // The patient-matching plugin adds its two status/cancel methods (allowed).
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 202);
+  // The memory bridge adds one read-only registration receipt method (allowed).
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 203);
   for (const method of ALLOWED_WIRE_METHODS) {
     assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
   }
@@ -227,7 +228,8 @@ test("owned plugin probe methods have exact actual Typert registrations and clos
     const probe = await registerPluginProbe(ctx);
     assert.equal(probe.typertRemote.namespace, "evimedPlugins");
     const actual = remoteMethods(probe).map(item => `${probe.typertRemote.namespace}/${item.method}`).sort();
-    assert.deepEqual(actual, ["evimedPlugins/builtin", "evimedPlugins/extensionInvocationFacts", "evimedPlugins/status", "evimedPlugins/verify", "evimedPlugins/verifyExtensions"]);
+    assert.deepEqual(actual, ["evimedPlugins/builtin", "evimedPlugins/extensionInvocationFacts", "evimedPlugins/memoryRegistration",
+      "evimedPlugins/status", "evimedPlugins/verify", "evimedPlugins/verifyExtensions"]);
     assert.deepEqual(SEAMS.wire.unary.filter(method => method.startsWith("evimedPlugins/")).sort(), actual);
     for (const method of actual) {
       assert.ok(ALLOWED_WIRE_METHODS.has(method));
