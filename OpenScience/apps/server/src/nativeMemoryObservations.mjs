@@ -1,3 +1,5 @@
+import { clinicalSegmentDigest } from './memoryClinicalSegments.mjs';
+import { presentationRule } from './memoryPresentation.mjs';
 import { choiceRows, choiceKey, normaliseChoice } from './nativeMemoryInduction.mjs';
 import { withMemorySummaryInvalidation } from './nativeMemorySummaries.mjs';
 import { recordObservationPromotion } from "./nativeMemoryMetrics.mjs";
@@ -71,24 +73,52 @@ export function observationWords(body) {
   return kept.join("；").slice(0, MAX_WORDS);
 }
 
+/** Only an observation consisting entirely of one typed standalone reply choice may
+ * send that original sentence through promotion without the rest of the file. */
+function standaloneReplyChoice(body) {
+  const choices = choiceRows(body);
+  const [first] = choices;
+  return first?.scope === 'reply' && ['form', 'format', 'length'].includes(first.kind)
+    && presentationRule(first.choice)?.standing === false && choices.length === body.split('\n').filter(line => line.trim()).length
+    && choices.every(choice => choiceKey(choice) === choiceKey(first)) ? first : null;
+}
+
 export class NativeMemoryObservations {
   /**
    * @param {{ overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay,
    *   sessions: import("./openVikingSessions.mjs").OpenVikingSessions,
    *   keepRepeatedChoice: (userId: string, choice: string, origins?: any[], evidence?: {choice: import("./nativeMemoryInduction.mjs").Choice, dates: string[], count: number}) => Promise<{ archiveUri: string, suppressed?: boolean }>,
-   *   inductionEnabled?: boolean,
+   *   inductionEnabled?: boolean, clinicalSegmentsEnabled?: boolean,
    *   memorySettings?: { settings: (userId: string) => Promise<{ learningPaused?: boolean }> } | null,
    *   report?: (line: string) => void }} dependencies
    *   `keepRepeatedChoice` is `NativeMemoryStore.keepRepeatedChoice`; `memorySettings` says whether the account paused learning, in which
    *   case nothing is promoted (a paused account is not written to).
    */
-  constructor({ overlay, sessions, keepRepeatedChoice, memorySettings = null, inductionEnabled = false, report = () => {} }) {
+  constructor({ overlay, sessions, keepRepeatedChoice, memorySettings = null, inductionEnabled = false, clinicalSegmentsEnabled = false, report = () => {} }) {
     this.inductionEnabled = inductionEnabled;
+    this.clinicalSegmentsEnabled = clinicalSegmentsEnabled;
     this.overlay = overlay;
     this.sessions = sessions;
     this.keepRepeatedChoice = keepRepeatedChoice;
     this.memorySettings = memorySettings;
     this.report = report;
+  }
+
+  /** The candidate template keeps a standalone reply request verbatim in its Choice row.
+   * Only the independently admitted excerpt may count for its original conversation. */
+  async conversationForChoice(userId, revision, choice) {
+    if (!revision.engineSession?.startsWith('evimed-segment-')) return this.overlay.conversationOf(userId, revision.engineSession, revision.archiveUri);
+    if (!this.clinicalSegmentsEnabled || choice?.scope !== 'reply' || !['form', 'format', 'length'].includes(choice.kind)
+      || presentationRule(choice.choice)?.standing !== false
+      || !choiceRows(revision.after ?? '').some(row => choiceKey(row) === choiceKey(choice))) return null;
+    const admission = await this.overlay.admissionOfCommit(userId, revision);
+    const ref = admission?.externalSource;
+    if (ref?.operation !== 'clinical-segment' || ref.presentationOnly !== true || !['pending', 'completed'].includes(admission.state)
+      || admission.engineSession !== revision.engineSession || admission.archiveUri !== revision.archiveUri
+      || admission.projectId !== revision.sourceProjectId || ref.projectCreatedAt !== revision.sourceProjectCreatedAt
+      || clinicalSegmentDigest(userId, admission.projectId, ref, choice.choice) !== ref.digest) return null;
+    const authority = await this.overlay.admissionAuthority(userId, { ...admission, text:choice.choice });
+    return authority.allowed ? ref.sessionId : null;
   }
 
   /**
@@ -108,11 +138,14 @@ export class NativeMemoryObservations {
         if (result.promoted >= MAX_PER_PASS) break;
         result.checked += 1;
         const revisions = await this.overlay.revisionsOf(userId, file.uri, { limit: 200 });
-        const conversations = await conversationsThatWrote(revisions, (revision) => this.overlay.conversationOf(userId, revision.engineSession, revision.archiveUri));
+        const hasSegments = this.clinicalSegmentsEnabled && revisions.some(row => row.engineSession?.startsWith('evimed-segment-'));
+        let body = hasSegments ? await this.sessions.read(userId, file.uri) : null;
+        const reply = body ? standaloneReplyChoice(body) : null;
+        const conversations = await conversationsThatWrote(revisions, revision => this.conversationForChoice(userId, revision, reply));
         if (conversations.size < CONVERSATIONS_TO_PROMOTE) continue;
-        const body = await this.sessions.read(userId, file.uri);
+        body ??= await this.sessions.read(userId, file.uri);
         if (body === null) { await this.overlay.removeFile(userId, file.uri); continue; }
-        const words = observationWords(body);
+        const words = (reply ?? standaloneReplyChoice(body))?.choice ?? observationWords(body);
         if (!words) { recordObservationPromotion("empty"); continue; }
         const origins = (await this.overlay.originsOf(userId, [file.uri])).get(file.uri) ?? new Map();
         await this.keepRepeatedChoice(userId, words, [
@@ -160,7 +193,7 @@ export class NativeMemoryObservations {
           if (revision.actor !== 'engine' || !['added', 'updated'].includes(revision.change) || revision.undoneAt || !revision.engineSession) continue;
           const count = (/** @type {string} */ text) => choiceRows(text).filter(row => choiceKey(row) === key).length;
           if (count(revision.after ?? '') <= count(revision.before ?? '')) continue;
-          const conversation = await this.overlay.conversationOf(userId, revision.engineSession, revision.archiveUri);
+          const conversation = await this.conversationForChoice(userId, revision, choice);
           if (!conversation) continue;
           group.conversations.add(conversation);
           group.latest = Math.max(group.latest, Date.parse(revision.changedAt ?? '') || 0);

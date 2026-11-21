@@ -5,6 +5,11 @@ description: |
   User preference memory: how this person wants work done and what they use, as a standing
   choice. Write it in the first conversation it is said, asked for or confirmed; do not wait
   for a second one.
+  Keep the user's own explicit ongoing presentation requirements on first mention,
+  including a terse request for a default length, tone, format or language. Preserve the
+  named deliverable and each requested dimension when one request combines several.
+  A bare request for a shorter
+  answer with no standing scope belongs in OBSERVATIONS even when it stands alone.
   Keep, one topic per file:
   - What the user says is a rule for future work, in any wording ("以后", "一律", "默认",
     "我们组都", "always" are examples of how people say it, not a list to match): methods and

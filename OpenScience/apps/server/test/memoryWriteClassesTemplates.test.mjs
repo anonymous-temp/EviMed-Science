@@ -49,3 +49,15 @@ test('every next type requires first-person evidence per clause, including the f
     assert.doesNotMatch(text, /Worthwhile unconfirmed advice is written|may be retained separately in NOTES|may be retained with explicit attribution/);
   }
 });
+
+test('only the candidate distinguishes a standalone reply choice from an explicit standing request', () => {
+  const candidate = renderMemoryTemplates({ variant:'next' });
+  assert.match(candidate['preferences.yaml'], /explicit ongoing presentation requirements on first mention/);
+  const observation = candidate['observations.yaml'];
+  assert.match(observation, /including a later request in the same conversation/);
+  assert.match(observation, /never assistant echoes or material/);
+  assert.match(observation, /append its exact Choice bullet/);
+  for (const options of [{}, {variant:'extraction-v2'}, {safetyNotes:true}]) {
+    assert.doesNotMatch(renderMemoryTemplates(options)['observations.yaml'], /"scope":"reply"/);
+  }
+});

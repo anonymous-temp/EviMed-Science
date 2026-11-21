@@ -63,7 +63,37 @@ const REPLACEMENTS = {
       "    their side. A completed item becomes a dated completed state, with bounded earlier history. A due date is not a stage.\n    An opinion about difficulty is not a stage. Never invent a stage to fill this optional section;\n    retain an opinion in NOTES with the label \"User believes:\". A status change the user states\n    in passing or in a subordinate clause still updates this project, even when the main request is unrelated.\n"
     ]
   ],
+  "observations.yaml": [
+    [
+      "  One file per choice, named by the kind of task and the choice.",
+      `  A standalone request about the length, tone, format or language of this reply is an
+  observation even when the user names no task or document and there is no earlier draft.
+  For this case, use one bullet per independent user request in the same topic file,
+  including a later request in the same conversation. Copy just the complete request
+  verbatim as choice. For example, if the user says “Keep it brief.”, the whole bullet is
+  - Choice: {"kind":"length","scope":"reply","choice":"Keep it brief.","subject":"work"}
+  Use length for brevity, form for tone, format for language or layout. Use the fixed
+  scope reply only for an unqualified reply request. Keep an explicitly named task or
+  document scope. Count only the user's own requests, never assistant echoes or material.
+  A repeated request about this answer still has that scope. An explicit future default
+  or standing choice goes directly to PREFERENCES, even on its first occurrence.
+  For other choices, use one file per choice, named by the kind of task and the choice.`
+    ],
+    [
+      "      Markdown bullets, one per conversation that showed the choice, oldest first: the choice and",
+      "      For a standalone reply request, append its exact Choice bullet as specified above for each independent request.\n      For other observations, write Markdown bullets, one per conversation that showed the choice, oldest first: the choice and"
+    ]
+  ],
   "preferences.yaml": [
+    [
+      "  Keep, one topic per file:",
+      `  Keep the user's own explicit ongoing presentation requirements on first mention,
+  including a terse request for a default length, tone, format or language. Preserve the
+  named deliverable and each requested dimension when one request combines several.
+  A bare request for a shorter
+  answer with no standing scope belongs in OBSERVATIONS even when it stands alone.
+  Keep, one topic per file:`
+    ],
     [
       "  A place names where something goes; it does not say that something always exists to put\n",
       "  Do not add an exception, permission to ask, or scope the user never stated.\n  A place names where something goes; it does not say that something always exists to put\n"

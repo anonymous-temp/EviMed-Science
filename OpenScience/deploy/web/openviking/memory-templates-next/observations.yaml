@@ -13,7 +13,18 @@ description: |
   "月度汇总请做成折线图，不要表格", "参考文献用 APA"). The condition on one deliverable that the
   other types would usually omit (its size, its colours, its page count) may be noted here too, as long
   as it is a choice about how the work is made.
-  One file per choice, named by the kind of task and the choice. Each conversation that shows
+  A standalone request about the length, tone, format or language of this reply is an
+  observation even when the user names no task or document and there is no earlier draft.
+  For this case, use one bullet per independent user request in the same topic file,
+  including a later request in the same conversation. Copy just the complete request
+  verbatim as choice. For example, if the user says “Keep it brief.”, the whole bullet is
+  - Choice: {"kind":"length","scope":"reply","choice":"Keep it brief.","subject":"work"}
+  Use length for brevity, form for tone, format for language or layout. Use the fixed
+  scope reply only for an unqualified reply request. Keep an explicitly named task or
+  document scope. Count only the user's own requests, never assistant echoes or material.
+  A repeated request about this answer still has that scope. An explicit future default
+  or standing choice goes directly to PREFERENCES, even on its first occurrence.
+  For other choices, use one file per choice, named by the kind of task and the choice. Each conversation that shows
   the choice adds ITS OWN line to the file, also when a line for the choice already exists:
   the choice and the kind of task it was shown in, in a few words, with no name, no number and
   nothing of the work's content ("预算类表格：带透视表（做月度汇总时）"). Reuse the exact topic of an
@@ -66,7 +77,8 @@ fields:
   - name: content
     type: string
     description: |
-      Markdown bullets, one per conversation that showed the choice, oldest first: the choice and
+      For a standalone reply request, append its exact Choice bullet as specified above for each independent request.
+      For other observations, write Markdown bullets, one per conversation that showed the choice, oldest first: the choice and
       the kind of task it was shown in, a few words. Keep every earlier bullet as it is and add
       this conversation's own bullet at the end. No names, numbers or content of the work.
       Example:

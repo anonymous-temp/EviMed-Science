@@ -204,7 +204,7 @@ export class NativeMemoryWorker {
     this.consolidation = null;
     /** What promotes a choice two conversations repeated (`nativeMemoryObservations.mjs`); built from the store when there is one. @type {{ promote: (userId: string) => Promise<any> } | null} */
     this.observations = nativeMemory && typeof nativeMemory.keepRepeatedChoice === "function"
-      ? new NativeMemoryObservations({ overlay, sessions, memorySettings, inductionEnabled: config.memoryObservationInductionEnabled === true, keepRepeatedChoice: (userId, choice, origins, evidence) => nativeMemory.keepRepeatedChoice(userId, choice, origins, evidence), report }) : null;
+      ? new NativeMemoryObservations({ overlay, sessions, memorySettings, clinicalSegmentsEnabled: config.memoryClinicalSegmentsEnabled === true, inductionEnabled: config.memoryObservationInductionEnabled === true, keepRepeatedChoice: (userId, choice, origins, evidence) => nativeMemory.keepRepeatedChoice(userId, choice, origins, evidence), report }) : null;
     /** When each account's type allowlist was last checked against the deployment's (`#syncPolicy`). @type {Map<string, number>} */
     this.policyChecked = new Map();
     this.now = now ?? (() => new Date());
