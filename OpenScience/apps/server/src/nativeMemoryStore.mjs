@@ -646,15 +646,30 @@ export class NativeMemoryStore {
     return pairs;
   }
 
+  async #personalPreferenceFiles(userId) {
+    const context = await this.#ownedContext(userId);
+    return (await this.files(userId, { context })).filter(file => !file.namespaceId && !file.sensitive
+      && !personProjectScope(file.projectId) && ['profile', 'preferences'].includes(file.type));
+  }
+
+  /** Compare the full personal set even when a reader selected only one side. */
+  async earlierPreferenceValues(userId) {
+    const byUri = new Map();
+    if (!this.preferenceReconcileEnabled || !this.preferenceJudge?.available) return byUri;
+    const files = await this.#personalPreferenceFiles(userId);
+    for (const record of await this.records(userId, { files })) {
+      if (!record.earlierValues?.length) continue;
+      if (!byUri.has(record.uri)) byUri.set(record.uri, []);
+      byUri.get(record.uri).push(...record.earlierValues);
+    }
+    return byUri;
+  }
+
   /** The same current/earlier labels on an explicit conversation read as on the page. */
   async preferenceRecallText(userId, uri, text) {
     if (!this.preferenceReconcileEnabled || !this.preferenceJudge?.available || typeof text !== 'string') return text;
     if (!['profile', 'preferences'].includes(nativeMemoryFile(uri, this.sessions.memoryRoot(userId))?.type)) return text;
-    const own = this.memoryContexts ? await this.#fileContext(userId, uri) : null;
-    const files = (await this.files(userId, { context: own })).filter(file => !file.namespaceId && !file.sensitive
-      && !personProjectScope(file.projectId) && ['profile', 'preferences'].includes(file.type));
-    const records = await this.records(userId, { files });
-    return labelEarlierPreferences(text, records.filter(record => record.uri === uri).flatMap(record => record.earlierValues ?? []));
+    return labelEarlierPreferences(text, (await this.earlierPreferenceValues(userId)).get(uri));
   }
 
   /**
@@ -747,7 +762,10 @@ export class NativeMemoryStore {
       const eligible = held.filter(file => !file.namespaceId && !personProjectScope(file.projectId) && !file.sensitive
         && ['profile', 'preferences'].includes(file.type));
       const uris = new Set(eligible.map(file => file.uri));
-      const candidates = protectedRecords.filter(record => uris.has(record.uri));
+      // A marked safety history in the profile is independent of ordinary preference changes.
+      const safetyLines = new Set(eligible.filter(file => file.type === 'profile').flatMap(file => safetyNoteLines(file.body)).map(lineFingerprint));
+      const candidates = protectedRecords.filter(record => uris.has(record.uri)
+        && !(record.nativeType === 'profile' && safetyLines.has(lineFingerprint(record.value))));
       const times = preferenceStatementTimes(eligible, revisions, origins);
       const marked = markPreferenceOverlaps(candidates, await this.#preferencePairs(userId, candidates), times, changedPreferenceUris);
       const labels = new Map(marked.filter(row => row.earlierValues?.length).map(row => [row.id, row]));
@@ -1556,8 +1574,7 @@ export class NativeMemoryStore {
     if (!this.preferenceReconcileEnabled || !this.preferenceJudge?.available || changedUris?.length === 0) return { removed: 0 };
     return withNativeMemoryWrite(this.overlay.database, userId, async () => {
       this.#touch(userId);
-      const files = (await this.files(userId)).filter(file => !file.sensitive && !file.namespaceId
-        && !personProjectScope(file.projectId) && ['profile', 'preferences'].includes(file.type));
+      const files = await this.#personalPreferenceFiles(userId);
       const records = await this.records(userId, { files, changedPreferenceUris: changedUris });
       const older = records.filter(row => row.earlierValues?.length);
       if (!older.length) return { removed: 0 };

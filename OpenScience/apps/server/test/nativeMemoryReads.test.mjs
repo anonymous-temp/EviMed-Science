@@ -503,3 +503,36 @@ test('native ZIP titles map only filtered headings to opaque paths', async () =>
   }
   assert.doesNotMatch(Object.entries(zip).map(([path, bytes]) => `${path}\n${Buffer.from(bytes)}`).join('\n'), /private[- ]withdrawn[- ]name/i);
 });
+
+test('preference reconciliation keeps marked safety history and source-bound supplied material out of the judge and writes', async () => {
+  const { files, store } = engine({ count: 0, delay: 0 });
+  const profile = ROOT + '/profile.md', pref = ROOT + '/preferences/self/work.md';
+  const line = 'Use red headings.', safety = 'Retain the signed exception.', pasted = 'Use blue headings.';
+  const personal = 'Use green headings.';
+  const profileBody = '# User\n- ' + line + ' (as of 2026-11-01)\n## History [evimed-safety-notes]\n- ' + safety;
+  const preferenceBody = '- ' + pasted + '\n- ' + personal;
+  files.set(profile, { body: profileBody, modTime: '2026-11-01' });
+  files.set(pref, { body: preferenceBody, modTime: '2026-11-20' });
+  const receipt = (text, kind, speaker, subject) => [lineFingerprint(text), { statementSource: {
+    lineDigest: contentHash(text), source: { kind, speaker, subject, conditions: 'preserved' },
+  } }];
+  store.overlay.originsOf = async () => new Map([
+    [pref, new Map([receipt(pasted, 'pasted_material', 'unknown', 'other'), receipt(personal, 'user_statement', 'user', 'self')])],
+    [profile, new Map([receipt(line + ' (as of 2026-11-01)', 'user_statement', 'user', 'self')])],
+  ]);
+  store.overlay.files = async () => new Map([[profile, { uri: profile, usedCount: 1 }], [pref, { uri: pref }]]);
+  store.overlay.sensitiveUris = store.overlay.otherProjectUris = async () => [];
+  let inputs;
+  Object.assign(store, { sourceEnvelopeEnabled: true, preferenceReconcileEnabled: true,
+    preferenceJudge: { available: true, overlaps: async input => { inputs = input; return [{ profile: 0, preference: 0 }]; } } });
+  const [opening] = await store.openingFiles('u1', 'default', 1);
+  assert.deepEqual(inputs.profile, [line]);
+  assert.deepEqual(inputs.preferences, [personal]);
+  assert.equal(opening.uri, profile);
+  assert.ok(opening.body.includes('[earlier value] ' + line + ' (as of 2026-11-01)'));
+  assert.equal(opening.statementSources[0].text, line + ' (as of 2026-11-01)');
+  assert.deepEqual(await store.reconcilePreferences('u1'), { removed: 1 });
+  assert.ok(files.get(profile).body.includes(safety));
+  assert.ok(!files.get(profile).body.includes(line));
+  assert.equal(files.get(pref).body, preferenceBody);
+});

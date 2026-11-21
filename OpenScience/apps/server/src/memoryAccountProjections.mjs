@@ -47,6 +47,8 @@ export function createAccountProjections({ config, native, overlay, methods, pro
     const ordinary = files.filter(file => !file.namespaceId && !file.sensitive && memoryLines(file.body).some(line => classify(words(line))));
     if (!ordinary.length) return [];
     const records = await native.records(userId, { files: ordinary });
+    const earlier = config.memoryPreferenceReconcileEnabled && ordinary.some(file => file.type === 'preferences')
+      ? await native.earlierPreferenceValues(userId) : new Map();
     const origins = await overlay.originsOf(userId, ordinary.map(file => file.uri));
     const archives = [...new Set([...origins.values()].flatMap(lines => [...lines.values()].map(ref => ref.archiveUri)).filter(Boolean))];
     const external = archives.length && overlay.externalSources ? await overlay.externalSources(userId, archives) : new Map();
@@ -57,10 +59,11 @@ export function createAccountProjections({ config, native, overlay, methods, pro
       if (reset && !(Date.parse(record.updatedAt) >= Date.parse(reset))) continue;
       if (!file || record.status !== 'active' || record.sensitive || record.relations?.validity?.sources?.length || record.sourcePrivacy?.classification !== 'ordinary') continue;
       if (file.projectId && !await visible(userId, file.projectId)) continue;
+      const superseded = new Set((earlier.get(record.uri) ?? []).map(lineFingerprint));
       const lines = memoryLines(record.value);
       for (const line of lines) {
         const quote = words(line);
-        if (!classify(quote)) continue;
+        if (superseded.has(lineFingerprint(line)) || !classify(quote)) continue;
         const statement = record.statementSources?.find(row => row.text === line)?.source;
         if (statement && (!['user_statement', 'user_opinion', 'user_edit'].includes(statement.kind)
           || statement.speaker !== 'user' || statement.subject === 'other' || statement.conditions === 'missing')) continue;

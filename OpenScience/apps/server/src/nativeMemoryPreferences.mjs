@@ -2,16 +2,23 @@ import { memoryHistoryLine } from '@evimed/domain';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { contentHash, lineFingerprint, memoryLines } from './nativeMemoryOverlay.mjs';
 
+// A bound source must support a personal choice. Legacy rows without a source still follow the judge path.
+function personalPreferenceSource(source) {
+  return !source || ['user_statement', 'user_opinion', 'user_edit'].includes(source.kind)
+    && source.speaker === 'user' && source.subject === 'self' && source.conditions === 'preserved';
+}
+
 /** Only profile statements and preference-file lines can be two versions of one choice. */
 export function preferenceCandidates(records) {
   const admitted = records.filter(record => record.scope === 'user' && !record.sensitive && record.status !== 'archived');
-  const profile = admitted.filter(record => record.nativeType === 'profile' && record.document && record.value?.trim()
+  const profile = admitted.filter(record => record.nativeType === 'profile' && record.document && record.value?.trim() && personalPreferenceSource(record.sourceEnvelope)
     && record.id !== `${record.document.id}_${lineFingerprint(`# ${record.value}`).slice(0, 12)}` && !memoryHistoryLine(record.value));
   const preferences = [];
   for (const record of admitted.filter(row => row.nativeType === 'preferences')) {
     if (!record.value || record.value.includes('[Inferred from behaviour;')) continue;
     for (const text of memoryLines(record.value)) {
-      if (!/^(?:#{1,6}\s|> |(?:Stated choice|Choice): )/u.test(text) && !memoryHistoryLine(text)) preferences.push({ text, record });
+      const source = record.statementSources?.find(row => row.text === text)?.source;
+      if (personalPreferenceSource(source) && !/^(?:#{1,6}\s|> |(?:Stated choice|Choice): )/u.test(text) && !memoryHistoryLine(text)) preferences.push({ text, record });
     }
   }
   return { profile, preferences };

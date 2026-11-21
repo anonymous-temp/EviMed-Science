@@ -7,7 +7,7 @@ import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { renderResidentProfile } from '../src/residentProfile.mjs';
 
 const quote = '以后报告用表格。';
-function fixture() {
+function fixture({ earlierPreferenceValues = async () => new Map() } = {}) {
   const config={memoryAccountPresentationEnabled:true};
   const source = {id:'local-method',payload:{status:'approved',body:'Local statistical method with private project details.',
     contentDigest:inputDigest('method'),provenance:{scope:'statistical-analysis',sourceProjectId:'study',evidence:[{runId:'r', quote}]}}};
@@ -17,7 +17,7 @@ function fixture() {
     sourcePrivacy:{classification:'ordinary'},attribution:{origins:['manual']}}];
   const f={config, source, run, file, records, deleted:false, clinical:false, shared:false};
   const decisions=new Map(), origins=new Map(), external=new Map();
-  const projection=createAccountProjections({config, native:{files:async()=>[file],records:async()=>records},overlay:{instructionCheck:async(_u,id)=>decisions.get(id),recordInstructionCheck:async(_u,id,verdict)=>decisions.set(id,verdict),files:async()=>new Map([[file.uri,file]]),originsOf:async()=>origins,externalSources:async()=>external},
+  const projection=createAccountProjections({config, native:{earlierPreferenceValues,files:async()=>[file],records:async()=>records},overlay:{instructionCheck:async(_u,id)=>decisions.get(id),recordInstructionCheck:async(_u,id,verdict)=>decisions.set(id,verdict),files:async()=>new Map([[file.uri,file]]),originsOf:async()=>origins,externalSources:async()=>external},
     methods:{approvedMethods:async()=>[source]},provenance:{ordinaryDocument:async()=>!f.shared}, settings:{resetInstant:async()=>null},
     contexts:{forProject:async()=>({kind:f.shared?'geo-project':'owned',projectCreatedAt:'epoch'}),assertLive:async()=>{}},projectFor:async(userId,id)=>({id,userId}),
     projectRuns:async()=>[run],deleted:async()=>f.deleted,clinical:async(_u,_p,refs)=>f.clinical || refs.some(ref=>ref.sessionId==='sealed')});
@@ -128,4 +128,20 @@ test('account projections retain the statement source and exclude material and i
   f.source.payload.status = 'approved';
   f.run.memoryInput = humanInputReceipt(quote, Date.now(), [{ start:0, end:quote.length }]);
   assert.deepEqual(await read(), []);
+});
+
+test('account presentation omits an earlier personal choice while leaving its local record and other projections available', async () => {
+  let compared = 0;
+  const f = fixture({ earlierPreferenceValues: async userId => {
+    assert.equal(userId, 'u');
+    compared++;
+    return new Map([[f.file.uri, [f.file.body]]]);
+  } });
+  const read = () => f.projection.presentation('u', 'analysis', 'session');
+  assert.equal((await read()).length, 2);
+  assert.equal(compared, 0);
+  f.config.memoryPreferenceReconcileEnabled = true;
+  assert.deepEqual((await read()).map(row => row.content), [quote]);
+  assert.equal(compared, 1);
+  assert.equal(f.records[0].value, f.file.body);
 });

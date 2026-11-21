@@ -596,8 +596,12 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         files.readStatus.literalFallback = entries.length >= 512 ? 'partial' : 'searched';
       } catch { files.readStatus.literalFallback = 'unavailable'; files.readStatus.state = 'unavailable'; }
       if (kept.length) {
-        const ids = new Set(kept.map(hit => hit.uri));
-        files.memories = [...kept, ...files.memories.filter(hit => !ids.has(hit.uri))].slice(0, limit);
+        // A confirmed alias may exist only in its merge receipt after cleanup of the live file.
+        const confirmed = files.memories.filter(hit => hit.retrieval === 'confirmed_alias');
+        const confirmedUris = new Set(confirmed.map(hit => hit.uri));
+        const exact = [...confirmed, ...kept.filter(hit => !confirmedUris.has(hit.uri))];
+        const ids = new Set(exact.map(hit => hit.uri));
+        files.memories = [...exact, ...files.memories.filter(hit => !ids.has(hit.uri))].slice(0, limit);
         files.resources = files.resources.filter(hit => !ids.has(hit.uri)).slice(0, limit - files.memories.length);
         files.skills = files.skills.filter(hit => !ids.has(hit.uri)).slice(0, limit - files.memories.length - files.resources.length);
         files.total = files.memories.length + files.resources.length + files.skills.length;
@@ -1511,17 +1515,19 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           sourceFiles ??= ctx.fileMetadata();
           const metadata = (await sourceFiles).get(uri);
           const original = text;
+          let sourceUnit;
           text = await ctx.preferenceText(uri, text);
           if (config.memorySourceEnvelopeEnabled === true && ctx.origin !== 'agent-api') {
             const origins = await overlay?.originsOf?.(user.id, [uri]).catch(() => new Map());
             const bound = visibleStatementSources(original, origins?.get(uri), { safetyProjection: Boolean(metadata?.safetySource) });
             // Keep the whole fenced body. A line map may clarify an attribution but never replaces its context.
             const source = memoryEnvelope(metadata);
-            text = JSON.stringify({ source, ...memoryQuoteUnit(text, source, bound) });
+            sourceUnit = { source, ...memoryQuoteUnit(text, source, bound) };
+            text = JSON.stringify(sourceUnit);
           } else if (metadata && ['origin', 'attribution', 'speaker', 'asOf', 'updatedAt', 'earlierValue'].some(key => metadata[key] != null)) text = `[Memory source ${memorySourceLabel(metadata)}]\n${text}`;
           if (observationFile(uri, `${userRoot}/memories`)) return `[seen once — observed choice, not a standing preference]\n${text}`;
           if (config.memoryPersonAliasHintEnabled !== true || nativeMemoryFile(uri, `${userRoot}/memories`)?.type !== 'people') return text;
-          if (!await ctx.personIdentityVisible(uri, text)) return text;
+          if (sourceUnit && sourceUnit.text !== original || !await ctx.personIdentityVisible(uri, original)) return text;
           if (!people) people = (async () => {
             const candidates = await view.tree(user.id, `${userRoot}/memories/people`, { levelLimit: 1, maxNodes: 200 }).catch(() => []);
             const rows = [];
@@ -1532,13 +1538,14 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             }
             return rows;
           })();
-          const label = personLabel(uri, text), aliases = confirmedAliases(text);
+          const label = personLabel(uri, original), aliases = confirmedAliases(original);
           const distinct = config.memoryPersonMergeEnabled === true ? await personEdges.dismissed(user.id) : new Set();
           const siblings = (await people).filter(row => row.uri !== uri && !distinct.has(personPairId(uri, row.uri)) && (closePersonNames(label, row.label)
             || aliases.includes(row.label) || row.aliases.includes(label))).slice(0, 8);
           if (!siblings.length) return text;
-          return `${text}\n\nRelated people files (possibly the same person — not confirmed; ask the user or report separately; never mix their facts):\n`
+          const hint = `Related people files (possibly the same person — not confirmed; ask the user or report separately; never mix their facts):\n`
             + siblings.map(row => `- ${row.label}: ${row.uri}`).join('\n');
+          return sourceUnit ? JSON.stringify({ ...sourceUnit, relatedPeopleHint: hint }) : `${text}\n\n${hint}`;
         },
         admit: (/** @type {string | null} */ engineSessionId, /** @type {number | null} */ at = null) => {
           engineSessionId = toolSession ? `dsh-${toolSession}` : engineSessionId;

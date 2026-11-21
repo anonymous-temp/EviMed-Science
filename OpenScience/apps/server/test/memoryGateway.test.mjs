@@ -2049,3 +2049,63 @@ test('only the live human reply can authorize a decision in a fork or after an u
   ] }), [{ role: 'assistant', text: 'Are A and B the same person?' }, { role: 'user', text: 'yes' },
     { role: 'user', text: '' }, { role: 'user', text: '' }]);
 });
+
+test('source-bound people hints use the live heading of an opaque path and stay outside its quoted facts', async t => {
+  const f = await fixture(t, { config: { memoryPersonAliasHintEnabled: true, memorySourceEnvelopeEnabled: true } });
+  const body = '# 王阿姨\n- Likes walking.';
+  const uri = f.stub.seedMemory(OV_USER, 'people/card-a.md', body);
+  const sibling = f.stub.seedMemory(OV_USER, 'people/card-b.md', '# 小王阿姨\n- Likes flowers.');
+  const answer = await f.call('GET', '/api/v1/content/read?uri=' + encodeURIComponent(uri));
+  const result = JSON.parse(answer.json.result);
+  assert.equal(result.text, body);
+  assert.ok(result.relatedPeopleHint.includes(sibling));
+  assert.match(result.relatedPeopleHint, /not confirmed/);
+  assert.doesNotMatch(answer.json.result, /Likes flowers/);
+});
+
+test('literal rescue retains a verified alias hit even when only its original receipt mentions the name', async t => {
+  const keep = ROOT + '/memories/people/keeper.md', old = ROOT + '/memories/people/retired.md';
+  const f = await fixture(t, { config: { memoryPersonMergeEnabled: true, memoryLiteralFallbackEnabled: true }, overlay: {
+    configured: true, sensitiveUris: async () => [], otherProjectUris: async () => [], noteRecalled: async () => {},
+    personMerges: async () => [{ state: 'applied', keepUri: keep, mergeUri: old, snapshot: {
+      keep: { body: '# Rin' }, merge: { body: '# ZX17' },
+    } }],
+  } });
+  f.stub.seedMemory(OV_USER, 'people/keeper.md', '# Rin\n- Likes walking.');
+  const neighbor = f.stub.seedMemory(OV_USER, 'notes/ZX17.md', 'An unrelated project.');
+  f.sessions.search = async () => ({ result: { memories: [] } });
+  for (const limit of [1, 2]) {
+    const found = await f.call('POST', '/api/v1/search/search', { query: 'ZX17', limit });
+    assert.deepEqual(found.json.result.memories.map(hit => [hit.uri, hit.retrieval]),
+      [[keep, 'confirmed_alias'], [neighbor, 'literal_index']].slice(0, limit));
+    assert.equal(found.json.result.total, limit);
+  }
+});
+
+test('earlier-value labels preserve source receipts, missing-condition fences and exact delivery hashes', async t => {
+  const { recallDigest } = await import('../src/memoryRecallReceipt.mjs');
+  const { contentHash, lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const uri = ROOT + '/memories/profile.md', line = 'Use tables (as of 2026-11-01)', body = '# User\n- ' + line;
+  const source = { kind: 'user_statement', speaker: 'user', subject: 'self', conditions: 'preserved' };
+  const annotated = body.replace('Use tables', '[earlier value] Use tables');
+  const operations = [];
+  const f = await fixture(t, { config: { memorySourceEnvelopeEnabled: true, memoryPreferenceReconcileEnabled: true },
+    admission: fixedAdmission({ sessionId: 'reader' }), recordDelivery: async row => operations.push(row.operation),
+    overlay: { configured: true, sensitiveUris: async () => [], otherProjectUris: async () => [], noteRecalled: async () => {},
+      originsOf: async () => new Map([[uri, new Map([[lineFingerprint(line), { statementSource: { lineDigest: contentHash(line), source } }]])]]) },
+    memoryTool: { preferenceRecallText: async (_user, _uri, text) => { assert.equal(text, body); return annotated; } } });
+  f.stub.seedMemory(OV_USER, 'profile.md', body);
+  const read = async () => (await f.call('GET', '/api/v1/content/read?uri=' + encodeURIComponent(uri))).json.result;
+  const delivered = await read();
+  assert.deepEqual(JSON.parse(delivered).statements, [{ text: line, source }]);
+  assert.equal(JSON.parse(delivered).text, annotated);
+  const [external] = await f.handler.opening({ userId: USER, projectId: 'p1' });
+  assert.equal(external.value, annotated);
+  assert.equal(external.elided, false);
+  source.conditions = 'missing';
+  const withheld = await read();
+  assert.match(JSON.parse(withheld).text, /Incomplete conditions/);
+  assert.doesNotMatch(withheld, /Use tables|earlier value/);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(operations.map(op => op.references[0].contentHash), [delivered, withheld].map(recallDigest));
+});
