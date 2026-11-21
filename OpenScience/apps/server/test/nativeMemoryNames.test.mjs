@@ -57,3 +57,54 @@ test('reconciliation never writes a destination whose name alone is withdrawn', 
   assert.equal(f.revisions.length, 0);
   assert.equal(f.bodies.get(f.a), f.before);
 });
+
+test('a date stamp stripped by the withdrawal fingerprint survives copying and retry', async () => {
+  const f = fixture();
+  const observation = 'Search frozen';
+  const old = `- ${observation} (as of 2026-03-01)`, current = `- ${observation} (as of 2026-04-01)`;
+  f.bodies.set(f.a, f.before + '\n' + old);
+  f.bodies.set(f.b, f.after + '\n' + current);
+  assert.equal(await reconcileMemoryNames({ userId: 'u', ...f }), 1);
+  const merged = f.bodies.get(f.a);
+  assert.ok(merged.indexOf(current) < merged.indexOf(old) && merged.includes(old));
+  assert.ok(merged.includes(f.before.split('\n')[1]));
+  assert.ok(merged.includes(f.after.split('\n')[1]));
+  assert.equal(mergeNormalizedMemoryText(merged, f.before + '\n' + old), merged);
+});
+
+test('a late withdrawn line in a formatting sibling cannot enter the surviving card', async () => {
+  const f = fixture();
+  const forgotten = 'The working title was Juniper.';
+  f.overlay.removals = async () => [{ text: forgotten, fingerprint: lineFingerprint(forgotten) }];
+  f.bodies.set(f.b, f.after + '\n- ' + forgotten);
+  assert.equal(await reconcileMemoryNames({ userId: 'u', ...f }), 0);
+  assert.equal(f.bodies.get(f.a), f.before);
+  // Once normal withdrawal cleanup has removed the late copy, retry copies only eligible lines.
+  f.bodies.set(f.b, f.after);
+  assert.equal(await reconcileMemoryNames({ userId: 'u', ...f }), 1);
+  assert.ok(!f.bodies.get(f.a).includes(forgotten));
+});
+
+test('recorded checkpoint replays every distinct dated statement of formatting-only project siblings', {
+  skip: process.env.WRT_DUPLICATE_SNAPSHOT ? false : 'requires the archived synthetic duplicate checkpoint',
+}, async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { files } = JSON.parse(await readFile(process.env.WRT_DUPLICATE_SNAPSHOT, 'utf8'));
+  const entries = Object.entries(files).filter(([path]) => path.startsWith('projects/'));
+  let pairs = 0;
+  for (const [index, [left, older]] of entries.entries()) for (const [right, newer] of entries.slice(index + 1)) {
+    const a = root + '/' + left, b = root + '/' + right;
+    if (memoryNameKey(a, root) !== memoryNameKey(b, root)) continue;
+    const f = fixture();
+    f.bodies.clear(); f.files.clear();
+    for (const [uri, body] of [[a, older], [b, newer]]) {
+      f.bodies.set(uri, body); f.files.set(uri, { body, projectId: 'recorded' });
+    }
+    assert.equal(await reconcileMemoryNames({ userId: 'u', ...f }), 1);
+    const [merged] = f.bodies.values();
+    for (const line of [...memoryLines(older), ...memoryLines(newer)]) assert.ok(memoryLines(merged).includes(line));
+    assert.equal(await reconcileMemoryNames({ userId: 'u', ...f }), 0);
+    pairs++;
+  }
+  assert.ok(pairs > 0, 'the snapshot must contain an actual duplicate');
+});
