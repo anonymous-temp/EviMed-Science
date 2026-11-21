@@ -1,3 +1,4 @@
+import { memoryEnvelope, memoryQuoteUnit } from './memorySourceEnvelope.mjs';
 import fs from "node:fs/promises";
 import path from "node:path";
 import { workspaceLayout } from "@evimed/domain";
@@ -138,10 +139,10 @@ function escapeContext(value) {
  * (review R1/R4, 2026-10-10). Extra speaker, record-date and earlier-value metadata stays on the memo;
  * it cannot add prose or extend this closed vocabulary. `lookup` is the line beside the profile that says what else can be looked up, last.
  * @param {readonly any[]} memories
- * @param {{ lookup?: string }} [options]
+ * @param {{ lookup?: string, sourceBound?: boolean }} [options]
  * @returns {string}
  */
-export function renderMemoryContext(memories, { lookup = "" } = {}) {
+export function renderMemoryContext(memories, { lookup = "", sourceBound = false } = {}) {
   if (!Array.isArray(memories) || memories.length === 0) return "";
   const uncertain = memories.some((memo) => Array.isArray(memo?.caveats) && memo.caveats.length > 0);
   return [
@@ -151,13 +152,16 @@ export function renderMemoryContext(memories, { lookup = "" } = {}) {
     ...(uncertain ? ["带 caveats 属性的记忆目前并不确定：不要当作定论陈述，需要时先核实。"] : []),
     ...memories.map((memo, index) => {
       const caveats = Array.isArray(memo.caveats) ? memo.caveats.filter((item) => typeof item === "string") : [];
+      const unit = sourceBound ? memoryQuoteUnit(memo.content, memoryEnvelope(memo), memo.statementSources)
+        : { text: memo.content, statements: [] };
       return [
-        `<evimed-memory index="${index + 1}" id="${escapeContext(memo.id)}" type="${escapeContext(memo.memoryType ?? "manual")}" kind="${escapeContext(memo.kind ?? "note")}" scope="${escapeContext(memo.scope ?? "user")}" origin="${originOf(memo.origin) ?? "unrecorded"}"${caveats.length ? ` caveats="${escapeContext(caveats.join(","))}"` : ""}>`,
-        escapeContext(memo.content),
+        `<evimed-memory index="${index + 1}" id="${escapeContext(memo.id)}" type="${escapeContext(memo.memoryType ?? "manual")}" kind="${escapeContext(memo.kind ?? "note")}" scope="${escapeContext(memo.scope ?? "user")}" origin="${originOf(memo.origin) ?? "unrecorded"}"${sourceBound ? ` source="${escapeContext(JSON.stringify(memoryEnvelope(memo)))}"` : ""}${caveats.length ? ` caveats="${escapeContext(caveats.join(","))}"` : ""}>`,
+        escapeContext(unit.text),
+        ...unit.statements.map(row => `<statement-source data="${escapeContext(JSON.stringify(row.source))}">${escapeContext(row.text)}</statement-source>`),
         ...(memo.validity?.from || memo.validity?.until
           ? [`有效期：${escapeContext(memo.validity.from ?? "起点未知")} 起，${escapeContext(memo.validity.until ?? "至今")} 止`] : []),
         ...(Array.isArray(memo.conflictsWith) ? memo.conflictsWith.map((other) =>
-          `与此冲突的另一条记忆（${escapeContext(other.key)}${originOf(other.origin) ? `，origin ${originOf(other.origin)}` : ""}）：${escapeContext(other.summary)}`) : []),
+          `与此冲突的另一条记忆（${escapeContext(other.key)}${originOf(other.origin) ? `，origin ${originOf(other.origin)}` : ""}）：${(sourceBound ? '请读取完整的冲突记录。' : escapeContext(other.summary))}`) : []),
         ...(Array.isArray(memo.staleSources) ? memo.staleSources.map((source) =>
           `所依据的来源 ${escapeContext(source.id)}：${SOURCE_STATE_TEXT[/** @type {keyof typeof SOURCE_STATE_TEXT} */ (source.state)] ?? escapeContext(source.state)}`) : []),
         "</evimed-memory>",
@@ -305,7 +309,7 @@ export async function prepareResearchContext(
     : "当前个人知识库为空；不要声称读取过用户资料。";
   // What `memory.md` carries for a delegated child: the profile as it stands, at every dispatch. A child never saw the
   // conversation's earlier messages, so what the root was handed once is not the child's to assume.
-  const memoryContext = resident ? resident.text : renderMemoryContext(memories);
+  const memoryContext = resident ? resident.text : renderMemoryContext(memories, { sourceBound: config.memorySourceEnvelopeEnabled === true });
   // What the root's own context carries: the profile when it is due, and nothing when the conversation already holds it —
   // not even a sentence saying so. There is no "nothing was retrieved" line any more: nothing is retrieved for the question
   // (the recall tool looks things up when the model asks), and a sentence about memory the model did not use is one it can

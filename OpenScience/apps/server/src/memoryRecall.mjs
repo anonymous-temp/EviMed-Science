@@ -82,6 +82,7 @@ export async function recallAcrossMemory({ capsules = null, memory = null }, use
       scope: memo.scope ?? "user",
       memoryType: memo.memoryType ?? "native",
       content: memo.content,
+      ...(memo.sourceEnvelope ? { sourceEnvelope: memo.sourceEnvelope, quoteUnit: memo.quoteUnit, statementSources: memo.statementSources } : {}),
       updatedAt: memo.updatedAt ?? null,
       confidence: memo.confidence ?? null,
       importance: memo.importance ?? null,

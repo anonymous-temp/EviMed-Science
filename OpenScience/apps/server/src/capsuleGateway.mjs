@@ -1,3 +1,4 @@
+import { memoryEnvelope } from './memorySourceEnvelope.mjs';
 import { readStatus, withReadStatus } from './memoryReadStatus.mjs';
 import { CAPSULE_FACT_KINDS, SOURCE_SCOPE_UNAVAILABLE_CONTEXT, identifierShapesIn } from "@evimed/domain";
 import { recordRecallTool } from "./memoryMetrics.mjs";
@@ -108,12 +109,12 @@ export function createNativeCapsuleSearch({ service, subscriptions = null, conte
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null,
  *   resident?: { forSession: (user: any, project: any, sessionId: string) => Promise<{ text: string, digest: string, memories: { id: string, kind?: string, scope?: string }[] } | null>,
  *     attached: (user: any, project: any, sessionId: string, receipt: { digest: string, memories: { id: string, kind?: string, scope?: string }[] }) => Promise<unknown> } | null,
- *   contextPolicies?: any, contextItems?: any }} dependencies
+ *   contextPolicies?: any, contextItems?: any, sourceBound?: boolean }} dependencies
  *   `resident.forSession` answers the block a conversation is to be handed at its first step, or null when it holds it already (or is not to have one);
  *   `resident.attached` notes that it has been handed. `contextPolicies` says whether the workload's project is a shared GEO project, whose
  *   recall reads only the entries `contextItems` admits and whose notes are refused (`contextOnly`). */
 export function createCapsuleGatewayHandler({ runtimeManager, store, service, sessions = null, nativeRoutes = null, subscriptions = null, clinicalContext = null,
-  resident = null, recallLimit = 5, recallMaxLimit = 8, contextPolicies = null, contextItems = null }) {
+  sourceBound = false, resident = null, recallLimit = 5, recallMaxLimit = 8, contextPolicies = null, contextItems = null }) {
   const maxLimit = Math.max(1, Math.min(30, Math.trunc(Number(recallMaxLimit)) || 8));
   const defaultLimit = Math.max(1, Math.min(maxLimit, Math.trunc(Number(recallLimit)) || 5));
   const windows = new Map();
@@ -252,7 +253,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
         // is not mistaken for a tool that failed. A recall the researcher paused already carries its own notice, and says so.
         const answer = !pause?.recall && found.items.length === 0 && !found.notice ? { ...found, notice: NOTHING_ABOVE_THE_FLOOR } : found;
         recordRecallTool(pause?.recall ? "paused" : answer.items.length ? "hit" : "empty", answer.items.length);
-        sendJson(res, 200, answer);
+        sendJson(res, 200, sourceBound ? { ...answer, items: answer.items.map(item => ({ ...item, sourceEnvelope: memoryEnvelope(item) })) } : answer);
       } else if (shared) {
         sendJson(res,200,{entry:null,reviewRequired:false,takesEffect:false,contextOnly:true,status:"not_kept",
           notice:"请通过本项目的记忆入口记录需要保留的内容。"});

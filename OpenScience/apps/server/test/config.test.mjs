@@ -88,6 +88,18 @@ test("the pasted-instruction attribution experiment defaults off and supports en
   } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
 });
 
+test("source envelopes defaults off and supports environment and explicit overrides", () => {
+  const key = "OPEN_SCIENCE_MEMORY_SOURCE_ENVELOPE_ENABLED";
+  const saved = process.env[key];
+  try {
+    delete process.env[key];
+    assert.equal(loadConfig({ rootDir: repoRoot }).memorySourceEnvelopeEnabled, false);
+    process.env[key] = "true";
+    assert.equal(loadConfig({ rootDir: repoRoot }).memorySourceEnvelopeEnabled, true);
+    assert.equal(loadConfig({ rootDir: repoRoot, memorySourceEnvelopeEnabled: false }).memorySourceEnvelopeEnabled, false);
+  } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
+});
+
 test("robust instruction attribution is independently default off and accepts explicit overrides", () => {
   const key = "OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_ROBUST_ENABLED";
   const saved = process.env[key];

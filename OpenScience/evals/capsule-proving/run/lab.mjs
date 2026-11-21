@@ -325,6 +325,7 @@ export async function startLabGateways(shared, config, variants = []) {
     for (const entry of [{ name: "", config: {} }, ...variants]) {
       const merged = { ...config, ...entry.config };
       const handler = createMemoryGatewayHandler({ ...shared, config: merged,
+        ...(shared.storeFor ? { memoryTool: shared.storeFor(merged) } : {}),
         ...(shared.historySearchFor ? { historySearch:shared.historySearchFor(merged) } : {}),
         admission: entry.name && shared.admissionFor ? shared.admissionFor(merged) : shared.admission });
       gateways.set(entry.name, { ...await startGatewayServer(handler, shared.onFailure), handler, config: merged });
@@ -510,12 +511,19 @@ export async function openLab({
       policies: { forProject: async () => ({ kind: "owned" }), policiesForOwner: async () => [], read: () => { throw new Error("no shared namespace in the lab"); } },
     });
     const productRejectionJudge = createRejectionJudge({ config: rejectionJudge ? config : { ...config, deepseekApiKey: "", nativeMemoryRejectionJudgeEnabled: false } });
-    const nativeMemory = new NativeMemoryStore({ forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions, overlay, memoryContexts: contexts, rejectionJudge: productRejectionJudge, ...(now ? { now } : {}), report: say });
+    const makeStore = selected => new NativeMemoryStore({ sourceEnvelopeEnabled: selected.memorySourceEnvelopeEnabled, forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions, overlay, memoryContexts: contexts, rejectionJudge: productRejectionJudge, ...(now ? { now } : {}), report: say });
+    const nativeMemory = makeStore(config);
+    const readStores = new Map([[config.memorySourceEnvelopeEnabled === true, nativeMemory]]);
+    const storeFor = selected => {
+      const flag = selected.memorySourceEnvelopeEnabled === true;
+      if (!readStores.has(flag)) readStores.set(flag, makeStore(selected));
+      return readStores.get(flag);
+    };
     const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay, nativeMemory, memoryContexts: contexts, rejectionJudge: productRejectionJudge,
       forgetRequestJudge: createForgetRequestJudge({ config }),
       pastedInstructionJudge: createPastedInstructionJudge({ config }), now, report: say });
     const resources = new OpenVikingResources({ client });
-    const profilesFor = (selectedConfig) => createLabResidentProfiles({ config: selectedConfig, memorySettings, nativeMemory });
+    const profilesFor = (selectedConfig) => createLabResidentProfiles({ config: selectedConfig, memorySettings, nativeMemory: storeFor(selectedConfig) });
     const residentProfiles = profilesFor(config);
 
     /** @param {string} userId @param {string} projectId */
@@ -624,7 +632,8 @@ export async function openLab({
       admissionFor: (merged) => createMemoryAdmission({ config: merged, memorySettings }),
       historySecrets: history.secrets,
       historySearch: (request) => history.search(request),
-      historySearchFor: selected => request => history.search(request,{ retrievalV2:selected.memoryHistoryRetrievalV2Enabled === true }),
+      storeFor,
+      historySearchFor: selected => request => history.search(request,{ retrievalV2:selected.memoryHistoryRetrievalV2Enabled === true, sourceBound: selected.memorySourceEnvelopeEnabled === true }),
     }, config, answerVariants);
     const gateway = gatewayGroup.gateways.get("");
     const handler = gateway.handler;

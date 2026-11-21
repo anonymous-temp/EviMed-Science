@@ -45,8 +45,8 @@ export function safetyNoteFile(file, { memoryRoot, projectId, hiddenUris = [], p
 
 /** A bounded safety-only view, newest file first, with the ordinary block's escaping and provenance.
  * Files have already passed the store's deletion redaction and source-receipt readers.
- * @param {any[]} files @param {{ maxTokens: number, maxChars?: number, lineMaxChars?: number }} options */
-export function renderSafetyNotes(files, { maxTokens, maxChars = SAFETY_NOTES_MAX_CHARS, lineMaxChars = SAFETY_NOTE_LINE_MAX_CHARS }) {
+ * @param {any[]} files @param {{ maxTokens: number, maxChars?: number, lineMaxChars?: number, sourceBound?: boolean }} options */
+export function renderSafetyNotes(files, { maxTokens, sourceBound = false, maxChars = SAFETY_NOTES_MAX_CHARS, lineMaxChars = SAFETY_NOTE_LINE_MAX_CHARS }) {
   if (/** @type {any} */ (files).unavailable) return { text: '安全历史暂时无法读取；提供个人建议前，用 mcp__openviking__search 查找并读取对应人的文件；这不代表没有已记录的风险。', memos: [] };
   const rows = files.map(file => ({ file, lines: safetyNoteLines(file.body, file.type) })).filter(row => row.lines.length)
     .sort((a, b) => String(b.file.updatedAt ?? b.file.modTime ?? '').localeCompare(String(a.file.updatedAt ?? a.file.modTime ?? ''))
@@ -62,9 +62,9 @@ export function renderSafetyNotes(files, { maxTokens, maxChars = SAFETY_NOTES_MA
     const reference = `${label} · ${file.sourceUri ?? file.uri} · 记录更新 ${date ?? '未知'}`;
     const content = `${reference}：${lines.join('；')}`;
     const memo = { id: `native-safety:${file.uri}`, memoryType: 'native_safety_note', kind: 'note',
-      scope: 'user', origin: file.origin ?? 'unknown', content, updatedAt: date, originalSources: file.originalSources ?? [],
-      sourcePrivacy: file.sourcePrivacy, attribution: file.attribution };
-    const rendered = renderMemoryContext([memo]);
+      scope: file.type === 'people' && file.projectId && file.projectId !== 'default' ? 'project' : 'user', origin: file.origin ?? 'unknown', content, updatedAt: date, originalSources: file.originalSources ?? [],
+      statementSources: file.statementSources, sourcePrivacy: file.sourcePrivacy, attribution: file.attribution };
+    const rendered = renderMemoryContext([memo], { sourceBound });
     const chars = [...rendered].length, tokens = estimatePromptTokens(rendered);
     if (chars <= remainingChars && tokens <= remainingTokens && (file.type === 'safety_notes' || [...content].length <= lineMaxChars)) {
       remainingChars -= chars;
@@ -77,10 +77,10 @@ export function renderSafetyNotes(files, { maxTokens, maxChars = SAFETY_NOTES_MA
   }
   // The content budget is fixed. A compact directory grows by one escaped pointer for each overflow file.
   // Keep the individual source receipts on delivery even though the pointers share an envelope.
-  const directory = pointers.length ? [{ id: 'native-safety-directory', memoryType: 'native_safety_note', kind: 'note',
+  const directory = sourceBound ? pointers : pointers.length ? [{ id: 'native-safety-directory', memoryType: 'native_safety_note', kind: 'note',
     scope: 'user', origin: 'unknown', content: pointers.map(row => row.content).join('\n') }] : [];
   const text = [HEADER, '按卡内主体区分本人和他人；记录更新时间与事实发生日期分开核对。',
-    ...renderMemoryContext([...memos, ...directory]).split('\n').slice(1), ...(pointers.length ? [SAFETY_NOTES_MORE] : []),
+    ...renderMemoryContext([...memos, ...directory], { sourceBound }).split('\n').slice(1), ...(pointers.length ? [SAFETY_NOTES_MORE] : []),
     ...(coverage ? [coverage] : []), CHECK].join('\n');
   return { text, memos: [...memos, ...pointers] };
 }

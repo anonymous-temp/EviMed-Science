@@ -1,4 +1,5 @@
 import { withdrawSafetyProjection } from './memorySafetyMigration.mjs';
+import { statementSource, visibleStatementSources } from './memoryStatementSources.mjs';
 import { filterCapturedMessage } from './memoryGateway.mjs';
 import { isNeutralProfileHeading, profileMemoryStatements, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
 import { readStatus } from './memoryReadStatus.mjs';
@@ -133,19 +134,30 @@ export const RECENT_WORK_LINES = 3;
  * a few words (the template writes no content of the work, and this cuts what is longer), joined into one sentence. Null when there are none.
  * @param {readonly any[]} records the project's `recent_work` records @returns {{ slot: string, recordId: string, text: string, updatedAt: string | null } | null}
  */
-export function recentWorkRow(records) {
+export function recentWorkRow(records, whole = false) {
   const newestFirst = [...records].sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
   /** @type {string[]} */
   const lines = [];
   for (const record of newestFirst) {
-    for (const line of statements(record.value)) {
-      const text = line.replace(AS_OF, "").replace(/\s+/g, " ").trim().slice(0, 120);
+    for (const line of whole ? completeCardLines(record.value) : statements(record.value)) {
+      if (whole && line.length > 120) continue;
+      const text = whole ? line : line.replace(AS_OF, "").replace(/\s+/g, " ").trim().slice(0, 120);
       if (text && !lines.includes(text)) lines.push(text);
       if (lines.length >= RECENT_WORK_LINES) break;
     }
     if (lines.length >= RECENT_WORK_LINES) break;
   }
   return lines.length ? { slot: "recent_work", recordId: newestFirst[0].id, text: lines.join("；"), updatedAt: newestFirst[0].updatedAt ?? null } : null;
+}
+
+// Preserve wrapped Markdown continuations before applying any excerpt budget.
+function cardUnits(body) {
+  return String(body ?? '').split(/\n(?=\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s))/).map(line => line.trim());
+}
+
+function completeCardLines(body) {
+  return cardUnits(body).filter(line => line && !line.startsWith('#') && !isLabelLine(line))
+    .map(line => line.replace(/^(?:[-*+]|\d+[.)])\s+/, ''));
 }
 
 /** A label line, or a statement: label lines are the platform's and are not shown as facts. @param {string} line */
@@ -317,10 +329,10 @@ const MAX_NATIVE_PACK_BYTES = 128 * 1024 * 1024;
  * the next conversation of the project is handed it as it is handed the rest.
  * `sections`: also the sections whose heading the closed list does not know, each as a row named by its heading (what a conversation of the
  * project is handed, `residentCard`); the memory page's 项目 tab keeps the card to the six slots and the clinical elements, as it always read it.
- * @param {readonly any[]} everything the account's records @param {string} projectId @param {{ sections?: boolean }} [options]
+ * @param {readonly any[]} everything the account's records @param {string} projectId @param {{ sections?: boolean, whole?: boolean }} [options]
  * @returns {{ slot: string, label?: string, recordId: string, text: string, updatedAt: string | null }[]}
  */
-export function projectCardRows(everything, projectId, { sections = false } = {}) {
+export function projectCardRows(everything, projectId, { sections = false, whole = false } = {}) {
   const records = everything.filter((record) => record.nativeType === "project_context" && record.scopeId === projectId);
   const SLOT_OF_HEADING = { "目标": "goal", "范围或对象": "subject", "材料与数据": "data_source", "阶段": "stage", "约束": "constraints",
     "goal": "goal", "scope": "subject", "materials and data": "data_source", "stage": "stage", "constraints": "constraints" };
@@ -334,8 +346,8 @@ export function projectCardRows(everything, projectId, { sections = false } = {}
   for (const record of records) {
     let section = "";
     let sectionLabel = "";
-    for (const line of String(record.value).split("\n")) {
-      const trimmed = line.trim();
+    for (const line of whole ? cardUnits(record.value) : String(record.value).split("\n")) {
+      const trimmed = whole ? line.replace(/\s+/g, " ").trim() : line.trim();
       const heading = /^##\s+(.+)$/.exec(trimmed);
       if (heading) { sectionLabel = heading[1].replace(/[（(].*$/, "").trim(); section = sectionLabel.toLowerCase(); continue; }
       const field = /^(?:领域|field)[：:]\s*(.+)$/i.exec(trimmed);
@@ -347,7 +359,7 @@ export function projectCardRows(everything, projectId, { sections = false } = {}
       if (earlierField) {
         const heldField = card.get('field');
         if (heldField?.recordId === record.id) card.set('field', { ...heldField,
-          text: `${heldField.text}；${history.prefix}${earlierField[1].trim()}${history.suffix}`.slice(0, 600) });
+          text: `${heldField.text}；${history.prefix}${earlierField[1].trim()}${history.suffix}`.slice(0, whole ? undefined : 600) });
         continue;
       }
       const element = /^([^：:]{1,24})[：:]\s*(.+)$/.exec(history?.value ?? item);
@@ -356,20 +368,20 @@ export function projectCardRows(everything, projectId, { sections = false } = {}
       if (!slot) {
         if (sections && section && !ELEMENTS.has(section) && sectionLabel) {
           const held = others.get(sectionLabel);
-          others.set(sectionLabel, held && held.recordId === record.id ? { ...held, text: `${held.text}；${item}`.slice(0, 600) }
-            : held ?? { slot: "other", label: sectionLabel.slice(0, 24), recordId: record.id, text: item.slice(0, 600), updatedAt: record.updatedAt });
+          others.set(sectionLabel, held && held.recordId === record.id ? { ...held, text: `${held.text}；${item}`.slice(0, whole ? undefined : 600) }
+            : held ?? { slot: "other", label: sectionLabel.slice(0, 24), recordId: record.id, text: item.slice(0, whole ? undefined : 600), updatedAt: record.updatedAt });
         }
         continue;
       }
       const value = inElements ? history ? `${history.prefix}${element[2].trim()}${history.suffix}` : element[2].trim() : item;
       const held = card.get(slot);
-      card.set(slot, held && held.recordId === record.id ? { ...held, text: `${held.text}；${value}`.slice(0, 600) } : held ?? { slot, recordId: record.id, text: value.slice(0, 600), updatedAt: record.updatedAt });
+      card.set(slot, held && held.recordId === record.id ? { ...held, text: `${held.text}；${value}`.slice(0, whole ? undefined : 600) } : held ?? { slot, recordId: record.id, text: value.slice(0, whole ? undefined : 600), updatedAt: record.updatedAt });
     }
   }
   const order = ["field", "goal", "subject", "data_source", "stage", "constraints", "population", "intervention", "comparator", "outcome", "design"];
   const rows = [...order.filter((slot) => card.has(slot)).map((slot) => /** @type {any} */ (card.get(slot))), ...[...others.values()].slice(0, 8)];
   // What the project was last worked on (`recent_work`), after the card's own rows: its own files, never the card's.
-  const recent = recentWorkRow(everything.filter((record) => record.nativeType === "recent_work" && record.scopeId === projectId));
+  const recent = recentWorkRow(everything.filter((record) => record.nativeType === "recent_work" && record.scopeId === projectId), whole);
   return recent ? [...rows, recent] : rows;
 }
 
@@ -399,7 +411,7 @@ function ownerSourcePrivacy(file, origins) {
  * @param {readonly any[]} everything @param {string} projectId
  * @returns {{ slot: string, recordId: string, text: string, updatedAt: string | null }[]}
  */
-export function projectExtraRows(everything, projectId) {
+export function projectExtraRows(everything, projectId, whole = false) {
   /** @type {{ slot: string, recordId: string, text: string, updatedAt: string | null }[]} */
   const rows = [];
   for (const type of PROJECT_EXTRA_TYPES) {
@@ -408,8 +420,9 @@ export function projectExtraRows(everything, projectId) {
     /** @type {string[]} */
     const lines = [];
     for (const record of files) {
-      for (const line of statements(record.value)) {
-        const text = line.replace(AS_OF, "").replace(/\s+/g, " ").trim().slice(0, PROJECT_EXTRA_LINE_CHARS);
+      for (const line of whole ? completeCardLines(record.value) : statements(record.value)) {
+        if (whole && line.length > PROJECT_EXTRA_LINE_CHARS) continue;
+        const text = whole ? line : line.replace(AS_OF, "").replace(/\s+/g, " ").trim().slice(0, PROJECT_EXTRA_LINE_CHARS);
         if (text && !lines.includes(text)) lines.push(text);
         if (lines.length >= PROJECT_EXTRA_LINES) break;
       }
@@ -433,15 +446,16 @@ export class NativeMemoryStore {
    *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null,
    *   now?: () => Date, conversationTitles?: ConversationTitles | null,
    *   rejectionJudge?: { same: (request: any) => Promise<{ same: Map<number, string>, stated: Set<number> }> } | null,
-   *   report?: (line: string) => void, settleExtractionsMs?: number, forgetTargetsEnabled?: boolean, personAliasHintEnabled?: boolean, personMergeEnabled?: boolean, standingInstructionsEnabled?: boolean, peopleAcrossProjectsEnabled?: boolean, replacedDeadlineMs?: number }} dependencies
+   *   report?: (line: string) => void, settleExtractionsMs?: number, sourceEnvelopeEnabled?: boolean, forgetTargetsEnabled?: boolean, personAliasHintEnabled?: boolean, personMergeEnabled?: boolean, standingInstructionsEnabled?: boolean, peopleAcrossProjectsEnabled?: boolean, replacedDeadlineMs?: number }} dependencies
    *   `conversationTitles` names the conversations a memory came out of (the run ledger knows them; this store does not). `rejectionJudge` is the
    *   rejection list's own judge (`nativeMemoryRejections.mjs`), asked which other lines say what a forgotten one said
    *   (`nativeMemoryForgetEverywhere.mjs`); absent, only the lines that contain a forgotten line's words go with it. `memoryContexts` names
    *   the registered namespaces (the account's own and each shared GEO project's, `geoNativeMemoryContext.mjs`).
    */
   constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, report = () => {},
-    settleExtractionsMs = 20_000, forgetTargetsEnabled = false, personAliasHintEnabled = false, personMergeEnabled = false, standingInstructionsEnabled = false, peopleAcrossProjectsEnabled = false, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
+    settleExtractionsMs = 20_000, sourceEnvelopeEnabled = false, forgetTargetsEnabled = false, personAliasHintEnabled = false, personMergeEnabled = false, standingInstructionsEnabled = false, peopleAcrossProjectsEnabled = false, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
     this.sessions = sessions;
+    this.sourceEnvelopeEnabled = sourceEnvelopeEnabled;
     this.standingInstructionsEnabled = standingInstructionsEnabled;
     this.peopleAcrossProjectsEnabled = peopleAcrossProjectsEnabled;
     this.forgetTargetsEnabled = forgetTargetsEnabled === true;
@@ -624,7 +638,7 @@ export class NativeMemoryStore {
       const history = (revisions.get(file.uri) ?? []).slice().reverse();
       const changed = sources.filter((source) => source.uri === file.uri && ["retracted", "changed", "expired", "removed"].includes(source.state));
       const base = this.#fileRecord(file, history, changed, conversationEvidence(history, sessionProjects), forgotten.has(file.namespaceId ?? null) ? forgotten.get(file.namespaceId ?? null) : []);
-      if (file.type !== "profile") { records.push({...base,...this.#attribution(file,history,origins.get(file.uri),attributionCommits)}); continue; }
+      if (file.type !== "profile") { records.push({...base,...(this.sourceEnvelopeEnabled ? { statementSources: visibleStatementSources(base.value, origins.get(file.uri)) } : {}),...this.#attribution(file,history,origins.get(file.uri),attributionCommits)}); continue; }
       // The profile is one document; its lines are the items the page lists.
       for (const line of profileStatements(file.body)) {
         // A line's own conversation is the one whose commit brought it, not every conversation that touched the file: from the index of
@@ -637,6 +651,7 @@ export class NativeMemoryStore {
         records.push({
           ...base, id: `${base.id}_${lineFingerprint(line).slice(0, 12)}`, key: `profile.md#${lineFingerprint(line).slice(0, 12)}`,
           ...this.#attribution(file,history,origins.get(file.uri),attributionCommits,line),
+          ...(this.sourceEnvelopeEnabled ? { sourceEnvelope: statementSource(line, origin), quoteUnit: line } : {}),
           value: line.replace(/^#\s+/, "").replace(AS_OF, "").trim(), summary: "",
           document: { id: base.id, uri: file.uri }, revisions: [], evidence, evidenceCount: evidence.length,
         });
@@ -1119,7 +1134,16 @@ export class NativeMemoryStore {
    */
   async residentCard(userId, projectId) {
     const everything = await this.#projectRecords(userId, projectId);
-    return [...projectCardRows(everything, projectId, { sections: true }), ...projectExtraRows(everything, projectId)].map(row=>({...row,originalSources:everything.filter(record=>record.id===row.recordId||record.nativeType===row.slot).map(record=>({id:record.id,contentDigest:record.contentHash,sourcePrivacy:record.sourcePrivacy,attribution:record.attribution}))}));
+    const whole = this.sourceEnvelopeEnabled;
+    const records = whole ? everything.filter(record => record.sourceEnvelope?.conditions !== 'missing'
+      && !record.statementSources?.some(row => row.source.conditions === 'missing')) : everything;
+    const rows = [...projectCardRows(records, projectId, { sections: true, whole }), ...projectExtraRows(records, projectId, whole)];
+    return rows.map(row => {
+      const sources = records.filter(record => record.id === row.recordId || record.nativeType === row.slot);
+      return { ...row, ...(whole ? { statementSources: sources.flatMap(record => record.statementSources ?? []) } : {}),
+        originalSources: sources.map(record => ({ id: record.id, contentDigest: record.contentHash,
+          sourcePrivacy: record.sourcePrivacy, attribution: record.attribution })) };
+    });
   }
 
   /** Metadata-only owned index, with the gateway's privacy and project exclusions.
@@ -1148,7 +1172,7 @@ export class NativeMemoryStore {
       let body = sources[0].value;
       if (file.type === 'profile') {
         // Profile records are individual statements. Reconstruct only marked lines still visible after redaction.
-        const visible = new Set(sources.map(record => lineFingerprint(record.value)));
+        const visible = new Set(sources.map(record => lineFingerprint(record.quoteUnit ?? record.value)));
         const lines = safetyNoteLines(file.body).filter(line => visible.has(lineFingerprint(line)));
         if (!lines.length) {
           if (!safetyNoteLines(file.body).length && sources.some(record => record.value.trim())) legacyUnclassified++;
@@ -1170,6 +1194,8 @@ export class NativeMemoryStore {
       const receipt = sourceReceiptState(originals, { trusted: true });
       const origins = [...new Set(sources.flatMap(record => record.attribution?.origins ?? ['unknown']))];
       return [{ ...file, body, ...(binding ? { sourceUri: binding.uri, lineHashes: binding.lineHashes } : {}),
+        ...(this.sourceEnvelopeEnabled ? { statementSources: sources.flatMap(record => record.sourceEnvelope
+          ? [{ text: record.quoteUnit ?? record.value, source: record.sourceEnvelope }] : record.statementSources ?? []) } : {}),
         updatedAt: binding?.updatedAt ?? sources[0].updatedAt ?? file.modTime,
         originalSources: receipt.originalSources, sourcePrivacy: receipt.sourcePrivacy,
         origin: origins.length === 1 ? origins[0] : 'mixed', attribution: { schemaVersion: 1, origins, confirmed: false } }];
@@ -1206,7 +1232,9 @@ export class NativeMemoryStore {
         sourcePrivacy: record.sourcePrivacy, attribution: record.attribution })), { trusted: true });
       const origins = [...new Set(sources.flatMap(record => record.attribution?.origins ?? ['unknown']))];
       return [{ ...selected.find(row => row.uri === file.uri), ...file,
-        body: sources.map(record => record.value).join('\n'),
+        ...(this.sourceEnvelopeEnabled ? { statementSources: sources.flatMap(record => record.sourceEnvelope
+          ? [{ text: record.quoteUnit ?? record.value, source: record.sourceEnvelope }] : record.statementSources ?? []) } : {}),
+        body: sources.map(record => record.quoteUnit ?? record.value).join('\n'),
         originalSources: receipt.originalSources, sourcePrivacy: receipt.sourcePrivacy,
         attribution: { schemaVersion: 1, origins, confirmed: false } }];
     });

@@ -1,3 +1,4 @@
+import { sourceBoundRequest } from './memorySourceEnvelope.mjs';
 import { reasoningFields } from "./modelReasoningPolicy.mjs";
 // The production model is certified end to end, not merely configured: the
 // release gate exercises the whole tool chain against it and signs a receipt
@@ -971,7 +972,7 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
 
 /**
  * @param {Record<string, any>} config @param {any} runtimeManager
- * @param {{ fetchImpl?: typeof fetch, usageLedger?: any, onModelCall?: ((receipt:any)=>unknown)|null, assertModelAccess?: ((caller:any,body:any)=>Promise<void>)|null,
+ * @param {{ fetchImpl?: typeof fetch, usageLedger?: any, pasteRangeIndex?: any, onModelCall?: ((receipt:any)=>unknown)|null, assertModelAccess?: ((caller:any,body:any)=>Promise<void>)|null,
  *           attributeRun?: (caller: { userId: string, projectId: string, sessionId?: string | null }) => Promise<string | null>,
  *           runPurpose?: (request: { userId: string, projectId: string, runId: string | null }) => Promise<string>,
  *           serviceCaller?: { identify: (token: string) => { service: string, purpose: string, maxBodyBytes: number } | null,
@@ -990,7 +991,7 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
  */
 export function createModelGatewayHandler(config, runtimeManager, {
   fetchImpl = fetch, usageLedger = null, attributeRun = null, runPurpose = null, assertModelAccess = null,
-  serviceCaller = null, onModelCall = null,
+  serviceCaller = null, onModelCall = null, pasteRangeIndex = null,
 } = {}) {
   const prefixes = new PromptPrefixMemo();
   const producers = new Set();
@@ -1129,6 +1130,9 @@ export function createModelGatewayHandler(config, runtimeManager, {
       // The cloud-processing check is about a study's records in a researcher's session; the service caller has neither.
       const assertAccess = caller.service ? null : assertModelAccess;
       if (assertAccess) await assertAccess({ ...caller, sessionId: kernelSessionId(req) }, normalized);
+      if (config.memorySourceEnvelopeEnabled === true && !caller.engine && !caller.service) {
+        normalized = sourceBoundRequest(normalized, route.protocol, text => pasteRangeIndex?.lookup(caller.userId, caller.projectId, kernelSessionId(req), text) ?? []);
+      }
       modelName = normalized.model;
       streamRequested = normalized.stream === true;
       if (config.requireDurableUsageLedger === true && !usageLedger) {

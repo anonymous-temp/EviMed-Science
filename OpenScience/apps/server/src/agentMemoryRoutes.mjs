@@ -348,7 +348,7 @@ export function createAgentMemoryRoutes({
       // A subject never seen has no memory and no methods of its own; it may
       // still read its institution's named capsules.
       const projectId = await projectOf(user, input.projectId);
-      const result = await recallForAgent({ capsules, memory: native ? nativeRecallSource(native, { recallEnabled: config.memoryRecallEnabled !== false }) : null, learning },
+      const result = await recallForAgent({ capsules, memory: native ? nativeRecallSource(native, { recallEnabled: config.memoryRecallEnabled !== false, sourceBound: config.memorySourceEnvelopeEnabled === true }) : null, learning },
         { user, institution: subject ? keyAccount : null }, {
           query,
           projectId,

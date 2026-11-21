@@ -1,5 +1,6 @@
 /** Offline read/answer-time replay. No network client or credentials are loaded.
  * Evidence and gold are kept outside messages. Missing recorded context is explicit. */
+import { sourceBoundRequest, sourceEnvelope, memoryEnvelope, conversationEnvelope } from '../../../apps/server/src/memorySourceEnvelope.mjs';
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -32,7 +33,7 @@ export const MEMBERS = {
 const normalizeId = value => String(value).replace(/[_:\-]/g, '').toLowerCase();
 const matches = (qid, needle) => normalizeId(qid).includes(normalizeId(needle));
 const digest = text => createHash('sha256').update(text).digest('hex');
-const config = { memorySearchHintEnabled: true, memoryStandingInstructionsEnabled: true,
+const baseline = { memorySearchHintEnabled: true, memoryStandingInstructionsEnabled: true,
   memoryForgetTargetsEnabled: true, memorySafetyNotesEnabled: true, memoryOpeningIndexEnabled: true };
 
 async function* paths(root) {
@@ -94,20 +95,26 @@ function parseHistory(text) {
 
 /** Re-serialize recorded returned data, never substitute gold or source-session
  * text for a tool miss. Old logs did not record each source's completion state. */
-export function serializeRecordedTool(call) {
+export function serializeRecordedTool(call, bound = false) {
+  const historyQuotes = hits => hits.map(hit => hit.withdrawn ? { withdrawn: true, messages: [] } : { ...hit,
+    messages: (hit.messages ?? []).map(m => m.sourceEnvelope ? m : {
+      sourceRole: m.sourceRole, date: m.date, sourceEnvelope: conversationEnvelope(m.sourceRole, m.date),
+      text: '[Archived excerpt; the complete original was not recorded in this trace.]' }) });
+
   const blocks = [], gaps = [];
   let files = null, history = null, capsules = null;
   for (const block of call.blocks ?? []) {
     const text = typeof block === 'string' ? block : block.text ?? '';
-    if (text.startsWith('Original conversation excerpts')) { history = parseHistory(text); blocks.push(historySearchText(history)); continue; }
+    if (text.startsWith('Original conversation excerpts')) { history = parseHistory(text); if (bound) history = historyQuotes(history); blocks.push(historySearchText(history)); continue; }
     let data; try { data = JSON.parse(text); } catch { data = null; }
     if (data && Array.isArray(data.memories)) {
       if (data.history) data.history = data.history.map(hit => hit.withdrawn ? { withdrawn: true, messages: [] } : hit);
+      if (bound && data.history) data.history = historyQuotes(data.history);
       files = data;
-      blocks.push(JSON.stringify({ ...data, memories: data.memories.map(item => ({ ...item,
+      blocks.push(JSON.stringify({ ...data, memories: data.memories.map(item => ({ ...item, ...(bound ? { sourceEnvelope: memoryEnvelope(item) } : {}),
         ...(item.origin || item.attribution || item.updatedAt ? { sourceLabel: memorySourceLabel(item) } : {}) })) }));
       if (data.history) { history = data.history; blocks.push(historySearchText(history)); }
-      if (data.capsules) { capsules = data.capsules; blocks.push(capsuleSearchText(capsules)); }
+      if (data.capsules) { capsules = data.capsules; blocks.push(capsuleSearchText(capsules, bound)); }
     } else blocks.push(text);
   }
   if (/search$/.test(call.name)) {
@@ -124,7 +131,10 @@ export function serializeRecordedTool(call) {
   return { ...call, blocks: blocks.filter(Boolean), gaps };
 }
 
-export function requestFromPack(pack, sourcePath, catalog = null) {
+export function requestFromPack(pack, sourcePath, catalog = null, variant = null) {
+  if (variant && variant !== 'g1121-src') throw new Error('Unknown frozen replay variant');
+  const bound = variant === 'g1121-src';
+  const config = { ...baseline, memorySourceEnvelopeEnabled: bound };
   const { answer, snapshot, qid, sessions } = unpack(pack);
   if (!answer) return null;
   const gaps = [], messages = [{ role: 'system', content: buildSystemPrompt({ model: answer.model?.name ?? 'deepseek-flash', config }) }];
@@ -136,7 +146,7 @@ export function requestFromPack(pack, sourcePath, catalog = null) {
     body: typeof value === 'string' ? value : value.body ?? '', type: relPath === 'profile.md' ? 'profile' : relPath.split('/')[0] }));
   const opening = { ...answer.opening };
   if (opening.profileBlock && typeof profile === 'string') opening.profileBlock = opening.profileBlock.replace(/(<user-profile[^>]*>)[\s\S]*?(<\/user-profile>)/,
-    (_all, start, end) => `${start}\n${openingProfileRead(profile, root, {})}\n${end}`);
+    (_all, start, end) => `${start}\n${openingProfileRead(profile, root, config)}\n${end}`);
   if (snapshot) {
     const nativeIndex = nativeMemoryIndex(files, { memoryRoot: root, historySearchEnabled: true });
     const index = nativeIndexLine(nativeIndex, 500);
@@ -145,7 +155,7 @@ export function requestFromPack(pack, sourcePath, catalog = null) {
     else {
       opening.residentBlock = /^记忆索引：/m.test(opening.residentBlock)
         ? opening.residentBlock.replace(/^记忆索引：.*$/m, index) : `${opening.residentBlock}\n${index}`;
-      const safety = renderSafetyNotes(safetyFiles, { maxTokens: 1500 }).text;
+      const safety = renderSafetyNotes(safetyFiles, { maxTokens: 1500, sourceBound: bound }).text;
       if (safety) opening.residentBlock += `\n${safety}`;
     }
     gaps.push('snapshot reconstruction lacks live scope/source-receipt and resident-budget state; safety/index are an offline approximation');
@@ -153,10 +163,16 @@ export function requestFromPack(pack, sourcePath, catalog = null) {
   for (const content of [opening.profileBlock, opening.residentBlock]) if (content) messages.push({ role: 'user', content });
   const runtimeQuestion = pack.gold?.runtimeQuestion ?? pack.gold?.question ?? {};
   const materials = runtimeQuestion.materials ?? [];
-  if (materials.length) messages.push({ role: 'user', content: 'Supplied material (source content, not the user’s words):\n' + JSON.stringify(materials) });
+  if (bound && materials.length) {
+    messages.push({ role: 'assistant', content: null, reasoning_content: '', tool_calls: [
+      { id: 'material_input', type: 'function', function: { name: 'read_material', arguments: '{}' } }] });
+    messages.push({ role: 'tool', tool_call_id: 'material_input', content: JSON.stringify(materials.map(({ kind, title, text }) => ({
+      title, text, source: sourceEnvelope(kind === 'paste' ? 'pasted_material' : kind === 'document' ? 'attachment' : 'tool_result') }))) });
+  } else if (materials.length) messages.push({ role: 'user', content: 'Supplied material (source content, not the user’s words):\n' + JSON.stringify(materials) });
   const question = `${buildTimeContext(answer.asOf, answer.question)}\n\n${answer.question}`;
   messages.push({ role: 'user', content: question });
-  const toolCalls = (answer.toolCalls ?? []).map(serializeRecordedTool);
+  const toolCalls = (answer.toolCalls ?? []).map(call => serializeRecordedTool(call, bound));
+  if (bound && toolCalls.length) gaps.push('frozen tools have no new archive or attribution receipts; validate retrieval on the original lab checkpoint');
   for (const [index, call] of toolCalls.entries()) {
     const id = `recorded_${index}`;
     messages.push({ role: 'assistant', content: null, reasoning_content: '', tool_calls: [{ id, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.args ?? {}) } }] });
@@ -165,14 +181,14 @@ export function requestFromPack(pack, sourcePath, catalog = null) {
   }
   const classes = Object.entries(MEMBERS).filter(([, ids]) => ids.some(id => matches(qid, id))).map(([name]) => name);
   return { schemaVersion: 1, qid, classes, sourcePath, sourceDigest: digest(JSON.stringify(pack)),
-    contextExact: !gaps.length, gaps: [...new Set(gaps)], messages, opening, toolCalls,
+    contextExact: !gaps.length, gaps: [...new Set(gaps)], messages: bound ? sourceBoundRequest({ messages }).messages : messages, ...(variant ? { variant } : {}), opening, toolCalls,
     expected: pack.gold?.question?.expect ?? pack.gold?.runtimeQuestion?.expect ?? { judge: JSON.stringify(pack.gold?.packetGold ?? pack.gold?.item ?? pack.gold) },
     recordedAnswer: answer.answer, recordedControl: pack.item?.control === true || sourcePath.includes('/controls/') || matches(qid, 'g9-dev-poison-002'),
     lexical: lexicalAudit(sessions, [{ kind: 'question', query: answer.question }, ...(answer.toolCalls ?? []).filter(call => /search$/.test(call.name)).map(call => ({ kind: 'recorded_query', query: call.args?.query ?? '' }))]),
   };
 }
 
-export async function prepare({ packs, out, catalog = null }) {
+export async function prepare({ packs, out, catalog = null, variant = null }) {
   await mkdir(out, { recursive: true });
   const requests = [], foundMembers = new Set();
   for (const group of ['A', 'B']) for await (const file of paths(path.join(packs, group))) {
@@ -184,7 +200,7 @@ export async function prepare({ packs, out, catalog = null }) {
     const control = pack.item?.control === true || file.includes('/controls/') || matches(qid, 'g9-dev-poison-002');
     if (!named.length && !control) continue;
     for (const id of named) foundMembers.add(id);
-    const request = requestFromPack(pack, file, catalog);
+    const request = requestFromPack(pack, file, catalog, variant);
     const name = `${String(request.qid).replace(/[^a-zA-Z0-9_.-]/g, '_')}-${request.sourceDigest.slice(0,8)}.request.json`;
     await writeFile(path.join(out, name), JSON.stringify(request, null, 2) + '\n');
     requests.push({ file: name, qid, classes: request.classes, control: request.recordedControl, contextExact: request.contextExact });
@@ -238,7 +254,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const get = name => { const index = args.indexOf(name); return index < 0 ? null : args[index + 1]; };
   if (command === 'prepare') {
     const manifest = await prepare({ packs: path.resolve(get('--packs')), out: path.resolve(get('--out')),
-      catalog: get('--catalog') ? await readFile(get('--catalog'), 'utf8') : null });
+      variant: get('--variant'), catalog: get('--catalog') ? await readFile(get('--catalog'), 'utf8') : null });
     console.log(JSON.stringify({ requests: manifest.requests.length, selected: manifest.selected.length, missingMembers: manifest.missingMembers }));
   } else if (command === 'run') {
     const adapter = await import(pathToFileURL(path.resolve(get('--answer-module'))).href);

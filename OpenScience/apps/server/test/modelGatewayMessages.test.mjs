@@ -84,7 +84,7 @@ function messagesStream(text, padding = 0) {
  * @param {import("node:test").TestContext} t
  * @param {(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, body: any) => void} upstreamHandler
  * @param {any[]} events
- * @param {{ path?: string, headers?: Record<string, string>, body?: any }} request
+ * @param {{ path?: string, headers?: Record<string, string>, body?: any, sourceBound?: boolean }} request
  */
 async function call(t, upstreamHandler, events, request) {
   const upstream = createServer(async (req, res) => {
@@ -95,7 +95,7 @@ async function call(t, upstreamHandler, events, request) {
   });
   const upstreamBase = await listen(upstream);
   t.after(() => new Promise((resolve) => { upstream.closeAllConnections(); upstream.close(resolve); }));
-  const gateway = createServer(createModelGatewayHandler(config(upstreamBase), runtimeManager, { usageLedger: ledger(events) }));
+  const gateway = createServer(createModelGatewayHandler({ ...config(upstreamBase), memorySourceEnvelopeEnabled: request.sourceBound }, runtimeManager, { usageLedger: ledger(events) }));
   const gatewayBase = await listen(gateway);
   t.after(() => new Promise((resolve) => { gateway.closeAllConnections(); gateway.close(resolve); }));
   return fetch(`${gatewayBase}${request.path ?? MODEL_GATEWAY_MESSAGES_PATH}`, {
@@ -314,4 +314,19 @@ test("native Messages preserves the user's chosen effort, including off, without
     assert.equal(seen.thinking.type, effort === "off" ? "disabled" : "enabled");
     assert.equal(seen.output_config?.effort, effort === "off" ? undefined : effort);
   }
+});
+
+test('the native Messages adapter carries material attribution with an empty capsule', async t => {
+  let forwarded;
+  const response = await call(t, (_req, res, body) => {
+    forwarded = body;
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.end(messagesStream('answer'));
+  }, [], { sourceBound: true, body: kernelRequest({ messages: [{ role: 'user', content: 'Summarize “an example history”.' }] }) });
+  assert.equal(response.status, 200);
+  await response.text();
+  const source = JSON.parse(forwarded.messages[0].content);
+  assert.equal(source.parts[1].source.kind, 'quoted_material');
+  assert.equal(source.parts[1].source.subject, 'unknown');
+  assert.match(forwarded.system, /answer-source-check/);
 });

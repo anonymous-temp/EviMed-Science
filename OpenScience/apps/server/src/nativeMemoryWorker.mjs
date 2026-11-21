@@ -1,4 +1,5 @@
 import { migrateSafetyNotes, safetyClassifier } from './memorySafetyMigration.mjs';
+import { statementSourceReviewer } from './memoryStatementSources.mjs';
 import { reconcileMemoryNames } from './nativeMemoryNames.mjs';
 import { keepUnexplainedLines } from './nativeMemoryKeepLines.mjs';
 import { confirmedAliasRequest, confirmedAliases, choiceRows, choiceKey } from './nativeMemoryInduction.mjs';
@@ -21,7 +22,7 @@ import { memoryNameVariants } from './nativeMemoryHardTokens.mjs';
 import { NativeMemoryVerification, originalSources, replaceStatement } from './nativeMemoryVerification.mjs';
 import { SOURCE_LABEL_PREFIX, sourcesNamedIn } from "./nativeMemoryStore.mjs";
 import { OPENVIKING_MEMORY_TYPES } from "./openVikingLayout.mjs";
-import { PROJECT_MEMORY_TYPES, nativeMemoryFile, observationFile, parseArchiveUri } from "./openVikingSessions.mjs";
+import { PROJECT_MEMORY_TYPES, nativeMemoryFile, observationFile, parseArchiveUri, platformSessionOf } from "./openVikingSessions.mjs";
 
 /**
  * The overlay's worker: what the native memory engine did, read into the overlay, and what it cannot do for itself, done.
@@ -159,14 +160,14 @@ export class NativeMemoryWorker {
    *   projectOfSession?: ((userId: string, sessionId: string) => Promise<string | null>) | null,
    *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null,
    *   rejectionJudge?: ReturnType<typeof import("./nativeMemoryRejections.mjs").createRejectionJudge> | null,
-   *   forgetRequestJudge?: any,
+   *   usageLedger?: any, pasteRangeIndex?: any, forgetRequestJudge?: any,
    *   pastedInstructionJudge?: ReturnType<typeof import("./nativeMemoryPastedInstructions.mjs").createPastedInstructionJudge> | null,
    *   now?: () => Date, report?: (line: string) => void }} dependencies
    *   `projectOfSession` names the project a platform conversation belongs to, for a commit the gateway never saw.
    *   `rejectionJudge` says whether a line near one the person removed repeats it (`nativeMemoryRejections.mjs`); absent, only a verbatim
    *   repeat and a line that contains a removed one are met.
    */
-  constructor({ config, memorySettings, sessions, overlay, nativeMemory = null, projectOfSession = null, memoryContexts = null, rejectionJudge = null, pastedInstructionJudge = null, forgetRequestJudge = null, now = null, report = () => {} }) {
+  constructor({ config, usageLedger = null, pasteRangeIndex = null, memorySettings, sessions, overlay, nativeMemory = null, projectOfSession = null, memoryContexts = null, rejectionJudge = null, pastedInstructionJudge = null, forgetRequestJudge = null, now = null, report = () => {} }) {
     this.config = config ?? {};
     this.memorySettings = memorySettings;
     this.sessions = sessions;
@@ -183,6 +184,7 @@ export class NativeMemoryWorker {
     /** Namespace scans rotate independently of pending commits. @type {Map<string, string>} */
     this.scanCursors = new Map();
     this.rejectionJudge = rejectionJudge;
+    this.reviewStatementSources = statementSourceReviewer({ config: this.config, usageLedger, pasteRangeIndex });
     this.pastedInstructionJudge = pastedInstructionJudge;
     this.forgetRequestJudge = forgetRequestJudge;
     /** @type {Promise<void> | null} */ this.safetyScan = null;
@@ -857,6 +859,10 @@ export class NativeMemoryWorker {
     const pastedInstructions = sourceDeleted ? new Set() : await this.#pastedInstructions(commit, operations, context).catch(() => {
       recordPastedInstructionCheck("failed"); return new Set();
     });
+    const reviewed = !sourceDeleted && this.config.memorySourceEnvelopeEnabled === true && context.kind !== 'geo-project'
+      && platformSessionOf(commit.engineSession) && commit.archiveUri && ['gateway', 'scan'].includes(commit.origin)
+      ? await this.reviewStatementSources(commit, operations, () => this.verification.readSources(userId, [commit], context, new Map(), { structured: true }))
+        .catch(() => new Map()) : new Map();
     const instructionRevisions = !sourceDeleted && this.robustInstructions ? await this.#prepareInstructionWrites(commit, diff, context, pastedInstructions, true) : new Map();
     for (const [list, change] of /** @type {const} */ ([["adds", "added"], ["updates", "updated"], ["deletes", "deleted"]])) {
       for (const operation of Array.isArray(operations[list]) ? operations[list] : []) {
@@ -889,7 +895,7 @@ export class NativeMemoryWorker {
           const otherLines=memoryLines(body).filter(line=>!written.has(lineFingerprint(line)));
           const engineBefore = new Set(memoryLines(operation?.before ?? '').map(lineFingerprint));
           const originBefore = sourceDeleted ? settledBefore : memoryLines(settledBefore).filter(line => engineBefore.has(lineFingerprint(line))).join('\n');
-          await this.overlay.syncOrigins(userId, uri, { after: body, before: [originBefore,...otherLines].join('\n'),
+          await this.overlay.syncOrigins(userId, uri, { after: body, before: [originBefore,...otherLines].join('\n'), statementSources: reviewed.get(uri),
             origin: { revisionId: recorded?.id ?? null, engineSession: commit.engineSession, archiveUri: commit.archiveUri, projectId: commit.projectId ?? projectId,projectCreatedAt:commit.projectCreatedAt??null, at: changedAt } });
         }
       }

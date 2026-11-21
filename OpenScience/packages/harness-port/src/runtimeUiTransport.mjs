@@ -2,7 +2,7 @@
  * Browser-only official transport hooks. Keep the installer self-contained:
  * the control plane serializes it into the parser-blocking frame bootstrap.
  * No module import, browser fetch replacement, or Host-ownership claim is used.
- * @param {{version:number, frameId:string, projectId:string, prefix:string, shellOrigin:string, assets?:string, access?:{type:string,owner:boolean,grants:any[]}, muxResponseMaxBytes:number}} frame
+ * @param {{version:number, frameId:string, projectId:string, prefix:string, shellOrigin:string, assets?:string, access?:{type:string,owner:boolean,grants:any[]}, sourceEnvelope?:boolean, muxResponseMaxBytes:number}} frame
  *   `assets`, when present, is the path every frame shares for the kernel
  *   application's content-addressed files (`/__evimed/k/`): a plugin bundle
  *   named by revision loads from there, so the browser keeps one copy for
@@ -26,6 +26,47 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
     Object.defineProperty(target, '__DSH_REMOTE_ACCESS__', { get: () => access, set: () => {}, configurable: false });
   }
   const origin = target.location.origin;
+  // beforeinput supplies the edit range. No clipboard read, paste interception or
+  // visible draft change. Retain only the current draft and exact, surviving ranges.
+  let pastedDraft = '';
+  /** @type {number[][]} */ let pasteSpans = [];
+  /** @type {{ node: any, text: string, start: number, end: number, paste: boolean } | null} */ let beforeEdit = null;
+  /** @param {any} event */
+  const beforeInput = event => {
+    const node = event.target;
+    if (!event.isTrusted || node?.tagName !== 'TEXTAREA' || node.value.length > 100000) return;
+    if (node.value !== pastedDraft) pasteSpans = [];
+    beforeEdit = { node, text: node.value, start: node.selectionStart, end: node.selectionEnd, paste: event.inputType === 'insertFromPaste' };
+  };
+  /** @param {any} event */
+  const afterInput = event => {
+    const edit = beforeEdit;
+    beforeEdit = null;
+    if (!edit || event.target !== edit.node) return;
+    const value = edit.node.value, tail = edit.text.slice(edit.end);
+    const end = value.length - tail.length;
+    if (value.length > 100000 || end < edit.start || !value.startsWith(edit.text.slice(0, edit.start)) || !value.endsWith(tail)) {
+      pastedDraft = ''; pasteSpans = []; return;
+    }
+    pasteSpans = pasteSpans.flatMap(([a,b]) => b <= edit.start ? [[a,b]] : a >= edit.end ? [[a + end - edit.end, b + end - edit.end]] : []);
+    if (edit.paste && end > edit.start) pasteSpans.push([edit.start, end]);
+    pasteSpans.sort((a,b) => a[0] - b[0]);
+    pastedDraft = pasteSpans.length ? value : '';
+  };
+  if (frame.sourceEnvelope) {
+    target.addEventListener('beforeinput', beforeInput, true);
+    target.addEventListener('input', afterInput, true);
+  }
+  /** @param {string} method @param {any} payload */
+  function pastePayload(method, payload) {
+    if (!pastedDraft || method !== 'session/prompt') return payload;
+    const request = payload?.args?.request;
+    const part = request?.content?.findIndex((/** @type {any} */ p) => p.type === 'text' && p.text === pastedDraft);
+    if (!(part >= 0)) return payload;
+    const evimedPasteRanges = [{ part, spans: pasteSpans.slice(0,64) }];
+    pastedDraft = ''; pasteSpans = [];
+    return { ...payload, args: { ...payload.args, request: { ...request, evimedPasteRanges } } };
+  }
   const nativeFetch = target.fetch.bind(target);
   const streams = new Map();
   // Hold only the scoped workspace stream until the bridge has retained the
@@ -292,7 +333,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
         let body;
         try { body = JSON.parse(init.body); } catch { /* the server rejects malformed native RPCs */ }
         if (body?.type === 'client-request' && body.method === 'session/prompt') {
-          const payload = researchPayload(body.method, geoPlanPayload(body.method, revisionPayload(body.method, body.payload)));
+          const payload = researchPayload(body.method, geoPlanPayload(body.method, revisionPayload(body.method, pastePayload(body.method, body.payload))));
           if (payload !== body.payload) outgoing = { ...init, body: JSON.stringify({ ...body, payload }) };
         }
       } else if (url.pathname.endsWith('/session/cancel')) { revisions.clear(); geoPlans.clear(); vcrSelections.clear(); }
@@ -373,7 +414,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
           if (signal.aborted) cancel();
         });
         if (signal.aborted) throw signal.reason;
-        send(socket, { type: 'open', streamId: id, endpoint, payload: researchPayload(endpoint, geoPlanPayload(endpoint, revisionPayload(endpoint, payload))) }); opened = true;
+        send(socket, { type: 'open', streamId: id, endpoint, payload: researchPayload(endpoint, geoPlanPayload(endpoint, revisionPayload(endpoint, pastePayload(endpoint, payload)))) }); opened = true;
         while (true) {
           if (failed) throw error;
           if (!queue.length) await new Promise(resolve => { wake = () => resolve(undefined); });
@@ -405,6 +446,11 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
     },
     dispose() {
       if (disposed) return;
+      if (frame.sourceEnvelope) {
+        target.removeEventListener('beforeinput', beforeInput, true);
+        target.removeEventListener('input', afterInput, true);
+        pastedDraft = ''; pasteSpans = []; beforeEdit = null;
+      }
       disposed = true; finishStartup('failed'); revisions.clear(); vcrSelections.clear(); cancelConnect?.();
       if (carrier) lose(carrier, failure('Runtime frame disposed'));
     },

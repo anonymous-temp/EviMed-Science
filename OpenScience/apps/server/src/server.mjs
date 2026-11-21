@@ -1,3 +1,4 @@
+import { createPasteRangeIndex } from './memoryPasteRanges.mjs';
 import { rememberAdmission } from './agentMemoryRemember.mjs';
 import { recallHistoryForAgent } from './agentMemoryRecall.mjs';
 import { agentMemoryAvailable } from './agentMemoryAvailability.mjs';
@@ -1413,11 +1414,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // One judge of whether a line says what another says: it holds a line the engine wrote near one the person removed out (one call a
   // commit) and finds the other lines that say what a line the person forgot said (`nativeMemoryRejections.mjs`, `nativeMemoryForgetEverywhere.mjs`).
   const rejectionJudge = createRejectionJudge({ config, usageLedger });
-  const nativeMemory = new NativeMemoryStore({ personMergeEnabled: config.memoryPersonMergeEnabled, personAliasHintEnabled: config.memoryPersonAliasHintEnabled, standingInstructionsEnabled: config.memoryStandingInstructionsEnabled, peopleAcrossProjectsEnabled: config.memoryPeopleAcrossProjectsEnabled, forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions: openVikingSessions, overlay: nativeMemoryOverlay, memoryContexts: nativeMemoryContexts, rejectionJudge,
+  const nativeMemory = new NativeMemoryStore({ sourceEnvelopeEnabled: config.memorySourceEnvelopeEnabled, personMergeEnabled: config.memoryPersonMergeEnabled, personAliasHintEnabled: config.memoryPersonAliasHintEnabled, standingInstructionsEnabled: config.memoryStandingInstructionsEnabled, peopleAcrossProjectsEnabled: config.memoryPeopleAcrossProjectsEnabled, forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions: openVikingSessions, overlay: nativeMemoryOverlay, memoryContexts: nativeMemoryContexts, rejectionJudge,
     report: (line) => process.stderr.write(`${line}\n`),
     // The conversation a memory came out of is named from the run ledger, which is composed further down.
     conversationTitles: (userId, refs) => nativeConversationTitles(userId, refs) });
+  const pasteRangeIndex = createPasteRangeIndex();
   const nativeMemoryWorker = new NativeMemoryWorker({
+    pasteRangeIndex,
+    usageLedger,
     config, memorySettings, sessions: openVikingSessions, overlay: nativeMemoryOverlay, nativeMemory, memoryContexts: nativeMemoryContexts,
     rejectionJudge,
     forgetRequestJudge: createForgetRequestJudge({ config, usageLedger }),
@@ -5455,7 +5459,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     deferEngine: entry => engineDeferred.defer(entry),
     report: (line) => process.stderr.write(`${line}\n`),
   });
-  const capsuleGatewayHandler = createCapsuleGatewayHandler({ contextPolicies: sharedContextPolicies, contextItems, runtimeManager, store, service: capsuleService,
+  const capsuleGatewayHandler = createCapsuleGatewayHandler({ sourceBound: config.memorySourceEnvelopeEnabled === true, contextPolicies: sharedContextPolicies, contextItems, runtimeManager, store, service: capsuleService,
     nativeRoutes: nativeInputRoute,
     // The recall tool answers with at most this many (review M6): five unless the model asks, and never more than the most.
     recallLimit: config.memoryRecallToolLimit, recallMaxLimit: config.memoryRecallToolMaxLimit,
@@ -5538,6 +5542,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     deployment: () => deploymentCloudPermission(config),
   }) : null;
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
+    pasteRangeIndex,
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
     assertModelAccess: assertVcrCloudAccess,
     usageLedger,
@@ -8820,6 +8825,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   const geoNativeSelectionRequests = new WeakSet();
   const runtimeUi = createRuntimeUiServer({
+    pasteRangeIndex,
     onGoalBarAction: (project, sessionId, op) => researchGoals?.noteBarAction(project, sessionId, op) ?? Promise.resolve(),
     resolveDelegatedFrame: (user, delegation, options) => resolveGeoFrame(user, { kind: "geo", geoProjectId: delegation.geoProjectId, sessionId: delegation.rootSessionId }, delegation, options),
     createDelegatedPolicy: async ({ user, project, claims }) => new GeoNativeFramePolicy({ authority: geoNativeAuthority,

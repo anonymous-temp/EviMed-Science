@@ -55,7 +55,7 @@ function oneLine(text) {
  * @param {ReadonlyArray<{ id?: string | null, factKind: string, content: string, updatedAt?: string | null, origin?: string | null }>} facts
  * @returns {Array<{ id: string, memoryType: string, kind: string, scope: string, origin?: string, content: string, updatedAt: string | null }>}
  */
-export function capsuleFactMemos(facts) {
+export function capsuleFactMemos(facts, sourceBound = false) {
   const byKind = new Map(CAPSULE_PROFILE_FACT_KINDS.map((kind) => [kind, /** @type {any[]} */ ([])]));
   for (const fact of Array.isArray(facts) ? facts : []) {
     const bucket = byKind.get(fact?.factKind);
@@ -68,6 +68,7 @@ export function capsuleFactMemos(facts) {
     for (const fact of entries) {
       // Platform tags in an entry are envelopes nobody typed; one the model was talked into writing must not open a block
       // of its own inside this one.
+      if (sourceBound && [...stripPlatformTags(fact.content).replace(/\s+/g, ' ').trim()].length > ENTRY_MAX_CHARS) continue;
       const content = oneLine(stripPlatformTags(fact.content));
       if (!content || seen.has(content)) continue;
       seen.add(content);
