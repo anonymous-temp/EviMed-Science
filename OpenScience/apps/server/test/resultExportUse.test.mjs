@@ -44,6 +44,7 @@ test("omitted result bytes and interrupted sends produce no use receipt", async 
   await route({ exporter: { export: async () => ({ ...file, useReceipt: null }) }, onExported })(request(url),
     { writeHead() {}, end(_bytes, callback) { callback(); } });
   await route({ onExported })(request(url), { writeHead() {}, end() {} });
+  await route({ onExported })(request(url), { writeHead() {}, end(_bytes, callback) { callback(new Error("closed")); } });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(observed, 0);
 });

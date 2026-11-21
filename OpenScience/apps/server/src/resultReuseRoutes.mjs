@@ -16,8 +16,8 @@ export function createResultReuseRoutes({ store, exporter, revisions, onExported
       const file = await exporter.export(user.id, url.searchParams.get("projectId"), matched[1]);
       res.writeHead(200, { "Content-Type": file.mimeType, "Content-Length": file.bytes.length,
         "Content-Disposition": attachmentDisposition(file.filename), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
-      res.end(file.bytes, () => {
-        if (onExported && file.useReceipt) void Promise.resolve()
+      res.end(file.bytes, (error) => {
+        if (!error && onExported && file.useReceipt) void Promise.resolve()
           .then(() => onExported(user, String(url.searchParams.get("projectId") ?? ""), matched[1], file.useReceipt)).catch(() => {});
       });
       return true;
