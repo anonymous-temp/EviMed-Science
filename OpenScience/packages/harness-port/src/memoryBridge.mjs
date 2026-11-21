@@ -183,7 +183,8 @@ const REQUIRED_MEMORY_TOOLS = Object.freeze(['remember', 'forget', 'read', 'sear
 const HANDSHAKE_RETRY_STATUS = new Set([429, 502, 503, 504])
 const REGISTRATION_RECEIPT_BYTES = 64 * 1024
 
-/** Only startup metadata is safe to replay after a lost response. */
+/** Only startup metadata is safe to replay after a lost response.
+ * @param {string | undefined} method @param {string} pathname @param {Buffer} body */
 function registrationStage(method, pathname, body) {
   if (method === 'GET' && pathname === '/health') return 'health'
   if (method !== 'POST' || pathname !== '/mcp') return null
@@ -195,7 +196,8 @@ function registrationStage(method, pathname, body) {
   return null
 }
 
-/** Translate only status/code fields from bounded metadata. Bodies never enter a receipt. */
+/** Translate only status/code fields from bounded metadata. Bodies never enter a receipt.
+ * @param {Response} response @param {Buffer[]} bytes */
 function registrationResponseCode(response, bytes) {
   if (!response.ok) return `http_${response.status}`
   if (!bytes.length) return null

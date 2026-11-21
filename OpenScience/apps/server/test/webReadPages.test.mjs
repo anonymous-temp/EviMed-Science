@@ -144,7 +144,9 @@ test("the terminal hook feeds the list from the transcript it already read", asy
   const source = await readFile(new URL("../src/server.mjs", import.meta.url), "utf8");
   const at = source.indexOf("const receipt = await persistRunTranscript({ project, run, sessions");
   assert.ok(at >= 0, "the terminal hook's transcript write moved");
-  const hook = source.slice(at);
-  assert.match(hook.slice(0, 1200), /const reading = pagesReadFromSessions\(sessions\);/);
-  assert.match(hook.slice(0, 1200), /recordLearning\(project, run\.id, \{ pagesRead: reading\.pages, pagesReadTotal: reading\.total \}\)/);
+  const end = source.indexOf('"run.pages_read.record"', at);
+  assert.ok(end > at, "the terminal hook's pages-read write audit moved");
+  const hook = source.slice(at, end);
+  assert.doesNotMatch(hook, /collectRunTranscripts\(/);
+  assert.match(hook, /const reading = pagesReadFromSessions\(sessions\);\s+if \(reading\.pages\.length\) \{\s+await agentRuns\.recordLearning\(project, run\.id, \{ pagesRead: reading\.pages, pagesReadTotal: reading\.total \}\)/);
 });

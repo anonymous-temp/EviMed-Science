@@ -35,10 +35,14 @@ test('ordinary prose, code examples and unrelated JSON are left alone', () => {
 });
 
 test('a raw final payload has no final assistant answer and never falls back to progress text', () => {
-  const transcript = (text) => ({ messages: [
-    { role: 'assistant', parts: [{ type: 'text', text: 'Working through the sources.' }] },
-    { role: 'assistant', parts: [{ type: 'text', text }] },
-  ] })
+  /** @param {string} text @returns {import('../index.mjs').RunTranscript} */
+  const transcript = (text) => ({
+    sessionId: 's-1', turnEnd: { kind: 'completed' }, subagents: [], lastSeq: 3,
+    messages: ['Working through the sources.', text].map((part, i) => ({
+      role: 'assistant', source: 'user', seq: i + 1, time: i + 1, turn: 1, step: i + 1,
+      parts: [{ type: 'text', text: part }], usage: null, interrupted: false,
+    })),
+  })
   assert.equal(finalAssistantText(transcript('<tool_call>{"name":"search","arguments":{}}</tool_call>')), '')
   assert.equal(finalAssistantText(transcript('The answer is 42.')), 'The answer is 42.')
 });

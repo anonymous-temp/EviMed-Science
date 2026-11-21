@@ -415,10 +415,12 @@ test('registration retries one transient handshake failure and never replays a t
   const gateway = await fakeGateway(() => ({
     status: ++upstream === 2 ? 200 : 503, body: '{"status":"ok"}',
   }))
+  /** @type {{step: string, elapsedMs: number, code: string | null}[]} */
   const steps = []
   const { bridge, call } = await startBridge({ gatewayUrl: gateway.url, retryRegistration: true,
     onRegistrationStep: (step, elapsedMs, code) => steps.push({ step, elapsedMs, code }),
   })
+  /** @param {string} method */
   const mcp = (method, params = {}) => call('/mcp', { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) })
   try {
     assert.equal((await mcp('tools/list')).status, 200)
@@ -431,6 +433,7 @@ test('registration retries one transient handshake failure and never replays a t
 
 test('registration stops after two failed health forwards and keeps both reasons observable', async () => {
   const gateway = await fakeGateway(() => ({ status: 503, body: '{}' }))
+  /** @type {(string | null)[]} */
   const codes = []
   const { bridge, call } = await startBridge({ gatewayUrl: gateway.url, retryRegistration: true,
     onRegistrationStep: (_step, _elapsedMs, code) => codes.push(code),

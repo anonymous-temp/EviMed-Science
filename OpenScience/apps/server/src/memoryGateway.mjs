@@ -2,7 +2,7 @@ import { memoryEnvelope, memoryQuoteUnit } from './memorySourceEnvelope.mjs';
 import { visibleStatementSources } from './memoryStatementSources.mjs';
 import { randomUUID } from 'node:crypto';
 import { recallOperation } from './memoryRecallReceipt.mjs';
-import { readStatus, searchStatusText, measuredRead, memorySourceLabel, literalAnchors, containsAnchor, literalIndexMatch, literalRecallCheck, literalFileName, hasLiteralHistoryMatch } from './memoryReadStatus.mjs';
+import { readStatus, searchStatusText, measuredRead, memorySourceLabel, containsAnchor, literalIndexMatch, literalRecallCheck, literalFileName, hasLiteralHistoryMatch } from './memoryReadStatus.mjs';
 import { aliasWithdrawn, PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';

@@ -159,7 +159,7 @@ export function createAccountProjections({ config, native, overlay, methods, pro
       for (const item of evidence) {
         if (p.bodyVersion > 1 && !String(p.body).split('\n').some(line => line.trim() === item.quote)) continue;
         if (!standing(item.quote) || !item.runId || !await checkedRun(userId,p.provenance.sourceProjectId,item.quote,{runId:item.runId})) continue;
-        lines.push({quote:item.quote,projectId:p.provenance.sourceProjectId,origin:'engine',updatedAt:method.updatedAt,source:{id:method.id,contentDigest:p.contentDigest,
+        lines.push({quote:item.quote,statement:undefined,projectId:p.provenance.sourceProjectId,origin:'engine',updatedAt:method.updatedAt,source:{id:method.id,contentDigest:p.contentDigest,
           sourcePrivacy:p.provenance.sourcePrivacy,attribution:{schemaVersion:1,origins:['engine'],confirmed:false}}});
       }
     }
