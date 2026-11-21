@@ -78,7 +78,10 @@ try {
     await sessions.setTags(id, uri, ['project=' + a.id]);
     await overlay.upsertFile({ userId: id, uri, memoryType: 'people', projectId: a.id });
   });
+  const scanInstant = async () => (await lab.parts.database.query(
+    'SELECT safety_scan_at FROM evimed_memory.native_accounts WHERE user_id=$1', [id])).rows[0]?.safety_scan_at?.toISOString();
   await stage('firstMigration', () => worker.migrateSafety(id));
+  report.firstScanAt = await stage('firstScanReceipt', scanInstant);
   const migrated = await stage('findProjection', async () => (await nativeMemory.safetyNotes(id, b.id)).find(file => file.sourceUri === uri && file.body.includes(legacy)));
   await check('binding', () => migrated?.lineHashes.includes(createHash('sha256').update('- ' + legacy).digest('hex')));
   await check('selection', () => migrated && !migrated.body.includes('咖啡'));
@@ -112,20 +115,28 @@ try {
   });
 
   // Measure the gateway wall clock separately from aggregate engine request time. Keep routes only.
-  const request = client.request;
-  report.forgetEngine = {};
-  client.request = async function (input) {
-    const start = performance.now();
-    try { return await request.call(this, input); }
-    finally {
-      const route = input.path.startsWith('/api/v1/content/') || input.path.startsWith('/api/v1/fs') ? input.path : 'other';
-      const row = report.forgetEngine[route] ??= { count: 0, ms: 0 };
-      row.count++; row.ms += Math.round(performance.now() - start);
-    }
-  };
+  report.forgetTiming = {};
+  const restore = [];
+  function measure(target, method, label) {
+    const original = target[method];
+    target[method] = async function (...args) {
+      const key = label(...args);
+      const start = performance.now();
+      try { return await original.apply(this, args); }
+      finally {
+        const row = report.forgetTiming[key] ??= { count: 0, ms: 0 };
+        row.count++; row.ms += Math.round(performance.now() - start);
+      }
+    };
+    restore.push(() => { target[method] = original; });
+  }
+  measure(client, 'request', input => input.path.startsWith('/api/v1/content/') || input.path.startsWith('/api/v1/fs') ? input.path : 'otherEngine');
+  measure(lab.parts.history, 'rejectRemoved', () => 'historyReview');
+  measure(nativeMemory.rejectionJudge, 'same', () => 'semanticReview');
   let forgotten;
   try { forgotten = await stage('gatewayForget', () => writer.callTool('forget', { uri, lines: [legacy] })); }
-  finally { client.request = request; }
+  finally { for (const reset of restore) reset(); }
+  report.forgetReceipt = forgotten?.blocks.map(block => lab.redact(block));
   await check('forget', () => forgotten && !forgotten.isError && /Removed 1 line\(s\)/.test(forgotten.blocks.join('\n')));
   await check('neighbour', async () => migrated && (await sessions.read(id, uri))?.includes('咖啡')
     && !(await sessions.read(id, uri)).includes('碘海醇') && await sessions.read(id, migrated.uri) === null);
@@ -141,7 +152,12 @@ try {
   await check('opening', () => cleanOpening(report.after.resident));
   await new Promise(resolve => setTimeout(resolve, 301000));
   await stage('secondMigration', () => worker.migrateSafety(id));
-  await check('retry', async () => migrated && await sessions.read(id, migrated.uri) === null && await cleanCards() && cleanOpening(await reader.residentBlock()));
+  report.secondScanAt = await stage('secondScanReceipt', scanInstant);
+  await check('retry', async () => {
+    const [absent, clean, opening] = await Promise.all([migrated && sessions.read(id, migrated.uri).then(text => text === null),
+      cleanCards(), reader.residentBlock()]);
+    return Date.parse(report.secondScanAt) - Date.parse(report.firstScanAt) >= 300000 && absent && clean && cleanOpening(opening);
+  });
 } catch (error) { report.error = errorOf(error); }
 finally {
   await check('cleanup', async () => {
