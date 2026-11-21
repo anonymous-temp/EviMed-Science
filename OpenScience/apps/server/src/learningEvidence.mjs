@@ -98,6 +98,7 @@ const MAX_STEERS_JUDGED = 3;
 /** How much of a message and of the previous request the judge is shown. */
 const MESSAGE_CHARS = 2_000;
 const REQUEST_CHARS = 1_000;
+const LATE_REPLY_DIAGNOSTIC_CHARS = 500;
 /** How many files opened are remembered as already looked at, and for how long: bounds on a cache, not opinions. */
 const USE_SEEN_LIMIT = 500;
 const USE_SEEN_MS = 5 * 60_000;
@@ -165,6 +166,15 @@ export function followUpVerdictFrom(content, { message, methods, mode = "follow-
   for (const candidate of [raw, ...[...raw.matchAll(/\{[\s\S]*\}/g)].map((match) => match[0])]) {
     try { parsed = JSON.parse(candidate); break; } catch { /* keep looking */ }
   }
+  return followUpVerdictFromObject(parsed, { message, methods, mode });
+}
+
+/**
+ * @param {any} parsed
+ * @param {{ message: string, methods: readonly { id: string, digest: string }[], mode?: string }} context
+ * @returns {ReturnType<typeof followUpVerdictFrom>}
+ */
+function followUpVerdictFromObject(parsed, { message, methods, mode = "follow-up" }) {
   const verdict = typeof parsed?.verdict === "string" ? parsed.verdict.trim().toLowerCase() : "";
   if (!LEARNING_EVIDENCE_VERDICTS.includes(verdict)) return { failure: "judge_unreadable" };
   if (mode === "steer" && !LEARNING_STEER_VERDICTS.includes(verdict)) return { failure: "judge_unreadable" };
@@ -184,6 +194,13 @@ export function followUpVerdictFrom(content, { message, methods, mode = "follow-
   }
   return { verdict, rule: rule.slice(0, 300), quote: quote.slice(0, 600), concerns };
 }
+
+/** @typedef {{ message: string, previousRequest: string, methods: readonly { id: string, title: string, whenToUse: string }[],
+ *   examples?: readonly import("@evimed/domain/follow-up-examples").FollowUpExample[], mode?: "steer" | "late-follow-up",
+ *   deliveries?: readonly { path: string, sha256: string }[] }} FollowUpJudgeRequest */
+/** @typedef {{ userId: string, projectId: string, runId: string }} FollowUpJudgeOwner */
+/** @typedef {{ content: string, complete: boolean, finishReason: string | null }} LateJudgeReply */
+/** @typedef {{ rawReplySnippet: string, finishReason: string | null }} LateJudgeDiagnostic */
 
 /** The one small-model call that reads a message, through the control plane's model gateway. Never a throw. */
 export class FollowUpJudge {
@@ -207,17 +224,39 @@ export class FollowUpJudge {
   /**
    * `examples` are bank examples in the order they are to be shown (the closest last); `mode: "steer"` says the message was typed into a
    * run that was still going. Both are left out of the request when not given.
-   * @param {{ message: string, previousRequest: string, methods: readonly { id: string, title: string, whenToUse: string }[],
-   *   examples?: readonly import("@evimed/domain/follow-up-examples").FollowUpExample[], mode?: "steer" | "late-follow-up", deliveries?: readonly { path: string, sha256: string }[] }} request
-   * @param {{ userId: string, projectId: string, runId: string }} owner
+   * @param {FollowUpJudgeRequest} request
+   * @param {FollowUpJudgeOwner} owner
    * @returns {Promise<string | null>} the model's text, or null when the call failed
    */
-  async read({ message, previousRequest, methods, examples = [], mode, deliveries = [] }, { userId, projectId, runId }) {
-    if (!this.available) return null;
+  async read(request, owner) {
+    const body = await this.#request(request, owner);
+    const answer = body?.choices?.[0]?.message;
+    return String(answer?.content || answer?.reasoning_content || "") || null;
+  }
+
+  /**
+   * @param {FollowUpJudgeRequest} request
+   * @param {FollowUpJudgeOwner} owner
+   * @returns {Promise<LateJudgeReply | null>}
+   */
+  async readLateReply(request, owner) {
+    const body = await this.#request({ ...request, mode: "late-follow-up" }, owner);
+    if (body === undefined) return null;
+    const choice = body?.choices?.[0];
+    const finishReason = typeof choice?.finish_reason === "string" ? choice.finish_reason : null;
+    const content = choice?.message?.content;
+    // The model can quote an example verdict in its reasoning. Only the final message can carry evidence.
+    return { content: typeof content === "string" ? content : "", finishReason,
+      complete: Array.isArray(body?.choices) && body.choices.length === 1 && (choice?.finish_reason == null || finishReason === "stop") };
+  }
+
+  /** @param {FollowUpJudgeRequest} request @param {FollowUpJudgeOwner} owner */
+  async #request({ message, previousRequest, methods, examples = [], mode, deliveries = [] }, { userId, projectId, runId }) {
+    if (!this.available) return undefined;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const body = await this.callModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
+      return await this.callModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
         userId, projectId, runId, purpose: "learning", signal: controller.signal,
         body: {
           model: this.config.deepseekModel,
@@ -238,12 +277,10 @@ export class FollowUpJudge {
           ],
         },
       });
-      const answer = body?.choices?.[0]?.message;
-      return String(answer?.content || answer?.reasoning_content || "") || null;
     } catch (error) {
       try { this.onFailure(error?.code === "usage_budget_exceeded" ? "judge_over_budget" : "judge_failed", { userId, projectId, runId }); } catch { /* diagnostic only */ }
       process.stderr.write(`follow-up judgement failed for ${runId}: ${/** @type {any} */ (error)?.name === "AbortError" ? "timeout" : /** @type {any} */ (error)?.code ?? "error"}\n`);
-      return null;
+      return undefined;
     } finally {
       clearTimeout(timeout);
     }
@@ -287,23 +324,54 @@ export async function readFollowUp({ judge, examples = null, observe = () => {} 
   return { failure: "adopt_unconfirmed" };
 }
 
-/** A single injectable late judgement; an acceptance carries both human words and an exact delivered-version bond.
- * @param {Pick<FollowUpJudge, "read">} judge
- * @param {{ message: string, previousRequest: string, methods: readonly { id: string, digest: string, title: string, whenToUse: string }[],
- *   deliveries: readonly { path: string, sha256: string }[] }} request
- * @param {{ userId: string, projectId: string, runId: string }} owner
- * @returns {Promise<{ verdict: string, rule: string | null, quote: string | null, concerns: { id: string, digest: string }[],
- *   artifact?: { path: string, sha256: string }, relation?: string } | { failure: string }>}
+/**
+ * Parse one late-judge object, optionally surrounded by prose or a matched JSON fence.
+ * @param {string} content
  */
-export async function readLateFollowUp(judge, { message, previousRequest, methods, deliveries }, owner) {
-  let answer;
-  try { answer = await judge.read({ message, previousRequest, methods, deliveries, mode: "late-follow-up" }, owner); }
-  catch { return { failure: "judge_failed" }; }
-  if (answer === null) return { failure: "judge_failed" };
-  let raw;
-  try { raw = JSON.parse(answer.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")); }
-  catch { return { failure: "judge_unreadable" }; }
-  const reading = followUpVerdictFrom(answer, { message, methods });
+function parseLateJudgeObject(content) {
+  const text = content.trim().replace(/^<think>[\s\S]*?<\/think>/i, "");
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end < start) return null;
+  const before = text.slice(0, start);
+  const after = text.slice(end + 1);
+  // Outer braces must delimit the only object. Reject array wrappers and unfinished thinking blocks.
+  if (/[{}[\]]|<\/?think\b/i.test(before + after)) return null;
+  const openingFence = /(?<![`~])(`{3,}|~{3,})(?:json)?\s*$/i.exec(before);
+  const closingFence = /^\s*(`{3,}|~{3,})/.exec(after);
+  const strayFence = /```|~~~/;
+  if (openingFence?.[1] !== closingFence?.[1]
+    || strayFence.test(openingFence ? before.slice(0, openingFence.index) : before)
+    || strayFence.test(closingFence ? after.slice(closingFence[0].length) : after)) return null;
+  try {
+    /** @type {Set<string>[]} */
+    const objectKeys = [];
+    const normalized = text.slice(start, end + 1).replace(/"(?:[^"\\]|\\[\s\S])*"|[{},]/g, (token, offset, source) => {
+      if (token === "{") objectKeys.push(new Set());
+      if (token === "}") objectKeys.pop();
+      const tail = source.slice(offset + token.length);
+      if (token === "," && /^\s*[}\]]/.test(tail) && !/(?:^|[{[,:])\s*$/.test(source.slice(0, offset))) return "";
+      if (!token.startsWith('"') || !/^\s*:/.test(tail)) return token;
+      const key = JSON.parse(token).toLowerCase();
+      const keys = objectKeys.at(-1);
+      // JSON.parse alone silently takes the last of two spellings of a field.
+      if (keys?.has(key)) throw new SyntaxError("Duplicate judge field");
+      keys?.add(key);
+      return JSON.stringify(key);
+    });
+    return JSON.parse(normalized);
+  } catch { return null; }
+}
+
+/** @typedef {Pick<FollowUpJudge, "read"> & Partial<Pick<FollowUpJudge, "readLateReply">>} LateJudgeReader */
+/** @typedef {{ message: string, previousRequest: string, methods: readonly { id: string, digest: string, title: string, whenToUse: string }[],
+ *   deliveries: readonly { path: string, sha256: string }[] }} LateFollowUpRequest */
+/** @typedef {{ verdict: string, rule: string | null, quote: string | null, concerns: { id: string, digest: string }[],
+ *   artifact?: { path: string, sha256: string }, relation?: string } | { failure: string, diagnostic?: LateJudgeDiagnostic }} LateFollowUpVerdict */
+
+/** @param {any} raw @param {LateFollowUpRequest} request @returns {LateFollowUpVerdict} */
+function lateVerdictFromObject(raw, { message, methods, deliveries }) {
+  const reading = followUpVerdictFromObject(raw, { message, methods });
   if ("failure" in reading) return reading;
   const unknown = { verdict: "none", rule: null, quote: null, concerns: [] };
   if (reading.verdict === "adopt") return unknown;
@@ -312,8 +380,42 @@ export async function readLateFollowUp(judge, { message, previousRequest, method
   if (quote.length < 2 || quote.length > 600 || !message.includes(quote)) return unknown;
   if (unsafeToKeep(quote)) return { failure: "rule_unsafe" };
   const artifact = deliveries.find(file => file.path === raw.artifact?.path && file.sha256 === raw.artifact?.sha256);
-  if (!artifact || !["build", "convert", "cite", "share"].includes(raw.relation)) return unknown;
-  return { ...reading, quote, artifact, relation: raw.relation };
+  const relation = typeof raw.relation === "string" ? raw.relation.trim().toLowerCase() : "";
+  if (!artifact || !["build", "convert", "cite", "share"].includes(relation)) return unknown;
+  return { ...reading, quote, artifact, relation };
+}
+
+/** Retry the same late-judge request once if its final reply cannot be read.
+ * @param {LateJudgeReader} judge
+ * @param {LateFollowUpRequest} request
+ * @param {FollowUpJudgeOwner} owner
+ * @returns {Promise<LateFollowUpVerdict>}
+ */
+export async function readLateFollowUp(judge, request, owner) {
+  const { message, previousRequest, methods, deliveries } = request;
+  const input = { message, previousRequest, methods, deliveries, mode: /** @type {const} */ ("late-follow-up") };
+  /** @type {LateJudgeReply | null} */
+  let unreadable = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    /** @type {LateJudgeReply | null} */
+    let reply;
+    try {
+      if (judge.readLateReply) reply = await judge.readLateReply(input, owner);
+      else {
+        const content = await judge.read(input, owner);
+        reply = content === null ? null : { content: typeof content === "string" ? content : "", finishReason: null, complete: true };
+      }
+    } catch { reply = null; }
+    if (reply === null) break;
+    const verdict = lateVerdictFromObject(reply.complete ? parseLateJudgeObject(reply.content) : null, request);
+    if (!("failure" in verdict) || verdict.failure !== "judge_unreadable") return verdict;
+    unreadable = reply;
+  }
+  if (!unreadable) return { failure: "judge_failed" };
+  return { failure: "judge_unreadable", diagnostic: {
+    rawReplySnippet: [...unreadable.content].slice(0, LATE_REPLY_DIAGNOSTIC_CHARS).join(""),
+    finishReason: unreadable.finishReason,
+  } };
 }
 
 /** @param {string} path @returns {string} a workspace-relative path in forward slashes with no leading `./` or `/`; empty when it names nothing */
@@ -330,7 +432,7 @@ export class LearningEvidence {
    * that is clean (accepted, adopted or used, never corrected) is read.
    * `examples` chooses the examples a request carries (`followUpExamples.mjs`); `observe(outcome)` counts what the judging did
    * (`FOLLOW_UP_JUDGE_OUTCOMES`).
-   * @param {{ feedback: any, jobs: any, agentRuns: any, triggers: any, judge?: Pick<FollowUpJudge, "read" | "available"> | null, scripts?: { afterSettle: (project: any, run: any) => Promise<unknown> } | null,
+   * @param {{ feedback: any, jobs: any, agentRuns: any, triggers: any, judge?: (LateJudgeReader & Pick<FollowUpJudge, "available">) | null, scripts?: { afterSettle: (project: any, run: any) => Promise<unknown> } | null,
    *   examples?: { select: (message: string) => Promise<{ examples: any[], mode: string }> } | null,
    *   methodsOpened?: ((project: any, run: any) => Promise<{ id: string, digest: string, title: string, whenToUse: string }[]>) | null,
    *   resolveProject?: ((userId: string, projectId: string) => Promise<any>) | null,
@@ -722,7 +824,7 @@ export class LearningEvidence {
    * Attended turns only — the callers never pass an automated, scheduled, background, programme or continuation turn.
    *
    * @param {any} project @param {{ sessionId: string, text: string, requestId?: string, dispatchId?: string | null }} turn
-   * @returns {Promise<{ recorded: boolean, reason?: string, verdict?: string, runId?: string, queued?: string[] }>}
+   * @returns {Promise<{ recorded: boolean, reason?: string, verdict?: string, runId?: string, queued?: string[], diagnostic?: LateJudgeDiagnostic }>}
    */
   async onNewTurn(project, { sessionId, text, requestId = "", dispatchId = null }) {
     // This callback runs before native consumption. Shared observations are
@@ -824,7 +926,11 @@ export class LearningEvidence {
     try {
       const verdict = await readLateFollowUp(this.judge, { message, previousRequest: String(previous.question ?? ""), methods: await this.#opened(project, previous), deliveries },
         { userId: project.userId, projectId: project.id, runId: previous.id });
-      if ("failure" in verdict) { this.#failed(verdict.failure); return unknown(verdict.failure); }
+      if ("failure" in verdict) {
+        this.#failed(verdict.failure);
+        const result = await unknown(verdict.failure);
+        return verdict.diagnostic ? { ...result, diagnostic: verdict.diagnostic } : result;
+      }
       const corrected = LEARNING_CORRECTION_VERDICTS.includes(verdict.verdict);
       // Recheck authority after the asynchronous judge, including reset, pause and source withdrawal.
       const refused = await this.#triggers.refusalFor(project, previous);

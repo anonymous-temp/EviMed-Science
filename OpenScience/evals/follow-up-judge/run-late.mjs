@@ -33,6 +33,7 @@ for (const id of LATE_CASE_IDS) {
     && answer.artifact?.sha256 === target?.artifact.sha256;
   rows.push({ id, verdict: 'verdict' in answer ? answer.verdict : null,
     failure: 'failure' in answer ? answer.failure : null,
+    ...('failure' in answer && answer.failure === 'judge_unreadable' && { diagnostic: answer.diagnostic }),
     falsePositive: accepted && (!target || !bound), missedPositive: Boolean(target) && !bound });
 }
 const falsePositives = rows.filter(row => row.falsePositive).map(row => row.id);
