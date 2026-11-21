@@ -988,6 +988,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // MCP profile reads always count and return the complete source.
       const startupProfile = !ctx.shared && uri === `${ctx.userRoot}/memories/profile.md` && ctx.query.get('model_use') !== 'true';
       if (!startupProfile) await noteUsed(ctx, [absolute(uri, ctx.userRoot)]);
+      else if (config.memoryPreferenceReconcileEnabled === true && memoryTool && typeof memoryTool.preferenceRecallText === 'function') {
+        text = await memoryTool.preferenceRecallText(ctx.user.id, uri, text).catch(() => text);
+      }
       return { status: 200, ...(ctx.origin === 'agent-api' && startupProfile ? { elided: openingProfileRead(text, `${ctx.userRoot}/memories`, config) !== text } : {}), json: { ...ok(startupProfile
         ? openingProfileRead(text, `${ctx.userRoot}/memories`, config) : await ctx.recallText(uri, text)), readStatus: readStatus('searched') }, outcome: "forwarded" };
     },

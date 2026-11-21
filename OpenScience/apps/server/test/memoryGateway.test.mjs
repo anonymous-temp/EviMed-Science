@@ -1420,6 +1420,19 @@ test('alias candidates respect hidden, project and account boundaries', async t 
   assert.ok(!read.json.result.includes('not confirmed'));
 });
 
+test('the opening profile and an explicit model read share the earlier-preference label', async t => {
+  const uri = `${ROOT}/memories/profile.md`, calls = [];
+  const f = await fixture(t, { config: { memoryPreferenceReconcileEnabled: true }, memoryTool: {
+    preferenceRecallText: async (_user, named, text) => { calls.push(named); return text.replace('Use Chinese', '[earlier value] Use Chinese'); },
+  } });
+  f.stub.seedMemory(OV_USER, 'profile.md', '# User\n- Use Chinese (as of 2026-11-01)');
+  for (const suffix of ['', '&model_use=true']) {
+    const read = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}${suffix}`);
+    assert.equal(read.status, 200); assert.match(read.json.result, /\[earlier value\] Use Chinese/);
+  }
+  assert.deepEqual(calls, [uri, uri]);
+});
+
 test('stated preferences rank ahead of inferred choices even at limit one', async t => {
   const f = await fixture(t, { config: { memoryObservationInductionEnabled: true } });
   f.stub.seedMemory(OV_USER, 'preferences/self/inferred.md', '- Use Markdown [Inferred from behaviour; 2 conversations; dates: unknown]');
