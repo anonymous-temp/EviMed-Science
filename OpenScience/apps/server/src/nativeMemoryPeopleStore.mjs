@@ -1,7 +1,7 @@
 import { NATIVE_TEXT_LIMIT } from './nativeMemoryPersistence.mjs';
 import { HttpError } from './security.mjs';
 import { contentHash, lineFingerprint, memoryLines, originalSources } from './nativeMemoryOverlay.mjs';
-import { mergePeopleText, personProjectScope } from './nativeMemoryPeople.mjs';
+import { aliasWithdrawn, mergePeopleText, personProjectScope } from './nativeMemoryPeople.mjs';
 import { personLabel } from './nativeMemoryInduction.mjs';
 import { withMemorySummaryInvalidation } from './nativeMemorySummaries.mjs';
 
@@ -99,7 +99,12 @@ export async function redirectPeopleWrites(deps) {
     const writable = [null, 'default', context.projectId ?? null];
     if (!writable.includes(keepMeta.projectId) || !writable.includes(mergeMeta.projectId)
       || personProjectScope(keepMeta.projectId) !== personProjectScope(mergeMeta.projectId)) throw conflict();
-    const after = mergePeopleText(before, incoming, personLabel(uri, incoming));
+    const label = personLabel(uri, incoming);
+    const removals = await overlay.removals?.(userId, context.kind === 'geo-project' ? context.namespaceId : null) ?? [];
+    const retainAlias = redirect.snapshot !== null && !aliasWithdrawn(label, removals);
+    const incomingBody = retainAlias ? incoming : incoming.split('\n')
+      .filter(line => line.trim() !== `# ${label}` && line.trim() !== `- 又称：${label}`).join('\n');
+    const after = mergePeopleText(before, incomingBody, retainAlias ? label : '');
     if (after.length > NATIVE_TEXT_LIMIT) throw conflict();
     const keep = { uri: target, body: before, projectId: keepMeta.projectId, sensitive: keepMeta.sensitive || mergeMeta.sensitive, origins: [...(origins.get(target) ?? [])] };
     const merge = { uri, body: incoming, projectId: mergeMeta.projectId, sensitive: mergeMeta.sensitive, origins: [...(origins.get(uri) ?? [])] };

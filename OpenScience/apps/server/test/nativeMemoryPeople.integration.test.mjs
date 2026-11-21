@@ -57,6 +57,8 @@ test('AL9 real gateway and PostgreSQL: distinct, confirmation, merge, inherited-
   const read = async uri => (await call('read', { uris: [uri] })).result.content.map(part => part.text).join('\n');
   assert.match(await read(keep), /Related people files/);
   const no = '王阿姨和小王阿姨不是同一个人。'; say(no);
+  assert.ok((await call('merge_people', { keep, merge, confirmation: no })).error);
+  assert.equal(await f.sessions.read(f.userId, merge), otherBody);
   assert.ok((await call('distinct_people', { a: keep, b: merge, confirmation: no })).result);
   assert.ok((await store.personEdges.dismissed(f.userId)).has(personPairId(keep, merge)));
   assert.doesNotMatch(await read(keep), /Related people files/);
@@ -88,7 +90,7 @@ test('AL9 real gateway and PostgreSQL: distinct, confirmation, merge, inherited-
   await worker.processCommits({ userId: f.userId });
   assert.equal(await f.sessions.read(f.userId, merge), null);
   assert.match(await f.sessions.read(f.userId, keep), /Likes walking/);
-  const consolidated = (await f.sessions.read(f.userId, keep)).split('\n').filter(line => !line.includes('又称：小王阿姨')).join('\n');
+  const consolidated = (await f.sessions.read(f.userId, keep)).split('\n').filter(line => !['# 小王阿姨', '- 又称：小王阿姨'].includes(line.trim())).join('\n');
   await f.sessions.replace(f.userId, keep, consolidated);
   await worker.ingestConsolidation(f.userId, { taskId: 'person-alias-cleanup', updates: [keep] }, { context });
   assert.doesNotMatch(await f.sessions.read(f.userId, keep), /小王阿姨/, 'ordinary cleanup may remove the visible alias line');

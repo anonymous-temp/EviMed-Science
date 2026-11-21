@@ -244,6 +244,21 @@ test('people cards offer only unconfirmed name hints on the page and honour a di
   assert.deepEqual((await store.records('u1')).find(row => row.uri === a).possibleSamePerson, []);
 });
 
+test('homophones can prompt confirmation while sensitive, withdrawn and other-project names stay out', async () => {
+  const { files, store } = engine({ count: 0, delay: 0 });
+  Object.assign(store, { personAliasHintEnabled: true, personMergeEnabled: true });
+  const metadata = new Map();
+  store.overlay.files = async () => metadata;
+  for (const [name, meta] of [['林舟', {}], ['临洲', {}], ['琳周', { sensitive: true }], ['邻州', { projectId: 'other' }], ['林周', {}]]) {
+    const uri = `${ROOT}/people/${name}.md`;
+    files.set(uri, { body: `# ${name}\n- Likes tea.`, modTime: '2026-11-21' }); metadata.set(uri, meta);
+  }
+  store.sourceDeletion = { hiddenMemoryUris: async () => [`${ROOT}/people/林周.md`], redactRecords: async (_u, records) => records };
+  const records = await store.records('u1');
+  assert.deepEqual(records.find(row => row.summary === '林舟').possibleSamePerson.map(row => row.label), ['临洲']);
+  assert.equal(files.size, 5);
+});
+
 test('a file heading is its visible title, rather than a stale filename after correction', async () => {
   const { files, store } = engine({ count: 0, delay: 0 });
   files.set(`${ROOT}/people/old-label.md`, { body: '# Current name\n- Independent fact.', modTime: '2026-11-17' });

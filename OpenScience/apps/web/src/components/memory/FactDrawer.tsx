@@ -107,7 +107,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
   onOpenRecord?: (recordId: string) => void;
   canOpenRecord?: (recordId: string) => boolean;
   /** Drafts the identity question in the ordinary composer; nothing is merged from this hint alone. */
-  onAskAbout?: (draft: string) => void;
+  onAskAbout?: (draft: string, projectId: string) => void;
 }) {
   const record = item.kind === "record" ? item.record : null;
   const entry: OwnCapsuleEntry | null = item.kind === "entry" ? item.entry : null;
@@ -326,7 +326,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
                 {record.possibleSamePerson?.map((person) => (
                   <li key={person.id} className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-ui text-text">{person.label}</span>
-                    <Button size="sm" variant="secondary" onClick={() => onAskAbout(`请确认“${record.summary}”和“${person.label}”是否是同一人。只有我明确回答是同一人后才能合并；如果不是，我会明确回答不是。`)}>去确认</Button>
+                    <Button size="sm" variant="secondary" onClick={() => onAskAbout(`请确认“${record.summary}”和“${person.label}”是否是同一人。请先问我，再按我的答复处理。`, item.projectId ?? "default")}>去确认</Button>
                   </li>
                 ))}
               </ul>

@@ -7,7 +7,7 @@ const root = 'viking://user/test/memories';
 test('formatting equality retains type, path segments, disambiguating suffixes and spelling differences', () => {
   assert.equal(normalizedMemoryName('ＢＩ－ＲＡＤＳ_4 类'), normalizedMemoryName('bi-rads 4类'));
   assert.equal(memoryNameKey(`${root}/projects/BI-RADS 4 类.md`, root), memoryNameKey(`${root}/projects/bi_rads_4类.md`, root));
-  for (const [a, b] of [['projects/a.md', 'people/a.md'], ['people/王青-01.md', 'people/王青-02.md'], ['entities/drug/a.md', 'entities/tool/a.md'], ['entities/drug/恩布格列净.md', 'entities/drug/恩格列净.md']]) {
+  for (const [a, b] of [['projects/a.md', 'people/a.md'], ['people/王青-01.md', 'people/王青-02.md'], ['people/Mary-Ann.md', 'people/mary_ann.md'], ['entities/drug/a.md', 'entities/tool/a.md'], ['entities/drug/恩布格列净.md', 'entities/drug/恩格列净.md']]) {
     assert.notEqual(memoryNameKey(`${root}/${a}`, root), memoryNameKey(`${root}/${b}`, root));
   }
   assert.equal(memoryNameKey('viking://user/other/memories/projects/a.md', root), null);

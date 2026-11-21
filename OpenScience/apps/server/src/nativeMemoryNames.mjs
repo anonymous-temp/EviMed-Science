@@ -17,6 +17,7 @@ export function normalizedMemoryName(value) {
 export function memoryNameKey(uri, root) {
   const file = nativeMemoryFile(uri, root);
   if (!file || file.type === 'profile') return null;
+  if (file.type === 'people') return JSON.stringify(['people', file.relPath]);
   const segments = file.relPath.replace(/\.md$/i, '').split('/').map(normalizedMemoryName);
   if (segments.some(segment => !segment)) return null;
   return JSON.stringify([file.type, ...segments]);

@@ -1,5 +1,5 @@
 import { readStatus, searchStatusText, measuredRead, memorySourceLabel, literalIndexMatch } from './memoryReadStatus.mjs';
-import { PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId } from './nativeMemoryPeople.mjs';
+import { aliasWithdrawn, PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';
 import { closePersonNames, confirmedAliases, personLabel } from './nativeMemoryInduction.mjs';
@@ -273,17 +273,37 @@ async function scopedListSearch(sessions, ctx, given) {
     let available = limit;
     for (const kind of ['memories', 'resources', 'skills']) { result[kind] = result[kind].slice(0, available); available -= result[kind].length; }
   }
-  if (ctx.personMergeEnabled && result.memories.length < limit && String(given.query ?? '').trim() && typeof ctx.personMerges === 'function') {
-    const merges = await ctx.personMerges().catch(() => []);
-    for (const row of merges) {
-      if (row.state !== 'applied' || !row.snapshot || result.memories.some(hit => hit.uri === row.keepUri)) continue;
-      const alias = personLabel(row.mergeUri, row.snapshot.merge?.body ?? '');
-      if (!literalIndexMatch(given.query, [alias]) || !(row.keepUri === target || row.keepUri.startsWith(`${target}/`)) || await ctx.hidden(row.keepUri)) continue;
-      if (!await ctx.personIdentityVisible(row.mergeUri, '')) continue;
-      const body = await ctx.readMemory(row.keepUri).catch(() => null);
-      if (body === null) continue;
-      result.memories.push({ uri: row.keepUri, abstract: await ctx.recallText(row.keepUri, body), retrieval: 'confirmed_alias' });
-      if (result.memories.length >= limit) break;
+  if (ctx.personMergeEnabled && String(given.query ?? '').trim()) {
+    const rows = await ctx.personMerges().catch(() => []);
+    /** @type {Map<string, import('./nativeMemoryPeople.mjs').PersonMerge>} */
+    const applied = new Map(rows.filter(row => row.state === 'applied' && row.snapshot).map(row => [row.mergeUri, row]));
+    const matches = [];
+    for (const row of applied.values()) {
+      const snapshot = row.snapshot.merge;
+      if (!snapshot || ctx.recallFile(row.mergeUri)?.type !== 'people' || hidden(row.mergeUri)
+        || snapshot.sensitive || snapshot.projectId && snapshot.projectId !== 'default' && snapshot.projectId !== ctx.project.id) continue;
+      const labels = [personLabel(row.mergeUri, snapshot.body), ...confirmedAliases(snapshot.body)];
+      const alias = labels.find(label => literalIndexMatch(given.query, [label]));
+      if (!alias || !await ctx.aliasVisible(row.mergeUri, alias)) continue;
+      let uri = row.keepUri;
+      const seen = new Set([row.mergeUri]);
+      while (applied.has(uri) && !seen.has(uri) && !hidden(uri) && ctx.recallFile(uri)?.type === 'people'
+        && await ctx.aliasVisible(uri, personLabel(uri, applied.get(uri).snapshot.merge.body))) {
+        seen.add(uri);
+        uri = applied.get(uri).keepUri;
+      }
+      if (seen.has(uri) || applied.has(uri) || ctx.recallFile(uri)?.type !== 'people' || hidden(uri)
+        || !(uri === target || uri.startsWith(`${target}/`)) || matches.some(hit => hit.uri === uri)) continue;
+      const body = await ctx.readMemory(uri).catch(() => null);
+      if (body === null || !await ctx.personIdentityVisible(uri, body)) continue;
+      matches.push({ uri, abstract: await ctx.recallText(uri, body), retrieval: 'confirmed_alias' });
+      if (matches.length === limit) break;
+    }
+    if (matches.length) {
+      const matched = new Set(matches.map(hit => hit.uri));
+      result.memories = [...matches, ...result.memories.filter(hit => !matched.has(hit.uri))].slice(0, limit);
+      result.resources = result.resources.slice(0, limit - result.memories.length);
+      result.skills = result.skills.slice(0, limit - result.memories.length - result.resources.length);
     }
   }
   result.total = result.memories.length + result.resources.length + result.skills.length;
@@ -438,7 +458,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   sourceReceiptFailed?: ((request:any)=>Promise<void>) | null,
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
  *   personMessages?: ((project: Record<string, unknown>, sessionId: string) => Promise<{role:string,text:string}[]>) | null,
- *   memoryTool?: { people?: import('./nativeMemoryStore.mjs').NativeMemoryStore['people'], forget: (user: any, project: any, uri: string | null, options?: any) => Promise<{ removed: boolean, removedLines?: number, fileRemoved?: boolean, historyRejected?: boolean, historyScanPending?: boolean, missingLines?: string[], availableLines?: string[] }> } | null,
+ *   memoryTool?: { preferenceRecallText?: import('./nativeMemoryStore.mjs').NativeMemoryStore['preferenceRecallText'], people?: import('./nativeMemoryStore.mjs').NativeMemoryStore['people'], forget: (user: any, project: any, uri: string | null, options?: any) => Promise<{ removed: boolean, removedLines?: number, fileRemoved?: boolean, historyRejected?: boolean, historyScanPending?: boolean, missingLines?: string[], availableLines?: string[] }> } | null,
  *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>) | null,
  *   historySecrets?: import("./memoryHistorySecrets.mjs").MemoryHistorySecrets | null,
  *   historySearch?: ((request: any) => Promise<any[]>) | null,
@@ -963,8 +983,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         let redirected = redirects.find(row => row.mergeUri === uri && row.state === 'applied');
         while (redirected) {
           const target = redirected.keepUri;
-          if (visited.has(target) || !insideNativeMemories(target, ctx.userRoot) || await ctx.hidden(target)
-            || !await ctx.personIdentityVisible(uri, '')) return missing;
+          if (visited.has(target) || ctx.recallFile(target)?.type !== 'people' || await ctx.hidden(target)
+            || redirected.snapshot?.merge?.projectId && redirected.snapshot.merge.projectId !== 'default' && redirected.snapshot.merge.projectId !== ctx.project.id
+            || !redirected.snapshot?.merge || !await ctx.aliasVisible(uri, personLabel(uri, redirected.snapshot.merge.body))) return missing;
           visited.add(target);
           uri = await ctx.checkUri(target);
           redirected = redirects.find(row => row.mergeUri === uri && row.state === 'applied');
@@ -1106,7 +1127,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             local.push(rpcError(message.id, -32602, 'These people files are not writable in this conversation.')); continue;
           }
           let result;
-          try { result = await memoryTool.people(ctx.user, ctx.project, { a, b, distinct: name === 'distinct_people', engineSession: `dsh-${admitted.sessionId}` }); }
+          try { result = await memoryTool.people(ctx.user, ctx.project, { a, b, distinct: name === 'distinct_people', confirmation: args.confirmation, engineSession: `dsh-${admitted.sessionId}` }); }
           catch (error) {
             if (!(error instanceof HttpError) || !['memory_conflict', 'memory_scope_denied', 'memory_payload_invalid', 'memory_source_cleanup_busy', 'memory_map_edges_full'].includes(error.code)) throw error;
             local.push(rpcError(message.id, -32602, error.message)); continue;
@@ -1325,6 +1346,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       /** @type {Promise<{uri:string,label:string,aliases:string[]}[]> | null} */
       let people = null;
       let sourceFiles = null;
+      let aliasRemovals;
       // Only the authenticated bridge can set this header; model arguments and Mcp-Session-Id never bind a conversation.
       const toolSession = route === 'mcp' && typeof req.headers['x-evimed-memory-session'] === 'string'
         && /^[A-Za-z0-9_.@-]{1,180}$/.test(req.headers['x-evimed-memory-session']) ? req.headers['x-evimed-memory-session'] : null;
@@ -1362,6 +1384,11 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         inductionEnabled: !shared && config.memoryObservationInductionEnabled === true,
         recallFile: (/** @type {string} */ uri) => nativeMemoryFile(uri, `${userRoot}/memories`)
           ?? (!shared && (config.memoryObservationInductionEnabled === true || config.memoryObservationRecallEnabled === true) ? observationFile(uri, `${userRoot}/memories`) : null),
+        aliasVisible: async (uri, label) => {
+          if (!await ctx.personIdentityVisible(uri, `# ${label}`)) return false;
+          aliasRemovals ??= overlay?.removals?.(user.id, shared ? memoryContext.namespaceId : null) ?? Promise.resolve([]);
+          return !aliasWithdrawn(label, await aliasRemovals);
+        },
         personIdentityVisible: async (/** @type {string} */ uri, /** @type {string} */ body) => {
           // A safe surviving body does not authorize a removed title or filename as an alias hint.
           // Use the same source-aware fence for both names, including filename fallback and redirects.

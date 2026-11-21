@@ -533,7 +533,7 @@ export class NativeMemoryWorker {
   async processCommits({ userId = null, limit = 50 } = {}) {
     let settled = 0;
     for (const commit of await this.overlay.openCommits({ userId, limit, now: this.commitClock ? this.commitClock() : null })) {
-      const lease = { exclusive: this.config.memoryProfileNameDedupeEnabled === true };
+      const lease = { exclusive: this.config.memoryProfileNameDedupeEnabled === true || this.config.memoryPersonMergeEnabled === true };
       try {
         if (commit.extraction.engineDeferred) {
           if (this.engineDeferred) settled += await withNativeMemoryWrite(this.overlay.database, commit.userId, () => this.engineDeferred.process(commit), lease) ? 1 : 0;

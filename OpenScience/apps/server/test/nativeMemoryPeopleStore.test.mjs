@@ -80,7 +80,7 @@ test('the store independently refuses disabled, foreign, non-people, identical a
   f.overlay.otherProjectUris = async () => [];
   const store = new NativeMemoryStore({ sessions: f.context.sessions, overlay: f.overlay });
   store.files = async () => [...f.metadata.values()].map(file => ({ ...file, type: 'people' }));
-  const call = (keep = a, merge = b) => store.people(user, project, { a: keep, b: merge, distinct: false, engineSession: 'dsh-current' });
+  const call = (keep = a, merge = b) => store.people(user, project, { a: keep, b: merge, distinct: false, confirmation: '王阿姨和小王阿姨是同一个人。', engineSession: 'dsh-current' });
   await assert.rejects(call(), /not enabled/);
   store.personMergeEnabled = true;
   await assert.rejects(call(a, a), /different/);
@@ -91,7 +91,11 @@ test('the store independently refuses disabled, foreign, non-people, identical a
   f.metadata.get(b).projectId = null;
   const decisions = [];
   store.personEdges.set = async (...args) => { decisions.push(args); return { hidden: true }; };
-  await store.people(user, project, { a, b, distinct: true, engineSession: 'dsh-current' });
+  for (const confirmation of ['王阿姨和小王阿姨不是同一个人。', '请确认王阿姨和小王阿姨是否是同一人。', '林舟和小王阿姨是同一个人。']) {
+    await assert.rejects(store.people(user, project, { a, b, distinct: false, confirmation, engineSession: 'dsh-current' }), /full decision/);
+    assert.equal(f.bytes.get(a), first); assert.equal(f.bytes.get(b), second);
+  }
+  await store.people(user, project, { a, b, distinct: true, confirmation: '王阿姨和小王阿姨不是同一个人。', engineSession: 'dsh-current' });
   assert.deepEqual(decisions, [[user.id, personPairId(a, b), true]]);
   assert.equal(f.revisions.length, 0); assert.equal(f.bytes.get(a), first); assert.equal(f.bytes.get(b), second);
 });

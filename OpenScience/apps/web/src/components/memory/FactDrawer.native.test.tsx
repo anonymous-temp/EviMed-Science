@@ -242,16 +242,18 @@ it('a profile title uses the same editable row and forget action as its neighbou
 });
 
 it('offers a similar-name person for explicit confirmation without merging from the page hint', async () => {
-  const file = nativeFile('王阿姨', '# 王阿姨\n- 喜欢喝茶。', { nativeType: 'people', folder: 'people', kind: 'person',
+  vi.clearAllMocks(); client.fetchMemorySources.mockResolvedValue([]);
+  const file = nativeFile('王阿姨', '# 王阿姨\n- 喜欢喝茶。', { nativeType: 'people', folder: 'people', kind: 'person', scope: 'project', scopeId: 'family',
     possibleSamePerson: [{ id: 'nm_other', label: '小王阿姨' }] });
   const onAskAbout = vi.fn();
   show(file, { onAskAbout });
   expect(screen.getByText('可能是同一人')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '去确认' }));
-  expect(onAskAbout).toHaveBeenCalledWith(expect.stringContaining('王阿姨'));
-  expect(onAskAbout).toHaveBeenCalledWith(expect.stringContaining('小王阿姨'));
+  expect(onAskAbout).toHaveBeenCalledWith(expect.stringContaining('王阿姨'), 'family');
+  expect(onAskAbout).toHaveBeenCalledWith(expect.stringContaining('小王阿姨'), 'family');
   expect(api.updateStructuredMemory).not.toHaveBeenCalled();
   expect(client.archiveMemoryRecord).not.toHaveBeenCalled();
+  cleanup();
 });
 
 it('labels an earlier preference and opens its current value without editing the label into memory', async () => {
@@ -263,6 +265,7 @@ it('labels an earlier preference and opens its current value without editing the
   expect(onOpenRecord).toHaveBeenCalledWith('nm_current');
   await userEvent.click(screen.getByRole('button', { name: '编辑' }));
   expect(screen.getByRole('textbox', { name: '编辑这条记忆' })).toHaveValue('回答一律用中文。');
+  cleanup();
 });
 
 it('a filename-only topic is editable as the file heading without changing its independent facts', async () => {

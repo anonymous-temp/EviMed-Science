@@ -1459,6 +1459,29 @@ test('a confirmed merge keeps alias retrieval after ordinary cleanup removes the
   assert.equal(unrelated.json.result.memories.length, 0);
 });
 
+test('confirmed alias lookup honours explicit exclusions, withdrawal, scope and undo even behind opaque filenames', async t => {
+  const keep = `${ROOT}/memories/people/first.md`, retired = `${ROOT}/memories/people/second.md`;
+  const merge = { state: 'applied', keepUri: keep, mergeUri: retired, snapshot: { merge: { body: '# Old Name', projectId: null } } };
+  let withdrawn = [];
+  const f = await fixture(t, { config: { memoryPersonMergeEnabled: true }, overlay: { configured: true,
+    sensitiveUris: async () => [], otherProjectUris: async () => [], noteRecalled: async () => {},
+    removals: async () => withdrawn, personMerges: async () => [merge] } });
+  f.stub.seedMemory(OV_USER, 'people/first.md', '# Pat\n- Likes walking.');
+  const search = async (patch = {}) => (await f.call('POST', '/api/v1/search/search', { query: 'Old Name', limit: 1, ...patch })).json.result.memories;
+  assert.deepEqual((await search()).map(hit => hit.uri), [keep]);
+  for (const excluded of [keep, retired]) assert.deepEqual(await search({ exclude_uris: [excluded] }), []);
+  merge.snapshot.merge.projectId = 'other-project';
+  assert.deepEqual(await search(), []);
+  merge.snapshot.merge.projectId = null;
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  withdrawn = [{ fingerprint: lineFingerprint('又称：Old Name') }];
+  assert.deepEqual(await search(), []);
+  assert.equal((await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(retired)}`)).status, 404);
+  withdrawn = [];
+  merge.state = 'undone';
+  assert.deepEqual(await search(), []);
+});
+
 test('an old people URI resolves only through one confirmed alias, never a similar name', async t => {
   const f = await fixture(t, { config: { memoryPersonAliasHintEnabled: true } });
   f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Confirmed aliases: ["王阿姨","小王阿姨"]\n- Likes walking.');
@@ -1573,7 +1596,8 @@ test('people tools require the switch, a bound conversation and a verbatim user 
   const keep = `${ROOT}/memories/people/王阿姨.md`, merge = `${ROOT}/memories/people/小王阿姨.md`;
   const confirmation = '王阿姨和小王阿姨是同一个人。', calls = [];
   const memoryTool = { forget: async () => ({ removed: false }), people: async (...args) => { calls.push(args); return { revisionId: '1' }; } };
-  const personMessages = async () => [{ role: 'user', text: confirmation }, { role: 'assistant', text: 'This is an assistant assertion.' }];
+  let latest = confirmation;
+  const personMessages = async () => [{ role: 'user', text: latest }, { role: 'assistant', text: 'This is an assistant assertion.' }];
   const f = await fixture(t, { config: { memoryPersonMergeEnabled: true }, memoryTool, personMessages,
     admission: createMemoryAdmission({ config: {}, memorySettings: memoryDouble(),
       conversations: { running: async () => [{ id: 'run', sessionId: SESSION.slice(4) }], runsOf: async () => [] } }) });
@@ -1589,7 +1613,9 @@ test('people tools require the switch, a bound conversation and a verbatim user 
   assert.equal(calls.length, 0);
   assert.ok((await call('merge_people', { keep, merge, confirmation })).messages[0].result);
   assert.equal(calls.length, 1); assert.equal(calls[0][2].engineSession, SESSION);
-  assert.ok((await call('distinct_people', { a: keep, b: merge, confirmation })).messages[0].result);
+  latest = '王阿姨和小王阿姨不是同一个人。';
+  assert.ok((await call('merge_people', { keep, merge, confirmation })).messages[0].error);
+  assert.ok((await call('distinct_people', { a: keep, b: merge, confirmation: latest })).messages[0].result);
   assert.equal(calls[1][2].distinct, true);
   for (const config of [{}, { memoryPersonMergeEnabled: false }]) {
     const off = await fixture(t, { config, memoryTool, personMessages });

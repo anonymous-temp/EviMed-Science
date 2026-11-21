@@ -2,11 +2,11 @@ import { filterCapturedMessage } from './memoryGateway.mjs';
 import { isNeutralProfileHeading, profileMemoryStatements, profileNameDuplicateLines, withoutProfileNameDuplicates, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
 import { readStatus } from './memoryReadStatus.mjs';
 import { mergePeopleFiles, undoPeopleMerge, redirectPeopleWrites } from './nativeMemoryPeopleStore.mjs';
-import { personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
+import { personConsentRefusal, personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { orderStandingPreferences } from './memoryOpeningByUse.mjs';
 import { personalMemoryTravels } from './openVikingLayout.mjs';
-import { inferredChoiceMessage, choiceRows, choiceKey, normaliseChoice, aliasesFor, aliasVariants, personLabel, closePersonNames, confirmedAliases } from './nativeMemoryInduction.mjs';
+import { inferredChoiceMessage, choiceRows, choiceKey, normaliseChoice, aliasesFor, aliasVariants, personLabel, personNameReading, closePersonNames, confirmedAliases } from './nativeMemoryInduction.mjs';
 import { forgetRequestId } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
@@ -668,22 +668,6 @@ export class NativeMemoryStore {
         });
       }
     }
-    if (this.personAliasHintEnabled && this.personMergeEnabled) {
-      const dismissed = await this.personEdges.dismissed(userId).catch(() => null);
-      if (dismissed) for (const record of records) {
-        const file = held.find(candidate => candidate.uri === record.uri && candidate.type === 'people');
-        if (!file) continue;
-        const label = personLabel(file.uri, file.body), aliases = confirmedAliases(file.body);
-        record.possibleSamePerson = held.filter(candidate => candidate.type === 'people' && candidate.uri !== file.uri
-          && (candidate.namespaceId ?? null) === (file.namespaceId ?? null)
-          && personProjectScope(candidate.projectId) === personProjectScope(file.projectId)
-          && !dismissed.has(personPairId(file.uri, candidate.uri))).flatMap(candidate => {
-          const other = personLabel(candidate.uri, candidate.body);
-          return closePersonNames(label, other) || aliases.includes(other) || confirmedAliases(candidate.body).includes(label)
-            ? [{ id: nativeFileId(candidate.uri), label: other }] : [];
-        }).slice(0, 8);
-      }
-    }
     const external = typeof this.overlay.externalSources === 'function' ? await this.overlay.externalSources(userId, archives) : new Map();
     for (const record of records) record.evidence = record.evidence.flatMap(item => {
       if (item.sourceType !== 'external') return [item];
@@ -697,6 +681,25 @@ export class NativeMemoryStore {
     const withdrawn = new Set(this.sourceDeletion ? await this.sourceDeletion.hiddenMemoryUris(userId) : []);
     const visible=records.filter(record=>![...withdrawn].some(prefix=>record.uri===prefix||record.uri.startsWith(`${prefix}/`)));
     const protectedRecords=this.sourceDeletion?await this.sourceDeletion.redactRecords(userId,visible):visible;
+    if (this.personAliasHintEnabled && this.personMergeEnabled) {
+      const dismissed = await this.personEdges.dismissed(userId).catch(() => null);
+      const people = protectedRecords.filter(row => row.nativeType === 'people' && !row.sensitive);
+      // Use only identities that survived the final page fences, including filename fallback.
+      const candidates = [];
+      for (const record of people) {
+        const file = held.find(file => file.uri === record.uri);
+        const label = personLabel(record.uri, record.value);
+        if (await fenceWithdrawnMemoryBody(this.overlay, userId, record.uri, `# ${label}`, file.namespaceId) === null) continue;
+        candidates.push({ record, label, reading: await personNameReading(label), aliases: confirmedAliases(record.value), file });
+      }
+      if (dismissed) for (const { record, label, reading, aliases, file } of candidates) {
+        record.possibleSamePerson = candidates.filter(other => other.record.id !== record.id
+          && other.file.namespaceId === file.namespaceId && personProjectScope(other.file.projectId) === personProjectScope(file.projectId)
+          && !dismissed.has(personPairId(record.uri, other.record.uri))
+          && (closePersonNames(label, other.label) || reading && reading === other.reading || aliases.includes(other.label) || other.aliases.includes(label)))
+          .slice(0, 8).map(other => ({ id: other.record.id, label: other.label }));
+      }
+    }
     return (await this.#withPreferenceCurrentness(userId, protectedRecords)).sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
   }
 
@@ -1736,8 +1739,8 @@ export class NativeMemoryStore {
 
   /** Gateway-only entry: evidence is checked against the bound human conversation before this method is called.
    * @param {{id:string}} user @param {{id:string,userId:string}} project
-   * @param {{a:string,b:string,distinct:boolean,engineSession:string}} decision */
-  async people(user, project, { a, b, distinct, engineSession }) {
+   * @param {{a:string,b:string,distinct:boolean,engineSession:string,confirmation:string}} decision */
+  async people(user, project, { a, b, distinct, engineSession, confirmation }) {
     if (!this.personMergeEnabled) throw new HttpError(400, 'memory_payload_invalid', 'People decisions are not enabled.');
     return withNativeMemoryWrite(this.overlay.database, user.id, async () => {
       this.#touch(user.id);
@@ -1757,6 +1760,8 @@ export class NativeMemoryStore {
       const keep = files.find(file => file.uri === a), merge = files.find(file => file.uri === b) ?? pending?.snapshot?.merge;
       if (!keep || !merge || a === b || keep.sensitive || merge.sensitive) throw new HttpError(400, 'memory_payload_invalid', 'Choose two available, different people files.');
       if (personProjectScope(keep.projectId) !== personProjectScope(merge.projectId)) throw new HttpError(403, 'memory_scope_denied', 'People files in different project scopes cannot be combined.');
+      const refusal = personConsentRefusal(personLabel(a, keep.body), personLabel(b, merge.body), distinct, confirmation);
+      if (refusal) throw new HttpError(400, 'memory_payload_invalid', refusal);
       if (distinct) return this.personEdges.set(user.id, personPairId(a, b), true);
       const origins = await this.overlay.originsOf(user.id, [a, b]);
       /** @param {{uri:string,body:string,projectId?:string|null,sensitive?:boolean}} file @returns {import('./nativeMemoryPeople.mjs').PersonBefore} */
