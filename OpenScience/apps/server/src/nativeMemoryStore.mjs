@@ -558,7 +558,7 @@ export class NativeMemoryStore {
       })).filter(file => file !== null);
     }
     if (files.some(file => file.type === 'safety_notes')) {
-      const hidden = await this.overlay.sensitiveUris(userId);
+      const hidden = await this.overlay.sensitiveUris(userId, 10000, { derivedOnly: true });
       files = files.filter(file => file.type !== 'safety_notes' || !hidden.some(uri => file.uri === uri || file.uri.startsWith(uri + '/')));
     }
     if (!this.sourceDeletion) return files;
@@ -1783,10 +1783,10 @@ export class NativeMemoryStore {
       for (const { uri } of files) {
         const current = await this.sessions.read(userId, uri);
         if (!current) continue;
-        const statements = safetyStatements(current, uri);
-        const bound = statements.filter(row => originalSources(origins.get(uri)?.get(lineFingerprint(row.text)))
+        const entries = safetyStatements(current, uri);
+        const bound = entries.filter(row => originalSources(origins.get(uri)?.get(lineFingerprint(row.text)))
           .some(origin => projections.has(origin.safetyProjectionUri)));
-        const remaining = statements.filter(row => !bound.includes(row));
+        const remaining = entries.filter(row => !bound.includes(row));
         candidates.push(...remaining);
         cards.push({ uri, current, bound, remaining });
       }

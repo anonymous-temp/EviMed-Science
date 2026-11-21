@@ -151,6 +151,7 @@ test('legacy line migration survives retries, travels and follows an exact sourc
 
 for (const deferred of [false, true]) test('a targeted withdrawal retracts extracted and unindexed safety echoes, deferred=' + deferred, options, async t => {
   const f = await fixture(t, { config: { memorySafetyNotesEnabled: true, memorySafetyNotesMigrationEnabled: true } });
+  f.stub.requireExistingBatchRoot = true;
   f.overlay.deferredSummaryRebuildEnabled = deferred;
   f.store.forgetTargetsEnabled = true;
   f.store.history = new MemoryHistory({ config: f.config,
@@ -179,6 +180,9 @@ for (const deferred of [false, true]) test('a targeted withdrawal retracts extra
   const origins = (await f.overlay.originsOf(f.userId, [engineUri])).get(engineUri);
   assert.equal(origins.get(lineFingerprint(echo)).sources[0].safetyProjectionUri, copy.uri);
   assert.equal(origins.get(lineFingerprint(fresh)).engineSession, 'dsh-session_latex');
+  await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'people', sensitive: true });
+  assert.ok(!(await f.store.safetyNotes(f.userId, 'second')).some(row => row.uri === engineUri));
+  await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'people', sensitive: false });
   const unindexed = f.seed('safety_notes/unsettled.md', '# Owner\n- ' + statement, { type: 'safety_notes' });
   const other = f.seed('safety_notes/other.md', '# Other person\n- My sister reported an iohexol reaction.', { type: 'safety_notes' });
   const result = await f.store.forget({ id: f.userId }, { id: 'first' }, uri, { lines: [statement] });
@@ -198,4 +202,18 @@ for (const deferred of [false, true]) test('a targeted withdrawal retracts extra
     assert.match(opening.text, /latex/);
     assert.doesNotMatch(opening.text, /iohexol/);
   }
+});
+
+test('an interrupted legacy write with no engine bytes loses both orphan rows even after its source disappears', options, async t => {
+  const f = await fixture(t, { config: { memorySafetyNotesEnabled: true, memorySafetyNotesMigrationEnabled: true } });
+  f.worker.nativeMemory = f.store;
+  await f.sessions.setLearning(f.userId, true);
+  const uri = f.root + '/safety_notes/legacy-abandoned.md';
+  await f.overlay.bindSafetySource(f.userId, uri, { uri: f.root + '/people/departed.md', sourceHash: 'old', lineHashes: [] });
+  await f.overlay.inheritOrigins(f.userId, uri, new Map([[lineFingerprint('orphan'), [{ projectId: 'first' }]]]));
+  await f.worker.migrateSafety(f.userId);
+  assert.equal(await f.overlay.file(f.userId, uri), null);
+  assert.equal((await f.overlay.originsOf(f.userId, [uri])).size, 0);
+  await f.sessions.ensureTypeDirectory(f.userId, 'safety_notes');
+  await f.sessions.ensureTypeDirectory(f.userId, 'safety_notes');
 });
