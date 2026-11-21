@@ -70,3 +70,18 @@ test('profile facts and opt-in next templates share the exact unnamed headings',
     assert.doesNotMatch(template, /__PROFILE_HEADING__/);
   }
 });
+
+test('history retrieval arms default off and can be selected individually without V2', () => {
+  for (const flag of ['Fusion', 'Diversity', 'Parallel', 'Compact', 'Wide', 'Deadline']) {
+    const name = 'OPEN_SCIENCE_MEMORY_HISTORY_' + flag.toUpperCase() + '_ENABLED';
+    const previous = process.env[name];
+    try {
+      delete process.env[name];
+      assert.equal(loadConfig()['memoryHistory' + flag + 'Enabled'], false);
+      process.env[name] = 'true';
+      const config = loadConfig({ memoryHistoryRetrievalV2Enabled: false });
+      assert.equal(config['memoryHistory' + flag + 'Enabled'], true);
+      assert.equal(config.memoryHistoryRetrievalV2Enabled, false);
+    } finally { if (previous === undefined) delete process.env[name]; else process.env[name] = previous; }
+  }
+});

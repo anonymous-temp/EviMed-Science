@@ -1,5 +1,5 @@
 import { readStatus, withReadStatus } from './memoryReadStatus.mjs';
-import { historyTokens, historyLexicalScorer } from './memoryHistoryRetrieval.mjs';
+import { historyTokens, historyLexicalScorer, fuseHistoryChannels } from './memoryHistoryRetrieval.mjs';
 import { createHash } from "node:crypto";
 import {
   OPENVIKING_SKILL_NAMES, libraryResourcesUri, nativeMemoryRoot, openVikingUserId, projectGraphUri, projectResourcesRoot, projectSourcesUri, projectWikiUri,
@@ -252,15 +252,7 @@ export class OpenVikingResources {
     const corpus = [...records.values()], scorer = historyLexicalScorer(corpus,query);
     const lexical = corpus.map(record=>({uri:record.uri,lexical:scorer.best(record.messages)?.score??0}))
       .filter(record=>record.lexical>0).sort((a,b)=>b.lexical-a.lexical||a.uri.localeCompare(b.uri));
-    const found = new Map();
-    for (const {hits:channel,weight} of [{hits:lexical,weight:3},{hits:Array.isArray(vector)?vector:[],weight:1}]) {
-      const seen = new Set();
-      for (const [rank,hit] of channel.entries()) {
-        if (typeof hit?.uri!=='string' || !hit.uri.startsWith(`${root}/`) || seen.has(hit.uri)) continue;
-        seen.add(hit.uri); found.set(hit.uri,(found.get(hit.uri)??0)+weight/(20+rank));
-      }
-    }
-    return [...found].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,80).map(([uri,score])=>({uri,score}));
+    return fuseHistoryChannels(lexical, Array.isArray(vector) ? vector : [], root);
   }
 
   // -------------------------------------------------------------------------------------------------------------------

@@ -1,5 +1,4 @@
-import { containsAnchor } from './memoryReadStatus.mjs';
-import { readStatus, withReadStatus } from './memoryReadStatus.mjs';
+import { containsAnchor, readStatus, withReadStatus } from './memoryReadStatus.mjs';
 import { removalContentMatch, removalRefusals, removalText, removalStatement, retainedRemovalKey, lineDecisionKey, decisionCovers } from './nativeMemoryRejections.mjs';
 import { recordNativeMaintenance } from './nativeMemoryMetrics.mjs';
 import { lineFingerprint, nativeMemoryRejectionType, originalSources } from './nativeMemoryOverlay.mjs';
@@ -573,12 +572,17 @@ export class MemoryHistory {
   }
   status() { return { enabled: this.enabled, backfill: { ...this.lastBackfill }, maintenance: { ...this.maintenance } }; }
 
-  async search({ user, project, query, limit = 5, literalAnchors = undefined }, { includeOrigins = false, includeWithdrawn = false, accountScope = true, forRemoval = false, readOnly = false, removalUri = null, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
+  async search({ user, project, query, limit = 5, literalAnchors = undefined }, { includeOrigins = false, includeWithdrawn = false, accountScope = true, forRemoval = false, readOnly = false, removalUri = null, retrievalConfig = this.config, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
     if (!this.enabled || !query?.trim()) return withReadStatus([], readStatus('skipped', !this.enabled ? 'disabled' : 'empty_query'));
     const status = readStatus('empty', null, { candidates: 0, droppedByFence: 0, droppedByScore: 0, droppedByLimit: 0 });
     // Leave time for the gateway to render already verified hits. A slow tail
     // must not turn a useful prefix into an empty history block at its deadline.
-    const deadline=retrievalV2 ? Date.now()+Math.max(250,Number(this.config.memoryGatewayTimeoutMs)||4000)-150 : Infinity;
+    const fusion = retrievalV2 || retrievalConfig.memoryHistoryFusionEnabled === true;
+    const diversity = retrievalV2 || retrievalConfig.memoryHistoryDiversityEnabled === true;
+    const parallel = retrievalV2 || retrievalConfig.memoryHistoryParallelEnabled === true;
+    const compact = retrievalV2 || retrievalConfig.memoryHistoryCompactEnabled === true;
+    const wide = retrievalV2 || retrievalConfig.memoryHistoryWideEnabled === true;
+    const deadline=(retrievalV2 || retrievalConfig.memoryHistoryDeadlineEnabled === true) ? Date.now()+Math.max(250,Number(this.config.memoryGatewayTimeoutMs)||4000)-150 : Infinity;
     // Removal is an internal owner-namespace lookup, not a conversation in a
     // fabricated default project. Re-resolve its URI to prove the live owner.
     const removal = forRemoval && removalUri !== null;
@@ -591,9 +595,9 @@ export class MemoryHistory {
     const account = removal || accountScope && project.id === 'default' && context.kind === 'owned';
     const root = account ? `${context.userRoot}/resources/history/${hash(context.ownerCreatedAt).slice(0,24)}` : this.root(context,source);
     const resources = this.resourcesFor(context);
-    const asked = Math.max(1, Math.min(retrievalV2 ? 20 : 8, Math.trunc(Number(limit)) || 5));
-    const found = literalAnchors?.length ? await resources.searchHistoryAnchors(user.id, root, literalAnchors) : await resources.searchHistory(user.id, root, query.slice(0, 2000), { limit: 40, ...(retrievalV2 ? { retrievalV2:true } : {}) });
-    const candidates = retrievalV2 ? diverseHistoryCandidates(found) : found;
+    const asked = Math.max(1, Math.min(wide ? 20 : 8, Math.trunc(Number(limit)) || 5));
+    const found = literalAnchors?.length ? await resources.searchHistoryAnchors(user.id, root, literalAnchors) : await resources.searchHistory(user.id, root, query.slice(0, 2000), { limit: 40, ...(fusion ? { retrievalV2:true } : {}) });
+    const candidates = diversity ? diverseHistoryCandidates(found) : found;
     status.candidates = candidates.length;
     if (found.readStatus) status.channels = found.readStatus;
     let visited = 0;
@@ -666,11 +670,11 @@ export class MemoryHistory {
     // only this request's proven archive promises; selection stays rank ordered.
     for (let offset=0;offset<Math.min(candidates.length,80) && hits.length<asked;) {
       if (Date.now()>=deadline) { status.state = 'unavailable'; status.reason = 'deadline'; break; }
-      const width=retrievalV2 ? Math.min(4,asked-hits.length) : 1;
+      const width=parallel ? Math.min(4,asked-hits.length) : 1;
       const batch=candidates.slice(offset,Math.min(offset+width,80)); offset+=batch.length;
       let timer;
       const pending=Promise.all(batch.map(hydrate));
-      const validated=await (retrievalV2 ? Promise.race([pending,/** @type {Promise<null>} */ (new Promise(resolve=>{
+      const validated=await (Number.isFinite(deadline) ? Promise.race([pending,/** @type {Promise<null>} */ (new Promise(resolve=>{
         timer=setTimeout(()=>resolve(null),Math.max(1,deadline-Date.now()));
       }))]).finally(()=>clearTimeout(timer)) : pending);
       if (!validated) { status.state = 'unavailable'; status.reason = 'deadline'; break; }
@@ -678,7 +682,7 @@ export class MemoryHistory {
         visited++;
         if (!value) { status.droppedByFence++; continue; }
         const {hit,meta}=value;
-        if (retrievalV2) {
+        if (compact) {
           const seen=seenMessages.get(meta.session_id)??new Set();seenMessages.set(meta.session_id,seen);
           const headerChars=historySearchText([{...hit,messages:[]}],{semanticSecrets:this.secretRedaction}).length;
           hit.messages=compactHistoryMessages(hit.messages,query,historyLexicalScorer([{messages:hit.messages}],query),Math.floor(48_000/asked)-headerChars,seen);

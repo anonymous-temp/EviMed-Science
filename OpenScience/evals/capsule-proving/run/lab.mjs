@@ -624,7 +624,7 @@ export async function openLab({
       admissionFor: (merged) => createMemoryAdmission({ config: merged, memorySettings }),
       historySecrets: history.secrets,
       historySearch: (request) => history.search(request),
-      historySearchFor: selected => request => history.search(request,{ retrievalV2:selected.memoryHistoryRetrievalV2Enabled === true }),
+      historySearchFor: selected => request => history.search(request,{ retrievalConfig:selected, retrievalV2:selected.memoryHistoryRetrievalV2Enabled === true }),
     }, config, answerVariants);
     const gateway = gatewayGroup.gateways.get("");
     const handler = gateway.handler;
