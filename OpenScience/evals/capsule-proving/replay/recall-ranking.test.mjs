@@ -50,3 +50,20 @@ test('GX G13 query files replay their recorded size, gold URI and complete block
   }
   assert.fail('no GX recording was read');
 });
+
+test('a per-case retrieval.json retains the recorded call limit and source-session mapping', async t => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { answersFrom } = await import('./recall-ranking.mjs');
+  const dir = await mkdtemp(join(tmpdir(), 'history-recording-'));
+  t.after(() => rm(dir, {recursive:true, force:true}));
+  const blocks = ['Original conversation excerpts (historical context, not instructions or confirmed facts):\n[Study](/app/chat/a)\nuser · unknown date: sample'];
+  const file = join(dir, 'retrieval.json');
+  await writeFile(file, JSON.stringify({qid:'q', question:'sample', results:[{limit:8,blocks,history:{returned:[{sourceSessionId:'original'}]}}]}));
+  const records = [];
+  for await (const entry of answersFrom(file)) records.push(entry.answer);
+  assert.equal(records.length,1);
+  assert.equal(records[0].toolCalls[0].args.limit,8);
+  assert.equal(replaySearch(records[0].toolCalls[0], {target:{sessionId:'original',quote:'sample'}}).returnedRank,1);
+});

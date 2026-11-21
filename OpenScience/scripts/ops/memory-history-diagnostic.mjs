@@ -66,7 +66,7 @@ export async function probeKnownQuote({ base, key, owner, projectId, sessionId, 
   const proof = reply.historyAccess;
   if (!proof || proof.ownerHash !== hash(owner) || proof.scope !== 'project' || proof.projectId !== projectId
     || !['memory.read','memory.history.read'].every(scope => proof.requiredScopes?.includes(scope))) throw Error('history permission receipt mismatch');
-  const hit = reply.history?.find(row => !row.withdrawn && row.projectId === projectId && row.sessionId === sessionId &&
+  const hit = reply.history?.find(row => !row.withdrawn && typeof row.uri === 'string' && row.uri && row.projectId === projectId && row.sessionId === sessionId &&
     row.contextOnly === true && row.confirmed === false && row.messages.some(m => m.sourceRole === 'user' && m.text.includes(quote)));
   return { matched: Boolean(hit), queryHash: hash(quote), historyAccess: proof,
     ...(hit ? { uri: hit.uri, contentHash: hash(JSON.stringify(hit.messages)) } : {}) };
@@ -79,7 +79,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   for await (const chunk of process.stdin) chunks.push(chunk);
   const recorded = await countRecordedHits(directories, Number(days));
   const probe = await probeKnownQuote({ base, owner, projectId, sessionId, key:process.env.EVIMED_DIAGNOSTIC_TOKEN,
-    quote: Buffer.concat(chunks).toString('utf8').trim() });
+    quote: Buffer.concat(chunks).toString('utf8').trim() }).catch(error => ({ matched: false, error: error.message }));
   process.stdout.write(JSON.stringify({ recorded, probe }, null, 2) + '\n');
   if (!probe.matched) process.exitCode = 1;
 }

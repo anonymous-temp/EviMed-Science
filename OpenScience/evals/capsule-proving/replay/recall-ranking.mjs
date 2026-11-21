@@ -29,7 +29,8 @@ export async function* answersFrom(input) {
       continue;
     }
     // LongMemEval's paired retrieval probes preserve channels separately from the rendered answer blocks.
-    for (const row of raw.report?.rows ?? raw.rows ?? []) {
+    const probeRows = raw.qid && Array.isArray(raw.results) ? [raw] : raw.report?.rows ?? raw.rows ?? [];
+    for (const row of probeRows) {
       if (!Array.isArray(row.results) || !row.qid) continue;
       const detail = raw.details?.find(d => d.caseId === row.caseId);
       yield {file:input,answer:{qid:row.qid,question:row.question, toolCalls:row.results.map(result => ({
@@ -184,5 +185,5 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   }
   const missing = labels.filter(label => !found.has(label)).map(label=>label.qid);
   process.stdout.write(JSON.stringify({schema:'recall-ranking/1', rows, noSearch, missing, largeLibraries:largeLibraryBreakdown(rows)}, null, 2)+'\n');
-  if (!rows.length || missing.length) process.exitCode = 1;
+  if ((!rows.length && !noSearch.length) || missing.length) process.exitCode = 1;
 }
