@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_accounts (
 );
 -- The replay of the legacy engine's records into the engine left a mark here; the replay is deleted (2026-10-25).
 ALTER TABLE evimed_memory.native_accounts DROP COLUMN IF EXISTS migrated_at;
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS safety_scan_at timestamptz;
 CREATE TABLE IF NOT EXISTS evimed_memory.native_admissions (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   candidate_id text NOT NULL CHECK (char_length(candidate_id) BETWEEN 1 AND 200),
@@ -216,6 +217,8 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_files (
   updated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (user_id, uri)
 );
+ALTER TABLE evimed_memory.native_files ADD COLUMN IF NOT EXISTS safety_source jsonb;
+CREATE INDEX IF NOT EXISTS native_files_safety_source_idx ON evimed_memory.native_files(user_id,(safety_source->>'uri')) WHERE safety_source IS NOT NULL;
 CREATE INDEX IF NOT EXISTS native_files_project_idx ON evimed_memory.native_files (user_id, project_id) WHERE project_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS evimed_memory.native_sources (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,

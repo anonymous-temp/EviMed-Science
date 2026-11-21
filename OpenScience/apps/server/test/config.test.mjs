@@ -13,6 +13,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 
 for (const [key, property] of [
   ['OPEN_SCIENCE_MEMORY_PEOPLE_ACROSS_PROJECTS_ENABLED', 'memoryPeopleAcrossProjectsEnabled'],
+  ['OPEN_SCIENCE_MEMORY_SAFETY_NOTES_MIGRATION_ENABLED', 'memorySafetyNotesMigrationEnabled'],
   ['OPEN_SCIENCE_MEMORY_LITERAL_FALLBACK_ENABLED', 'memoryLiteralFallbackEnabled'],
   ['OPEN_SCIENCE_AGENT_MEMORY_API_INTERNAL_ENABLED', 'agentMemoryApiInternalEnabled'],
   ['OPEN_SCIENCE_MEMORY_NORMALIZE_NAMES_ENABLED', 'memoryNormalizeNamesEnabled'],

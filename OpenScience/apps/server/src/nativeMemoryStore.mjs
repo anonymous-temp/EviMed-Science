@@ -524,6 +524,10 @@ export class NativeMemoryStore {
         return body === null ? null : { ...file, body, hash: contentHash(body) };
       })).filter(file => file !== null);
     }
+    if (files.some(file => file.safetySource)) {
+      const hidden = await this.overlay.sensitiveUris(userId);
+      files = files.filter(file => !file.safetySource || !hidden.some(uri => file.uri === uri || file.uri.startsWith(uri + '/')));
+    }
     if (!this.sourceDeletion) return files;
     const hidden = new Set(await this.sourceDeletion.hiddenMemoryUris(userId));
     return files.filter(file => ![...hidden].some(prefix=>file.uri===prefix||file.uri.startsWith(`${prefix}/`)));
@@ -575,6 +579,7 @@ export class NativeMemoryStore {
       const held = known.get(node.uri) ?? null;
       const tag = node.tags.find((item) => item.startsWith("project="))?.slice("project=".length) ?? null;
       return {
+        ...(held?.safetySource ? { safetySource: held.safetySource } : {}),
         uri: node.uri, relPath: /** @type {any} */ (file).relPath, type: /** @type {any} */ (file).type, body, hash: contentHash(body),
         projectId: context.kind === 'geo-project' ? context.projectId : tag ?? held?.projectId ?? null,
         namespaceId: context.kind === 'geo-project' ? context.namespaceId : null,
@@ -807,6 +812,7 @@ export class NativeMemoryStore {
     const projectScoped = (file.namespaceId || PROJECT_MEMORY_TYPES.includes(file.type)) && Boolean(file.projectId);
     return {
       id: nativeFileId(file.uri),
+      ...(file.safetySource ? { safetySource: file.safetySource } : {}),
       scope: projectScoped ? "project" : "user",
       scopeId: projectScoped ? file.projectId : "",
       kind: /** @type {Record<string, string>} */ (PAGE_KIND_OF_TYPE)[file.type] ?? "project_fact",
@@ -1129,8 +1135,8 @@ export class NativeMemoryStore {
   async safetyNotes(userId, projectId) {
     const scope = { memoryRoot: this.sessions.memoryRoot(userId), projectId, peopleAcrossProjects: this.peopleAcrossProjectsEnabled,
       hiddenUris: [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId, 10000, { peopleAcrossProjects: this.peopleAcrossProjectsEnabled, memoryRoot: this.sessions.memoryRoot(userId) })] };
-    const inventory = [...(await this.overlay.files(userId)).values()];
-    const selected = inventory.filter(file => safetyNoteFile(file, scope));
+    const inventoryByUri = await this.overlay.files(userId);
+    const selected = [...inventoryByUri.values()].filter(file => safetyNoteFile(file, scope));
     if (!selected.length) return [];
     const files = (await this.files(userId, { uris: selected.map(file => file.uri) })).filter(file => safetyNoteFile(file, scope));
     const records = await this.records(userId, { files });
@@ -1155,10 +1161,15 @@ export class NativeMemoryStore {
         if (body.trim() && file.type === 'people' && !safetyNoteLines(file.body, file.type).length) legacyUnclassified++;
         return [];
       }
-      const receipt = sourceReceiptState(sources.map(record => ({ id: record.id, contentDigest: record.contentHash,
-        sourcePrivacy: record.sourcePrivacy, attribution: record.attribution })), { trusted: true });
+      const binding = inventoryByUri.get(file.uri)?.safetySource;
+      const originals = sources.map(record => ({ id: record.id, contentDigest: record.contentHash,
+        sourcePrivacy: record.sourcePrivacy, attribution: record.attribution }));
+      if (binding) originals.push({ id: nativeFileId(binding.uri), contentDigest: binding.sourceHash,
+        sourcePrivacy: sources[0].sourcePrivacy, attribution: sources[0].attribution });
+      const receipt = sourceReceiptState(originals, { trusted: true });
       const origins = [...new Set(sources.flatMap(record => record.attribution?.origins ?? ['unknown']))];
-      return [{ ...file, body, updatedAt: sources[0].updatedAt ?? file.modTime,
+      return [{ ...file, body, ...(binding ? { sourceUri: binding.uri, lineHashes: binding.lineHashes } : {}),
+        updatedAt: binding?.updatedAt ?? sources[0].updatedAt ?? file.modTime,
         originalSources: receipt.originalSources, sourcePrivacy: receipt.sourcePrivacy,
         origin: origins.length === 1 ? origins[0] : 'mixed', attribution: { schemaVersion: 1, origins, confirmed: false } }];
     });
@@ -1472,6 +1483,7 @@ export class NativeMemoryStore {
         await this.history.rejectRemoved(context, file, removed, this.rejectionJudge, { activate, memorySweep, allowDeferred: Boolean(memorySweep || actOf(reason) && this.overlay.deferredSummaryRebuildEnabled === true) });
       } else await activate();
     }
+    await this.#withdrawSafetyCopies(userId, file, next);
     await this.history?.retireWriteSessions(context,oldOrigins,removed);
     const oldUri = file.uri, source = await this.#bodySource(userId,file);
     // A removed value in a filename is still returned by list/search. Keep the
@@ -1515,6 +1527,20 @@ export class NativeMemoryStore {
     await this.overlay.syncOrigins(userId, file.uri, { after: next, before: file.body, ...(actor === "user" && revision ? { origin: { revisionId: revision.id, at: revision.changedAt, projectId: file.projectId } } : {}) });
     await this.history?.drainDeletes(userId);
     this.#touch(userId);
+  }
+
+  /** Withdraw exact source-bound copies before a source edit or forget can return.
+   * An already-removed engine file is a retryable partial cleanup. No duplicate discovery or model is needed. */
+  async #withdrawSafetyCopies(userId, file, next) {
+    if (!['people','profile'].includes(file.type) || file.namespaceId || !this.overlay.safetyCopies) return;
+    const hashes = new Set((next ?? '').split(/\r?\n/).map(line => createHash('sha256').update(line).digest('hex')));
+    for (const { uri, binding } of await this.overlay.safetyCopies(userId, file.uri)) {
+      if (next !== null && binding.lineHashes.every(hash => hashes.has(hash)) &&
+          (!binding.titleFromFile || hashes.has(binding.titleHash))) continue;
+      await withMemorySummaryInvalidation(this.sessions, this.overlay, userId, uri, () => this.sessions.remove(userId, uri));
+      await this.overlay.forgetText(userId, uri);
+      await this.overlay.removeFile(userId, uri);
+    }
   }
 
   /** Source history is derived from exact archive/session authority even when no current file or origin remains. */
@@ -1967,6 +1993,7 @@ export class NativeMemoryStore {
     if (this.history && actor !== "platform") await this.history.rejectRemoved(context,file,
       [...new Map([...statements(file.body).map(removalText), ...names].map(text => [lineFingerprint(text), text])).values()],this.rejectionJudge, { activate, memorySweep, allowDeferred: Boolean(memorySweep || actOf(reason) && this.overlay.deferredSummaryRebuildEnabled === true) });
     else await activate();
+    await this.#withdrawSafetyCopies(userId, file, null);
     await this.history?.retireWriteSessions(context,oldOrigins,statements(file.body));
     const removed = await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.remove(userId, file.uri)));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change: "deleted", actor: /** @type {any} */ (actor),

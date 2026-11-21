@@ -129,6 +129,7 @@ function publicRevision(row) {
 function publicFile(row) {
   return {
     uri: String(row.uri), memoryType: String(row.memory_type), projectId: row.project_id ?? null, sensitive: row.sensitive === true,
+    ...(row.safety_source ? { safetySource: row.safety_source } : {}),
     contentHash: row.content_hash ?? null, body: row.body ?? null, labels: Array.isArray(row.labels) ? row.labels : [],
     lastRecalledAt: instant(row.last_recalled_at), recallCount: Number(row.recall_count) || 0,
     lastUsedAt: instant(row.last_used_at), usedCount: Number(row.used_count) || 0,
@@ -920,6 +921,23 @@ export class NativeMemoryOverlay {
 
   // ------------------------------------------------------------------- files
 
+  async claimSafetyScan(userId) {
+    const result = await this.#query(`UPDATE evimed_memory.native_accounts SET safety_scan_at=clock_timestamp() WHERE user_id=$1
+      AND (safety_scan_at IS NULL OR safety_scan_at <= clock_timestamp()-interval '5 minutes') RETURNING user_id`, [owner(userId)]);
+    return Boolean(result.rowCount);
+  }
+
+  async bindSafetySource(userId, uri, binding) {
+    await this.#query(`INSERT INTO evimed_memory.native_files(user_id,uri,memory_type,safety_source) VALUES($1,$2,'safety_notes',$3::jsonb)
+      ON CONFLICT(user_id,uri) DO UPDATE SET safety_source=EXCLUDED.safety_source`, [owner(userId), uri, JSON.stringify(binding)]);
+  }
+
+  async safetyCopies(userId, sourceUri) {
+    const result = await this.#query(`SELECT uri,safety_source FROM evimed_memory.native_files
+      WHERE user_id=$1 AND safety_source IS NOT NULL AND safety_source->>'uri'=$2`, [owner(userId), sourceUri]);
+    return result.rows.map(row => ({ uri: String(row.uri), binding: row.safety_source }));
+  }
+
   /**
    * What the overlay knows of one file, written or refreshed. `projectId`, `body` and `sensitive` are left as they are
    * when not given.
@@ -1265,7 +1283,14 @@ export class NativeMemoryOverlay {
       [owner(userId), bound + 1]);
     if (result.rows.length > bound) throw new HttpError(503, "memory_index_listing_too_large", "The complete sensitive-file set exceeds its safe recall bound.");
     const withdrawn = this.sourceDeletion ? await this.sourceDeletion.hiddenMemoryUris(userId) : [];
-    const uris = [...new Set([...result.rows.map(row => String(row.uri)), ...withdrawn])];
+    const hidden = [...result.rows.map(row => String(row.uri)), ...withdrawn];
+    const copies = await this.#query(`SELECT derived.uri FROM evimed_memory.native_files derived LEFT JOIN evimed_memory.native_files src
+      ON src.user_id=derived.user_id AND src.uri=(derived.safety_source->>'uri')
+      WHERE derived.user_id=$1 AND derived.safety_source IS NOT NULL AND (src.uri IS NULL OR src.sensitive
+        OR src.content_hash IS DISTINCT FROM (derived.safety_source->>'sourceHash')
+        OR EXISTS (SELECT 1 FROM unnest($2::text[]) prefix WHERE src.uri=prefix OR starts_with(src.uri,prefix||'/'))) LIMIT $3`,
+    [owner(userId),hidden,bound+1]);
+    const uris = [...new Set([...hidden, ...copies.rows.map(row => String(row.uri))])];
     if (uris.length > bound) throw new HttpError(503, "memory_index_listing_too_large", "The complete privacy set exceeds its safe recall bound.");
     return uris;
   }
