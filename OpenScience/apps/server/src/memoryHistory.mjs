@@ -573,7 +573,7 @@ export class MemoryHistory {
   }
   status() { return { enabled: this.enabled, backfill: { ...this.lastBackfill }, maintenance: { ...this.maintenance } }; }
 
-  async search({ user, project, query, limit = 5, literalAnchors = undefined }, { includeOrigins = false, includeWithdrawn = false, accountScope = true, forRemoval = false, removalUri = null, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
+  async search({ user, project, query, limit = 5, literalAnchors = undefined }, { includeOrigins = false, includeWithdrawn = false, accountScope = true, forRemoval = false, readOnly = false, removalUri = null, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
     if (!this.enabled || !query?.trim()) return withReadStatus([], readStatus('skipped', !this.enabled ? 'disabled' : 'empty_query'));
     const status = readStatus('empty', null, { candidates: 0, droppedByFence: 0, droppedByScore: 0, droppedByLimit: 0 });
     // Leave time for the gateway to render already verified hits. A slow tail
@@ -607,7 +607,7 @@ export class MemoryHistory {
       try { verified = await this.resolveSource({ userId: user.id, projectId: meta.project_id, engineSession: `dsh-${meta.session_id}` }, context); }
       catch { status.state = 'unavailable'; status.reason = 'source_unavailable'; return null; } // Never fall back to another project; a failed proof is not evidence of absence.
       if (!verified || verified.projectId !== meta.project_id || verified.projectCreatedAt !== meta.project_created_at) return null;
-      if (!await this.eligible(context, verified)) { await this.removeConversation({ ...context, projectId: verified.projectId, projectCreatedAt: verified.projectCreatedAt }, verified.sessionId); return null; }
+      if (!await this.eligible(context, verified)) { if (!readOnly) await this.removeConversation({ ...context, projectId: verified.projectId, projectCreatedAt: verified.projectCreatedAt }, verified.sessionId); return null; }
       const body = await resources.readHistory(user.id, candidate.uri);
       if (body === null || Buffer.byteLength(body) > 32_000 || hash(body) !== meta.digest) return null;
       let parsed; try { parsed = JSON.parse(body); } catch { return null; }
