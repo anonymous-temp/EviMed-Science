@@ -1189,6 +1189,10 @@ export class EvimedCreditsService {
     if (!this.#wired() || await this.ensureReady()) return 0;
     if (this.simulated) await this.sweepWallet();
     const bound = Math.max(1, Math.min(200, Math.floor(Number(limit) || 20)));
+    for (const row of await this.usageLedger?.unsettledMemoryCharges?.(bound) ?? []) {
+      await this.settleRun({ ...row, status: 'succeeded', effectiveRouteReason: 'agent-memory', subject: 'External agent memory',
+        startedAt: new Date(row.startedAt).toISOString(), finishedAt: new Date(row.finishedAt).toISOString() });
+    }
     let attempted = 0;
     for (; attempted < bound;) {
       const row = await this.#claimDue();

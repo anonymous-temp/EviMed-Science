@@ -1,3 +1,4 @@
+import { memoryPayer, memoryModelAttribution } from './agentMemoryBilling.mjs';
 import { reasoningFields } from "./modelReasoningPolicy.mjs";
 // The production model is certified end to end, not merely configured: the
 // release gate exercises the whole tool chain against it and signs a receipt
@@ -1452,6 +1453,11 @@ const CONTROL_PLANE_NEVER_SENT = /^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREA
  * @returns {Promise<any>} the provider's parsed JSON response
  */
 export async function callModelForControlPlane({ config, usageLedger, fetchImpl = fetch }, call) {
+  const billing = memoryPayer();
+  if (billing) {
+    await billing.meter.admit(billing.payer);
+    call = { ...call, ...memoryModelAttribution(billing.payer) };
+  }
   const at = call.at ?? new Date();
   const body = { ...call.body, stream: false };
   if (!supportedDeepSeekModels.has(String(body.model ?? ""))) {

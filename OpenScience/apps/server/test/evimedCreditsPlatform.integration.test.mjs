@@ -775,3 +775,20 @@ test("everything at once on one account — settlements, replays, holds, sweeps,
     assert.equal(units(taken.rows[0].taken), units(settled.rows[0].taken), `round ${round}`);
   }
 });
+
+test('external memory usage survives revocation and wallet retry debits each measured receipt once', options, async () => {
+  const { AgentApiKeyStore } = await import('../src/agentApiKeys.mjs');
+  const w = await world(), keys = new AgentApiKeyStore(database);
+  const key = await keys.create(w.userId,{name:'Codex'});
+  const id = `amc_${randomUUID()}`;
+  const row = {id,runId:id,userId:w.userId,projectId:w.projectId, taskId:key.id, operation:'POST /remember', module:'agent-memory',
+    purpose:'memory-extraction',model:'test-model',priceVersion:'test',currency:'CNY',requestFingerprint:'d'.repeat(64),
+    usage:{cacheHitTokens:0,cacheMissTokens:400,completionTokens:25}, actualCost:0.25,priced:true};
+  await usage.recordSettled(row); await keys.revoke(w.userId,key.id); await usage.recordSettled(row);
+  await w.service.retryDue(); await w.service.retryDue();
+  const totals = await usage.byAgentKey(w.userId);
+  assert.equal(totals.length,1); assert.equal(totals[0].keyId,key.id);
+  assert.equal(totals[0].settledCalls,1); assert.equal(Number(totals[0].costCny),0.25);
+  assert.equal(Number((await w.balance()).balance),199.75);
+  assert.equal((await w.service.statements(w.userId)).items.filter(i=>i.runId===id).length,1);
+});

@@ -308,11 +308,9 @@ export async function recordAction({ nativeMemory = null }, user, recordId, acti
   if (privateByDefault(existing ?? historical) || (!existing && !historical)) {
     throw new HttpError(404, "memory_not_found", "No such memory.");
   }
-  if (action === 'restore') {
-    const entry = existing ?? historical;
-    if (entry.sensitive === true || (nativeMemory.memoryContexts && (await nativeMemory.memoryContexts.forUri(user.id, entry.uri ?? entry.document?.uri)).kind !== 'owned')) {
-      throw new HttpError(404, 'memory_not_found', 'No such memory.');
-    }
+  const entry = existing ?? historical;
+  if (entry.sensitive === true || (nativeMemory.memoryContexts && (await nativeMemory.memoryContexts.forUri(user.id, entry.uri ?? entry.document?.uri)).kind !== 'owned')) {
+    throw new HttpError(404, 'memory_not_found', 'No such memory.');
   }
   return nativeRecordAction(nativeMemory, user, recordId, action, body);
 }

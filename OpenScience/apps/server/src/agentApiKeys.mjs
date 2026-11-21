@@ -222,7 +222,7 @@ export class AgentApiKeyStore {
   async list(userId) {
     await migrateAgentApiKeys(this.database);
     const { rows } = await this.database.query(
-      "SELECT * FROM evimed_agent.api_keys WHERE user_id=$1 ORDER BY created_at DESC, id DESC LIMIT 200",
+      "SELECT * FROM evimed_agent.api_keys WHERE user_id=$1 ORDER BY (revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())) DESC, created_at DESC, id DESC LIMIT 200",
       [userId],
     );
     return rows.map(record);

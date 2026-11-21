@@ -280,7 +280,29 @@ export class UsageLedger {
     this.lateAttribution = { sweeps: 0, calls: 0 };
   }
 
-  /** Provider cost only, grouped by registered operation; never customer charges. */
+  /** Public-key usage survives rotation and revocation because attribution lives on the settled request. */
+  async byAgentKey(userId) {
+    await migrateUsageLedger(this.database);
+    const { rows } = await this.database.query(`SELECT task_id AS "keyId",
+      count(*) FILTER (WHERE status='settled')::int AS "settledCalls",
+      count(*) FILTER (WHERE status='uncertain')::int AS "uncertainCalls",
+      coalesce(sum(actual_cost) FILTER (WHERE status='settled'),0)::text AS "costCny"
+      FROM evimed_usage.model_requests WHERE user_id=$1 AND module='agent-memory' GROUP BY task_id`, [userId]);
+    return rows;
+  }
+
+  /** The credits worker retries the gap between recording measured spend and opening its wallet settlement. */
+  async unsettledMemoryCharges(limit) {
+    await migrateUsageLedger(this.database);
+    const { rows } = await this.database.query(`SELECT r.user_id AS "userId",r.project_id AS "projectId",r.run_id AS "runId",
+      u.created_at::text AS "accountCreatedAt",r.created_at AS "startedAt",r.settled_at AS "finishedAt"
+      FROM evimed_usage.model_requests r JOIN evimed_control.users u ON u.id=r.user_id
+      WHERE r.module='agent-memory' AND left(r.run_id,4)='amc_' AND r.status='settled' AND r.actual_cost>0
+        AND NOT EXISTS(SELECT 1 FROM evimed_credits.settlements s WHERE s.run_id=r.run_id)
+      ORDER BY r.settled_at,r.id LIMIT $1`, [limit]);
+    return rows;
+  }
+
   async byOperation() {
     await migrateUsageLedger(this.database);
     const result=await this.database.query(`SELECT operation,count(*)::int AS requests,coalesce(sum(actual_cost) FILTER(WHERE status='settled'),0)::float AS cost_cny FROM evimed_usage.model_requests WHERE operation IS NOT NULL GROUP BY operation`);
@@ -782,7 +804,7 @@ export class UsageLedger {
       coalesce(sum(cache_miss_tokens) FILTER (WHERE status='settled'),0) AS cache_miss_tokens,
       coalesce(sum(output_tokens) FILTER (WHERE status='settled'),0) AS output_tokens,
       coalesce(sum(actual_cost) FILTER (WHERE status='settled'),0) AS cost
-      FROM evimed_usage.model_requests WHERE created_at >= $1::timestamptz GROUP BY purpose`, [at]);
+      FROM evimed_usage.model_requests WHERE created_at >= $1::timestamptz AND provider_request_id IS DISTINCT FROM 'openviking-account-allocation' GROUP BY purpose`, [at]);
     const rows = new Map(result.rows.map((row) => [row.purpose, row]));
     return USAGE_PURPOSES.map((purpose) => {
       const row = rows.get(purpose);

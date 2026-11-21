@@ -629,7 +629,7 @@ export interface WebStructuredMemory {
     /** What a memory the platform itself wrote was written from, in the person's words (「从其他 AI 导入」, 「你在两次对话里都这样做」): the
      *  control plane names it for an import and for a choice two conversations made, where there is no conversation to link to. */
     label?: string;
-    externalSource?: { client: string; sessionId: string; messageId?: string; saidAt: string };
+    externalSource?: { operation?: 'ingest'; client: string; sessionId: string; messageId?: string; saidAt: string };
   }>;
   revisions: Array<{
     version: number;

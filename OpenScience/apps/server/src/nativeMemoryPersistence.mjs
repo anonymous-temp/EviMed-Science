@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_admissions (
   PRIMARY KEY (user_id, candidate_id, candidate_revision),
   UNIQUE (user_id, engine_session)
 );
+ALTER TABLE evimed_memory.native_admissions ADD COLUMN IF NOT EXISTS billing jsonb;
 ALTER TABLE evimed_memory.native_admissions ADD COLUMN IF NOT EXISTS external_source jsonb CHECK (external_source IS NULL OR jsonb_typeof(external_source)='object');
 CREATE INDEX IF NOT EXISTS native_admissions_open_idx ON evimed_memory.native_admissions (user_id,state)
   WHERE state <> 'completed';

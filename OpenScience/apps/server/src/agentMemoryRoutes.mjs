@@ -1,3 +1,4 @@
+import { withMemoryPayer } from './agentMemoryBilling.mjs';
 import { ingestConversation, recordWorkSignal } from './agentMemoryHost.mjs';
 import { shareForAgent } from './agentMemorySharing.mjs';
 import { rememberSource, rememberAdmission } from './agentMemoryRemember.mjs';
@@ -108,7 +109,7 @@ function fields(body, allowed) {
 /**
  * @param {{
  *   config: any, apiKeys: any, store: any, memorySettings: any, capsules: any,
- *   workEvidence?: any, shareServices?: any, learning?: any, observations?: any, nativeMemory?: any, admission?: any, openingContext?: any, historySearch?: ((input: any) => Promise<any[]>) | null,
+ *   meter?: any, workEvidence?: any, shareServices?: any, learning?: any, observations?: any, nativeMemory?: any, admission?: any, openingContext?: any, historySearch?: ((input: any) => Promise<any[]>) | null,
  *   deleteSubject?: ((ownerId: string, subjectAccountId: string) => Promise<number>) | null,
  *   audit?: ((event: string, status: string, details: Record<string, unknown>) => unknown) | null,
  * }} dependencies
@@ -116,7 +117,7 @@ function fields(body, allowed) {
  */
 export function createAgentMemoryRoutes({
   config, apiKeys, store, memorySettings, capsules, learning = null,
-  workEvidence = () => null, shareServices = null, observations = null, nativeMemory = null, admission = null, openingContext = null, historySearch = null, deleteSubject = null, audit = null,
+  meter = null, workEvidence = () => null, shareServices = null, observations = null, nativeMemory = null, admission = null, openingContext = null, historySearch = null, deleteSubject = null, audit = null,
 }) {
   return async function agentMemoryRoutes(req, res) {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -237,6 +238,10 @@ export function createAgentMemoryRoutes({
       res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
       res.end(json);
     };
+    const payer = { ownerId: keyAccount.id, generation: keyAccount.accountCreatedAt, chargeWallet: config.evimedCreditsEnabled === true, keyId: identity.keyId,
+      projectId: identity.projectId ?? 'default', model: config.deepseekModel, operation };
+    return withMemoryPayer(meter ? { payer, meter } : null, serve);
+    async function serve() {
     const body = ["POST", "PUT", "PATCH"].includes(method) ? await readJson(req, Math.min(config.maxJsonBytes ?? 1_048_576, 256 * 1024)) : null;
     /** The dashboard's acts leave an audit line: which key, which account,
      *  what. Never the subject's own identifier — the account id is its digest.
@@ -267,7 +272,8 @@ export function createAgentMemoryRoutes({
       const native = await nativeFor(user);
       const evidence = workEvidence();
       if (!native?.externalRememberEnabled || !admission || (!ingest && !evidence)) throw new HttpError(503, 'memory_engine_unavailable', 'External host service unavailable.');
-      const params = { user, project, identity, input, billing: { keyId: identity.keyId, ownerId: keyAccount.id } };
+      await meter?.admit(payer);
+      const params = { user, project, identity, input, billing: payer };
       const data = ingest ? await ingestConversation({ native, admission }, params)
         : await recordWorkSignal({ native, admission, learning, ...evidence }, params);
       await reply(ingest ? 202 : 200, { data });
@@ -278,6 +284,7 @@ export function createAgentMemoryRoutes({
       requireScope('memory.share');
       if (identity.projectId || subject) throw new HttpError(403, 'agent_key_project_denied', 'Sharing requires the account owner.');
       if (!shareServices) throw new HttpError(404, 'capsule_share_not_enabled', 'Capsule sharing is unavailable.');
+      if (['deliver', 'createLink', 'importLink', 'importDelivery'].includes(body?.action)) await meter?.admit(payer);
       const result = await shareForAgent(shareServices, keyAccount, body);
       await trail(`sharing.${body.action}`, keyAccount);
       await reply(200, { data: result });
@@ -295,6 +302,7 @@ export function createAgentMemoryRoutes({
       const native = await nativeFor(user);
       if (!native?.externalRememberEnabled) throw new HttpError(503, 'memory_engine_unavailable', 'External remember admission is unavailable.');
       await rememberAdmission({ native, admission }, { user, project, at: Date.parse(source.saidAt) });
+      await meter?.admit(payer);
       const result = await native.remember(user.id, { text: input.statement, projectId: project.id, projectName: project.name ?? null, externalSource: source });
       await trail('remember', user);
       await reply(200, { data: result });
@@ -378,6 +386,7 @@ export function createAgentMemoryRoutes({
       // A subject never seen has no memory and no methods of its own; it may
       // still read its institution's named capsules.
       const projectId = await projectOf(user, input.projectId);
+      await meter?.admit(payer);
       const result = await recallForAgent({ capsules, memory: native ? nativeRecallSource(native, { recallEnabled: config.memoryRecallEnabled !== false }) : null, learning },
         { user, institution: subject ? keyAccount : null }, {
           query,
@@ -507,6 +516,7 @@ export function createAgentMemoryRoutes({
       const user = /** @type {any} */ (await accountFor({ create: true }));
       // The wording pass is metered to the account's one project.
       await store.requireProject(user, "default");
+      await meter?.admit(payer);
       const outcome = await observations.observe(user, observation);
       if (outcome.habits.length) await trail("observation.habits", user, { changes: outcome.habits.map((/** @type {any} */ habit) => `${habit.change}:${habit.id}`).join(",") });
       await reply(202, { data: outcome });
@@ -583,6 +593,7 @@ export function createAgentMemoryRoutes({
         if (privateByDefault(existing)) throw new HttpError(404, "note_not_found", "No such proposed note.");
         if (!existing || existing.projectId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This note belongs to a different project.");
       }
+      if (note.act === 'confirm') await meter?.admit(payer);
       const changed = await noteAction({ capsules, memorySettings, nativeMemory }, user, note.id, note.act, body);
       await trail(`note.${note.act}`, user, { target: note.id });
       await reply(200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null, ...(changed.admission ? { admission: changed.admission } : {}) } });
@@ -645,5 +656,6 @@ export function createAgentMemoryRoutes({
     }
 
     throw new HttpError(404, "not_found", "No such agent-memory operation.");
+    }
   };
 }

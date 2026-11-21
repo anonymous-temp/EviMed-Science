@@ -1,3 +1,4 @@
+import { createMemoryBilling } from './agentMemoryBilling.mjs';
 import { rememberAdmission } from './agentMemoryRemember.mjs';
 import { recallHistoryForAgent } from './agentMemoryRecall.mjs';
 import { agentMemoryAvailable } from './agentMemoryAvailability.mjs';
@@ -1827,7 +1828,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const deleteAgentSubjects = (ownerId, only = null) => deleteSubjectAccounts(
     { apiKeys: agentApiKeys, store, memoryIndexing, capsuleTransfers: capsuleTransferService,
       nativeMemory: { erase: async (/** @type {string} */ userId) => { await memoryHistory?.eraseAccount(userId); if (await nativeMemoryHeldBy(userId)) await nativeMemory.eraseAccount(userId); } } }, ownerId, { only });
-  const agentKeyRoutes = createAgentKeyRoutes({ config, apiKeys: agentApiKeys, context, audit });
+  const agentKeyRoutes = createAgentKeyRoutes({ config, apiKeys: agentApiKeys, context, audit, usageLedger });
   // 「知识页」 (knowledgePageService.mjs): composed further down, once the run ledger and the runtime exist. The hooks below reach it
   // through these, so a deployment without it (or with it switched off) behaves as it always did.
   /** @type {KnowledgePageService | null} */
@@ -3596,7 +3597,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   });
   // The external agent-memory API (`/api/agent-memory/v1`): reads and acts on an account's memory through the store the memory page
   // uses, and stages an episode as a pending candidate that the owner confirms (`agentMemoryRoutes.mjs`).
+  const memoryBilling = createMemoryBilling({ config, ledger: usageLedger, store, wallet: () => credits?.service });
+  nativeMemory.agentBilling = memoryBilling;
   const agentMemoryRoutes = createAgentMemoryRoutes({
+    meter: memoryBilling,
     workEvidence: () => learningEvidence?.judge?.available && feedbackEvents ? { judge: learningEvidence.judge, feedback: feedbackEvents } : null,
     shareServices: capsuleSharing ? { service: capsuleService, sharing: capsuleSharing, transfers: capsuleTransferService, links: capsuleShareLinks } : null,
     openingContext: { resident: residentProfiles, opening: input => /** @type {any} */ (memoryGatewayHandler).opening(input), get sourceDeletion() { return sourceDeletion; } },

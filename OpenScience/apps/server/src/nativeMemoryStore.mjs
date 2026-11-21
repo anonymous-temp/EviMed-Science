@@ -1,3 +1,4 @@
+import { withMemoryPayer } from './agentMemoryBilling.mjs';
 import { filterCapturedMessage } from './memoryGateway.mjs';
 import { isNeutralProfileHeading, profileMemoryStatements, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
 import { readStatus } from './memoryReadStatus.mjs';
@@ -456,6 +457,7 @@ export class NativeMemoryStore {
     this.memoryContexts = memoryContexts;
     /** Durable raw-history lifecycle fences, set by the composition root. */
     this.history = null;
+    /** @type {any} */ this.agentBilling = null;
     /** Composed by the native worker: every direct page edit and restore shares instruction attribution. @type {any} */
     this.instructionWriteCheck = null;
     /** @type {any} */ this.sourceDeletion = null;
@@ -643,7 +645,7 @@ export class NativeMemoryStore {
       const source = external.get(item.archiveUri);
       if (!source) return [];
       const { archiveUri: _archive, ...evidence } = item;
-      return [{ ...evidence, ...(source.operation === 'ingest' ? { label: `外部智能体 ${source.client}` } : {}), observedAt: source.saidAt, externalSource: { client: source.client, sessionId: source.sessionId,
+      return [{ ...evidence, ...(source.operation === 'ingest' ? { label: `外部智能体 ${source.client}` } : {}), observedAt: source.saidAt, externalSource: { ...(source.operation === 'ingest' ? { operation: 'ingest' } : {}), client: source.client, sessionId: source.sessionId,
         ...(source.messageId ? { messageId: source.messageId } : {}), saidAt: source.saidAt } }];
     });
     for (const record of records) record.evidenceCount = record.evidence.length;
@@ -2283,9 +2285,10 @@ export class NativeMemoryStore {
 
   /** @param {string} userId @param {any} admission */
   async processAdmission(userId, admission) {
-    return admission.externalSource
+    const scope = admission.billing && this.agentBilling ? { payer: admission.billing, meter: this.agentBilling } : null;
+    return withMemoryPayer(scope, () => admission.externalSource
       ? withNativeMemoryWrite(this.overlay.database, userId, () => this.#processAdmission(userId, admission))
-      : this.#processAdmission(userId, admission);
+      : this.#processAdmission(userId, admission));
   }
 
   async #processAdmission(userId, admission) {
@@ -2379,6 +2382,10 @@ export class NativeMemoryStore {
               await save({ state: 'uncertain', error: 'unexpected_session_messages', release: true }); return receipt(row);
             }
           }
+          if (row.externalSource && row.phase === 'commit_submitting') {
+            await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true });
+            return receipt(row);
+          }
           const priorPhase = row.phase;
           await save({ state: "submitting", phase: "commit_submitting" });
           if (!await authorized(priorPhase)) return receipt(row);
@@ -2401,6 +2408,7 @@ export class NativeMemoryStore {
         commit = await this.overlay.commit(userId, commit.replayedAs);
       }
       if (commit?.state === "completed") {
+        if (row.billing && this.agentBilling) await this.agentBilling.extraction(row.billing, { userId, sessions: this.sessions, commit, createdAt: row.createdAt });
         const revisions = await this.overlay.admissionRevisions(userId, commit.archiveUri);
         await save({ state: "completed", recordIds: [...new Set(revisions.filter((revision) => revision.change !== "deleted").map((revision) => nativeFileId(revision.uri)))], error: "", release: true });
       } else {
@@ -2409,7 +2417,7 @@ export class NativeMemoryStore {
       return receipt(row);
     } catch (error) {
       if (/** @type {any} */ (error)?.code === "memory_admission_gone") throw error;
-      await save({ state: (row.phase.startsWith("turn:") || ["context_submitting","message_submitting","commit_submitting"].includes(row.phase)) ? "uncertain" : "failed",
+      await save({ state: (String(row.phase ?? "").startsWith("turn:") || ["context_submitting","message_submitting","commit_submitting"].includes(row.phase)) ? "uncertain" : "failed",
         error: String(/** @type {any} */ (error)?.code ?? "memory_admission_failed").slice(0,200), release: true });
       return receipt(row);
     }

@@ -49,7 +49,7 @@ export async function recordWorkSignal({ native, admission, learning, feedback, 
     || source.billing?.keyId !== identity.keyId) throw new HttpError(404, 'memory_not_found', 'No completed conversation for this key.');
   const check = async () => {
     const context = await rememberAdmission({ native, admission }, { user, project, at: Date.parse(source.saidAt) });
-    if (context.projectCreatedAt !== source.projectCreatedAt || (!native.history?.ledger || await native.history.ledger.rejected(context, [input.text], row.archiveUri))) {
+    if (context.projectCreatedAt !== source.projectCreatedAt || await native.sourceDeletion?.ledger.get(project, row.engineSession.slice(4)) || (!native.history?.ledger || await native.history.ledger.rejected(context, [input.text], row.archiveUri))) {
       throw new HttpError(403, 'memory_scope_denied', 'This evidence was withdrawn.');
     }
   };
@@ -80,7 +80,7 @@ export async function recordWorkSignal({ native, admission, learning, feedback, 
   if ('failure' in verdict) return { recorded: false, reason: verdict.failure };
   await check();
   const { event } = await feedback.recordLearningEvidence(user.id, { runId, projectId: project.id, key: String(input.messageIndex),
-    detail: { evidence: 'follow-up', ...verdict, concerns: [{ id, digest }], inputDigest: source.messages[input.messageIndex],
+    detail: { evidence: 'follow-up', ...verdict, externalTarget: { id, digest }, inputDigest: source.messages[input.messageIndex],
       sessionId: runId, at: input.saidAt, scope: 'open-domain-answer' } });
   return { recorded: true, eventId: event.id, verdict: event.detail.verdict };
 }

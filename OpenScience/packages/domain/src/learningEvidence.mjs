@@ -135,6 +135,8 @@ export function cleanLearningEvidence(value) {
     ...(artifact ? { artifact } : {}),
     ...(['build', 'convert', 'cite'].includes(record.relation) ? { relation: record.relation } : {}),
     ...trace,
+    ...(identifier(record.externalTarget?.id) && typeof record.externalTarget?.digest === 'string' && record.externalTarget.digest.length <= limits.digest
+      ? { externalTarget: { id: record.externalTarget.id, digest: record.externalTarget.digest } } : {}),
     rule: text(record.rule, limits.rule) || null,
     quote: text(record.quote, limits.quote) || null,
     concerns,

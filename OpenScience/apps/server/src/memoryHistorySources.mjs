@@ -35,7 +35,7 @@ export function createMemoryHistorySources({ config, store, productDatabase, nat
         if (memoryContext.kind !== 'owned') return null;
         const row = await nativeMemoryOverlay.admission(user.id, `host:${external[1]}`, 1);
         if (!row || row.projectId !== projectId || row.engineSession !== commit.engineSession || row.state === 'cancelled'
-          || row.externalSource?.operation !== 'ingest' || Date.parse(row.externalSource.projectCreatedAt) !== Date.parse(base.projectCreatedAt)) return null;
+          || row.externalSource?.operation !== 'ingest' || row.externalSource.projectCreatedAt !== base.projectCreatedAt) return null;
         return { ...base, sessionId, runs: [], external: row.externalSource,
           conversationTitle: `外部智能体 ${row.externalSource.client}`, projectTitle: historyTitle(project.name, 'Project'), conversationUrl: '/app/memory' };
       }
