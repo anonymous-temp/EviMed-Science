@@ -127,9 +127,10 @@ export function parseArguments(argv) {
       if (value === undefined || value.startsWith("--")) throw new Error(`${flag} needs a value`);
       if (flag === "--config") Object.assign(options.config, Object.fromEntries([configEntry(value)]));
       else if (flag === "--answer-variant") {
-        const at = value.indexOf(":"); const name = value.slice(0, at);
+        const definition = value === 'g1121-src' ? 'g1121-src:memorySourceEnvelopeEnabled=true' : value;
+        const at = definition.indexOf(":"); const name = definition.slice(0, at);
         if (at < 1 || !/^[A-Za-z0-9_-]{1,64}$/.test(name) || options.answerVariants.some((entry) => entry.name === name)) throw new Error("answer variant needs a unique safe name:k=v");
-        options.answerVariants.push({ name, config: configEntries(value.slice(at + 1)) });
+        options.answerVariants.push({ name, config: configEntries(definition.slice(at + 1)) });
       } else {
         if (value !== "each" && !/^\d+(,\d+)*$/.test(value)) throw new Error("--maintain-after is n[,n...] or each");
         options.maintainAfter = value === "each" ? "each" : [...new Set(value.split(",").map(Number))];

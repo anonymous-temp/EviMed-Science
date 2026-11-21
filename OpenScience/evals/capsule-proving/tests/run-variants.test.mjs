@@ -385,3 +385,10 @@ test('ingest-only preserves temporal snapshots when requested and never calls th
   assert.equal((await json(path.join(f.out, 'cases/U01/snapshots/1.json'))).afterSession, 1);
   assert.equal((await json(path.join(f.out, 'cases/U01/snapshots/2.json'))).afterSession, 2);
 });
+
+test('g1121-src enables only source envelopes on the selected answer variant', () => {
+  const options = parseArguments([...base, '--config', 'memorySearchHintEnabled=true', '--answer-variant', 'g1121-src']);
+  assert.deepEqual(options.config, { memorySearchHintEnabled: true });
+  assert.deepEqual(options.answerVariants, [{ name: 'g1121-src', config: { memorySourceEnvelopeEnabled: true } }]);
+  assert.throws(() => parseArguments([...base, '--answer-variant', 'g1121-src', '--answer-variant', 'g1121-src']));
+});

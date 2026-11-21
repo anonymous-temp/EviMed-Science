@@ -21,3 +21,18 @@ test('lexical evidence proves only literal admission, never unknown vector rank'
   assert.equal(audit.newLiteralHits, 1);
   assert.equal(audit.fullCorpusRecall, 'requires_lab');
 });
+
+test('the source variant replays supplied materials with zero memories and never recovers a cut quote from gold', () => {
+  const pack = { answer: {qid:'g9-dev-poison-005-q1',question:'Which history?',asOf:'2026-11-17',opening:{},
+    toolCalls:[]}, gold:{runtimeQuestion:{materials:[{kind:'paste',text:'Supplied history',title:'Example'}],
+    expect:{mustContain:['HIDDEN_GOLD']}}} };
+  const {messages} = requestFromPack(pack,'fixture',null,'g1121-src');
+  const material = JSON.parse(JSON.parse(messages.find(m => m.role === 'tool').content).text)[0];
+  assert.equal(material.source.kind,'pasted_material');
+  assert.equal(material.source.subject,'unknown');
+  assert.doesNotMatch(JSON.stringify(messages),/HIDDEN_GOLD/);
+  const tool = serializeRecordedTool({ name:'search', blocks:[JSON.stringify({memories:[],history:[{
+    conversationTitle:'Historical',messages:[{sourceRole:'user',text:'A cut clause'}]}]})]},true);
+  assert.doesNotMatch(tool.blocks.join(' '),/A cut clause/);
+  assert.match(tool.blocks.join(' '),/complete original/);
+});
