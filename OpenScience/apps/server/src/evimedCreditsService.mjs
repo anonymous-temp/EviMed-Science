@@ -521,7 +521,7 @@ export class EvimedCreditsService {
       if (prior.rows[0]?.user_id !== undefined && prior.rows[0].user_id !== userId) throw new HttpError(409, 'usage_settlement_conflict', 'Settlement owner differs.');
       if (prior.rows[0]) return { inserted: false, row: settlement(prior.rows[0]) };
       const requests = await client.query(
-        `SELECT id,status,priced,currency,purpose,actual_cost,price_version,created_at,run_id,cache_hit_tokens,cache_miss_tokens,output_tokens
+        `SELECT id,status,priced,currency,purpose,module,actual_cost,price_version,created_at,run_id,cache_hit_tokens,cache_miss_tokens,output_tokens
          FROM evimed_usage.model_requests WHERE user_id=$1 AND run_id=ANY($2::text[])
          AND NOT EXISTS (SELECT 1 FROM evimed_credits.research_task_requests a
            WHERE a.request_id=evimed_usage.model_requests.id) ORDER BY id`, [userId, ids]);
@@ -614,7 +614,7 @@ export class EvimedCreditsService {
         if (prior.rows[0]?.user_id !== undefined && prior.rows[0].user_id !== userId) throw new HttpError(409, 'usage_settlement_conflict', 'Settlement owner differs.');
         if (prior.rows[0]) return { duplicate: settlement(prior.rows[0]) };
         const requests = await client.query(
-          `SELECT id,status,priced,currency,purpose,actual_cost,price_version,created_at,run_id,cache_hit_tokens,cache_miss_tokens,output_tokens
+          `SELECT id,status,priced,currency,purpose,module,actual_cost,price_version,created_at,run_id,cache_hit_tokens,cache_miss_tokens,output_tokens
            FROM evimed_usage.model_requests WHERE user_id=$1 AND run_id=ANY($2::text[])
            AND NOT EXISTS (SELECT 1 FROM evimed_credits.research_task_requests a
              WHERE a.request_id=evimed_usage.model_requests.id) ORDER BY id`, [userId, ids]);

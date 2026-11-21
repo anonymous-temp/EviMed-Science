@@ -45,6 +45,45 @@ test('waivers exclude background overhead and pre-policy requests', () => {
   assert.equal(platform.platformCostCny, '2.75000000');
 });
 
+test('wallet-enabled external memory receipts are priced without changing their usage purpose', () => {
+  const receipt = { id: 'charged', run_id: 'amc_receipt', module: 'agent-memory', purpose: 'memory-extraction',
+    status: 'settled', priced: true, currency: 'CNY', actual_cost: '0.25000000', price_version: 'p1' };
+  const exact = researchTaskCharge([receipt, receipt], { mode: 'precision-v1' });
+  assert.equal(exact.creditsAmount, '0.25000000');
+  assert.equal(exact.platformCostCny, '0.00000000');
+  assert.equal(exact.usage.calls, 1);
+  assert.deepEqual(exact.evidence.map(({ purpose, billable }) => ({ purpose, billable })), [{ purpose: 'memory-extraction', billable: true }]);
+
+  const whole = researchTaskCharge([receipt]);
+  assert.equal(whole.billableCny, '0.25000000');
+  assert.equal(whole.creditsAmount, '0.00000000');
+  assert.equal(whole.waivedCny, '0.25000000');
+  const judge = researchTaskCharge([{ ...receipt, purpose: 'learning' }], { mode: 'precision-v1' });
+  assert.equal(judge.creditsAmount, '0.25000000');
+});
+
+test('external memory billing requires both ledger markers and confirmed eligible use', () => {
+  const receipt = { id: 'charged', run_id: 'amc_receipt', module: 'agent-memory', purpose: 'memory-extraction',
+    status: 'settled', priced: true, currency: 'CNY', actual_cost: '0.25000000' };
+  const options = { mode: 'precision-v1' };
+  for (const overhead of [
+    { ...receipt, module: null },
+    { ...receipt, run_id: 'run_background' },
+    { ...receipt, run_id: 'amu_receipt', purpose: 'kernel' },
+  ]) {
+    const result = researchTaskCharge([overhead], options);
+    assert.equal(result.creditsAmount, '0.00000000');
+    assert.equal(result.platformCostCny, '0.25000000');
+    assert.equal(result.evidence[0].notBillableReason, 'platform_overhead');
+  }
+  for (const unbillable of [
+    { ...receipt, status: 'uncertain' },
+    { ...receipt, priced: false },
+    { ...receipt, billing_eligible: false, not_billable_reason: 'before_policy_activation' },
+  ]) assert.equal(researchTaskCharge([unbillable], options).creditsAmount, '0.00000000');
+  assert.equal(researchTaskCharge([receipt], { ...options, owned: false }).creditsAmount, '0.00000000');
+});
+
 test('the simulated wallet vocabulary is closed, whole-credit and labelled', () => {
   assert.equal(SIMULATED_WALLET_LABEL, '模拟');
   assert.ok(Number.isSafeInteger(SIMULATED_START_CREDITS) && SIMULATED_START_CREDITS > SIMULATED_LOW_CREDITS);
