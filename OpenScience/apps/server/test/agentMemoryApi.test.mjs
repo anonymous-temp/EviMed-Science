@@ -445,3 +445,13 @@ test("recall no longer takes a time to read as of: the records engine that answe
   await assert.rejects(() => routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "剂量", asOf: "2025-06-30" }), response()),
     (error) => error.status === 400 && error.code === "agent_memory_payload_invalid");
 });
+
+test('response budget and audit metadata apply to ordinary public reads', async () => {
+  const { routes, calls } = fixture({ records: [{ scope: 'user', value: '敏'.repeat(400000) }] });
+  await assert.rejects(routes(request(`${AGENT_MEMORY_PATH}/records`, undefined, 'evk_good', 'GET'), response()), { code: 'agent_memory_response_too_large' });
+  await routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: 'private question' }), response());
+  const audit = calls.filter(row => row[0] === 'audit').at(-1);
+  assert.equal(audit[3].operation, 'POST /recall');
+  assert.equal(audit[3].keyId, 'agk_1');
+  assert.ok(!JSON.stringify(audit).includes('private question'));
+});

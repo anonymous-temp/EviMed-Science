@@ -10138,6 +10138,9 @@ async function securityAudit(config, action, status, details = {}) {
     username: details.username ?? null,
     userId: details.userId ?? null,
     code: details.code ?? null,
+    ...(details.keyId ? { keyId: safeLogId(details.keyId) } : {}),
+    ...(details.subjectAccountId ? { subjectAccountId: safeLogId(details.subjectAccountId) } : {}),
+    ...(action === "agent-memory.request" ? { operation: details.operation } : {}),
     ...(detail ? { detail } : {}),
   };
   const file = path.join(config.dataDir, ".openscience", "security.jsonl");

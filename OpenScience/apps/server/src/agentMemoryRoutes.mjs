@@ -7,7 +7,7 @@ import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES, nativeRecallSourc
 import { memoryBoard, methodAction, methodDetail, noteAction, recordAction } from "./agentMemoryBoard.mjs";
 import { OBSERVATION_FIELDS, readObservation } from "./agentMemoryObservations.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
-import { assertAgentSubject } from "./agentApiKeys.mjs";
+import { AGENT_ACCOUNT_REQUESTS_PER_MINUTE, AGENT_KEY_REQUESTS_PER_MINUTE as RATE_LIMIT_PER_MINUTE, assertAgentSubject, subjectAccountId } from "./agentApiKeys.mjs";
 import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
 import { isPlatformAccount } from "./platformAccount.mjs";
 import { forgetForAgent, forgottenForAgent } from './agentMemoryForget.mjs';
@@ -59,11 +59,7 @@ import { forgetForAgent, forgottenForAgent } from './agentMemoryForget.mjs';
 
 export const AGENT_MEMORY_PATH = "/api/agent-memory/v1";
 
-/** Per key, per minute. Generous for an agent doing real work, far below what
- * a loop costs. Held in memory on purpose: it protects this process's own
- * resources, and a durable counter would be a database write per call. */
-const RATE_LIMIT_PER_MINUTE = 120;
-const MAX_TRACKED_KEYS = 10_000;
+const MAX_RESPONSE_BYTES = 1024 * 1024;
 
 /** Every operation this surface serves, as the root lists them. A contract test
  *  holds the OpenAPI description's paths to exactly this list. */
@@ -120,9 +116,6 @@ export function createAgentMemoryRoutes({
   config, apiKeys, store, memorySettings, capsules, learning = null,
   observations = null, nativeMemory = null, admission = null, openingContext = null, historySearch = null, deleteSubject = null, audit = null,
 }) {
-  /** @type {Map<string, {until: number, count: number}>} */
-  const windows = new Map();
-
   return async function agentMemoryRoutes(req, res) {
     const url = new URL(req.url ?? "/", "http://evimed.local");
     if (url.pathname !== AGENT_MEMORY_PATH && !url.pathname.startsWith(`${AGENT_MEMORY_PATH}/`)) return false;
@@ -157,14 +150,7 @@ export function createAgentMemoryRoutes({
     // A key that resolves to the platform's publishing account is no key: nothing speaks for that account.
     if (!keyAccount || isPlatformAccount(keyAccount)) throw new HttpError(401, "agent_key_invalid", "The API key is not valid.");
 
-    const now = Date.now();
-    for (const [key, window] of windows) if (window.until <= now) windows.delete(key);
-    if (!windows.has(identity.keyId) && windows.size >= MAX_TRACKED_KEYS) {
-      throw new HttpError(503, "agent_memory_busy", "The agent memory API is busy.");
-    }
-    const window = windows.get(identity.keyId) ?? { until: now + 60_000, count: 0 };
-    windows.set(identity.keyId, window);
-    if (++window.count > RATE_LIMIT_PER_MINUTE) throw new HttpError(429, "agent_memory_rate_limited", "Too many memory operations.");
+    await apiKeys.countMemoryRequest?.(identity.userId, identity.keyId);
 
     // Whom this request is for (rule 2). Checked after the rate limit, so a
     // flood of made-up subjects is a flood of refusals, not of accounts.
@@ -235,6 +221,20 @@ export function createAgentMemoryRoutes({
 
     const action = url.pathname.slice(AGENT_MEMORY_PATH.length).replace(/^\//, "");
     const method = req.method ?? "GET";
+    const operation = AGENT_MEMORY_ENDPOINTS.find(endpoint => {
+      const [verb, template] = endpoint.split(" ");
+      const parts = template.slice(1).split("/");
+      const actual = action.split("/");
+      return verb === method && parts.length === actual.length && parts.every((part, i) => part === "{id}" || part === actual[i]);
+    }) ?? "GET /";
+    const reply = async (status, payload) => {
+      const json = JSON.stringify(payload);
+      if (Buffer.byteLength(json) > MAX_RESPONSE_BYTES) throw new HttpError(413, "agent_memory_response_too_large", "Request fewer records or a smaller result.");
+      await audit?.("agent-memory.request", "completed", { keyId: identity.keyId, userId: keyAccount.id,
+        subjectAccountId: subject ? subjectAccountId(keyAccount.id, subject) : null, operation });
+      res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+      res.end(json);
+    };
     const body = ["POST", "PUT", "PATCH"].includes(method) ? await readJson(req, Math.min(config.maxJsonBytes ?? 1_048_576, 256 * 1024)) : null;
     /** The dashboard's acts leave an audit line: which key, which account,
      *  what. Never the subject's own identifier — the account id is its digest.
@@ -267,7 +267,7 @@ export function createAgentMemoryRoutes({
       await rememberAdmission({ native, admission }, { user, project, at: Date.parse(source.saidAt) });
       const result = await native.remember(user.id, { text: input.statement, projectId: project.id, projectName: project.name ?? null, externalSource: source });
       await trail('remember', user);
-      sendJson(res, 200, { data: result });
+      await reply(200, { data: result });
       return true;
     }
 
@@ -279,7 +279,7 @@ export function createAgentMemoryRoutes({
       const project = await store.requireProject(user, projectId ?? 'default');
       const native = await nativeFor(user);
       const result = await contextForAgent({ config, native, admission, ...openingContext }, { user, project });
-      sendJson(res, 200, { data: result });
+      await reply(200, { data: result });
       return true;
     }
 
@@ -293,7 +293,7 @@ export function createAgentMemoryRoutes({
       const native = await nativeFor(user);
       const outcome = await forgetForAgent({ config, native, admission }, { user, project, boundProject: identity.projectId, input });
       await trail('forget', user);
-      sendJson(res, 200, { data: outcome });
+      await reply(200, { data: outcome });
       return true;
     }
 
@@ -303,7 +303,7 @@ export function createAgentMemoryRoutes({
       const projectId = await projectOf(user, url.searchParams.get('projectId'));
       const native = await nativeFor(user);
       const items = user ? await forgottenForAgent(native, user, { projectId, canRestore: identity.scopes.includes('memory.manage') && !identity.projectId }) : [];
-      sendJson(res, 200, { data: { items } });
+      await reply(200, { data: { items } });
       return true;
     }
 
@@ -368,8 +368,8 @@ export function createAgentMemoryRoutes({
           historySearch({ user, project, query, accountScope: identity.projectId == null && input.projectId == null, limit: Math.min(20, Math.max(1, Math.trunc(Number(input.limit)) || 5)) }),
           new Promise(resolve => { timer = setTimeout(() => resolve([]), Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4000)); }),
         ]).finally(() => clearTimeout(timer)) : [];
-        sendJson(res, 200, { data: { ...result, history } });
-      } else sendJson(res, 200, { data: result });
+        await reply(200, { data: { ...result, history } });
+      } else await reply(200, { data: result });
       return true;
     }
 
@@ -388,7 +388,7 @@ export function createAgentMemoryRoutes({
         // where the platform's own notes take effect (capsuleService.note).
         review: true,
       });
-      sendJson(res, 200, { data: { entry, reviewRequired: true, contextOnly: true } });
+      await reply(200, { data: { entry, reviewRequired: true, contextOnly: true } });
       return true;
     }
 
@@ -405,7 +405,7 @@ export function createAgentMemoryRoutes({
       const scopeId = (await projectOf(user, url.searchParams.get("scopeId"))) ?? "";
       const native = await nativeFor(user);
       // A subject with no account has no memory: an empty list.
-      if (!native) { sendJson(res, 200, { data: [] }); return true; }
+      if (!native) { await reply(200, { data: [] }); return true; }
       // The engine's memories are all in force: a status that excludes `active` (a proposal, a replaced or forgotten one) finds none here.
       const statuses = filters("status", allowedStatuses);
       const found = statuses.length && !statuses.includes("active") ? [] : await native.listRecords(user.id, {
@@ -414,7 +414,7 @@ export function createAgentMemoryRoutes({
         allowRecord: (record) => !privateByDefault(record),
         pageSize: Math.max(1, Math.min(200, Number(url.searchParams.get("pageSize") ?? 50))),
       });
-      sendJson(res, 200, { data: found.filter((record) => !privateByDefault(record)).slice(0, Math.max(1, Math.min(200, Number(url.searchParams.get("pageSize") ?? 50)))) });
+      await reply(200, { data: found.filter((record) => !privateByDefault(record)).slice(0, Math.max(1, Math.min(200, Number(url.searchParams.get("pageSize") ?? 50)))) });
       return true;
     }
 
@@ -452,7 +452,7 @@ export function createAgentMemoryRoutes({
         factKind: "project_fact", content: `External session ${sessionId}: ${createHash("sha256").update(JSON.stringify(messages)).digest("hex")}\n${messages.map((message) => `${message.sender}: ${message.parts[0].text}`).join("\n").slice(0,16000)}`,
         origin: "inferred", review: true, externalSession: { sessionId, messages },
       });
-      sendJson(res, 202, { data: { episodeId: entry.id, candidateId: entry.id, proposed: 1, extracted: 0, activated: 0, pending: 1, rejected: 0,
+      await reply(202, { data: { episodeId: entry.id, candidateId: entry.id, proposed: 1, extracted: 0, activated: 0, pending: 1, rejected: 0,
         state: "pending_confirmation", confirm: { path: `${AGENT_MEMORY_PATH}/notes/${encodeURIComponent(entry.id)}/confirm`, expectedRevision: entry.revision } } });
       return true;
     }
@@ -464,7 +464,7 @@ export function createAgentMemoryRoutes({
       const user = await accountFor({ create: false });
       const native = await nativeFor(user);
       const board = await memoryBoard({ memorySettings, learning, capsules, observations, nativeMemory: native, projectId: identity.projectId }, user);
-      sendJson(res, 200, { data: board });
+      await reply(200, { data: board });
       return true;
     }
 
@@ -472,13 +472,14 @@ export function createAgentMemoryRoutes({
     if (action === "observations" && method === "POST") {
       requireScope("memory.observe");
       if (!observations) throw new HttpError(503, "product_state_unavailable", "Observations are unavailable.");
+      if (identity.projectId) throw new HttpError(403, "agent_key_project_denied", "Account observations require an account-scoped key.");
       const observation = readObservation(body);
       const user = /** @type {any} */ (await accountFor({ create: true }));
       // The wording pass is metered to the account's one project.
       await store.requireProject(user, "default");
       const outcome = await observations.observe(user, observation);
       if (outcome.habits.length) await trail("observation.habits", user, { changes: outcome.habits.map((/** @type {any} */ habit) => `${habit.change}:${habit.id}`).join(",") });
-      sendJson(res, 202, { data: outcome });
+      await reply(202, { data: outcome });
       return true;
     }
 
@@ -486,6 +487,7 @@ export function createAgentMemoryRoutes({
       requireScope("memory.manage");
       const input = fields(body, ["learningPaused", "recallPaused"]);
       const user = /** @type {any} */ (await accountFor({ create: true }));
+      if (identity.projectId) throw new HttpError(403, "agent_key_project_denied", "Account settings require an account-scoped key.");
       const settings = await memorySettings.updateSettings(user.id, input);
       await trail("settings.update", user, { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused });
       // The pause is the engine's own policy too (what the memory page's switch does); the gateway reads
@@ -494,7 +496,7 @@ export function createAgentMemoryRoutes({
         await nativeMemory.setLearning(user.id, !settings.learningPaused)
           .catch((/** @type {any} */ error) => trail("settings.engine", user, { code: String(error?.code ?? "memory_engine_unavailable") }));
       }
-      sendJson(res, 200, { data: { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused } });
+      await reply(200, { data: { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused } });
       return true;
     }
 
@@ -515,16 +517,20 @@ export function createAgentMemoryRoutes({
       }
       const outcome = await recordAction({ nativeMemory: native }, user, record.id, act, body);
       await trail(outcome.event, user, { target: record.id });
-      sendJson(res, 200, { data: outcome.record });
+      await reply(200, { data: outcome.record });
       return true;
     }
 
     const habit = target("methods");
+    if (habit && identity.projectId) {
+      requireScope(method === "GET" ? "memory.read" : "memory.manage");
+      if ((await learning?.getMethod(keyAccount.id, habit.id))?.projectId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This method belongs to a different scope.");
+    }
     if (habit && method === "GET" && !habit.act) {
       requireScope("memory.read");
       const user = await accountFor({ create: false });
       if (!user) throw new HttpError(404, "method_not_found", "The method is unavailable.");
-      sendJson(res, 200, { data: await methodDetail({ learning }, user, habit.id) });
+      await reply(200, { data: await methodDetail({ learning }, user, habit.id) });
       return true;
     }
     if (habit && method === "POST" && ["retire", "restore", "rollback"].includes(habit.act)) {
@@ -533,7 +539,7 @@ export function createAgentMemoryRoutes({
       if (!user) throw new HttpError(404, "method_not_found", "The method is unavailable.");
       const changed = await methodAction({ learning }, user, habit.id, habit.act, body);
       await trail(`method.${habit.act}`, user, { target: habit.id });
-      sendJson(res, 200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null, ...(changed.admission ? { admission: changed.admission } : {}) } });
+      await reply(200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null, ...(changed.admission ? { admission: changed.admission } : {}) } });
       return true;
     }
 
@@ -549,7 +555,7 @@ export function createAgentMemoryRoutes({
       }
       const changed = await noteAction({ capsules, memorySettings, nativeMemory }, user, note.id, note.act, body);
       await trail(`note.${note.act}`, user, { target: note.id });
-      sendJson(res, 200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null, ...(changed.admission ? { admission: changed.admission } : {}) } });
+      await reply(200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null, ...(changed.admission ? { admission: changed.admission } : {}) } });
       return true;
     }
 
@@ -562,13 +568,13 @@ export function createAgentMemoryRoutes({
       const user = await accountFor({ create: false });
       const deleted = user ? await deleteSubject(keyAccount.id, user.id) : 0;
       await trail("subject.delete", user, { deleted });
-      sendJson(res, 200, { data: { deleted: deleted > 0 } });
+      await reply(200, { data: { deleted: deleted > 0 } });
       return true;
     }
 
     if (action === "" && method === "GET") {
       // What this key can do, from the key. An integrator's first call.
-      sendJson(res, 200, { data: {
+      await reply(200, { data: {
         version: 1,
         scopes: identity.scopes,
         capabilities: {
@@ -594,6 +600,8 @@ export function createAgentMemoryRoutes({
         subjects: identity.subjects === true,
         speaksFor: subject ? "subject" : "account",
         rateLimitPerMinute: RATE_LIMIT_PER_MINUTE,
+        accountRateLimitPerMinute: AGENT_ACCOUNT_REQUESTS_PER_MINUTE,
+        maxResponseBytes: MAX_RESPONSE_BYTES,
         endpoints: AGENT_MEMORY_ENDPOINTS,
         notes: [
           "Every episode stays a pending candidate, and every note an unconfirmed one, until the account owner confirms it; an episode never changes a memory already in force.",
