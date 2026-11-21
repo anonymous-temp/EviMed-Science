@@ -9,7 +9,7 @@ import { personConsentRefusal, personPairId, personProjectScope } from './native
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { orderStandingPreferences } from './memoryOpeningByUse.mjs';
 import { personalMemoryTravels } from './openVikingLayout.mjs';
-import { inferredChoiceMessage, choiceRows, choiceKey, normaliseChoice, aliasesFor, aliasVariants, personLabel, personNameReading, closePersonNames, confirmedAliases } from './nativeMemoryInduction.mjs';
+import { inferredChoiceMessage, choiceRows, choiceKey, normaliseChoice, aliasesFor, aliasVariants, personLabel, personNameReading, personHintNames, personNamesSuggestPair } from './nativeMemoryInduction.mjs';
 import { forgetRequestId } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
@@ -748,13 +748,14 @@ export class NativeMemoryStore {
         const file = held.find(candidate => candidate.uri === record.uri);
         const label = personLabel(record.uri, record.value);
         if (await fenceWithdrawnMemoryBody(this.overlay, userId, record.uri, `# ${label}`, file.namespaceId) === null) continue;
-        candidates.push({ record, label, reading: personNameReading(label), aliases: confirmedAliases(record.value), file });
+        const names = personHintNames(label, record.value);
+        candidates.push({ record, label, names, readings: names.map(personNameReading), file });
       }
-      if (dismissed) for (const { record, label, reading, aliases, file } of candidates) {
+      if (dismissed) for (const { record, names, readings, file } of candidates) {
         record.possibleSamePerson = candidates.filter(other => other.record.id !== record.id
           && other.file.namespaceId === file.namespaceId && personProjectScope(other.file.projectId) === personProjectScope(file.projectId)
           && !dismissed.has(personPairId(record.uri, other.record.uri))
-          && (closePersonNames(label, other.label) || reading && reading === other.reading || aliases.includes(other.label) || other.aliases.includes(label)))
+          && personNamesSuggestPair(names, other.names, { left: readings, right: other.readings }))
           .slice(0, 8).map(other => ({ id: other.record.id, label: other.label }));
       }
     }

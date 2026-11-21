@@ -333,6 +333,28 @@ test('homophones can prompt confirmation while sensitive, withdrawn and other-pr
   assert.equal(files.size, 5);
 });
 
+test('people cards with title or relationship wording can match using their declared names', async () => {
+  const { store, files } = engine({ count: 0, delay: 0 });
+  Object.assign(store, { personAliasHintEnabled: true, personMergeEnabled: true });
+  const pairs = [
+    ['小明', '# 小明\n- Likes tea.', '王小明医生', '# 王小明医生\n- 全名王小明，是用户科室的骨干'],
+    ['同事林舟', '# 同事林舟\n- 姓名：林舟', '邻居林洲', '# 邻居林洲\n- 又称：林洲'],
+  ];
+  for (const [first, firstBody, second, secondBody] of pairs) {
+    files.set(`${ROOT}/people/${first}.md`, { body: firstBody, modTime: '1' });
+    files.set(`${ROOT}/people/${second}.md`, { body: secondBody, modTime: '1' });
+  }
+  const prose = `${ROOT}/people/陈主任.md`;
+  files.set(prose, { body: '# 陈主任\n- 经常和王小明一起开会。', modTime: '1' });
+  const records = await store.records('u1');
+  for (const [a, , b] of pairs) {
+    assert.deepEqual(records.find(record => record.summary === a).possibleSamePerson.map(hint => hint.label), [b]);
+    assert.deepEqual(records.find(record => record.summary === b).possibleSamePerson.map(hint => hint.label), [a]);
+  }
+  assert.deepEqual(records.find(record => record.uri === prose).possibleSamePerson, []);
+  assert.equal(files.size, 5);
+});
+
 test('a file heading is its visible title, rather than a stale filename after correction', async () => {
   const { files, store } = engine({ count: 0, delay: 0 });
   files.set(`${ROOT}/people/old-label.md`, { body: '# Current name\n- Independent fact.', modTime: '2026-11-17' });

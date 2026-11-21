@@ -2075,6 +2075,21 @@ test('source-bound people hints use the live heading of an opaque path and stay 
   assert.doesNotMatch(answer.json.result, /Likes flowers/);
 });
 
+test('conversation hints match declared person names inside the current project scope', async t => {
+  const metadata = new Map();
+  const f = await fixture(t, { config: { memoryPersonAliasHintEnabled: true, memoryPeopleAcrossProjectsEnabled: true }, overlay: {
+    configured: true, files: async () => metadata, sensitiveUris: async () => [], otherProjectUris: async () => [], noteRecalled: async () => {},
+  } });
+  const nickname = f.stub.seedMemory(OV_USER, 'people/short.md', '# 小明\n- Likes walking.');
+  f.stub.seedMemory(OV_USER, 'people/titled.md', '# 王小明医生\n- 全名王小明，是用户科室的骨干');
+  f.stub.seedMemory(OV_USER, 'people/prose.md', '# 王主任\n- 经常和王小明一起开会');
+  const other = f.stub.seedMemory(OV_USER, 'people/other.md', '# 别的项目的人\n- 别名：小明');
+  metadata.set(other, { projectId: 'other' });
+  const answer = await f.call('GET', '/api/v1/content/read?uri=' + encodeURIComponent(nickname));
+  assert.match(answer.json.result, /王小明医生: .*titled\.md/);
+  assert.doesNotMatch(answer.json.result, /prose\.md|other\.md|科室的骨干/);
+});
+
 test('literal rescue retains a verified alias hit even when only its original receipt mentions the name', async t => {
   const keep = ROOT + '/memories/people/keeper.md', old = ROOT + '/memories/people/retired.md';
   const f = await fixture(t, { config: { memoryPersonMergeEnabled: true, memoryLiteralFallbackEnabled: true }, overlay: {

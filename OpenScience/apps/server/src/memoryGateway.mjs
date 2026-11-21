@@ -3,10 +3,10 @@ import { visibleStatementSources } from './memoryStatementSources.mjs';
 import { randomUUID } from 'node:crypto';
 import { recallOperation } from './memoryRecallReceipt.mjs';
 import { readStatus, searchStatusText, measuredRead, memorySourceLabel, literalAnchors, containsAnchor, literalIndexMatch, literalRecallCheck, literalFileName, hasLiteralHistoryMatch } from './memoryReadStatus.mjs';
-import { aliasWithdrawn, PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId } from './nativeMemoryPeople.mjs';
+import { aliasWithdrawn, PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';
-import { closePersonNames, confirmedAliases, personLabel } from './nativeMemoryInduction.mjs';
+import { confirmedAliases, personHintNames, personLabel, personNamesSuggestPair } from './nativeMemoryInduction.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { historySearchText } from './memoryHistory.mjs';
 import { forgetToolStatus } from './memoryForgetStatus.mjs';
@@ -1442,7 +1442,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const admissions = new Map();
       /** @type {Promise<string[]> | null} */
       let hiddenList = null;
-      /** @type {Promise<{uri:string,label:string,aliases:string[]}[]> | null} */
+      /** @type {Promise<{uri:string,label:string,names:string[]}[]> | null} */
       let people = null;
       let sourceFiles = null;
       let aliasRemovals;
@@ -1539,14 +1539,18 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             for (const entry of candidates.slice(0, 200)) {
               if (entry.isDir || nativeMemoryFile(entry.uri, `${userRoot}/memories`)?.type !== 'people' || await ctx.hidden(entry.uri)) continue;
               const body = await ctx.readMemory(entry.uri).catch(() => null);
-              if (body !== null && await ctx.personIdentityVisible(entry.uri, body)) rows.push({ uri: entry.uri, label: personLabel(entry.uri, body), aliases: confirmedAliases(body) });
+              if (body !== null && await ctx.personIdentityVisible(entry.uri, body)) {
+                const label = personLabel(entry.uri, body);
+                rows.push({ uri: entry.uri, label, names: personHintNames(label, body) });
+              }
             }
             return rows;
           })();
-          const label = personLabel(uri, original), aliases = confirmedAliases(original);
+          const names = personHintNames(personLabel(uri, original), original);
+          const projectScope = personProjectScope(metadata?.projectId), files = await sourceFiles;
           const distinct = config.memoryPersonMergeEnabled === true ? await personEdges.dismissed(user.id) : new Set();
-          const siblings = (await people).filter(row => row.uri !== uri && !distinct.has(personPairId(uri, row.uri)) && (closePersonNames(label, row.label)
-            || aliases.includes(row.label) || row.aliases.includes(label))).slice(0, 8);
+          const siblings = (await people).filter(row => row.uri !== uri && !distinct.has(personPairId(uri, row.uri))
+            && personProjectScope(files.get(row.uri)?.projectId) === projectScope && personNamesSuggestPair(names, row.names)).slice(0, 8);
           if (!siblings.length) return text;
           const hint = `Related people files (possibly the same person — not confirmed; ask the user or report separately; never mix their facts):\n`
             + siblings.map(row => `- ${row.label}: ${row.uri}`).join('\n');

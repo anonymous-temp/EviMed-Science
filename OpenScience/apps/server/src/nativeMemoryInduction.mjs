@@ -87,6 +87,32 @@ export function personLabel(uri, body) {
   try { return decodeURIComponent(filename); } catch { return filename; }
 }
 
+const DECLARED_PERSON_NAME = /^(?:(?:姓名|全名|别名|又称|name|full name|alias(?:es)?|also known as)\s*[:：]\s*|(?:全名|又称)\s*)(.+)$/iu;
+
+/** Names on the card are leads for a hint only. Keep title and relationship wording intact.
+ * @param {string} label @param {string} body */
+export function personHintNames(label, body) {
+  const names = new Set([label, ...confirmedAliases(body)]);
+  for (const line of body.split('\n')) {
+    const field = line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/u, '').replace(/\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/iu, '');
+    // The first clause of an explicit field can be followed by details about the person.
+    const value = DECLARED_PERSON_NAME.exec(field.split(/[，,。；;]/u, 1)[0])?.[1];
+    if (!value) continue;
+    for (const entry of value.split('、')) {
+      const name = entry.trim().replace(/^(?:“(.+)”|「(.+)」|"(.+)")$/u, (_whole, curly, corner, straight) => curly ?? corner ?? straight);
+      if (name.length >= 2 && name.length <= 100) names.add(name);
+      if (names.size >= 12) return [...names];
+    }
+  }
+  return [...names];
+}
+
+/** @param {string[]} names @param {string[]} others @param {{left:(string|null)[],right:(string|null)[]}|null} [readings] */
+export function personNamesSuggestPair(names, others, readings = null) {
+  return names.some((name, i) => others.some((other, j) => name === other || closePersonNames(name, other)
+    || Boolean(readings?.left[i] && readings.left[i] === readings.right[j])));
+}
+
 /** Confirmed links are local to the caller's already scoped file inventory.
  * @param {{uri:string,body:string}[]} files @param {{uri:string,body:string}} origin @returns {string[]} */
 export function aliasesFor(files, origin) {
