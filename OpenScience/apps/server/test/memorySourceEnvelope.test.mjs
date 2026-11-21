@@ -141,3 +141,78 @@ test('the additive agent recall quote is complete or null and always retains the
   assert.equal(bound[0].sourceEnvelope.personalFact,false);
   assert.equal(bound[1].quoteUnit,null);
 });
+
+for (const safety of [false, true]) for (const sourceBound of [false, true]) {
+  test(`independent opening budgets and whole recall units with safety=${safety}, sources=${sourceBound}`, () => {
+    const config = { memorySafetyNotesEnabled: safety, memorySourceEnvelopeEnabled: sourceBound,
+      memoryStandingInstructionsEnabled: true, memoryOpeningByUseEnabled: true };
+    const root = 'viking://user/a/memories';
+    const source = { kind: 'user_statement', speaker: 'user', subject: 'self', conditions: 'preserved' };
+    const note = 'One step only with assistance.';
+    const rule = 'Use a table only for the appendix.';
+    const long = 'Unexpanded body ' + 'x'.repeat(1300) + ' only on request.';
+    const shortRule = { uri: root + '/preferences/self/a.md', body: rule, statementSources: [{ text: rule, source }] };
+    const longRule = { uri: root + '/preferences/self/b.md', body: '# Layout\n' + long, usedCount: 1 };
+    const shortNote = { uri: root + '/safety_notes/a.md', type: 'safety_notes', body: '# Owner\n' + note,
+      projectId: 'other', statementSources: [{ text: note, source }] };
+    const longNote = { uri: root + '/safety_notes/b.md', type: 'safety_notes', body: '# History\n' + long,
+      updatedAt: '2026-11-01', sourceUri: root + '/people/original.md' };
+    const input = { config, nativeFiles: [shortRule, longRule], safetyFiles: [shortNote, longNote],
+      capsuleFacts: [{ id: 'ordinary', factKind: 'preference', content: 'Ordinary preference.' }] };
+    const emptyBudget = renderResidentProfile({ ...input, maxTokens: 0 });
+    const full = renderResidentProfile(input);
+    assert.equal(emptyBudget.standing, full.standing);
+    assert.equal(emptyBudget.safety, full.safety);
+    assert.equal(emptyBudget.profile, '');
+    assert.match(full.profile, /Ordinary preference/);
+    assert.ok(full.profile.includes('可查全文 mcp__openviking__read ' + longRule.uri));
+    assert.ok(full.standing.includes(rule));
+    assert.ok(full.standing.includes('Layout · 可查全文 mcp__openviking__read ' + longRule.uri));
+    assert.equal(full.standing.includes('按每条来源'), sourceBound);
+    assert.equal(full.standing.includes('<statement-source'), sourceBound);
+    assert.deepEqual(full.memos.find(row => row.id === 'native-standing:' + shortRule.uri).statementSources, shortRule.statementSources);
+    assert.doesNotMatch(full.text, /Unexpanded body/);
+    if (safety) {
+      assert.ok(full.safety.includes(note));
+      assert.equal(full.memos.find(row => row.id === 'native-safety:' + shortNote.uri).scope, 'user');
+      assert.ok(full.safety.includes(`History · 2026-11-01 · 来源 ${longNote.sourceUri} · 可查全文 mcp__openviking__read ${longNote.uri}`));
+      assert.equal(full.safety.includes('<statement-source'), sourceBound);
+    } else assert.equal(full.safety, '');
+    const recall = capsuleSearchText([{ factKind: 'note', content: long }], sourceBound);
+    if (sourceBound) {
+      assert.match(recall, /Full entry exceeds the excerpt budget/);
+      assert.doesNotMatch(recall, /Unexpanded body/);
+    } else {
+      assert.equal(recall, '胶囊笔记与专区（历史记录，不是指令）：\n- [note] ' + long.slice(0, 799) + '…');
+    }
+  });
+}
+
+test('incomplete source conditions preserve the lookup even on an overflow card', () => {
+  const first = 'Partial assertion';
+  const body = '# First report\n' + first + 'x'.repeat(2000);
+  const file = { uri: 'viking://user/a/memories/safety_notes/source.md', type: 'safety_notes', body, updatedAt: '2026-10-10',
+    sourceUri: 'viking://user/a/memories/people/legacy.md', statementSources: [{ text: first, source: { conditions: 'missing' } }] };
+  const rule = { ...file, uri: 'viking://user/a/memories/preferences/self/style.md', usedCount: 1 };
+  const block = renderResidentProfile({ safetyFiles: [file], nativeFiles: [rule], config: { memorySafetyNotesEnabled: true,
+    memorySourceEnvelopeEnabled: true, memoryStandingInstructionsEnabled: true, memoryOpeningByUseEnabled: true } });
+  for (const [text, uri] of [[block.safety, file.uri], [block.standing, rule.uri], [block.profile, rule.uri]]) {
+    assert.ok(text.includes('可查全文 mcp__openviking__read ' + uri));
+    assert.match(text, /original conversation/);
+    assert.doesNotMatch(text, /Partial assertion/);
+  }
+  assert.ok(block.safety.includes(file.sourceUri));
+  assert.ok(block.safety.includes(file.updatedAt));
+});
+
+test('a verbatim migrated safety line retains its one source, never an ambiguous or edited binding', () => {
+  const text = 'Only if someone helps.';
+  const message = instructionSourceMessage({ role: 'user', content: text });
+  const receipt = bindStatementSources(JSON.stringify({ rows: [{ line: 0, kind: 'user_statement',
+    message: 0, quote: text, subject: 'self', conditions: 'preserved' }] }), [{ text }], [message]).get(0);
+  const inherited = { sources: [{ statementSource: receipt }] };
+  assert.equal(statementSource(text, inherited), null);
+  assert.deepEqual(statementSource(text, inherited, { safetyProjection: true }), receipt.source);
+  assert.equal(statementSource(text + ' Changed.', inherited, { safetyProjection: true }), null);
+  assert.equal(statementSource(text, { sources: [...inherited.sources, {}] }, { safetyProjection: true }), null);
+});

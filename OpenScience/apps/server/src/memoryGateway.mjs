@@ -1360,7 +1360,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           const metadata = (await sourceFiles).get(uri);
           if (config.memorySourceEnvelopeEnabled === true && ctx.origin !== 'agent-api') {
             const origins = await overlay?.originsOf?.(user.id, [uri]).catch(() => new Map());
-            const bound = visibleStatementSources(text, origins?.get(uri));
+            const bound = visibleStatementSources(text, origins?.get(uri), { safetyProjection: Boolean(metadata?.safetySource) });
             // Keep the whole fenced body. A line map may clarify an attribution but never replaces its context.
             const source = memoryEnvelope(metadata);
             text = JSON.stringify({ source, ...memoryQuoteUnit(text, source, bound) });

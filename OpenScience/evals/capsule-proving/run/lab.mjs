@@ -511,21 +511,6 @@ export async function openLab({
       policies: { forProject: async () => ({ kind: "owned" }), policiesForOwner: async () => [], read: () => { throw new Error("no shared namespace in the lab"); } },
     });
     const productRejectionJudge = createRejectionJudge({ config: rejectionJudge ? config : { ...config, deepseekApiKey: "", nativeMemoryRejectionJudgeEnabled: false } });
-    const makeStore = selected => new NativeMemoryStore({ sourceEnvelopeEnabled: selected.memorySourceEnvelopeEnabled, forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions, overlay, memoryContexts: contexts, rejectionJudge: productRejectionJudge, ...(now ? { now } : {}), report: say });
-    const nativeMemory = makeStore(config);
-    const readStores = new Map([[config.memorySourceEnvelopeEnabled === true, nativeMemory]]);
-    const storeFor = selected => {
-      const flag = selected.memorySourceEnvelopeEnabled === true;
-      if (!readStores.has(flag)) readStores.set(flag, makeStore(selected));
-      return readStores.get(flag);
-    };
-    const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay, nativeMemory, memoryContexts: contexts, rejectionJudge: productRejectionJudge,
-      forgetRequestJudge: createForgetRequestJudge({ config }),
-      pastedInstructionJudge: createPastedInstructionJudge({ config }), now, report: say });
-    const resources = new OpenVikingResources({ client });
-    const profilesFor = (selectedConfig) => createLabResidentProfiles({ config: selectedConfig, memorySettings, nativeMemory: storeFor(selectedConfig) });
-    const residentProfiles = profilesFor(config);
-
     /** @param {string} userId @param {string} projectId */
     const projectRow = async (userId, projectId) => {
       const row = (await database.query(`SELECT p.id, p.name, u.created_at::text AS account_created_at, p.created_at::text AS project_created_at
@@ -585,9 +570,33 @@ export async function openLab({
       admitMessage: async (memoryContext, source, message) => (await admission.admit({ user: { id: memoryContext.ownerId }, project: source.project,
         engineSessionId: `dsh-${source.sessionId}`, at: isoOk(message?.created_at) ? Date.parse(message.created_at) : null })).learn,
     });
+    const storeOptions = selected => ({
+      sourceEnvelopeEnabled: selected.memorySourceEnvelopeEnabled === true,
+      standingInstructionsEnabled: selected.memoryStandingInstructionsEnabled === true,
+      peopleAcrossProjectsEnabled: selected.memoryPeopleAcrossProjectsEnabled === true,
+    });
+    const readStores = new Map();
+    const storeFor = selected => {
+      const options = storeOptions(selected);
+      const key = JSON.stringify(options);
+      if (!readStores.has(key)) {
+        const readStore = new NativeMemoryStore({ ...options, forgetTargetsEnabled: config.memoryForgetTargetsEnabled,
+          sessions, overlay, memoryContexts: contexts, rejectionJudge: productRejectionJudge, ...(now ? { now } : {}), report: say });
+        readStore.history = history;
+        readStores.set(key, readStore);
+      }
+      return readStores.get(key);
+    };
+    const nativeMemory = storeFor(config);
+    const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay, nativeMemory, memoryContexts: contexts, rejectionJudge: productRejectionJudge,
+      forgetRequestJudge: createForgetRequestJudge({ config }),
+      pastedInstructionJudge: createPastedInstructionJudge({ config }), now, report: say });
+    const resources = new OpenVikingResources({ client });
+    const profilesFor = (selectedConfig) => createLabResidentProfiles({ config: selectedConfig, memorySettings, nativeMemory: storeFor(selectedConfig) });
+    const residentProfiles = profilesFor(config);
+
     worker.history = history;
     worker.verification.history = history;
-    nativeMemory.history = history;
 
     /** @type {Map<string, { taskId: string, adds: number, updates: number, deletes: number, added: number, updated: number, deleted: number }[]>} */
     const consolidationTasks = new Map();

@@ -208,3 +208,26 @@ test('legacy coverage and failed reads are explicit without fabricating typed sa
   assert.ok(safetyNoteFile(notes, { memoryRoot, projectId: 'default' }));
   assert.match(renderSafetyNotes([notes], { maxTokens: 1500 }).text, /父亲/);
 });
+
+test('the scoped store binds only visible safety statements and retains the original event date', async () => {
+  const { NativeMemoryStore } = await import('../src/nativeMemoryStore.mjs');
+  const fact = 'Only with assistance (as of 2026-10-10)';
+  const extra = 'Private work detail.';
+  const person = file({ type: 'people', body: `# Parent\n## Treatment ${anchor}\n- ${fact}\n## Work\n- ${extra}` });
+  const profile = file({ uri: memoryRoot + '/profile.md', type: 'profile', body: person.body });
+  const files = [person, profile];
+  const store = new NativeMemoryStore({ sessions: { memoryRoot: () => memoryRoot }, sourceEnvelopeEnabled: true,
+    overlay: { sensitiveUris: async () => [], otherProjectUris: async () => [], files: async () => new Map(files.map(f => [f.uri, f])) } });
+  store.files = async () => files;
+  const statement = { text: fact, source: { conditions: 'preserved', subject: 'other' } };
+  store.records = async () => [
+    { uri: person.uri, id: 'p', value: person.body, statementSources: [statement, { text: extra, source: { conditions: 'missing' } }] },
+    { uri: profile.uri, id: 'q', value: 'Only with assistance', quoteUnit: fact, sourceEnvelope: statement.source },
+  ];
+  const notes = await store.safetyNotes('owner', 'current');
+  assert.equal(notes.length, 2);
+  for (const row of notes) assert.deepEqual(row.statementSources, [statement]);
+  const { text } = renderSafetyNotes(notes, { sourceBound: true, maxTokens: 1500, maxChars: 4000 });
+  assert.ok(text.includes(fact));
+  assert.doesNotMatch(text, /Private work detail|Incomplete conditions/);
+});

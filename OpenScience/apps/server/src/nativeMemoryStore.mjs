@@ -638,7 +638,11 @@ export class NativeMemoryStore {
       const history = (revisions.get(file.uri) ?? []).slice().reverse();
       const changed = sources.filter((source) => source.uri === file.uri && ["retracted", "changed", "expired", "removed"].includes(source.state));
       const base = this.#fileRecord(file, history, changed, conversationEvidence(history, sessionProjects), forgotten.has(file.namespaceId ?? null) ? forgotten.get(file.namespaceId ?? null) : []);
-      if (file.type !== "profile") { records.push({...base,...(this.sourceEnvelopeEnabled ? { statementSources: visibleStatementSources(base.value, origins.get(file.uri)) } : {}),...this.#attribution(file,history,origins.get(file.uri),attributionCommits)}); continue; }
+      if (file.type !== "profile") {
+        records.push({ ...base, ...(this.sourceEnvelopeEnabled ? { statementSources: visibleStatementSources(base.value, origins.get(file.uri),
+          { safetyProjection: Boolean(file.safetySource) }) } : {}), ...this.#attribution(file, history, origins.get(file.uri), attributionCommits) });
+        continue;
+      }
       // The profile is one document; its lines are the items the page lists.
       for (const line of profileStatements(file.body)) {
         // A line's own conversation is the one whose commit brought it, not every conversation that touched the file: from the index of
@@ -1182,7 +1186,8 @@ export class NativeMemoryStore {
         const section = file.body.split('\n').find(line => line.trim().startsWith('## ') && line.trim().endsWith(MEMORY_SAFETY_NOTES_ANCHOR));
         body = `${heading}\n${section}\n${lines.map(line => `- ${line}`).join('\n')}`;
       }
-      if (!safetyNoteLines(body, file.type).length) {
+      const safetyLines = safetyNoteLines(body, file.type);
+      if (!safetyLines.length) {
         if (body.trim() && file.type === 'people' && !safetyNoteLines(file.body, file.type).length) legacyUnclassified++;
         return [];
       }
@@ -1195,7 +1200,7 @@ export class NativeMemoryStore {
       const origins = [...new Set(sources.flatMap(record => record.attribution?.origins ?? ['unknown']))];
       return [{ ...file, body, ...(binding ? { sourceUri: binding.uri, lineHashes: binding.lineHashes } : {}),
         ...(this.sourceEnvelopeEnabled ? { statementSources: sources.flatMap(record => record.sourceEnvelope
-          ? [{ text: record.quoteUnit ?? record.value, source: record.sourceEnvelope }] : record.statementSources ?? []) } : {}),
+          ? [{ text: record.quoteUnit ?? record.value, source: record.sourceEnvelope }] : record.statementSources ?? []).filter(row => safetyLines.some(line => line.includes(row.text))) } : {}),
         updatedAt: binding?.updatedAt ?? sources[0].updatedAt ?? file.modTime,
         originalSources: receipt.originalSources, sourcePrivacy: receipt.sourcePrivacy,
         origin: origins.length === 1 ? origins[0] : 'mixed', attribution: { schemaVersion: 1, origins, confirmed: false } }];

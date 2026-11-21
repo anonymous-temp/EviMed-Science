@@ -163,12 +163,17 @@ export function mostUsedMemos(files, config) {
   const limit = Math.max(0, Math.min(100, Math.trunc(Number(config.memoryOpeningTopK ?? 5)) || 0));
   return files.filter(file => count(file) > 0 && !file.sensitive && String(file.body ?? '').trim())
     .sort((a, b) => count(b) - count(a) || lastUse(b) - lastUse(a) || String(a.uri).localeCompare(String(b.uri)))
-    .slice(0, limit).map(file => ({
-      id: `native-used:${file.uri}`, memoryType: 'native_most_used', kind: 'note', scope: file.projectId ? 'project' : 'user',
-      origin: 'unknown', updatedAt: file.updatedAt ?? null,
-      content: `Most used · ${file.uri}\n${[...file.body].length <= 400 ? file.body : openingPointer(file)}`,
-      statementSources: file.statementSources, originalSources: file.originalSources ?? [], attribution: file.attribution, sourcePrivacy: file.sourcePrivacy,
-    }));
+    .slice(0, limit).map(file => {
+      const personalSafety = file.type === 'safety_notes' && (config.memorySafetyNotesEnabled === true || config.memorySourceEnvelopeEnabled === true);
+      const pointer = openingPointer(file);
+      return {
+        id: `native-used:${file.uri}`, memoryType: 'native_most_used', kind: 'note', scope: file.projectId && !personalSafety ? 'project' : 'user',
+        origin: 'unknown', updatedAt: file.updatedAt ?? null,
+        ...(config.memorySourceEnvelopeEnabled === true ? { sourceLookup: pointer } : {}),
+        content: `Most used · ${file.uri}\n${[...file.body].length <= 400 ? file.body : pointer}`,
+        statementSources: file.statementSources, originalSources: file.originalSources ?? [], attribution: file.attribution, sourcePrivacy: file.sourcePrivacy,
+      };
+    });
 }
 
 /** Templates identify the person's own preferences and corrections by directory,
@@ -197,7 +202,7 @@ function openingPointer(file) {
 
 /** Complete lines preserve scope and exceptions; never truncate a rule mid-condition.
  * Inputs have passed the owned store's deletion and receipt readers.
- * @param {StandingPreferenceFile[]} files @param {{ memoryStandingInstructionsEnabled?: boolean }} config */
+ * @param {StandingPreferenceFile[]} files @param {{ memoryStandingInstructionsEnabled?: boolean, memorySourceEnvelopeEnabled?: boolean }} config */
 export function standingPreferenceMemos(files, config) {
   if (config.memoryStandingInstructionsEnabled !== true) return [];
   let remaining = 400;
@@ -209,6 +214,7 @@ export function standingPreferenceMemos(files, config) {
     const fits = size <= remaining;
     if (fits) remaining -= size;
     memos.push({ id: `native-standing:${file.uri}`, memoryType: 'native_standing_preference',
+      ...(config.memorySourceEnvelopeEnabled === true ? { sourceLookup: openingPointer(file) } : {}),
       kind: 'preference', scope: 'user', origin: 'engine', content: fits ? body : openingPointer(file), updatedAt: file.updatedAt ?? null,
       statementSources: file.statementSources, originalSources: file.originalSources ?? [], attribution: file.attribution, sourcePrivacy: file.sourcePrivacy });
   }

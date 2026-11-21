@@ -1840,3 +1840,27 @@ test('literal and observation reads retain same-date neighbours through the shar
   const read = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read', arguments: { uris: [`${ROOT}/memories/observations/Keys.md`] } } });
   assert.match(JSON.stringify(read.messages), /seen once/); assert.doesNotMatch(JSON.stringify(read.messages), /night shifts/);
 });
+
+for (const safe of [false, true]) for (const bound of [false, true]) {
+  test(`native retrieval preserves conditional text with safety=${safe}, sources=${bound}`, async t => {
+    const config = { memorySafetyNotesEnabled: safe, memorySourceEnvelopeEnabled: bound, memoryStandingInstructionsEnabled: true };
+    const statement = 'Assistant suggested (not adopted): Use the long layout only for the appendix.';
+    const body = '# Layout\n- ' + statement;
+    const f = await fixture(t, { config });
+    const uri = f.stub.seedMemory(OV_USER, 'preferences/self/layout.md', body, { type: 'preferences' });
+    const read = await f.call('GET', '/api/v1/content/read?uri=' + encodeURIComponent(uri));
+    const hits = await f.call('POST', '/api/v1/search/search', { query: 'layout' });
+    assert.equal(read.status, 200);
+    assert.equal(hits.status, 200);
+    const hit = hits.json.result.memories.find(row => row.uri === uri);
+    assert.ok(hit);
+    for (const text of [read.json.result, hit.abstract]) {
+      if (bound) {
+        const unit = JSON.parse(text);
+        assert.equal(unit.text, body);
+        assert.deepEqual(unit.statements.map(row => row.text), [statement]);
+        assert.equal(unit.statements[0].source.speaker, 'assistant');
+      } else assert.equal(text, body);
+    }
+  });
+}

@@ -61,8 +61,12 @@ export function renderSafetyNotes(files, { maxTokens, sourceBound = false, maxCh
     const date = file.updatedAt ?? file.modTime ?? null;
     const reference = `${label} · ${file.sourceUri ?? file.uri} · 记录更新 ${date ?? '未知'}`;
     const content = `${reference}：${lines.join('；')}`;
+    const source = file.sourceUri ? ` · 来源 ${file.sourceUri}` : '';
+    const pointer = `${label} · ${date ?? '日期未知'}${source} · 可查全文 mcp__openviking__read ${file.uri}`;
     const memo = { id: `native-safety:${file.uri}`, memoryType: 'native_safety_note', kind: 'note',
-      scope: file.type === 'people' && file.projectId && file.projectId !== 'default' ? 'project' : 'user', origin: file.origin ?? 'unknown', content, updatedAt: date, originalSources: file.originalSources ?? [],
+      scope: file.type === 'people' && file.projectId && file.projectId !== 'default' ? 'project' : 'user',
+      origin: file.origin ?? 'unknown', content, updatedAt: date, originalSources: file.originalSources ?? [],
+      ...(sourceBound ? { sourceLookup: pointer } : {}),
       statementSources: file.statementSources, sourcePrivacy: file.sourcePrivacy, attribution: file.attribution };
     const rendered = renderMemoryContext([memo], { sourceBound });
     const chars = [...rendered].length, tokens = estimatePromptTokens(rendered);
@@ -71,12 +75,11 @@ export function renderSafetyNotes(files, { maxTokens, sourceBound = false, maxCh
       remainingTokens -= tokens;
       memos.push(memo);
     } else {
-      const source = file.sourceUri ? ` · 来源 ${file.sourceUri}` : '';
-      pointers.push({ ...memo, content: `${label} · ${date ?? '日期未知'}${source} · 可查全文 mcp__openviking__read ${file.uri}` });
+      pointers.push({ ...memo, content: pointer });
     }
   }
   // The content budget is fixed. A compact directory grows by one escaped pointer for each overflow file.
-  // Keep the individual source receipts on delivery even though the pointers share an envelope.
+  // Source-bound pointers keep their individual envelopes. The legacy directory shares one.
   const directory = sourceBound ? pointers : pointers.length ? [{ id: 'native-safety-directory', memoryType: 'native_safety_note', kind: 'note',
     scope: 'user', origin: 'unknown', content: pointers.map(row => row.content).join('\n') }] : [];
   const text = [HEADER, '按卡内主体区分本人和他人；记录更新时间与事实发生日期分开核对。',

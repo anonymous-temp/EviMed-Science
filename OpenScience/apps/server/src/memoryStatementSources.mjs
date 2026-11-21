@@ -101,10 +101,10 @@ export function statementSourceReviewer({ config, usageLedger, pasteRangeIndex, 
   };
 }
 
-export function visibleStatementSources(body, origins) {
+export function visibleStatementSources(body, origins, { safetyProjection = false } = {}) {
   const sources = [];
   for (const text of memoryLines(body)) {
-    const source = statementSource(text, origins?.get(lineFingerprint(text)));
+    const source = statementSource(text, origins?.get(lineFingerprint(text)), { safetyProjection });
     if (source) sources.push({ text, source });
     else {
       const label = recordedNoteSource(text);
@@ -114,9 +114,13 @@ export function visibleStatementSources(body, origins) {
   return sources;
 }
 
-export function statementSource(text, origin) {
-  if (!origin?.statementSource || origin.sources?.length) return null;
-  const receipt = origin.statementSource;
+export function statementSource(text, origin, { safetyProjection = false } = {}) {
+  // A verbatim copied line can retain one producer receipt inside its inherited origin.
+  // Multiple possible origins cannot establish a single speaker.
+  const receipt = origin?.sources?.length
+    ? (safetyProjection && origin.sources.length === 1 ? origin.sources[0]?.statementSource : null)
+    : origin?.statementSource;
+  if (!receipt) return null;
   if (receipt.lineDigest !== digest(text)) return null;
   const fields = (receipt.layout ?? []).map(([start, length]) => text.slice(start, start + length));
   return fields.length ? { ...receipt.source, layout: emptyFormatFields(fields) } : receipt.source;

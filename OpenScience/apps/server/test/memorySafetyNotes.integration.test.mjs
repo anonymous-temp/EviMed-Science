@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
+import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { MEMORY_SAFETY_NOTES_ANCHOR as anchor } from '@evimed/domain';
 import { ResidentProfiles } from '../src/residentProfile.mjs';
 import { createLabResidentProfiles } from '../../../evals/capsule-proving/run/lab.mjs';
@@ -114,18 +116,24 @@ test('switch off and non-health accounts remain identical through the database-b
 });
 
 test('legacy line migration survives retries, travels and follows an exact source withdrawal', options, async t => {
-  const f = await fixture(t, { config: { memorySafetyNotesEnabled: true, memorySafetyNotesMigrationEnabled: true } });
+  const f = await fixture(t, { config: { memorySafetyNotesEnabled: true, memorySafetyNotesMigrationEnabled: true, memorySourceEnvelopeEnabled: true } });
+  f.store.sourceEnvelopeEnabled = true;
   f.worker.nativeMemory = f.store;
   await f.sessions.setLearning(f.userId, true);
   const source = '# Owner\n- Old reported reaction, only after exposure.\n- A different hobby.';
   const uri = f.seed('people/owner.md', source, { type: 'people', tags: ['project=first'] });
   await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'people', projectId: 'first', body: source });
+  const statement = 'Old reported reaction, only after exposure.';
+  const receipt = { kind: 'user_statement', speaker: 'user', subject: 'self', conditions: 'preserved', personalFact: true };
+  await f.overlay.syncOrigins(f.userId, uri, { after: source, origin: { projectId: 'first' },
+    statementSources: { [lineFingerprint(statement)]: { lineDigest: createHash('sha256').update(statement).digest('hex'), source: receipt } } });
   let calls = 0;
   f.worker.classifySafety = async (_u, _uri, lines) => { calls++; return lines.includes(source.split('\n')[1]) ? [[2,2]] : []; };
   await Promise.all([f.worker.migrateSafety(f.userId), f.worker.migrateSafety(f.userId)]);
   assert.equal(calls, 1);
   const [copy] = await f.store.safetyNotes(f.userId, 'second');
   assert.equal(copy.sourceUri, uri); assert.equal(copy.type, 'safety_notes');
+  assert.deepEqual(copy.statementSources, [{ text: statement, source: receipt }]);
   assert.ok(copy.body.includes('only after exposure')); assert.ok(!copy.body.includes('hobby'));
   await f.store.forgetLines(f.userId, (await f.store.files(f.userId, { uris: [uri] }))[0], ['Old reported reaction, only after exposure.']);
   assert.equal(await f.sessions.read(f.userId, copy.uri), null);

@@ -157,6 +157,7 @@ export function renderMemoryContext(memories, { lookup = "", sourceBound = false
       return [
         `<evimed-memory index="${index + 1}" id="${escapeContext(memo.id)}" type="${escapeContext(memo.memoryType ?? "manual")}" kind="${escapeContext(memo.kind ?? "note")}" scope="${escapeContext(memo.scope ?? "user")}" origin="${originOf(memo.origin) ?? "unrecorded"}"${sourceBound ? ` source="${escapeContext(JSON.stringify(memoryEnvelope(memo)))}"` : ""}${caveats.length ? ` caveats="${escapeContext(caveats.join(","))}"` : ""}>`,
         escapeContext(unit.text),
+        ...(sourceBound && unit.text !== memo.content && memo.sourceLookup ? [escapeContext(memo.sourceLookup)] : []),
         ...unit.statements.map(row => `<statement-source data="${escapeContext(JSON.stringify(row.source))}">${escapeContext(row.text)}</statement-source>`),
         ...(memo.validity?.from || memo.validity?.until
           ? [`有效期：${escapeContext(memo.validity.from ?? "起点未知")} 起，${escapeContext(memo.validity.until ?? "至今")} 止`] : []),
