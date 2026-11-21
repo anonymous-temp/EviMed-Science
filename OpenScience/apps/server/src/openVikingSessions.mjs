@@ -398,6 +398,17 @@ export class OpenVikingSessions {
     return this.client.request({ method: "POST", path: "/api/v1/fs/attrs/set_tags", userId, body: { uri, tags: [...tags] }, timeoutMs: this.timeoutMs });
   }
 
+  /** Native batch-write requires the type directory to exist, even for its first file. */
+  async ensureTypeDirectory(userId, type) {
+    if (!this.memoryTypes.includes(type)) throw new HttpError(400, 'memory_payload_invalid', 'Unknown memory directory.');
+    try {
+      await this.client.request({ method: 'POST', path: '/api/v1/fs/mkdir', userId,
+        body: { uri: `${this.memoryRoot(userId)}/${type}` }, timeoutMs: this.timeoutMs });
+    } catch (error) {
+      if (/** @type {any} */ (error)?.upstreamCode !== 'ALREADY_EXISTS') throw error;
+    }
+  }
+
   /**
    * Replace an existing memory file's body. `wait` re-embeds before answering, so the edit is searchable when this
    * returns (about a second). Use batch-write's exact URI semantics: content/write normalizes spaces

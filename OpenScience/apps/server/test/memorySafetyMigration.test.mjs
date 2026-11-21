@@ -22,7 +22,7 @@ function scene(type = 'people') {
       removals: async () => removals, instructionCheck: async (_u, key) => decisions.has(key),
       originsOf: async () => new Map(), inheritOrigins: async () => {}, bindSafetySource: async (_u, uri, binding) => bindings.set(uri, binding),
       upsertFile: async () => {}, recordInstructionCheck: async (_u, key) => decisions.add(key) },
-    sessions: { settings: async () => ({ memoryTypes: ['safety_notes'] }), memoryRoot: () => root, tree: async () => [...files.values()], read: async (_u, uri) => files.get(uri)?.body ?? null,
+    sessions: { ensureTypeDirectory: async (_u, type) => assert.equal(type, 'safety_notes'), settings: async () => ({ memoryTypes: ['safety_notes'] }), memoryRoot: () => root, tree: async () => [...files.values()], read: async (_u, uri) => files.get(uri)?.body ?? null,
       replace: async (_u, uri, body) => { writes++; files.set(uri, { uri, body }); } },
     classify: async () => { calls++; return [[2,3]]; },
   };
@@ -93,4 +93,21 @@ test('withdrawal removes the bound statement and its exception while preserving 
   assert.equal(withdrawSafetyProjection(f.text, changed, binding, copy).body, '');
   assert.equal(withdrawSafetyProjection(f.text, null, binding, copy + '\n- Independent history.').body,
     '# Account owner\n- Independent history.');
+});
+
+test('a missing type directory is created before binding and a refused write is retryable', async () => {
+  const f = scene();
+  let directory = false;
+  f.deps.sessions.ensureTypeDirectory = async () => { directory = true; };
+  const replace = f.deps.sessions.replace;
+  f.deps.sessions.replace = async () => {
+    assert.ok(directory);
+    throw Object.assign(new Error('file rejected'), { upstreamStatus: 404 });
+  };
+  f.deps.overlay.removeSafetyOrphan = async (_u, uri) => f.bindings.delete(uri);
+  await assert.rejects(f.run(), /file rejected/);
+  assert.equal(f.bindings.size, 0);
+  f.deps.sessions.replace = replace;
+  await f.run();
+  assert.equal(f.bindings.size, 1);
 });

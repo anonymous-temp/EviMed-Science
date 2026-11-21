@@ -41,6 +41,7 @@ export class OpenVikingStub {
     this.apiKey = apiKey;
     /** @type {Map<string, string>} uri → text (files of every kind: memories, archives' own files) */
     this.files = new Map();
+    this.directories = new Set();
     /** @type {Map<string, string[]>} uri → tags */
     this.tags = new Map();
     /** @type {Map<string, any>} `${user}/${session}` → { messages, archives, commitCount } */
@@ -140,6 +141,12 @@ export class OpenVikingStub {
     const own = `viking://user/${user}`;
     const within = (uri) => uri === own || uri.startsWith(`${own}/`) || uri === "viking://user" || uri.startsWith("viking://resources") || uri.startsWith("viking://agent");
 
+    if (path === '/api/v1/fs/mkdir' && req.method === 'POST') {
+      if (!within(body.uri)) return send(403, fail('PERMISSION_DENIED', 'Access denied'));
+      if (this.directories.has(body.uri)) return send(409, fail('ALREADY_EXISTS', 'Directory exists'));
+      this.directories.add(body.uri);
+      return send(200, ok({ uri: body.uri }));
+    }
     const privacy = /^\/api\/v1\/privacy-configs\/session\/([^/]+)$/.exec(path);
     if (privacy && req.method === "DELETE") {
       const key = `${user}/${decodeURIComponent(privacy[1])}`;

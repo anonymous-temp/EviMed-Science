@@ -946,6 +946,14 @@ export class NativeMemoryOverlay {
       ON CONFLICT(user_id,uri) DO UPDATE SET safety_source=EXCLUDED.safety_source`, [owner(userId), uri, JSON.stringify(binding)]);
   }
 
+  async removeSafetyOrphan(userId, uri) {
+    await this.database.transaction(async client => {
+      const removed = await client.query(`DELETE FROM evimed_memory.native_files WHERE user_id=$1 AND uri=$2
+        AND safety_source IS NOT NULL AND content_hash IS NULL RETURNING uri`, [owner(userId), uri]);
+      if (removed.rowCount) await client.query('DELETE FROM evimed_memory.native_line_origins WHERE user_id=$1 AND uri=$2', [owner(userId), uri]);
+    });
+  }
+
   async clearSafetySource(userId, uri) {
     await this.#query('UPDATE evimed_memory.native_files SET safety_source=NULL WHERE user_id=$1 AND uri=$2', [owner(userId), uri]);
   }

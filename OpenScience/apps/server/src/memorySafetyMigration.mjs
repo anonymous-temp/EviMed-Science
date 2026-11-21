@@ -67,6 +67,14 @@ export async function migrateSafetyNotes({ config, store, overlay, sessions, set
   if (!scan) return;
   if (!(await sessions.settings(userId))?.memoryTypes.includes('safety_notes')) return;
   const root = sessions.memoryRoot(userId);
+  // Older failed batch writes left a binding and inherited origins without a file.
+  // Recheck under the writer lease: a timeout may also have committed engine bytes.
+  for (const file of (await overlay.files(userId)).values()) {
+    if (!file.safetySource || file.contentHash) continue;
+    await withNativeMemoryWrite(overlay.database, userId, async () => {
+      if (await sessions.read(userId, file.uri) === null) await overlay.removeSafetyOrphan(userId, file.uri);
+    }, { exclusive: true });
+  }
   const visibleSources = async () => {
     const inventory = await overlay.files(userId);
     const hidden = await overlay.sensitiveUris(userId);
@@ -127,6 +135,7 @@ export async function migrateSafetyNotes({ config, store, overlay, sessions, set
       if (!file.contentHash) await overlay.upsertFile({ userId, uri: file.uri, memoryType: source.type,
         projectId: source.projectId, body: source.raw });
       const origins = (await overlay.originsOf(userId, [file.uri])).get(file.uri);
+      if (ranges.length) await sessions.ensureTypeDirectory(userId, 'safety_notes');
       for (const selected of ranges) {
         const body = [title, ...selected.filter(line => line !== title)].join('\n');
         const words = [title, ...selected].map(removalText).filter(Boolean);
@@ -141,7 +150,16 @@ export async function migrateSafetyNotes({ config, store, overlay, sessions, set
           const fingerprint = lineFingerprint(word);
           return [fingerprint, originalSources(origins?.get(fingerprint))];
         })));
-        if (before === null) await sessions.replace(userId, uri, body);
+        if (before === null) {
+          try {
+            await sessions.replace(userId, uri, body);
+          } catch (error) {
+            // Only a definitive refusal proves the write cannot arrive later.
+            const status = /** @type {any} */ (error)?.upstreamStatus;
+            if (status >= 400 && status < 500) await overlay.removeSafetyOrphan(userId, uri);
+            throw error;
+          }
+        }
         await overlay.upsertFile({ userId, uri, memoryType: 'safety_notes', body });
       }
       await overlay.recordInstructionCheck(userId, key, { safetyClassification: true });
