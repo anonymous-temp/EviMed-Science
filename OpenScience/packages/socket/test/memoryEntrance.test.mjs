@@ -229,7 +229,7 @@ test('all three memory wording switches compose without changing other guidance 
         assert.equal(parts.context.includes('`statement`'), memoryForgetTargets);
         assert.equal(parts.context.includes('只有工具确认移除后才说已忘记'), memoryForgetToolHint && !memoryForgetTargets);
         assert.equal(parts.context.includes('Claim completion only after the tool confirms'), memoryForgetTargets);
-        assert.equal(parts.context.includes('还没有确认回执时，只能报告已请求、待核验或未执行'), memoryForgetToolHint || memoryForgetTargets);
+        assert.match(parts.context, /还没有确认回执时，只能报告已请求、待核验或未执行/);
         // The targeted mode replaces the whole-file hint, preserving the lane's precedence.
         assert.equal(parts.context.includes('一个文件还含有用户要保留的内容时，先澄清'), memoryForgetToolHint && !memoryForgetTargets);
         contexts.push(parts.context);
