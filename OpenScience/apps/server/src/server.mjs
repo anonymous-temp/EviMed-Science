@@ -2411,7 +2411,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       notifications: notificationService, weekly, config, workerId: randomId("frontier-notify-") });
     // What each reader was served and did (frontierInteractions.mjs): list ids for every list answer, and the page's events.
     const interactions = new FrontierInteractions({ database: productDatabase, config });
-    const profiles = new FrontierProfiles({ database: productDatabase, memorySettings, nativeMemory: config.memoryEngineEnabled ? nativeMemory : null, editor, embedder, config, budget, entityVocabulary, tags: tagStore,
+    const profiles = new FrontierProfiles({ database: productDatabase, ownedLines: accountProjections.ownedLines, memorySettings, nativeMemory: config.memoryEngineEnabled ? nativeMemory : null, editor, embedder, config, budget, entityVocabulary, tags: tagStore,
       // 与我相关 reads a reader's own recent questions: their runs across
       // their projects, the platform's internal ones left out. Asked in the
       // background, a few readers a round, never on a request.

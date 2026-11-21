@@ -46,7 +46,7 @@ export function createAccountProjections({ config, native, overlay, methods, pro
     const results = [];
     for (const record of records) {
       const file = ordinary.find(item => item.uri === record.uri);
-      if (!file || record.status !== 'active' || record.sensitive || record.sourcePrivacy?.classification !== 'ordinary') continue;
+      if (!file || record.status !== 'active' || record.sensitive || record.relations?.validity?.sources?.length || record.sourcePrivacy?.classification !== 'ordinary') continue;
       if (file.projectId && !await visible(userId, file.projectId)) continue;
       const lines = memoryLines(record.value);
       for (const line of lines) {
@@ -59,7 +59,7 @@ export function createAccountProjections({ config, native, overlay, methods, pro
         if (!manual && !(sessionId && ref?.archiveUri && ref.projectCreatedAt && !ref.sources?.length
           && await checkedRun(userId, ref.projectId, quote, { sessionId, epoch:ref.projectCreatedAt }))) continue;
         const source = {id:record.id,contentDigest:record.contentHash,sourcePrivacy:record.sourcePrivacy,attribution:record.attribution};
-        results.push({ quote, source, updatedAt:record.updatedAt, origin:record.origin });
+        results.push({ quote, source, projectId:ref?.projectId ?? file.projectId, updatedAt:record.updatedAt, origin:record.origin });
       }
     }
     return results;
