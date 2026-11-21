@@ -653,7 +653,7 @@ export class MemoryHistory {
         || await this.ledger.rejected(context,[title])) title='Conversation';
       if (await this.ledger.rejected(context,[projectTitle])) projectTitle='Project';
       if (!await this.ledger.lookup(user.id,context.ownerCreatedAt,context.namespaceId,verified.projectId,verified.projectCreatedAt,candidate.uri)) return null;
-      return { meta,hit:{ conversationTitle: redact(title), conversationUrl: verified.conversationUrl, projectId: verified.projectId, projectTitle: redact(projectTitle), scope: 'project',
+      return { meta,hit:{ uri: candidate.uri, conversationTitle: redact(title), conversationUrl: verified.conversationUrl, projectId: verified.projectId, projectTitle: redact(projectTitle), scope: 'project',
         sessionId: meta.session_id, messages: this.secretRedaction ? messages.map(message=>({...message,text:redact(message.text)})) : messages, contextOnly: true, confirmed: false, privateByDefault: privateByDefault({ nativeType: 'people' }),
         ...(forRemoval ? {originalMessages:original.map(message=>{
           const text=messageText(message,this.secretRedaction)??'';

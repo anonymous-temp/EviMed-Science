@@ -106,8 +106,8 @@ export function createNativeCapsuleSearch({ service, subscriptions = null, conte
  *     paused?: (userId: string, projectId: string, sessionId: string | null) => Promise<{ learning: boolean, recall: boolean, trial: boolean }>,
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null,
- *   resident?: { forSession: (user: any, project: any, sessionId: string) => Promise<{ text: string, digest: string, memories: { id: string, kind?: string, scope?: string }[] } | null>,
- *     attached: (user: any, project: any, sessionId: string, receipt: { digest: string, memories: { id: string, kind?: string, scope?: string }[] }) => Promise<unknown> } | null,
+ *   resident?: { forSession: (user: any, project: any, sessionId: string) => Promise<{ text: string, digest: string, blockHash?: string, memories: { id: string, kind?: string, scope?: string }[] } | null>,
+ *     attached: (user: any, project: any, sessionId: string, receipt: { digest: string, blockHash?: string, memories: { id: string, kind?: string, scope?: string }[] }) => Promise<unknown> } | null,
  *   contextPolicies?: any, contextItems?: any }} dependencies
  *   `resident.forSession` answers the block a conversation is to be handed at its first step, or null when it holds it already (or is not to have one);
  *   `resident.attached` notes that it has been handed. `contextPolicies` says whether the workload's project is a shared GEO project, whose
@@ -182,7 +182,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
         // The block as it was when it was handed: asked again, and noted only if it is still the block the plugin names (a card that changed
         // between the two calls is handed again, with its own digest, at the next step).
         const current = resident ? await resident.forSession(currentUser, project, body.sessionId).catch(() => null) : null;
-        if (resident && current && current.digest === body.digest) await resident.attached(currentUser, project, body.sessionId, { digest: current.digest, memories: current.memories });
+        if (resident && current && current.digest === body.digest) await resident.attached(currentUser, project, body.sessionId, { digest: current.digest, memories: current.memories, ...(current.blockHash ? { blockHash: current.blockHash } : {}) });
         sendJson(res, 200, { attached: Boolean(current && current.digest === body.digest) });
         return;
       }

@@ -9013,6 +9013,17 @@ test("a dispatch's recalled memories are on the run, as ids and kinds and never 
     await store.recordLearning(project, run.id, { mountedSkills: ["open-domain-answer"] });
     assert.equal((await store.list(project))[0].recalledMemories.length, 3);
 
+    const { recallOperation } = await import('../src/memoryRecallReceipt.mjs');
+    const operation = recallOperation({ id: 'lookup', entry: 'mcp.search', items: [{uri:'memory:a', text:'PRIVATE VALUE', source:'memory-file'}] });
+    await Promise.all([store.recordLearning(project, run.id, { recallOperations: [operation] }),
+      store.recordLearning(project, run.id, { mountedSkills: ['open-domain-answer'] })]);
+    await store.recordLearning(project, run.id, { recallOperations: [operation] });
+    const folded = (await store.list(project))[0].memoryRecall;
+    assert.equal(folded.operations.length, 1);
+    assert.equal(folded.references.length, 1);
+    assert.equal(folded.state, 'hit');
+    assert.ok(!(await readFile(path.join(project.metaDir, 'runs.jsonl'), 'utf8')).includes('PRIVATE VALUE'));
+
     // Whose conversation a gateway call is: the running runs, with their session.
     assert.deepEqual(await store.activeRuns(project), [{ id: run.id, sessionId: "ses_recall" }]);
   } finally {

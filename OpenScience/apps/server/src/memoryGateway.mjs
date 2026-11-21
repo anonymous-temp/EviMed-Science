@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { recallOperation } from './memoryRecallReceipt.mjs';
 import { readStatus, searchStatusText, measuredRead, memorySourceLabel, literalAnchors, containsAnchor } from './memoryReadStatus.mjs';
 import { PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
@@ -396,6 +398,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   rememberJournal?: import("./geoNativeMemoryRemember.mjs").GeoNativeMemoryRemember | null,
  *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null, allowRunningFallback?: boolean }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
  *   sourceDeletion?: any,
+ *   recordDelivery?: ((request:any)=>Promise<void>) | null,
  *   sourceReceipt?: ((request:any)=>Promise<void>) | null,
  *   sourceReceiptFailed?: ((request:any)=>Promise<void>) | null,
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
@@ -412,7 +415,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  * @returns {((req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>) & { commitSession: MemoryGatewayCommitSession }}
  *   the request handler, with the one function the control plane commits a conversation by (`nativeTurnCommit.mjs`)
  */
-export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, overlay = null, memoryTool = null, personMessages = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, historySecrets = null, now = () => Date.now() }) {
+export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, recordDelivery = null, sourceReceipt = null, sourceReceiptFailed = null, overlay = null, memoryTool = null, personMessages = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, historySecrets = null, now = () => Date.now() }) {
   const personEdges = new MapEdgeCorrections({ database: overlay?.database });
   const peopleEnabled = config.memoryPersonMergeEnabled === true && typeof memoryTool?.people === 'function' && personMessages !== null;
   const enabled = config.memoryEngineEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
@@ -567,10 +570,27 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       reason ? skipped(reason) : !capsuleSearch ? skipped('disabled') : measuredRead(() => capsuleSearch(request), capsuleWaitMs),
     ]);
     if (ctx.literalFallbackEnabled && !ctx.shared && given.mode !== 'context' && Array.isArray(files.memories)) await rescueMissingAnchor(ctx, given, files, history, capsule.items);
-    return { history: history.items.map(hit => hit.withdrawn ? { withdrawn: true, messages: [] } : hit), capsules: capsule.items, searchStatus: {
+    const searchStatus = {
       memoryFiles: files.readStatus ?? readStatus((files.memories?.length || files.entries?.length) ? 'searched' : 'empty'),
       earlierConversations: history.status, receivedCapsules: files.capsuleReadStatus ?? capsule.status,
-    } };
+    };
+    const visibleHistory = history.items.map(hit => hit.withdrawn ? { withdrawn: true, messages: [] } : hit);
+    const admitted = await ctx.admit(ctx.route !== 'mcp' && typeof given.session_id === 'string' ? given.session_id : null);
+    const items = [...(files.memories ?? []), ...(files.entries ?? []), ...(files.resources ?? []), ...(files.skills ?? [])]
+      .map(hit => ({ uri: hit.uri, text: hit.text ?? hit.abstract, source: 'memory-file' }));
+    for (const hit of visibleHistory) {
+      if (hit.withdrawn || !hit.messages?.length) continue;
+      items.push({ uri: hit.uri ?? hit.conversationUrl, source: 'history', text: ctx.route === 'mcp'
+        ? historySearchText([hit], { semanticSecrets: config.memoryHistorySecretRedactionEnabled === true }).split('\n').slice(1).join('\n')
+        : JSON.stringify(hit.messages) });
+    }
+    for (const item of capsule.items.slice(0, ctx.route === 'mcp' ? CAPSULE_ITEMS_MAX : undefined)) {
+      const rendered = ctx.route === 'mcp' ? capsuleSearchText([item])?.split('\n').slice(1).join('\n') : item.content;
+      if (rendered) items.push({ uri: 'capsule:' + (item.id ?? item.factId ?? 'search'), source: 'capsule', text: rendered });
+    }
+    if (files.capsuleContext) items.push({ uri: 'capsule:search', source: 'capsule', text: files.capsuleContext });
+    ctx.stage(admitted.sessionId, given.mode === 'context' ? 'opening.context' : ctx.route + '.search', given.query, items, searchStatus);
+    return { history: visibleHistory, capsules: capsule.items, searchStatus };
   }
 
   /** @param {Map<string, { until: number, count: number }>} windows @param {string} key @param {number} span @param {number} limit */
@@ -924,9 +944,10 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     async search(ctx) {
       const given = ctx.json && typeof ctx.json === "object" && !Array.isArray(ctx.json) ? ctx.json : {};
       const context = given.mode === "context";
-      const admitted = await ctx.admit(typeof given.session_id === "string" ? given.session_id : null);
+      const admitted = await ctx.admit(ctx.route !== 'mcp' && typeof given.session_id === "string" ? given.session_id : null);
       if (!admitted.recall) {
         recordGatewayWithheld(admitted.recallReason ?? "memory_off");
+        ctx.stage(admitted.sessionId, context ? 'opening.context' : ctx.route + '.search', given.query, [], { memoryFiles: readStatus('skipped') });
         return { status: 200, json: ok({ ...(context ? { entries: [], rendered: '', digest: '' } : { memories: [], resources: [], skills: [], total: 0 }), searchStatus: Object.fromEntries(['memoryFiles', 'earlierConversations', 'receivedCapsules'].map(key => [key, readStatus('skipped', admitted.recallReason ?? 'admission')])) }), outcome: "withheld" };
       }
       if (given.target_uri !== undefined && (typeof given.target_uri !== "string" || !insideNativeMemories(given.target_uri, ctx.userRoot))) {
@@ -999,8 +1020,10 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // MCP profile reads always count and return the complete source.
       const startupProfile = !ctx.shared && uri === `${ctx.userRoot}/memories/profile.md` && ctx.query.get('model_use') !== 'true';
       if (!startupProfile) await noteUsed(ctx, [absolute(uri, ctx.userRoot)]);
-      return { status: 200, ...(ctx.origin === 'agent-api' && startupProfile ? { elided: openingProfileRead(text, `${ctx.userRoot}/memories`, config) !== text } : {}), json: { ...ok(startupProfile
-        ? openingProfileRead(text, `${ctx.userRoot}/memories`, config) : await ctx.recallText(uri, text)), readStatus: readStatus('searched') }, outcome: "forwarded" };
+      const delivered = startupProfile ? openingProfileRead(text, `${ctx.userRoot}/memories`, config) : await ctx.recallText(uri, text);
+      ctx.stage(admitted.sessionId, startupProfile ? 'opening.profile' : ctx.route + '.read', null,
+        [{ uri, text: delivered, source: startupProfile ? 'profile' : 'memory-file' }]);
+      return { status: 200, ...(ctx.origin === 'agent-api' && startupProfile ? { elided: openingProfileRead(text, `${ctx.userRoot}/memories`, config) !== text } : {}), json: { ...ok(delivered), readStatus: readStatus('searched') }, outcome: "forwarded" };
     },
     async list(ctx) {
       let uri = String(ctx.query.get("uri") ?? "");
@@ -1126,6 +1149,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         if (READ_TOOLS.has(name)) {
           if (!admitted.recall) {
             recordGatewayWithheld(admitted.recallReason ?? "memory_off");
+            if (name === 'search') ctx.stage(admitted.sessionId, 'mcp.search', args.query, [], { memoryFiles: readStatus('skipped') });
             local.push(toolText(message.id, (/** @type {any} */ (NOT_READ)[admitted.recallReason ?? ""] ?? NOT_READ.other)
               + '\n' + searchStatusText(Object.fromEntries(['memoryFiles', 'earlierConversations', 'receivedCapsules'].map(key => [key, readStatus('skipped', admitted.recallReason ?? 'admission')])))));
             continue;
@@ -1336,7 +1360,13 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // Only the authenticated bridge can set this header; model arguments and Mcp-Session-Id never bind a conversation.
       const toolSession = route === 'mcp' && typeof req.headers['x-evimed-memory-session'] === 'string'
         && /^[A-Za-z0-9_.@-]{1,180}$/.test(req.headers['x-evimed-memory-session']) ? req.headers['x-evimed-memory-session'] : null;
+      const staged = [];
+      const startedAt = now();
       const ctx = {
+        route,
+        stage(sessionId, entry, query, items, coverage = {}) {
+          if (recordDelivery && origin === 'kernel' && sessionId) staged.push({ sessionId, entry, query, items, coverage });
+        },
         memoryFileSearchMinScore: config.memoryFileSearchMinScore,
         literalFallbackEnabled: config.memoryLiteralFallbackEnabled === true,
         fileMetadata: () => overlay?.configured && typeof overlay.files === 'function' ? overlay.files(user.id) : Promise.resolve(new Map()),
@@ -1463,17 +1493,31 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const writes = route === 'sessionCreate' || route === 'messageWrite' || route === 'commit';
       let answer = writes ? await withNativeMemoryWrite(overlay?.database,user.id,()=>handlers[route](ctx)) : await handlers[route](ctx);
       if (sourceDeletion && await sourceDeletion.version(user.id) !== deletionVersion) throw new HttpError(503, 'memory_gateway_source_changed', 'The source privacy state changed during this request.');
+      let receiptItems = staged.map(row => row.items);
       if (config.memoryHistorySecretRedactionEnabled === true && ['search','mcp'].includes(route)) {
         // One account filter after all search blocks have been assembled. A
         // failed privacy lookup returns no result, never an unfiltered answer.
         if (!historySecrets) throw new HttpError(503,'memory_gateway_secret_filter_unavailable','The memory privacy state is unavailable.');
-        if ('json' in answer) answer = { ...answer,json:await historySecrets.filterValue(user.id,answer.json) };
+        const filter = async value => {
+          if (!staged.length) return historySecrets.filterValue(user.id, value);
+          const [wire, items] = await historySecrets.filterValue(user.id, [value, receiptItems]);
+          receiptItems = items;
+          return wire;
+        };
+        if ('json' in answer) answer = { ...answer,json:await filter(answer.json) };
         else if ('text' in answer && answer.text) {
           const stream = 'contentType' in answer && String(answer.contentType).includes('text/event-stream');
           const value = stream ? parseEventStream(answer.text) : JSON.parse(answer.text);
-          const safe = await historySecrets.filterValue(user.id,value);
+          const safe = await filter(value);
           answer = { ...answer,text:stream ? safe.map(message=>`event: message\ndata: ${JSON.stringify(message)}\n\n`).join('') : JSON.stringify(safe) };
         }
+      }
+      if (staged.length && answer.status === 200) {
+        // Redact the reference inputs as well as the wire. A failed audit is never a delivery.
+
+        const at = new Date(now()).toISOString();
+        return { ...answer, deliveries: staged.map((row, i) => ({ project, sessionId: staged[i].sessionId, startedAt,
+          operation: recallOperation({ ...row, items: receiptItems[i], id: randomUUID(), at }) })) };
       }
       return answer;
   }
@@ -1541,6 +1585,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (raw.length) await runtimeManager.assertActiveEviMedWorkloadToken(token).catch(() => { throw new HttpError(401, "memory_gateway_unauthenticated", "The memory gateway does not know this caller."); });
       const answer = await dispatch({ req, url, found, route, user, project, json });
       recordGatewayRequest(route, answer.outcome);
+      if ('deliveries' in answer && answer.deliveries.length) res.once('finish', () => {
+        void Promise.all(answer.deliveries.map(row => recordDelivery(row))).catch(() => recordRecallNote('receipt_failed'));
+      });
       send(answer);
     } catch (error) {
       // These internal privacy failures are safe to name, but their raw messages

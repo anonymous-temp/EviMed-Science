@@ -207,7 +207,7 @@ export function nativeSessionResident({ residentProfiles, activeRuns, startedByP
       if (running.some((run) => run.dispatchId)) return null;
       const block = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId, attended: !running.some(startedByPlatform) });
       if (!block.due || !block.text || !block.digest) return null;
-      return { text: block.text, digest: block.digest, memories: block.memories.map((/** @type {any} */ memo) => ({ id: memo.id, kind: memo.kind, scope: memo.scope,originalSources:memo.originalSources,sourcePrivacy:memo.sourcePrivacy,attribution:memo.attribution })) };
+      return { text: block.text, digest: block.digest, blockHash: createHash("sha256").update(block.text).digest("hex"), memories: block.memories.map((/** @type {any} */ memo) => ({ id: memo.id, kind: memo.kind, scope: memo.scope,originalSources:memo.originalSources,sourcePrivacy:memo.sourcePrivacy,attribution:memo.attribution })) };
     },
     /** @param {any} user @param {any} project @param {string} sessionId @param {{ digest: string, memories: { id: string, kind?: string, scope?: string }[] }} receipt */
     attached(user, project, sessionId, receipt) {
@@ -355,9 +355,9 @@ export class ResidentProfiles {
    * The block was handed to a conversation by the kernel's own first step (the capsule gateway's `session`), and the step has entered: the
    * conversation now holds it, so the next one is not handed it again. The second half of a hand-over made in two calls; a dispatch's
    * `delivered` is the same note made in one.
-   * @param {string} userId @param {{ projectId: string, sessionId: string, digest: string, memories?: readonly { id: string, kind?: string, scope?: string }[] }} receipt
+   * @param {string} userId @param {{ projectId: string, sessionId: string, digest: string, blockHash?: string, memories?: readonly { id: string, kind?: string, scope?: string }[] }} receipt
    */
-  async acknowledge(userId, { projectId, sessionId, digest, memories = [] }) {
-    await this.store.noteResidentDelivered(userId, projectId, sessionId, digest, memories);
+  async acknowledge(userId, { projectId, sessionId, digest, blockHash = undefined, memories = [] }) {
+    await this.store.noteResidentDelivered(userId, projectId, sessionId, digest, memories, blockHash);
   }
 }

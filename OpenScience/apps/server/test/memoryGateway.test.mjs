@@ -47,7 +47,7 @@ function fixedAdmission(answer = {}) {
   return { asked, admit: async (caller) => { asked.push(caller.engineSessionId ?? null); return { ...base, ...(typeof answer === "function" ? answer(caller) : answer) }; } };
 }
 
-async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, personMessages = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, timeoutMs = 4_000, project = {}, memoryContexts = null, rememberJournal = null } = {}) {
+async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, personMessages = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, recordDelivery = null, sourceReceipt = null, sourceReceiptFailed = null, timeoutMs = 4_000, project = {}, memoryContexts = null, rememberJournal = null } = {}) {
   resetNativeMemoryMetrics();
   const stub = await startOpenVikingStub(t, stubOptions);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
@@ -57,7 +57,7 @@ async function fixture(t, { admission = fixedAdmission(), config = {}, overlay =
     config: { memoryEngineEnabled: true, memoryEnabled: true, ...config },
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); }, runtimeGeneration: () => "generation-1" },
     store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER, ...project }) },
-    sessions, admission, overlay, memoryTool, personMessages, capsuleSearch, historySearch, sourceDeletion, sourceReceipt, sourceReceiptFailed,
+    sessions, admission, overlay, memoryTool, personMessages, capsuleSearch, historySearch, sourceDeletion, recordDelivery, sourceReceipt, sourceReceiptFailed,
     memoryContexts: typeof memoryContexts === "function" ? memoryContexts(sessions) : memoryContexts, rememberJournal,
   });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
@@ -1851,4 +1851,22 @@ test('literal rescue displaces a full page of neighbours only for an absent expl
   assert.deepEqual(rescued.memories.map(hit => hit.uri), [`${ROOT}/memories/notes/ZX17.md`]);
   assert.equal(rescued.total, 1);
   assert.equal((await search('what happened?')).readStatus.literalFallback, undefined);
+});
+
+test('finished gateway responses record exact emitted history, profile and explicit file reads', async t => {
+  const rows = [];
+  const f = await fixture(t, { admission: fixedAdmission({ sessionId: 'mine' }), config: { memoryHistorySearchEnabled: true },
+    recordDelivery: async row => { rows.push(row); }, historySearch: async () => [{ uri:'history:one', conversationTitle:'T', conversationUrl:'/s',
+      messages:[{sourceRole:'user',text:'A recorded sentence.'}] }, {withdrawn:true,messages:[]}] });
+  f.stub.seedMemory(OV_USER, 'profile.md', 'Use metric units.');
+  const read = await f.call('GET', '/api/v1/content/read?uri=' + encodeURIComponent(ROOT + '/memories/profile.md'));
+  await f.mcp({ jsonrpc:'2.0', id:2,method:'tools/call',params:{name:'read',arguments:{uris:[ROOT+'/memories/profile.md']}} });
+  await f.mcp({ jsonrpc:'2.0', id:3,method:'tools/call',params:{name:'search',arguments:{query:'past'}} });
+  await new Promise(resolve => setImmediate(resolve));
+  const { recallDigest } = await import('../src/memoryRecallReceipt.mjs');
+  assert.equal(rows[0].operation.references[0].contentHash, recallDigest(read.json.result));
+  assert.equal(rows[1].operation.references[0].action, 'read');
+  assert.deepEqual(rows[2].operation.references.filter(ref=>ref.source==='history').map(ref=>ref.uri), ['history:one']);
+  assert.equal(rows.every(row => row.sessionId === 'mine'), true);
+  assert.doesNotMatch(JSON.stringify(rows), /A recorded sentence|Use metric units/);
 });

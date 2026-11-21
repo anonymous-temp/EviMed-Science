@@ -6,6 +6,7 @@ import { announceRunsChanged, runTitle } from "@/lib/runPresentation";
 import { chatPath } from "@/lib/runLocation";
 import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { isRunning } from "@/components/sidebar/useProjectRuns";
+import { MemoryRecallRecord } from "@/components/runs/MemoryRecallRecord";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { inputClasses } from "@/components/ui/Input";
 import { LazyMenu } from "@/components/ui/LazyMenu";
@@ -43,6 +44,7 @@ export function ConversationMenu({ conversation, onRenamed, className }: {
   const renameInput = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const [showRecall, setShowRecall] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -150,6 +152,7 @@ export function ConversationMenu({ conversation, onRenamed, className }: {
   const items: MenuEntry[] = [
     ...(working.length ? [{ label: "停止", onSelect: () => setConfirming("stop") }] : []),
     { label: "重命名", onSelect: () => { setDraft(title); setRenaming(true); } },
+    { label: "记忆查找记录", onSelect: () => setShowRecall(true) },
     { label: "归档", onSelect: () => void archive() },
     { label: "删除", destructive: true, onSelect: () => setConfirming("delete") },
     ...(operator ? ["separator" as const, { label: "复制诊断信息", onSelect: () => void copyDiagnostics() }] : []),
@@ -157,6 +160,7 @@ export function ConversationMenu({ conversation, onRenamed, className }: {
 
   return (
     <div className={className}>
+      {showRecall && <MemoryRecallRecord runs={runs} onClose={() => setShowRecall(false)} />}
       <LazyMenu label={`“${title}”的操作`} items={items} />
       {confirming === "stop" && (
         <ConfirmDialog

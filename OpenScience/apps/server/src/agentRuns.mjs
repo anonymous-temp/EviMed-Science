@@ -1,3 +1,4 @@
+import { mergeRecallReceipt } from './memoryRecallReceipt.mjs';
 import { sourcePrivacyOf } from '@evimed/domain';
 import { sourceReceiptState } from './memorySourceReceipts.mjs';
 import {RuntimePromptStops} from './runtimePromptStops.mjs';
@@ -1075,6 +1076,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
         ...(event.methodsInvoked ? { methodsInvoked: normalizeMethodDigests(event.methodsInvoked) } : {}),
         ...(event.mountedSkills ? { mountedSkills: normalizeMountedSkills(event.mountedSkills) } : {}),
         ...(event.personalSkillGeneration ? { personalSkillGeneration: normalizePersonalSkillGeneration(event.personalSkillGeneration) } : {}),
+        ...(event.memoryRecall?.version === 1 ? { memoryRecall: event.memoryRecall } : {}),
         ...(event.recalledMemories ? { recalledMemories: normalizeRecalledMemories(event.recalledMemories) } : {}),
         ...(event.originalSources?sourceReceiptState(event.originalSources,{trusted:true,inheritedPrivacy:event.sourcePrivacy}):{}),
         // The web pages the run read (contract X5), and how many in all when
@@ -5858,7 +5860,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{inputAttribution?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], originalSources?:any[], recalledMemories?: {id: string, kind?: string, scope?: string,originalSources?:any[]}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
+   * @param {{recallOperations?: any[], recallTurn?: any, inputAttribution?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], originalSources?:any[], recalledMemories?: {id: string, kind?: string, scope?: string,originalSources?:any[]}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
   async recordLearning(project, rawRunId, patch) {
     const runId = safeId(rawRunId, "agent run id");
@@ -5886,6 +5888,9 @@ export class AgentRunStore {
         at: this.now().toISOString(),
         ...(current.promptDispatchStartedAt ? { promptDispatchStartedAt: current.promptDispatchStartedAt } : {}),
         ...(patch.inputAttribution ? { inputAttribution: mergeInputAttribution(current.inputAttribution,patch.inputAttribution) } : current.inputAttribution ? { inputAttribution: current.inputAttribution } : {}),
+        ...(patch.recallOperations || patch.recallTurn
+          ? { memoryRecall: mergeRecallReceipt(current.memoryRecall, patch.recallOperations, patch.recallTurn) }
+          : current.memoryRecall ? { memoryRecall: current.memoryRecall } : {}),
         ...(patch.transcript ? { transcript: patch.transcript } : current.transcript ? { transcript: current.transcript } : {}),
         ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
         ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),
