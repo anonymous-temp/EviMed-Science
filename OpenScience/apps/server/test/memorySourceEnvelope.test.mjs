@@ -79,6 +79,38 @@ test('legacy mid-message chunks regain the whole checked utterance or carry no q
   assert.equal(units[0].sourceEnvelope.subject,'unknown');
 });
 
+test('personal activity advice distinguishes a selected file read from an assisted attempt in original history', () => {
+  const turns = [
+    { role: 'user', content: 'Can I train on the stairs?' },
+    { role: 'assistant', content: null, tool_calls: [{ id: 'files', function: { name: 'mcp__openviking__read' } }] },
+    { role: 'tool', tool_call_id: 'files', content: 'Profile: walking on level ground is easier. Walking preference: small doses.' },
+  ];
+  const { messages } = sourceBoundRequest({ messages: turns });
+  const { medicalAdvice: { activityBaseline } } = JSON.parse(messages[0].content.split('\n')[1]);
+  const read = JSON.parse(messages.at(-1).content);
+  assert.match(read.source.coverage, /did not search earlier conversations/);
+  assert.match(activityBaseline.ifMissing, /mcp__openviking__search.*without target_uri/);
+  assert.match(activityBaseline.ifStillUnknown, /ask about the attempt before giving a personal progression plan/);
+  assert.doesNotMatch(JSON.stringify(messages), /daughter|handrail|one small step/i);
+
+  const quote = 'With my daughter helping me and my hand on the handrail, I went up just one small step.';
+  const original = [{ role: 'user', content: quote }];
+  const [chunk] = historyChunks(original);
+  const units = completeHistoryUnits(chunk.messages, original, m => m.content, 4000);
+  const history = historySearchText([{ conversationTitle: 'Previous attempt', conversationUrl: '/c', messages: units }]);
+  const afterSearch = sourceBoundRequest({ messages: [...turns,
+    { role: 'assistant', content: null, tool_calls: [{ id: 'history', function: { name: 'mcp__openviking__search' } }] },
+    { role: 'tool', tool_call_id: 'history', content: history },
+  ] });
+  const hit = JSON.parse(JSON.parse(afterSearch.messages.at(-1).content).text.split('\n').at(-1));
+  assert.equal(hit.source.speaker, 'user');
+  assert.equal(hit.text, quote);
+  assert.deepEqual(activityBaseline.findTogether, ['activity actually attempted', 'who performed it or assisted',
+    'support or equipment used', 'extent actually achieved']);
+  assert.match(activityBaseline.inAdvice, /Restate the supported conditions and achieved extent together.*starting point/);
+  assert.match(activityBaseline.inAdvice, /progression beyond it needs separate evidence/);
+});
+
 test('capsule lines retain their pinned rendering and opening budgets omit oversized units whole', () => {
   const item = {mode:'own',factKind:'note',origin:'assistant',content:'One step, with assistance.'};
   const off = capsuleSearchText([item]), on = capsuleSearchText([item],true);

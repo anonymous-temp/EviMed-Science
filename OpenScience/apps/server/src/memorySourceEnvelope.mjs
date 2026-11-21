@@ -48,7 +48,14 @@ export const ANSWER_SOURCE_CHECK = {
   sourceReading: 'The outer role identifies who sent a message, not who made each claim or whom it describes. Separate the request from supplied material, including unmarked pasted passages. Unknown attribution never establishes a personal fact.',
   personalRecall: { perClaim: ['source or explicit unknown', 'speaker', 'subject', 'when', 'conditions', 'adoption'],
     separate: ['recorded facts', 'new advice'] },
-  medicalAdvice: { verifyBeforeAnswer: ['subject', 'time', 'conditions and who assisted', 'single best or every applicable option', 'each required field including name and age if requested'] },
+  medicalAdvice: { verifyBeforeAnswer: ['subject', 'time', 'conditions and who assisted', 'single best or every applicable option', 'each required field including name and age if requested'],
+    activityBaseline: {
+      when: "Personal advice about what someone can do or try next depends on their previous attempt at that activity.",
+      findTogether: ['activity actually attempted', 'who performed it or assisted', 'support or equipment used', 'extent actually achieved'],
+      ifMissing: `If the specific attempt is missing or its conditions are incomplete, use ${OPENVIKING_MCP_TOOL_PREFIX}search when available, without target_uri, for the activity and the person's account of trying it. Check the original conversation excerpt. A profile read or performance on a different activity does not establish this baseline.`,
+      inAdvice: 'Restate the supported conditions and achieved extent together in the advice and use that attempt as the starting point. Independent performance or progression beyond it needs separate evidence.',
+      ifStillUnknown: 'Say which details remain unknown and ask about the attempt before giving a personal progression plan.',
+    } },
   rememberedFormat: { use: 'structure only', forEachContentField: { field: 'each named place, including those named in prose', value: null, source: null, supportingQuote: null },
     fillOnlyFrom: 'Bind each value to a numbered input or tool source and its supporting words about the same subject for this task. Earlier answers and example report contents cannot fill a new report.',
     missing: '未提供/未知 (not provided/unknown); keep the field explicitly empty or marked unknown' },
@@ -152,7 +159,8 @@ export function sourceBoundRequest(body, protocol = 'chat', pasteSpans = (_text)
     const call = calls.get(callId);
     const tool = call?.name || fallbackName || 'unknown tool';
     if (memoryReaders.has(call?.name)) {
-      return { ...sourceEnvelope('tool_result'), id, tool, label: 'Memory lookup. Attribute each returned entry or conversation excerpt to its own source.' };
+      return { ...sourceEnvelope('tool_result'), id, tool, label: 'Memory lookup. Attribute each returned entry or conversation excerpt to its own source.',
+        ...(tool === `${OPENVIKING_MCP_TOOL_PREFIX}read` ? { coverage: 'Only the requested files were read. This call did not search earlier conversations.' } : {}) };
     }
     const parsed = typeof call?.path === 'string' && /(?:^|\/)(?:\.evimed-derived|library)\/[^/]+\/index\.md$/.test(call.path);
     const kind = call?.name === 'read' && (attachments.has(call.path) || parsed) ? 'attachment' : 'tool_result';
