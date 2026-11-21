@@ -56,6 +56,7 @@ import {
  *   resetHistory?: ((userId: string) => Promise<unknown>) | null,
  *   resetProduct?: ((userId: string) => Promise<{ methods: number, entries: number, jobs: number, feedback: number }>) | null,
  *   releasePausedRuntimes?: ((userId: string) => Promise<unknown>) | null,
+ *   goalCardRows?: ((userId:string, projectId:string)=>Promise<any[]>) | null,
  *   projectWork?: ((user: any, project: any, options: { timeZone: string }) => Promise<{ capabilities: any[], works: any[] }>) | null,
  *   store: any,
  *   context: (req: any, res: any) => Promise<any>,
@@ -65,7 +66,7 @@ import {
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createMemoryRoutes({
-  config, memorySettings, nativeMemory = null, nativeMemoryImport = null, resetProduct = null, resetHistory = null, releasePausedRuntimes = null, projectWork = null,
+  config, memorySettings, nativeMemory = null, nativeMemoryImport = null, resetProduct = null, resetHistory = null, releasePausedRuntimes = null, projectWork = null, goalCardRows = null,
   store, context, audit, decodeRouteComponent,
 }) {
   const enabled = config.memoryEnabled !== false;
@@ -282,7 +283,7 @@ export function createMemoryRoutes({
       sendJson(res, 200, { data: {
         projectId: project.id,
         paused: Array.isArray(settings?.pausedProjects) && settings.pausedProjects.includes(project.id),
-        card: await memory.projectCard(ctx.user.id, project.id),
+        card: [...await memory.projectCard(ctx.user.id, project.id), ...(await goalCardRows?.(ctx.user.id, project.id).catch(() => []) ?? [])],
         capabilities: work?.capabilities ?? [],
         works: work?.works ?? [],
         timeZone,

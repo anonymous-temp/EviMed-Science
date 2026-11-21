@@ -490,6 +490,7 @@ import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget
 import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler, createNativeCapsuleSearch } from "./capsuleGateway.mjs";
 import { MEMORY_GATEWAY_PATH, filterCapturedMessage, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
+import { createGoalStatusReader } from './memoryGoalStatus.mjs';
 import { createClinicalSegments } from './memoryClinicalSegments.mjs';
 import { createAccountProjections } from './memoryAccountProjections.mjs';
 import { humanInputReceipt } from './memoryHumanSegments.mjs';
@@ -1717,6 +1718,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     projectRuns: project => agentRuns.researcherRuns(project),
     deleted: (project, sessionId) => sourceDeletion?.ledger.get(project, sessionId),
     clinical: (userId, projectId, refs) => vcrPrivacyStore?.hasClinicalContext(userId, projectId, refs) ?? false });
+  const goalStatus = createGoalStatusReader({ config, documents: productDocuments, contexts: nativeMemoryContexts,
+    projectFor: async (userId, projectId) => store.requireProject(await store.userById(userId), projectId),
+    runsOf: project => agentRuns.conversationIndex(project),
+    resetInstant: userId => memorySettings.resetInstant(userId),
+    permitted: async (project, sessionId, rows = []) => {
+      if (isInternalProjectOf(config, project.userId, project.id) || config.memoryRecallEnabled === false) return false;
+      if ((await memoryPausedFor(memorySettings, project.userId, project.id, sessionId)).recall) return false;
+      if (!sessionId) return true;
+      if (!sourceDeletion || await sourceDeletion.ledger.get(project, sessionId) || !vcrPrivacyStore) return false;
+      return !await vcrPrivacyStore.hasClinicalContext(project.userId, project.id, [{sessionId}, ...rows.map(run => ({sessionId,runId:run.id}))]);
+    } });
+  const goalCardRows = async (userId, projectId, sessionId = null) =>
+    (await goalStatus(userId,projectId,sessionId)).map(item => item.row);
   const residentProfiles = new ResidentProfiles({
     presentation: (userId,projectId,sessionId) => accountProjections.presentation(userId,projectId,sessionId),
     config, store: memorySettings, capsules: capsuleService, contextPolicies: sharedContextPolicies,
@@ -1727,7 +1741,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // conversation a person is in (`ResidentProfiles.forDispatch`); a deployment without the engine has no card to hand over.
     // What a conversation of the project is handed up front is the card and the project's other standing files (`residentCard`); the
     // 项目 tab keeps reading the card alone (`projectCard`). A shared GEO project's card is read from its own namespace.
-    projectCard: config.memoryEngineEnabled ? (userId, projectId) => nativeMemory.residentCard(userId, projectId) : null,
+    projectCard: config.memoryEngineEnabled ? async (userId, projectId, sessionId) => [
+      ...await nativeMemory.residentCard(userId, projectId),
+      ...await goalCardRows(userId,projectId,sessionId).catch(() => []),
+    ] : null,
   });
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
     nativeMemory: config.memoryEngineEnabled ? nativeMemory : null,
@@ -1812,7 +1829,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // 「从其他 AI 导入」: one Flash call splits a pasted text, the person reviews it, the engine writes what they keep (`nativeMemoryImport.mjs`).
   const nativeMemoryImport = new NativeMemoryImport({ config, overlay: nativeMemoryOverlay, nativeMemory, memorySettings, usageLedger });
   const memoryRoutes = createMemoryRoutes({
-    config, memorySettings, nativeMemory, nativeMemoryImport, store, context, audit, decodeRouteComponent,
+    config, memorySettings, nativeMemory, nativeMemoryImport, store, context, audit, decodeRouteComponent, goalCardRows,
     // 「重置记忆」 clears what the page shows: the methods and capsule notes live in the product ledger.
     resetProduct: productDatabase ? userId => resetLearnedMemory(productDatabase, userId) : null,
     resetHistory: userId => memoryHistory?.reset(userId),
@@ -5693,6 +5710,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     return resolveConversationSourceScope(researchSessions, project, sessionId);
   };
   const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex,
+    goalStatus: async (identity, sessionId, query, limit) =>
+      (await goalStatus(identity.userId,identity.projectId,sessionId,query,limit)).map(item => item.record),
     ...(sharedKnowledgeContext ? { contextFor: identity => sharedKnowledgeContext.forWorkload(identity) } : {}),
     sourceScope: conversationSourceScope,
   });

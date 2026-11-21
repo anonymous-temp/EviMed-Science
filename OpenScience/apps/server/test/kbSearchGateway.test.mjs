@@ -12,9 +12,9 @@ const runtimeManager = {
   },
 };
 
-async function withGateway(t, { config = {}, index = null, sourceScope = undefined, contextFor = null } = {}) {
+async function withGateway(t, { config = {}, index = null, goalStatus = null, sourceScope = undefined, contextFor = null } = {}) {
   const failures = [];
-  const handler = createKbSearchGatewayHandler({ kbSearchEnabled: true, kbSearchTimeoutMs: 1_000, ...config }, runtimeManager, { index, sourceScope, contextFor });
+  const handler = createKbSearchGatewayHandler({ kbSearchEnabled: true, kbSearchTimeoutMs: 1_000, ...config }, runtimeManager, { index, sourceScope, contextFor, goalStatus });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -193,4 +193,21 @@ test("trusted owning-root scope remains selected or empty and unknown children f
   assert.equal((await call({ query: "q", sessionId: "unknown-child" })).status, 503);
   assert.equal((await call({ query: "q" })).status, 503);
   assert.equal(requests.length, count);
+});
+
+test('goal lookup respects the runtime identity, session, switch and saved source selection', async t => {
+  let calls = 0, selected = null;
+  const deps = {index:{search:async()=>({mode:'empty'})}, sourceScope:async()=>selected,
+    goalStatus:async(identity,session,query)=>{calls++; assert.equal(identity.projectId,'project-1');
+      assert.equal(session,'owned'); assert.equal(query,'目标状态'); return [{sourceId:'goal-owned'}];}};
+  const on = await withGateway(t,{...deps,config:{memoryGoalStatusEnabled:true}});
+  const query = {query:'目标状态',sessionId:'owned'};
+  assert.equal((await on.call(query)).body.data.researchGoals[0].sourceId,'goal-owned');
+  assert.equal((await on.call({...query,sourceIds:[]})).body.data.researchGoals,undefined);
+  assert.equal((await on.call({query:'目标状态'})).body.data.researchGoals,undefined);
+  selected=[]; assert.equal((await on.call(query)).body.data.researchGoals,undefined);
+  selected=null;
+  const off = await withGateway(t,deps);
+  assert.equal((await off.call(query)).body.data.researchGoals,undefined);
+  assert.equal(calls,1);
 });

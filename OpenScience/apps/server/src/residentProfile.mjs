@@ -220,7 +220,7 @@ export function nativeSessionResident({ residentProfiles, activeRuns, startedByP
 export class ResidentProfiles {
   /**
    * @param {{ config: any, store: any, capsules?: { profileFacts: Function, lookupCount?: Function } | null,
-   *   presentation?: ((userId:string, projectId:string, sessionId:string)=>Promise<any[]>) | null, contextPolicies?: any, projectCard?: ((userId: string, projectId: string) => Promise<readonly any[]>) | null,
+   *   presentation?: ((userId:string, projectId:string, sessionId:string)=>Promise<any[]>) | null, contextPolicies?: any, projectCard?: ((userId: string, projectId: string, sessionId?: string | null) => Promise<readonly any[]>) | null,
    *   nativeFiles?: ((userId: string, projectId: string, limit: number) => Promise<any[]>) | null,
    *   nativeIndex?: ((userId: string, projectId: string) => Promise<{ counts: Record<string, number> }>) | null,
    *   safetyNotes?: ((userId: string, projectId: string) => Promise<any[]>) | null }} dependencies
@@ -247,9 +247,9 @@ export class ResidentProfiles {
   /**
    * The project's card as a memo, when this dispatch is one a person is in, inside a project that has a subject of its own.
    * Any failure of the read is no card: the conversation goes on without it.
-   * @param {string} userId @param {string} projectId @param {boolean} attended
+   * @param {string} userId @param {string} projectId @param {boolean} attended @param {string | null} sessionId
    */
-  async #card(userId, projectId, attended) {
+  async #card(userId, projectId, attended, sessionId) {
     if (!attended || !this.projectCard || !projectId || projectId === CATCH_ALL_PROJECT_ID || isInternalProjectOf(this.config, userId, projectId)) return null;
     // Bounded: the card is a read of the engine, and a dispatch is not to wait on an engine that hangs
     // (`OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS`). A card read late is not read; the next message asks again.
@@ -258,7 +258,7 @@ export class ResidentProfiles {
     let timer;
     try {
       const rows = await Promise.race([
-        this.projectCard(userId, projectId),
+        this.projectCard(userId, projectId, sessionId),
         new Promise((_resolve, reject) => { timer = setTimeout(() => reject(Object.assign(new Error("the project card was not read in time"), { code: "resident_card_timeout" })), deadline); }),
       ]);
       const memo = projectCardMemo(projectId, /** @type {any} */ (rows));
@@ -300,7 +300,7 @@ export class ResidentProfiles {
     const pause = await memoryPausedFor(this.store, userId, projectId, sessionId);
     if (pause.recall) return none("paused");
 
-    const card = await this.#card(userId, projectId, attended);
+    const card = await this.#card(userId, projectId, attended, sessionId);
     if (shared && !sameContextPolicy(policy, await this.contextPolicies.forProject({ userId, id: projectId }))) throw new Error("Project context policy changed");
     // A shared GEO project's conversation is the project's, not its owner's: none of the owner's personal capsule profile.
     const capsuleFacts = !shared && this.capsules ? await this.capsules.profileFacts(userId, projectId, CAPSULE_PROFILE_FACT_KINDS).catch(() => []) : [];

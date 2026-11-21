@@ -105,6 +105,9 @@ def _validated(arguments: dict) -> dict:
 
 
 def _summary(data: dict) -> tuple[str, list[str], list[str]]:
+    if data.get("researchGoals") and not (data.get("hits") or data.get("files")):
+        return ("Found %d sourced project goal status record(s)." % len(data["researchGoals"]), [],
+                ["Use the returned conversation and run identifiers to inspect the original work."])
     mode = data.get("mode")
     library = data.get("library") or {}
     if mode == "small-library":
@@ -185,7 +188,7 @@ def search(arguments: dict, execution_context: dict | None = None) -> dict:
         raise KbSearchError("kb_search_response_invalid", "The knowledge-base search gateway returned no data.")
     summary, warnings, next_actions = _summary(data)
     return {
-        "status": "success" if (data.get("hits") or data.get("files")) else "warning",
+        "status": "success" if (data.get("hits") or data.get("files") or data.get("researchGoals")) else "warning",
         "summary": summary,
         "data": data,
         "warnings": warnings,
