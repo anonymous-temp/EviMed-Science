@@ -1,3 +1,5 @@
+import { confirmedAliases } from './nativeMemoryInduction.mjs';
+import { lineFingerprint } from './nativeMemoryOverlay.mjs';
 import { createHash } from 'node:crypto';
 
 /** Exact URI pair identity, shared with the existing map dismissal store. @param {string} a @param {string} b */
@@ -18,10 +20,32 @@ export function personDecisionRefusal({ root, a, b, confirmation, messages }) {
   if (!peopleUri(a) || !peopleUri(b)) return 'Both URIs must name people files in this conversation’s writable memory scope.';
   if (a === b) return 'Choose two different people files.';
   if (typeof confirmation !== 'string' || !confirmation.trim() || confirmation.length > 6000) return 'Supply the person’s confirming sentence verbatim.';
-  if (!messages.some(message => message.role === 'user' && message.text.includes(confirmation))) {
-    return 'The confirmation was not found in a user message of this conversation. Ask the person and quote their answer verbatim.';
+  if (messages.filter(message => message.role === 'user').at(-1)?.text.trim() !== confirmation.trim()) {
+    return 'Ask the person and quote their latest complete answer verbatim.';
   }
   return null;
+}
+
+/** A typed consent receipt names both current cards and the operation. Free text is never parsed for intent. */
+export function personConsentRefusal(left, right, distinct, confirmation, question = '') {
+  const relation = distinct ? '不是同一个人' : '是同一个人';
+  const action = distinct ? '记录为不同人' : '合并';
+  for (const [a, b] of [[left, right], [right, left]]) {
+    const asks = [`“${a}”和“${b}”是同一个人吗？`, `Are ${a} and ${b} the same person?`];
+    const answers = distinct ? ['不是', '不是同一个人', 'no'] : ['是', '是的', '是同一个人', 'yes'];
+    if (asks.includes(question.trim()) && answers.includes(String(confirmation ?? '').trim().replace(/[.。]$/u, '').toLowerCase())) return null;
+    const sentence = `${a}和${b}${relation}`;
+    const english = `${a} and ${b} are ${distinct ? 'different people' : 'the same person'}`;
+    const forms = [sentence, `${sentence}，请${action}`, `更正一下，${sentence}，请${action}`, english];
+    if (forms.includes(String(confirmation ?? '').trim().replace(/[.。]$/u, ''))) return null;
+  }
+  return `Ask the person to reply with the full decision about these two cards: ${left}和${right}${relation}。`;
+}
+
+/** A later explicit withdrawal also retires the alias as a lookup key. */
+export function aliasWithdrawn(label, removals) {
+  const prints = new Set([label, `又称：${label}`].map(lineFingerprint));
+  return removals.some(row => prints.has(row.fingerprint) || row.text && confirmedAliases(`- ${row.text}`).includes(label));
 }
 
 /** Append intact dated lines. Only byte-identical lines collapse; headings remain in their original order.
@@ -49,7 +73,7 @@ export function mergePeopleText(keep, merge, label) {
     lines.push(...headings, line); headings = []; seen.add(line);
   }
   const alias = `- 又称：${label}`;
-  if (!seen.has(alias)) lines.push(alias);
+  if (label && !seen.has(alias)) lines.push(alias);
   return lines.join('\n');
 }
 
@@ -60,7 +84,7 @@ export function mergePeopleText(keep, merge, label) {
 
 export const PERSON_MEMORY_TOOLS = {
   merge_people: {
-    description: 'Merge two people files ONLY after the person explicitly confirms in this conversation that they are the same person. Never infer identity from similar names or facts. Quote the person’s confirming sentence verbatim. Both histories and conflicting facts are kept; the memory page can undo this operation.',
+    description: 'Merge two people files ONLY after the person explicitly confirms in this conversation that they are the same person. Never infer identity from similar names or facts. Ask “<first name>”和“<second name>”是同一个人吗？ as a standalone question to bind a short yes or no. Quote the person’s complete latest answer verbatim. Both histories and conflicting facts are kept; the memory page can undo this operation.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['keep', 'merge', 'confirmation'], properties: {
       keep: { type: 'string' }, merge: { type: 'string' }, confirmation: { type: 'string', minLength: 1, maxLength: 6000 },
     } },

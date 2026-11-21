@@ -493,7 +493,7 @@ import { GeoInclusionClient, inclusionEnabled } from "./geoInclusionClient.mjs";
 import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget.mjs";
 import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler, createNativeCapsuleSearch } from "./capsuleGateway.mjs";
-import { MEMORY_GATEWAY_PATH, filterCapturedMessage, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
+import { MEMORY_GATEWAY_PATH, personDecisionMessages, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
 import { createGoalStatusReader } from './memoryGoalStatus.mjs';
 import { createClinicalSegments } from './memoryClinicalSegments.mjs';
 import { createAccountProjections } from './memoryAccountProjections.mjs';
@@ -515,6 +515,7 @@ import { safetyClassifier } from './memorySafetyMigration.mjs';
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
+import { createPreferenceJudge } from "./nativeMemoryPreferences.mjs";
 import { createPastedInstructionJudge } from "./nativeMemoryPastedInstructions.mjs";
 import { createVerificationJudge } from './nativeMemoryVerification.mjs';
 import { NativeMemoryConsolidation } from "./nativeMemoryConsolidation.mjs";
@@ -1421,7 +1422,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // One judge of whether a line says what another says: it holds a line the engine wrote near one the person removed out (one call a
   // commit) and finds the other lines that say what a line the person forgot said (`nativeMemoryRejections.mjs`, `nativeMemoryForgetEverywhere.mjs`).
   const rejectionJudge = createRejectionJudge({ config, usageLedger });
-  const nativeMemory = new NativeMemoryStore({ sourceEnvelopeEnabled: config.memorySourceEnvelopeEnabled, personMergeEnabled: config.memoryPersonMergeEnabled, personAliasHintEnabled: config.memoryPersonAliasHintEnabled, standingInstructionsEnabled: config.memoryStandingInstructionsEnabled, peopleAcrossProjectsEnabled: config.memoryPeopleAcrossProjectsEnabled, forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions: openVikingSessions, overlay: nativeMemoryOverlay, memoryContexts: nativeMemoryContexts, rejectionJudge,
+  const nativeMemory = new NativeMemoryStore({ sourceEnvelopeEnabled: config.memorySourceEnvelopeEnabled, personMergeEnabled: config.memoryPersonMergeEnabled, personAliasHintEnabled: config.memoryPersonAliasHintEnabled, profileNameDedupeEnabled: config.memoryProfileNameDedupeEnabled, preferenceReconcileEnabled: config.memoryPreferenceReconcileEnabled, preferenceJudge: createPreferenceJudge({ config, usageLedger }), standingInstructionsEnabled: config.memoryStandingInstructionsEnabled, peopleAcrossProjectsEnabled: config.memoryPeopleAcrossProjectsEnabled, forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions: openVikingSessions, overlay: nativeMemoryOverlay, memoryContexts: nativeMemoryContexts, rejectionJudge,
     report: (line) => process.stderr.write(`${line}\n`),
     // The conversation a memory came out of is named from the run ledger, which is composed further down.
     conversationTitles: (userId, refs) => nativeConversationTitles(userId, refs) });
@@ -5497,13 +5498,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const memoryGatewayHandler = createMemoryGatewayHandler({
     config, runtimeManager, store, sessions: openVikingSessions, admission: memoryAdmission,
     personMessages: async (project, sessionId) => {
-      // Read the kernel's recorded human messages, never the tool's role-labelled remember arguments.
-      // Admission binds the only running conversation; a concurrent or unbound call is refused before this reader.
       const transcript = await runtimeManager.sessionTranscript(project, sessionId, { wake: false });
-      return transcript.messages.filter(message => message.role === 'user' && message.source === 'user').flatMap(message => {
-        const captured = filterCapturedMessage(message);
-        return 'forward' in captured ? [{ role: 'user', text: captured.forward.parts.map(part => part.text).join('\n') }] : [];
-      });
+      return personDecisionMessages(transcript);
     },
     memoryContexts: nativeMemoryContexts, rememberJournal: nativeRememberJournal,
     historySecrets: memoryHistory?.secrets,

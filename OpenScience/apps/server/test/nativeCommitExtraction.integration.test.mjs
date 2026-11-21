@@ -4,7 +4,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { extractionFacts } from "../src/nativeMemoryWorker.mjs";
+import { lineFingerprint } from "../src/nativeMemoryOverlay.mjs";
+import { cleanBody, extractionFacts } from "../src/nativeMemoryWorker.mjs";
 import { nativeMemoryCounters, nativeMemoryMetricFamilies, recordNativeExtraction, resetNativeMemoryMetrics } from "../src/nativeMemoryMetrics.mjs";
 import { parseArchiveUri, nativeMemoryFile } from "../src/openVikingSessions.mjs";
 import { commitReport, messageShape, parseArguments, renderText, verdictOf } from "../../../scripts/ops/native-commit-report.mjs";
@@ -163,4 +164,72 @@ test("the report reads each commit off the engine's archives, ledger or not, and
   // Since: only commits from then on.
   const none = await commitReport(deps, { user: userId, since: "2999-01-01" });
   assert.equal(none.commits.length, 0);
+});
+
+test('the worker removes an extracted name bullet that exactly repeats the real profile H1', options, async t => {
+  const { userId, store, worker, sessions, root, commitConversation } = await fixture(t, {
+    config: { memoryProfileNameDedupeEnabled: true },
+    extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/profile.md`, memory_type: 'profile',
+      after: '# 林舟\n- 姓名：林舟 (as of 2026-11-21)\n- 喜欢游泳 (as of 2026-11-21)' }] }),
+  });
+  await commitConversation('duplicate-profile-name', [{ role: 'user', text: '我叫林舟，喜欢游泳。' }]);
+  await worker.processCommits({ userId });
+  const uri = `${root}/profile.md`;
+  assert.equal(await sessions.read(userId, uri), '# 林舟\n- 喜欢游泳 (as of 2026-11-21)');
+  assert.deepEqual((await store.records(userId)).map(row => row.value).sort(), ['林舟', '喜欢游泳'].sort());
+});
+
+test('a compacted and forgotten short profile name stays withdrawn on a later labelled write', options, async t => {
+  const f = await fixture(t, { config: { memoryProfileNameDedupeEnabled: true } });
+  const uri = f.seed('profile.md', '# 林舟\n- 喜欢游泳', { type: 'profile' });
+  f.store.profileNameDedupeEnabled = true;
+  const title = (await f.store.records(f.userId)).find(row => row.value === '林舟');
+  await f.store.remove(f.userId, title.id, { keepText: true });
+  f.stub.extract = () => ({ updates: [{ uri, memory_type: 'profile', before: '- 喜欢游泳', after: '# 用户\n- 姓名：林舟\n- 喜欢游泳' }] });
+  await f.commitConversation('profile-replay', [{ role: 'user', text: '我还喜欢游泳。' }]);
+  assert.equal(await f.worker.processCommits({ userId: f.userId }), 1);
+  assert.doesNotMatch(await f.sessions.read(f.userId, uri), /林舟/);
+  assert.match(await f.sessions.read(f.userId, uri), /喜欢游泳/);
+});
+
+test('the worker reconciles an extracted preference under the database lease and keeps neighbouring facts', options, async t => {
+  const f = await fixture(t, { config: { memoryPreferenceReconcileEnabled: true },
+    extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/preferences/language.md`, memory_type: 'preferences',
+      after: '- 回答一律用英文\n- 表格不超过五列' }] }),
+  });
+  const { userId, store, worker, sessions, overlay } = f;
+  Object.assign(store, { preferenceReconcileEnabled: true,
+    preferenceJudge: { available: true, overlaps: async () => [{ profile: 0, preference: 0 }] } });
+  worker.nativeMemory = store;
+  const profile = f.seed('profile.md', '# 用户\n- 回答一律用中文 (as of 2026-01-01)\n- 喜欢游泳', { type: 'profile' });
+  await f.commitConversation('preference-reconcile', [{ role: 'user', text: '以后回答用英文。' }]);
+  assert.equal(await worker.processCommits({ userId }), 1);
+  assert.equal(await sessions.read(userId, profile), '# 用户\n- 喜欢游泳');
+  assert.equal(await sessions.read(userId, `${f.root}/preferences/language.md`), '- 回答一律用英文\n- 表格不超过五列');
+  assert.ok(!(await overlay.rejectedFingerprints(userId, 'profile')).has(lineFingerprint('回答一律用中文')));
+  assert.ok((await overlay.revisionsOf(userId, profile)).some(row => row.reason === 'preference superseded across files'));
+});
+
+test('cleaning an unrelated rejected line preserves a named profile title alone when enabled', () => {
+  const rejected = new Set([lineFingerprint('Withdrawn fact')]);
+  assert.deepEqual(cleanBody('# 林舟\n- Withdrawn fact', rejected, true),
+    { text: '# 林舟', reasons: ['rejected_line'], hasStatements: true });
+  assert.equal(cleanBody('# Profile\n- Withdrawn fact', rejected, true).hasStatements, false);
+  assert.equal(cleanBody('# 林舟\n- Withdrawn fact', rejected).hasStatements, false);
+});
+
+test('two profile edits based on the same version preserve both neighbouring rows after retry', options, async t => {
+  const f = await fixture(t);
+  const uri = f.seed('profile.md', '# User\n- First fact\n- Second fact', { type: 'profile' });
+  f.store.profileNameDedupeEnabled = true;
+  const rows = await f.store.records(f.userId);
+  const edits = ['First fact', 'Second fact'].map(value => rows.find(row => row.value === value));
+  const edit = row => f.store.update(f.userId, row.id, { expectedVersion: row.version, value: row.value + ' edited' });
+  const attempts = await Promise.allSettled(edits.map(edit));
+  assert.equal(attempts.filter(item => item.status === 'fulfilled').length, 1);
+  const index = attempts.findIndex(item => item.status === 'rejected');
+  assert.ok(['memory_conflict', 'memory_source_cleanup_busy'].includes(attempts[index].reason.code));
+  const surviving = (await f.store.records(f.userId)).find(row => row.value === edits[index].value);
+  await edit(surviving);
+  assert.equal(await f.sessions.read(f.userId, uri), '# User\n- First fact edited (as of 2026-10-13)\n- Second fact edited (as of 2026-10-13)');
 });

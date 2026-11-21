@@ -7,7 +7,7 @@ import { checkForgetRequests } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash } from "node:crypto";
-import { checkMemoryNoteLabels, carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn } from "@evimed/domain";
+import { checkMemoryNoteLabels, carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn, profileMemoryStatements, profileNameFieldValue, withoutProfileNameDuplicates } from "@evimed/domain";
 import { filterCapturedMessage } from "./memoryGateway.mjs";
 import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
 import { HttpError } from './security.mjs';
@@ -100,8 +100,8 @@ export function lineRefusal(line, rejected) {
   return rejected.has(print) ? "rejected_line" : null;
 }
 
-/** A body without the lines `refused` names, and whether a statement is left. @param {string} body @param {Set<string> | Map<string, string>} rejected */
-export function cleanBody(body, rejected) {
+/** A body without the lines `refused` names, and whether a statement is left. @param {string} body @param {Set<string> | Map<string, string>} rejected @param {boolean} [namedProfile] */
+export function cleanBody(body, rejected, namedProfile = false) {
   const kept = [];
   /** @type {string[]} */
   const reasons = [];
@@ -111,7 +111,7 @@ export function cleanBody(body, rejected) {
     kept.push(line);
   }
   const text = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-  return { text, reasons, hasStatements: memoryLines(kept.filter((line) => !isLabelLine(line)).join("\n")).some((line) => !/^#/.test(line)) };
+  return { text, reasons, hasStatements: namedProfile && profileMemoryStatements(text).some(line => /^#\s/.test(line)) || memoryLines(kept.filter((line) => !isLabelLine(line)).join("\n")).some((line) => !/^#/.test(line)) };
 }
 
 /** Whether a commit's diff wrote (or changed) a note of the `observations` type. @param {any} diff @param {string} root `nativeMemoryRoot(userId)` */
@@ -559,11 +559,12 @@ export class NativeMemoryWorker {
   async processCommits({ userId = null, limit = 50 } = {}) {
     let settled = 0;
     for (const commit of await this.overlay.openCommits({ userId, limit, now: this.commitClock ? this.commitClock() : null })) {
+      const lease = { exclusive: this.config.memoryPreferenceReconcileEnabled === true || this.config.memoryProfileNameDedupeEnabled === true || this.config.memoryPersonMergeEnabled === true };
       try {
         if (commit.extraction.engineDeferred) {
-          if (this.engineDeferred) settled += await withNativeMemoryWrite(this.overlay.database, commit.userId, () => this.engineDeferred.process(commit)) ? 1 : 0;
-        } else if (commit.state === "pending") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#settle(commit)) ? 1 : 0;
-        else if (commit.state === "failed") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#replay(commit)) ? 1 : 0;
+          if (this.engineDeferred) settled += await withNativeMemoryWrite(this.overlay.database, commit.userId, () => this.engineDeferred.process(commit), lease) ? 1 : 0;
+        } else if (commit.state === "pending") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#settle(commit), lease) ? 1 : 0;
+        else if (commit.state === "failed") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#replay(commit), lease) ? 1 : 0;
       } catch (error) {
         this.report(`native memory commit: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
       }
@@ -925,6 +926,11 @@ export class NativeMemoryWorker {
       // Failure leaves the extracted lines available; the next commit can retry the merge.
       await reconcileMemoryNames({ userId, context, overlay: this.overlay }).catch(() => this.report('native memory name reconciliation unavailable'));
     }
+    if (!sourceDeleted && context.kind !== 'geo-project' && this.config.memoryPreferenceReconcileEnabled === true && this.nativeMemory) {
+      const changed = [...(operations.adds ?? []), ...(operations.updates ?? [])].map(row => row.uri)
+        .filter(uri => ['profile', 'preferences'].includes(nativeMemoryFile(uri, root)?.type));
+      await this.nativeMemory.reconcilePreferences(userId, changed).catch(() => this.report('native memory preference reconciliation unavailable'));
+    }
     recordNativeOperations(counts);
     return counts.added + counts.updated + counts.deleted;
   }
@@ -1161,6 +1167,10 @@ export class NativeMemoryWorker {
       // a deletion, or restoration of a pre-merge file that may since have been withdrawn.
       for (const row of assessed.results) recordVerificationLines(row.corrected ? 'suggested' : row.status);
     }
+    if (context.kind !== 'geo-project' && this.config.memoryPreferenceReconcileEnabled === true && this.nativeMemory) {
+      const changed = written.filter(file => ['profile', 'preferences'].includes(file.type)).map(file => file.uri);
+      await this.nativeMemory.reconcilePreferences(userId, changed).catch(() => this.report('native memory preference reconciliation unavailable'));
+    }
     return counts;
   }
 
@@ -1175,7 +1185,6 @@ export class NativeMemoryWorker {
     const sessions = memoryContext.sessions;
     let current = await sessions.read(userId, uri);
     if (current === null) return null;
-    // Check syntax only: no extra model call, no semantic keyword filter, no rewrite.
     // Count fresh writes, not replayed settlement receipts. Sensitive is sticky until the person changes it.
     if (type === 'notes' && this.config.memoryTemplatesDirectory === 'memory-templates-extraction-v2') {
       const labels = checkMemoryNoteLabels(current);
@@ -1226,9 +1235,24 @@ export class NativeMemoryWorker {
     // this file's original sources so a later human restatement keeps its authority across edits.
     const nameSources = await this.verification.readRemovalSources(userId, [...origins.values()].flatMap(originalSources), memoryContext, cache);
     candidates.push(...filenameVariants.map(text => ({ text, sources: [...archive, ...inherited, ...nameSources] })));
+    // A compacted profile may retain only its H1. A later labelled spelling of the same withdrawn short
+    // name still checks the bare name against the original rejection and the candidate's own sources.
+    const nameFields = [];
+    if (type === 'profile' && this.config.memoryProfileNameDedupeEnabled === true) {
+      for (const candidate of [...candidates]) {
+        const name = profileNameFieldValue(candidate.text);
+        if (!name) continue;
+        nameFields.push({ name, line: candidate.text });
+        candidates.push({ ...candidate, text: name });
+      }
+    }
     const matches = await removalRefusals({ userId, projectId, overlay: this.overlay,
       namespaceId: memoryContext.kind === 'geo-project' ? memoryContext.namespaceId : null,
       judge: this.rejectionJudge, candidates, ignoreTokenWhitespace: this.config.memoryForgetRequestCheckEnabled === true });
+    for (const { name, line } of nameFields) {
+      const rejected = matches.get(lineFingerprint(name));
+      if (rejected) matches.set(lineFingerprint(line), rejected);
+    }
     if (this.history && archiveUri && matches.size) {
       await this.history.rejectRelearned(memoryContext, archiveUri, [...new Set([...matches.values()].map(hit => hit.rejected))]);
     }
@@ -1238,7 +1262,7 @@ export class NativeMemoryWorker {
     if (current === diffAfter) {
       for (const print of brought) if (!refused.has(print) && pastedInstructions.has(`${uri}\u0000${print}`)) refused.set(print, "pasted_instruction");
     } else if ([...brought].some(print => pastedInstructions.has(`${uri}\u0000${print}`))) recordPastedInstructionCheck("stale");
-    const cleaned = cleanBody(current, refused);
+    const cleaned = cleanBody(current, refused, type === 'profile' && this.config.memoryProfileNameDedupeEnabled === true);
     const reasons = [...new Set(cleaned.reasons)];
     let body = current;
     if (reasons.length) {
@@ -1269,6 +1293,15 @@ export class NativeMemoryWorker {
         }
         await this.overlay.removeFile(userId, uri);
         return null;
+      }
+    }
+    if (this.config.memoryProfileNameDedupeEnabled === true && type === 'profile') {
+      const deduplicated = withoutProfileNameDuplicates(body);
+      if (deduplicated !== body) {
+        await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.replace(userId, uri, deduplicated));
+        await this.overlay.addRevision({ userId, uri, memoryType: type, change: 'updated', actor: 'platform',
+          reason: 'duplicate profile name', before: body, after: deduplicated, projectId });
+        body = deduplicated;
       }
     }
     if (filenameVariants.some(text => matches.has(lineFingerprint(text)))) {
@@ -1469,7 +1502,8 @@ export class NativeMemoryWorker {
         if (reviewed.has(key)) refused.set(print, 'pasted_instruction');
         else if (reviewed.pending?.has(key)) refused.set(print, 'pasted_instruction_pending');
       }
-      const cleaned = cleanBody(current, refused); if (!cleaned.reasons.length) continue;
+      const cleaned = cleanBody(current, refused, file.type === 'profile' && this.config.memoryProfileNameDedupeEnabled === true);
+      if (!cleaned.reasons.length) continue;
       // Persist recovery authority BEFORE changing the engine, including when its summary rebuild subsequently fails.
       const removalMatches = await removalRefusals({ userId, projectId, overlay: this.overlay, judge: this.rejectionJudge,
         namespaceId: context.kind === 'geo-project' ? context.namespaceId : null,

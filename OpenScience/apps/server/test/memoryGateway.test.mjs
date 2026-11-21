@@ -11,7 +11,7 @@ import { AUTOPILOT_VERIFICATION_ROUTE_REASON as VERIFICATION_ROUTE_REASON } from
 import { createNativeCapsuleSearch } from "../src/capsuleGateway.mjs";
 import { createMemoryAdmission, isPlatformStartedRun } from "../src/memoryAdmission.mjs";
 import {
-  MEMORY_GATEWAY_PATH, MEMORY_GATEWAY_TOOLS, PLUGIN_CONTEXT_TAG, capsuleSearchText, createMemoryGatewayHandler, filterCapturedMessage, memoryGatewayRoutePattern, parseEventStream,
+  MEMORY_GATEWAY_PATH, MEMORY_GATEWAY_TOOLS, PLUGIN_CONTEXT_TAG, capsuleSearchText, createMemoryGatewayHandler, filterCapturedMessage, personDecisionMessages, memoryGatewayRoutePattern, parseEventStream,
 } from "../src/memoryGateway.mjs";
 import { MapEdgeCorrections } from '../src/memoryMapEdges.mjs';
 import { personPairId } from '../src/nativeMemoryPeople.mjs';
@@ -1427,6 +1427,19 @@ test('alias candidates respect hidden, project and account boundaries', async t 
   assert.ok(!read.json.result.includes('not confirmed'));
 });
 
+test('the opening profile and an explicit model read share the earlier-preference label', async t => {
+  const uri = `${ROOT}/memories/profile.md`, calls = [];
+  const f = await fixture(t, { config: { memoryPreferenceReconcileEnabled: true }, memoryTool: {
+    preferenceRecallText: async (_user, named, text) => { calls.push(named); return text.replace('Use Chinese', '[earlier value] Use Chinese'); },
+  } });
+  f.stub.seedMemory(OV_USER, 'profile.md', '# User\n- Use Chinese (as of 2026-11-01)');
+  for (const suffix of ['', '&model_use=true']) {
+    const read = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}${suffix}`);
+    assert.equal(read.status, 200); assert.match(read.json.result, /\[earlier value\] Use Chinese/);
+  }
+  assert.deepEqual(calls, [uri, uri]);
+});
+
 test('stated preferences rank ahead of inferred choices even at limit one', async t => {
   const f = await fixture(t, { config: { memoryObservationInductionEnabled: true } });
   f.stub.seedMemory(OV_USER, 'preferences/self/inferred.md', '- Use Markdown [Inferred from behaviour; 2 conversations; dates: unknown]');
@@ -1435,6 +1448,54 @@ test('stated preferences rank ahead of inferred choices even at limit one', asyn
   assert.equal(found.json.result.memories.length, 1);
   assert.equal(found.json.result.memories[0].uri, stated);
 });
+test('a confirmed merge keeps alias retrieval after ordinary cleanup removes the alias line', async t => {
+  const keep = `${ROOT}/memories/people/王阿姨.md`, retired = `${ROOT}/memories/people/小王阿姨.md`;
+  const f = await fixture(t, { config: { memoryPersonMergeEnabled: true }, overlay: { configured: true,
+    sensitiveUris: async () => [], otherProjectUris: async () => [], noteRecalled: async () => {},
+    personMerges: async () => [{ state: 'applied', keepUri: keep, mergeUri: retired,
+      snapshot: { keep: { uri: keep, body: '# 长辈' }, merge: { uri: retired, body: '# 小王阿姨\n- Likes tea.' } } }] } });
+  f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Likes walking.');
+  for (const query of ['小王阿姨', '小王阿姨喜欢什么？']) {
+    const found = await f.call('POST', '/api/v1/search/search', { query });
+    assert.equal(found.json.result.memories.length, 1);
+    assert.equal(found.json.result.memories[0].uri, keep);
+    assert.equal(found.json.result.memories[0].retrieval, 'confirmed_alias');
+    assert.match(found.json.result.memories[0].abstract, /Likes walking/);
+  }
+  const unrelated = await f.call('POST', '/api/v1/search/search', { query: '大王阿姨' });
+  assert.equal(unrelated.json.result.memories.length, 0);
+});
+
+test('confirmed alias lookup honours explicit exclusions, withdrawal, scope and undo even behind opaque filenames', async t => {
+  const keep = `${ROOT}/memories/people/first.md`, retired = `${ROOT}/memories/people/second.md`;
+  const merge = { state: 'applied', keepUri: keep, mergeUri: retired, snapshot: { merge: { body: '# Old Name', projectId: null }, keep: { body: '# Former Keeper\n- Confirmed aliases: ["Former Keeper","Keeper Alias"]', projectId: null } } };
+  let withdrawn = [];
+  const f = await fixture(t, { config: { memoryPersonMergeEnabled: true }, overlay: { configured: true,
+    sensitiveUris: async () => [], otherProjectUris: async () => [], noteRecalled: async () => {},
+    removals: async () => withdrawn, personMerges: async () => [merge] } });
+  f.stub.seedMemory(OV_USER, 'people/first.md', '# Pat\n- Likes walking.');
+  const search = async (patch = {}) => (await f.call('POST', '/api/v1/search/search', { query: 'Old Name', limit: 1, ...patch })).json.result.memories;
+  assert.deepEqual((await search()).map(hit => hit.uri), [keep]);
+  for (const query of ['Former Keeper', 'Keeper Alias']) assert.deepEqual((await search({ query })).map(hit => hit.uri), [keep]);
+  for (const excluded of [keep, retired]) assert.deepEqual(await search({ exclude_uris: [excluded] }), []);
+  merge.snapshot.merge.projectId = 'other-project';
+  assert.deepEqual(await search(), []);
+  merge.snapshot.merge.projectId = null;
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  withdrawn = [{ fingerprint: lineFingerprint('又称：Keeper Alias') }];
+  assert.deepEqual(await search({ query: 'Keeper Alias' }), []);
+  withdrawn = [{ fingerprint: lineFingerprint('又称：Old Name') }];
+  assert.deepEqual(await search(), []);
+  assert.equal((await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(retired)}`)).status, 404);
+  withdrawn = [];
+  const formerKeeper = merge.snapshot.keep;
+  merge.snapshot.keep = null;
+  assert.deepEqual(await search(), [], 'a partial snapshot cannot authorize an alias');
+  merge.snapshot.keep = formerKeeper;
+  merge.state = 'undone';
+  assert.deepEqual(await search(), []);
+});
+
 test('an old people URI resolves only through one confirmed alias, never a similar name', async t => {
   const f = await fixture(t, { config: { memoryPersonAliasHintEnabled: true } });
   f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Confirmed aliases: ["王阿姨","小王阿姨"]\n- Likes walking.');
@@ -1549,7 +1610,8 @@ test('people tools require the switch, a bound conversation and a verbatim user 
   const keep = `${ROOT}/memories/people/王阿姨.md`, merge = `${ROOT}/memories/people/小王阿姨.md`;
   const confirmation = '王阿姨和小王阿姨是同一个人。', calls = [];
   const memoryTool = { forget: async () => ({ removed: false }), people: async (...args) => { calls.push(args); return { revisionId: '1' }; } };
-  const personMessages = async () => [{ role: 'user', text: confirmation }, { role: 'assistant', text: 'This is an assistant assertion.' }];
+  let latest = confirmation;
+  const personMessages = async () => [{ role: 'user', text: latest }, { role: 'assistant', text: 'This is an assistant assertion.' }];
   const f = await fixture(t, { config: { memoryPersonMergeEnabled: true }, memoryTool, personMessages,
     admission: createMemoryAdmission({ config: {}, memorySettings: memoryDouble(),
       conversations: { running: async () => [{ id: 'run', sessionId: SESSION.slice(4) }], runsOf: async () => [] } }) });
@@ -1565,7 +1627,9 @@ test('people tools require the switch, a bound conversation and a verbatim user 
   assert.equal(calls.length, 0);
   assert.ok((await call('merge_people', { keep, merge, confirmation })).messages[0].result);
   assert.equal(calls.length, 1); assert.equal(calls[0][2].engineSession, SESSION);
-  assert.ok((await call('distinct_people', { a: keep, b: merge, confirmation })).messages[0].result);
+  latest = '王阿姨和小王阿姨不是同一个人。';
+  assert.ok((await call('merge_people', { keep, merge, confirmation })).messages[0].error);
+  assert.ok((await call('distinct_people', { a: keep, b: merge, confirmation: latest })).messages[0].result);
   assert.equal(calls[1][2].distinct, true);
   for (const config of [{}, { memoryPersonMergeEnabled: false }]) {
     const off = await fixture(t, { config, memoryTool, personMessages });
@@ -1975,3 +2039,13 @@ for (const sourceBound of [false, true]) {
       recallDigest(capsuleBlock.slice(capsuleBlock.indexOf('\n') + 1)));
   });
 }
+
+test('only the live human reply can authorize a decision in a fork or after an unattended turn', () => {
+  const msg = (seq, role, source, content) => ({ seq, role, source, content });
+  assert.deepEqual(personDecisionMessages({ seedEndSeq: 2, messages: [
+    msg(1, 'user', 'user', 'Inherited consent'), msg(3, 'assistant', 'system', 'Are A and B the same person?'),
+    msg(4, 'user', 'plugin', 'context'), msg(5, 'user', 'user', 'yes'),
+    msg(6, 'user', 'loopx-continuation', 'yes'), msg(7, 'user', 'user', '')
+  ] }), [{ role: 'assistant', text: 'Are A and B the same person?' }, { role: 'user', text: 'yes' },
+    { role: 'user', text: '' }, { role: 'user', text: '' }]);
+});

@@ -29,6 +29,36 @@ export function isNeutralProfileHeading(line) {
   return title !== undefined && structuralTitles.has(foldTitle(title));
 }
 
+const PROFILE_NAME_LABEL = /^(?:(?:姓名|名字|昵称|称呼)\s*(?:[:：]|是|为)?\s*|(?:name|nickname)\s*[:：]\s*)(.+?)\s*$/iu;
+const PROFILE_AS_OF = /\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/iu;
+
+/** The value of an explicit name field, without its bullet or as-of annotation. @param {unknown} line */
+export function profileNameFieldValue(line) {
+  const statement = String(line ?? '').trim().replace(/^(?:[-*+]|\d+[.)])\s+/u, '').replace(PROFILE_AS_OF, '');
+  return PROFILE_NAME_LABEL.exec(statement)?.[1] ?? null;
+}
+
+/** Exact duplicate name bullets of a genuinely named H1, never a neutral scaffold or a different value.
+ * @param {unknown} body @returns {string[]} raw trimmed lines */
+export function profileNameDuplicateLines(body) {
+  const lines = String(body ?? '').replace(/\r\n/gu, '\n').split('\n');
+  const titles = lines.map(line => /^#\s+(.+?)\s*$/u.exec(line.trim())?.[1]).filter(value => value !== undefined);
+  const [title] = titles;
+  if (titles.length !== 1 || title === undefined || isNeutralProfileHeading(`# ${title}`)) return [];
+  return lines.map(line => line.trim()).filter(line => {
+    const name = profileNameFieldValue(line);
+    return name !== null && foldTitle(name) === foldTitle(title);
+  });
+}
+
+/** Remove only the exact duplicate name rows, leaving the named H1 as the one editable fact.
+ * @param {unknown} body */
+export function withoutProfileNameDuplicates(body) {
+  const text = String(body ?? '');
+  const duplicates = new Set(profileNameDuplicateLines(text));
+  return duplicates.size ? text.replace(/\r\n/gu, '\n').split('\n').filter(line => !duplicates.has(line.trim())).join('\n') : text;
+}
+
 /** Keep H1 identity for editing and origins; lower headings are structure.
  * @param {unknown} body @returns {string[]} */
 export function profileMemoryStatements(body) {

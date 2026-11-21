@@ -660,6 +660,11 @@ export interface WebStructuredMemory {
   forgetStatus?: WebForgetStatus;
   /** Present on a line of the profile document: the document the line belongs to. */
   document?: { id: string };
+  /** Name-only suggestions for a person card; identity still requires the person's explicit confirmation. */
+  possibleSamePerson?: Array<{ id: string; label: string }>;
+  /** Older values of a judged profile/preference pair; the newer record is linked when unambiguous. */
+  earlierValues?: string[];
+  currentPreferenceId?: string;
 }
 
 /** Why a memory in force is uncertain, as the control plane names it (`MEMORY_CAVEATS`). */

@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 // Syntax and identity only. The existing extraction call judges meaning; no extra model or embedding call.
 /** @typedef {{kind:string,scope:string,choice:string,subject:'work'}} Choice */
 /** @param {string} text */
@@ -28,6 +29,23 @@ export function inferredChoiceMessage(row, dates, count) {
     + `A stated preference takes precedence. Withdraw this inference when a later choice for the same scope differs, or an explicit statement supersedes it; retain dated history only as history.\n`
     + `Do not convert this into an explicit instruction or profile fact. Keep a separate identity bullet exactly: - Choice: ${JSON.stringify(row)}.`;
 }
+// Default Mandarin readings of U+4E00..U+9FFF, generated one character per line with ICU 74.2
+// uconv -x Han-Latin, grouped by identical reading including tone. A reading is only a page hint.
+const requireData = createRequire(import.meta.url);
+let hanReadings;
+export function personNameReading(label) {
+  if (!/^\p{Script=Han}{2,16}$/u.test(label)) return null;
+  if (!hanReadings) {
+    const groups = /** @type {Record<string,string>} */ (requireData('./person-name-readings.json'));
+    hanReadings = new Map();
+    for (const [reading, characters] of Object.entries(groups)) {
+      for (const char of characters) hanReadings.set(char, reading);
+    }
+  }
+  const readings = [...label].map(char => hanReadings.get(char));
+  return readings.every(Boolean) ? readings.join(' ') : null;
+}
+
 /** Edit distance is a name hint, never identity authority. @param {string} left @param {string} right */
 export function closePersonNames(left, right) {
   const a = [...normaliseChoice(left)], b = [...normaliseChoice(right)];

@@ -149,7 +149,8 @@ export class NativeMemoryConsolidation {
    */
   async tick(userId, { force = false, mode = this.modes.get(userId) ?? this.config.nativeMemoryConsolidationMode ?? 'merge' } = {}) {
     mode = parseNativeMemoryConsolidationMode(mode);
-    return withNativeMemoryWrite(this.overlay.database,userId,()=>this.#tickOwned(userId, { force, mode }));
+    return withNativeMemoryWrite(this.overlay.database,userId,()=>this.#tickOwned(userId, { force, mode }),
+      { exclusive: this.config.memoryProfileNameDedupeEnabled === true || this.config.memoryPreferenceReconcileEnabled === true });
   }
 
   /** Explicit experiment entry: advances the same asynchronous engine task without interval/quiet gates.

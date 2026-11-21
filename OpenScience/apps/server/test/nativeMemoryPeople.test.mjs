@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mergePeopleText, personDecisionRefusal, personPairId } from '../src/nativeMemoryPeople.mjs';
+import { personConsentRefusal, mergePeopleText, personDecisionRefusal, personPairId } from '../src/nativeMemoryPeople.mjs';
 const root = 'viking://user/u-123456789012345678901234';
 const a = `${root}/memories/people/王阿姨.md`, b = `${root}/memories/people/小王阿姨.md`;
 const confirmation = '王阿姨和小王阿姨是同一个人。';
@@ -33,4 +33,13 @@ test('a repeated date heading stays attached to new facts instead of inheriting 
   const keep = '# 王阿姨\n## 2026-10-01\n- Weight: 50 kg\n## 2026-11-01\n- Weight: 55 kg';
   const other = '# 小王阿姨\n## 2026-10-01\n- Height: 160 cm';
   assert.match(mergePeopleText(keep, other, '小王阿姨'), /## 2026-10-01\n- Height: 160 cm/);
+});
+
+test('short consent belongs to the named pair and polarity of the preceding question', () => {
+  const question = '“王阿姨”和“小王阿姨”是同一个人吗？';
+  assert.equal(personConsentRefusal('王阿姨', '小王阿姨', false, '是', question), null);
+  assert.equal(personConsentRefusal('王阿姨', '小王阿姨', true, '不是', question), null);
+  for (const [confirmation, prompt] of [['不是', question], ['是', ''], ['是', '“王阿姨”和“陈主任”是同一个人吗？']]) {
+    assert.ok(personConsentRefusal('王阿姨', '小王阿姨', false, confirmation, prompt));
+  }
 });

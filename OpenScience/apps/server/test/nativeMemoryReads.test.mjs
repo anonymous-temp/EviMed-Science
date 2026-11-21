@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { unzipSync } from 'fflate';
-import { NativeMemoryStore } from "../src/nativeMemoryStore.mjs";
+import { NativeMemoryStore, nativeFileId } from "../src/nativeMemoryStore.mjs";
 import { NativeMemoryOverlay, contentHash, lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { reconcileMemoryNames } from '../src/nativeMemoryNames.mjs';
 
@@ -154,6 +154,156 @@ test('profile H1 is a visible editable row; forgetting the title preserves neigh
   assert.equal(restored.value, 'Mara Chen');
   assert.match(files.get(uri).body, /^# Mara Chen\n/);
   assert.doesNotMatch(files.get(uri).body, /Mara Santos/);
+});
+
+test('a profile H1 and its exact name bullet are one visible fact and forget and restore together', async () => {
+  for (const target of ['title', 'bullet', 'conversation']) {
+    const { files, store } = engine({ count: 0, delay: 0 });
+    store.profileNameDedupeEnabled = true;
+    const uri = `${ROOT}/profile.md`, rejected = [], revisions = [];
+    const body = '# 林舟\n- 姓名：林舟 (as of 2026-11-17)\n- 喜欢游泳 (as of 2026-11-17)';
+    store.overlay.addRevision = async row => { const revision = { ...row, id: `r${revisions.length}`, changedAt: '2026-11-17' }; revisions.push(revision); return revision; };
+    store.overlay.forgottenRevisions = async () => revisions.filter(row => row.reason.startsWith('forgotten') && !row.undoneAt).reverse();
+    store.overlay.revisionsOf = async () => revisions;
+    store.overlay.revisionsOfMany = async () => new Map([[uri, [...revisions].reverse()]]);
+    store.overlay.markUndone = async (_user, id) => { revisions.find(row => row.id === id).undoneAt = '2026-11-17'; };
+    store.overlay.reject = async (_user, _type, _uri, lines) => rejected.push(...lines);
+    files.set(uri, { body, modTime: '2026-11-17' });
+    const records = await store.records('u1');
+    assert.deepEqual(records.map(row => row.value).sort(), ['喜欢游泳', '林舟'].sort());
+    const id = target === 'title' ? records.find(row => row.value === '林舟').id
+      : `${nativeFileId(uri)}_${lineFingerprint('姓名：林舟').slice(0, 12)}`;
+    if (target === 'conversation') {
+      await store.forgetLines('u1', (await store.files('u1'))[0], ['姓名：林舟']);
+    } else await store.remove('u1', id, { keepText: true });
+    assert.equal(files.get(uri).body, '- 喜欢游泳 (as of 2026-11-17)');
+    assert.ok(rejected.includes('林舟')); assert.ok(rejected.some(row => row.startsWith('姓名：林舟')));
+    const forgotten = await store.forgotten('u1');
+    assert.equal(forgotten.length, 1); assert.equal(forgotten[0].value, '林舟');
+    await store.update('u1', forgotten[0].id, { status: 'active', expectedVersion: forgotten[0].version });
+    assert.equal(files.get(uri).body, body);
+    assert.equal((await store.records('u1')).filter(row => row.value === '林舟').length, 1);
+    assert.ok(revisions[0].undoneAt);
+  }
+});
+
+test('duplicate profile names are opt-in and ambiguous or structural titles keep independent rows', async () => {
+  const { store, files } = engine({ count: 0, delay: 0 }), uri = `${ROOT}/profile.md`;
+  files.set(uri, { body: '# 林舟\n- 姓名林舟\n- 昵称：小舟', modTime: '1' });
+  assert.deepEqual((await store.records('u1')).map(row => row.value), ['林舟', '姓名林舟', '昵称：小舟']);
+  store.profileNameDedupeEnabled = true;
+  assert.deepEqual((await store.records('u1')).map(row => row.value), ['林舟', '昵称：小舟']);
+  for (const title of ['# Profile', '# 林舟\n# 林川']) {
+    files.set(uri, { body: `${title}\n- 姓名林舟`, modTime: title });
+    assert.ok((await store.records('u1')).some(row => row.value === '姓名林舟'));
+  }
+});
+
+test('profile and preference values use the newer revision, read with an earlier label and reconcile without rejection', async () => {
+  for (const newer of ['profile', 'preference']) {
+    const { files, store } = engine({ count: 0, delay: 0 });
+    const profile = `${ROOT}/profile.md`, preference = `${ROOT}/preferences/language.md`, rejected = [];
+    Object.assign(store, { preferenceReconcileEnabled: true, preferenceJudge: { available: true, overlaps: async () => [{ profile: 0, preference: 0 }] } });
+    store.overlay.reject = async (...args) => rejected.push(args);
+    files.set(profile, { body: `# 用户\n- 回答一律用中文 (as of ${newer === 'profile' ? '2026-11-03' : '2026-11-01'})`, modTime: newer === 'profile' ? '2026-11-03' : '2026-11-01' });
+    files.set(preference, { body: '- 回答一律用英文\n- 表格不超过五列', modTime: newer === 'preference' ? '2026-11-03' : '2026-11-01' });
+    const records = await store.records('u1');
+    const old = records.find(row => row.uri === (newer === 'profile' ? preference : profile));
+    assert.deepEqual(old.earlierValues, [newer === 'profile' ? '回答一律用英文' : '回答一律用中文']);
+    assert.match(await store.preferenceRecallText('u1', old.uri, old.value), /\[earlier value\]/);
+    assert.deepEqual((await store.reconcilePreferences('u1')).removed, 1);
+    assert.doesNotMatch(files.get(old.uri).body, /回答一律用/);
+    assert.match(files.get(newer === 'profile' ? profile : preference).body, /回答一律用/);
+    if (newer === 'profile') assert.match(files.get(preference).body, /表格不超过五列/);
+    assert.deepEqual(rejected, [], 'platform reconciliation is not a forget or a ban on the old words');
+  }
+  const { files, store } = engine({ count: 0, delay: 0 }), rejected = [];
+  const profile = `${ROOT}/profile.md`, preference = `${ROOT}/preferences/language.md`;
+  Object.assign(store, { preferenceReconcileEnabled: true, preferenceJudge: { available: true, overlaps: async () => [{ profile: 0, preference: 0 }] } });
+  store.overlay.reject = async (...args) => rejected.push(args);
+  store.overlay.forgetText = async () => {}; store.overlay.removeFile = async () => {};
+  files.set(profile, { body: '# 用户\n- 回答一律用中文', modTime: '2026-11-03' });
+  files.set(preference, { body: '- 回答一律用英文', modTime: '2026-11-01' });
+  await store.reconcilePreferences('u1');
+  assert.equal(files.has(preference), false, 'an empty old preference file is retired');
+  assert.deepEqual(rejected, [], 'retiring that file still creates no withdrawal authority');
+});
+
+test('two superseded statements in one profile produce one rewrite and retain the other statements', async () => {
+  const { files, store, calls } = engine({ count: 0, delay: 0 }), profile = `${ROOT}/profile.md`, preference = `${ROOT}/preferences/work.md`;
+  files.set(profile, { body: '# User\n- Chinese\n- Five columns\n- Likes tea', modTime: '2026-11-01' });
+  files.set(preference, { body: '- English\n- Three columns', modTime: '2026-11-20' });
+  Object.assign(store, { preferenceReconcileEnabled: true, preferenceJudge: { available: true,
+    overlaps: async () => [{ profile: 0, preference: 0 }, { profile: 1, preference: 1 }] } });
+  assert.deepEqual(await store.reconcilePreferences('u1', [preference]), { removed: 2 });
+  assert.equal(files.get(profile).body, '# User\n- Likes tea');
+  assert.equal(files.get(preference).body, '- English\n- Three columns');
+  assert.equal(calls.replace, 1);
+});
+
+test('a concurrent withdrawal of the proposed current value makes the judged rewrite inapplicable', async () => {
+  const { files, store, calls } = engine({ count: 0, delay: 0 }), profile = `${ROOT}/profile.md`, preference = `${ROOT}/preferences/work.md`;
+  files.set(profile, { body: '# User\n- Chinese', modTime: '2026-11-01' });
+  files.set(preference, { body: '- English', modTime: '2026-11-20' });
+  Object.assign(store, { preferenceReconcileEnabled: true, preferenceJudge: { available: true, overlaps: async () => {
+    files.delete(preference); return [{ profile: 0, preference: 0 }];
+  } } });
+  assert.deepEqual(await store.reconcilePreferences('u1'), { removed: 0 });
+  assert.equal(files.get(profile).body, '# User\n- Chinese');
+  assert.equal(files.has(preference), false);
+  assert.equal(calls.replace, 0);
+});
+
+test('unrelated profile edits do not promote an old preference and sensitive or project facts never reach the judge', async () => {
+  const { files, store } = engine({ count: 0, delay: 0 }), profile = `${ROOT}/profile.md`, current = `${ROOT}/preferences/work.md`;
+  files.set(profile, { body: '# Mara\n- Chinese (as of 2026-01-01)\n- Swims', modTime: '2026-11-20' });
+  files.set(current, { body: '- English', modTime: '2026-11-01' });
+  const meta = new Map();
+  for (const [name, flags] of [['sensitive', { sensitive: true }], ['project', { projectId: 'other' }]]) {
+    const uri = `${ROOT}/preferences/${name}.md`;
+    files.set(uri, { body: '- Private', modTime: '2026-11-05' }); meta.set(uri, flags);
+  }
+  store.overlay.files = async () => meta;
+  let seen;
+  Object.assign(store, { preferenceReconcileEnabled: true, preferenceJudge: { available: true, overlaps: async input => {
+    seen = input; return [{ profile: input.profile.indexOf('Chinese'), preference: 0 }];
+  } } });
+  const records = await store.records('u1');
+  assert.deepEqual(seen.profile.sort(), ['Chinese', 'Swims']);
+  assert.deepEqual(seen.preferences, ['English']);
+  assert.deepEqual(records.find(row => row.value === 'Chinese').earlierValues, ['Chinese']);
+  assert.deepEqual(await store.reconcilePreferences('u1', [`${ROOT}/notes/else.md`]), { removed: 0 });
+  assert.equal(await store.preferenceRecallText('u1', profile, files.get(profile).body), '# Mara\n- [earlier value] Chinese (as of 2026-01-01)\n- Swims');
+});
+
+test('people cards offer only unconfirmed name hints on the page and honour a distinct-person decision', async () => {
+  const { files, store } = engine({ count: 0, delay: 0 });
+  Object.assign(store, { personAliasHintEnabled: true, personMergeEnabled: true });
+  const a = `${ROOT}/people/王阿姨.md`, b = `${ROOT}/people/小王阿姨.md`, other = `${ROOT}/people/陈主任.md`;
+  files.set(a, { body: '# 王阿姨\n- Likes tea.', modTime: '2026-11-17' });
+  files.set(b, { body: '# 小王阿姨\n- Likes walking.', modTime: '2026-11-17' });
+  files.set(other, { body: '# 陈主任\n- Works nearby.', modTime: '2026-11-17' });
+  const records = await store.records('u1');
+  assert.deepEqual(records.find(row => row.uri === a).possibleSamePerson.map(row => row.label), ['小王阿姨']);
+  assert.deepEqual(records.find(row => row.uri === other).possibleSamePerson, []);
+  const { personPairId } = await import('../src/nativeMemoryPeople.mjs');
+  store.personEdges.dismissed = async () => new Set([personPairId(a, b)]);
+  assert.deepEqual((await store.records('u1')).find(row => row.uri === a).possibleSamePerson, []);
+});
+
+test('homophones can prompt confirmation while sensitive, withdrawn and other-project names stay out', async () => {
+  const { files, store } = engine({ count: 0, delay: 0 });
+  Object.assign(store, { personAliasHintEnabled: true, personMergeEnabled: true });
+  const metadata = new Map();
+  store.overlay.files = async () => metadata;
+  for (const [name, meta] of [['林舟', {}], ['临洲', {}], ['琳周', { sensitive: true }], ['邻州', { projectId: 'other' }], ['林周', {}]]) {
+    const uri = `${ROOT}/people/${name}.md`;
+    files.set(uri, { body: `# ${name}\n- Likes tea.`, modTime: '2026-11-21' }); metadata.set(uri, meta);
+  }
+  store.sourceDeletion = { hiddenMemoryUris: async () => [`${ROOT}/people/林周.md`], redactRecords: async (_u, records) => records };
+  const records = await store.records('u1');
+  assert.deepEqual(records.find(row => row.summary === '林舟').possibleSamePerson.map(row => row.label), ['临洲']);
+  assert.equal(files.size, 5);
 });
 
 test('a file heading is its visible title, rather than a stale filename after correction', async () => {

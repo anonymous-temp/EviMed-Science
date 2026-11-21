@@ -26,7 +26,7 @@ import { ConversationLink } from "./ConversationLink";
 import { DrawerSection } from "./DrawerSection";
 import { RelatedSection } from "./RelatedSection";
 import type { FactItem } from "./memoryItems";
-import { breath, fileTopic, isFileMemory, memoryText } from "./memoryNative";
+import { breath, displayMemoryText, fileTopic, isFileMemory, memoryText } from "./memoryNative";
 import { ValidityBar, validitySpan } from "./ValidityBar";
 
 function when(value: string | null | undefined) {
@@ -91,7 +91,7 @@ export interface FormerStatement { id: string; text: string; until: string | nul
  * Responsive: existing bounded drawer width.
  * Verification: FactDrawer tests; live native path acceptance is separate.
  */
-export function FactDrawer({ item, formerly = [], projectName, conversations, siblings = [], onClose, onChanged, onOpenRecord, canOpenRecord }: {
+export function FactDrawer({ item, formerly = [], projectName, conversations, siblings = [], onClose, onChanged, onOpenRecord, canOpenRecord, onAskAbout }: {
   /** Its old statements, which are the person's to have gone: where the map opened the drawer, it knows them. */
   formerly?: readonly FormerStatement[];
   item: FactItem;
@@ -106,6 +106,8 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
   /** Opens another memory in this drawer, from its 关联 section; absent where the page cannot. */
   onOpenRecord?: (recordId: string) => void;
   canOpenRecord?: (recordId: string) => boolean;
+  /** Drafts the identity question in the ordinary composer; nothing is merged from this hint alone. */
+  onAskAbout?: (draft: string, projectId: string) => void;
 }) {
   const record = item.kind === "record" ? item.record : null;
   const entry: OwnCapsuleEntry | null = item.kind === "entry" ? item.entry : null;
@@ -260,7 +262,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
     ...(record ? [{ label: "不再记这条", destructive: true, disabled: busy, onSelect: () => setRejecting(true) }] : []),
   ];
 
-  const sentence = memoryExcerpt(text, 4_000);
+  const sentence = memoryExcerpt(record ? displayMemoryText(record) : text, 4_000);
   const lines = record?.document ? siblings.filter((other) => other.document?.id === record.document?.id && other.id !== record.id) : [];
   const save = () => (record ? void saveRecord({ value, status: "active" }) : void saveEntry());
 
@@ -305,8 +307,8 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
                 {lines.map((other) => (
                   <li key={other.id}>
                     {onOpenRecord && canOpenRecord?.(other.id)
-                      ? <button type="button" className="text-left hover:underline" onClick={() => onOpenRecord(other.id)}>{memoryExcerpt(other.value, 120)}</button>
-                      : memoryExcerpt(other.value, 120)}
+                      ? <button type="button" className="text-left hover:underline" onClick={() => onOpenRecord(other.id)}>{memoryExcerpt(displayMemoryText(other), 120)}</button>
+                      : memoryExcerpt(displayMemoryText(other), 120)}
                   </li>
                 ))}
               </ul>
@@ -314,6 +316,22 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
           )}
 
           {record && <ValidityBar span={validitySpan(record)} />}
+          {record?.currentPreferenceId && onOpenRecord && canOpenRecord?.(record.currentPreferenceId) && (
+            <Button size="sm" variant="secondary" onClick={() => onOpenRecord(record.currentPreferenceId!)}>查看当前值</Button>
+          )}
+
+          {record && onAskAbout && (record.possibleSamePerson?.length ?? 0) > 0 && (
+            <DrawerSection label="可能是同一人">
+              <ul className="space-y-2">
+                {record.possibleSamePerson?.map((person) => (
+                  <li key={person.id} className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-ui text-text">{person.label}</span>
+                    <Button size="sm" variant="secondary" onClick={() => onAskAbout(`请确认“${record.summary}”和“${person.label}”是否是同一人。请先问我，再按我的答复处理。`, item.projectId ?? "default")}>去确认</Button>
+                  </li>
+                ))}
+              </ul>
+            </DrawerSection>
+          )}
 
           {candidate && (
             <div className="flex flex-wrap items-center gap-2">

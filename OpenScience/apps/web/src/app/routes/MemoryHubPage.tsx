@@ -29,6 +29,7 @@ import { RememberDialog } from "@/components/memory/RememberDialog";
 import { useMemoryReads, type MemoryRead } from "@/components/memory/useMemoryReads";
 import { usePendingMemory } from "@/components/memory/usePendingMemory";
 import { useMemoryWritePrompt } from "@/components/memory/useMemoryWritePrompt";
+import { useAskAbout } from "@/components/memory/useAskAbout";
 import { useKnowledgeConversation } from "@/components/sources/useKnowledgeConversation";
 import { ShareDrawer, type ShareTab } from "./CapsuleTransferPanel";
 import { knownErrorCodeMessage } from "@evimed/domain";
@@ -144,6 +145,7 @@ function ReceivedPanel({ packs, onShare, onImport, onChanged }: {
 
 function MemoryHub() {
   const [params, setParams] = useSearchParams();
+  const askAbout = useAskAbout();
   const currentProjectId = useProjectStore((state) => state.currentId);
   // The list the address names, else the one the page picked for the researcher once the data was in (below).
   const named = tabFromAddress(params);
@@ -384,6 +386,7 @@ function MemoryHub() {
           onChanged={reload}
           onOpenRecord={(recordId) => setOpenKey(`record:${recordId}`)}
           canOpenRecord={(recordId) => everyFact.some((fact) => fact.key === `record:${recordId}`)}
+          onAskAbout={askAbout}
         />
       ) : opened?.kind === "method" ? (
         <MethodDrawer key={opened.key} method={opened.method} onClose={close} onChanged={reload} />

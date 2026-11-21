@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { factItems, factRowSummary } from "./memoryItems";
-import { fileStatements, fileSummary, fileTopic, isFileMemory, isProfileLine, memoryText } from "./memoryNative";
+import { displayMemoryText, fileStatements, fileSummary, fileTopic, isFileMemory, isProfileLine, memoryText } from "./memoryNative";
 import { nativeFile, nativeProfile, nativeProfileLine } from "./__fixtures__/memoryProfiles";
 
 describe("a memory kept as a file", () => {
@@ -28,6 +28,17 @@ describe("a memory kept as a file", () => {
     expect(file && factRowSummary(file)).toBe("先给结论，再给依据；表格不超过五列");
     expect(line?.text).toBe("所在科室是临床药学部。");
     expect(line && factRowSummary(line)).toBeUndefined();
+  });
+
+  it("labels only earlier values in lists and drawers while edits keep the original stored text", () => {
+    const line = nativeProfileLine("回答一律用中文。", { earlierValues: ["回答一律用中文。"], currentPreferenceId: "nm_current" });
+    const file = nativeFile("回答语言", "- 回答一律用英文。\n- 表格不超过五列。", { earlierValues: ["回答一律用英文。"] });
+    expect(displayMemoryText(line)).toBe("早先值：回答一律用中文。");
+    expect(displayMemoryText(file)).toBe("- 早先值：回答一律用英文。\n- 表格不超过五列。");
+    expect(memoryText(line)).toBe("回答一律用中文。");
+    expect(memoryText(file)).toBe("- 回答一律用英文。\n- 表格不超过五列。");
+    expect(factItems([line], [])[0]?.text).toBe("早先值：回答一律用中文。");
+    expect(fileSummary(file)).toBe("早先值：回答一律用英文；表格不超过五列");
   });
 
   it("edits a file from its whole text, and a sentence from the sentence", () => {

@@ -35,9 +35,10 @@ function show(record: ReturnType<typeof nativeFile>, props: Record<string, unkno
   return { onChanged, onClose, record };
 }
 
+beforeEach(() => { vi.clearAllMocks(); client.fetchMemorySources.mockResolvedValue([]); });
+afterEach(cleanup);
+
 describe("a memory kept as a file, opened from its row", () => {
-  beforeEach(() => { vi.clearAllMocks(); client.fetchMemorySources.mockResolvedValue([]); });
-  afterEach(cleanup);
 
   it('labels an external statement with the client and original time without inventing a conversation link', () => {
     const file = nativeFile('单位', '- 使用公制单位。');
@@ -238,6 +239,33 @@ it('a profile title uses the same editable row and forget action as its neighbou
   await userEvent.click(screen.getByRole('button', { name: '保存' }));
   await waitFor(() => expect(onOpenRecord).toHaveBeenCalledWith(corrected.id));
   expect(api.updateStructuredMemory.mock.calls[0][1].value).toBe('Mara Chen');
+  cleanup();
+});
+
+it('offers a similar-name person for explicit confirmation without merging from the page hint', async () => {
+  vi.clearAllMocks(); client.fetchMemorySources.mockResolvedValue([]);
+  const file = nativeFile('王阿姨', '# 王阿姨\n- 喜欢喝茶。', { nativeType: 'people', folder: 'people', kind: 'person', scope: 'project', scopeId: 'family',
+    possibleSamePerson: [{ id: 'nm_other', label: '小王阿姨' }] });
+  const onAskAbout = vi.fn();
+  show(file, { onAskAbout });
+  expect(screen.getByText('可能是同一人')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '去确认' }));
+  expect(onAskAbout).toHaveBeenCalledWith(expect.stringContaining('王阿姨'), 'family');
+  expect(onAskAbout).toHaveBeenCalledWith(expect.stringContaining('小王阿姨'), 'family');
+  expect(api.updateStructuredMemory).not.toHaveBeenCalled();
+  expect(client.archiveMemoryRecord).not.toHaveBeenCalled();
+  cleanup();
+});
+
+it('labels an earlier preference and opens its current value without editing the label into memory', async () => {
+  const line = nativeProfileLine('回答一律用中文。', { earlierValues: ['回答一律用中文。'], currentPreferenceId: 'nm_current' });
+  const onOpenRecord = vi.fn();
+  show(line, { onOpenRecord, canOpenRecord: () => true });
+  expect(screen.getByText('早先值：回答一律用中文。')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '查看当前值' }));
+  expect(onOpenRecord).toHaveBeenCalledWith('nm_current');
+  await userEvent.click(screen.getByRole('button', { name: '编辑' }));
+  expect(screen.getByRole('textbox', { name: '编辑这条记忆' })).toHaveValue('回答一律用中文。');
   cleanup();
 });
 

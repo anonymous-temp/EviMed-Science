@@ -2,14 +2,14 @@ import { withdrawSafetyProjection } from './memorySafetyMigration.mjs';
 import { statementSource, visibleStatementSources } from './memoryStatementSources.mjs';
 import { withMemoryPayer } from './agentMemoryBilling.mjs';
 import { filterCapturedMessage } from './memoryGateway.mjs';
-import { isNeutralProfileHeading, profileMemoryStatements, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
+import { isNeutralProfileHeading, profileMemoryStatements, profileNameFieldValue, profileNameDuplicateLines, withoutProfileNameDuplicates, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
 import { readStatus } from './memoryReadStatus.mjs';
 import { mergePeopleFiles, undoPeopleMerge, redirectPeopleWrites } from './nativeMemoryPeopleStore.mjs';
-import { personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
+import { personConsentRefusal, personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { orderStandingPreferences } from './memoryOpeningByUse.mjs';
 import { personalMemoryTravels } from './openVikingLayout.mjs';
-import { inferredChoiceMessage, choiceRows, choiceKey, normaliseChoice, aliasesFor, aliasVariants, personLabel } from './nativeMemoryInduction.mjs';
+import { inferredChoiceMessage, choiceRows, choiceKey, normaliseChoice, aliasesFor, aliasVariants, personLabel, personNameReading, closePersonNames, confirmedAliases } from './nativeMemoryInduction.mjs';
 import { forgetRequestId } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
@@ -17,6 +17,7 @@ import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
 import { neutralMemoryUri, removalStatement, containsRemoved, similarity, removalRefusals, removalLines, removalText, lineDecisionKey } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
+import { labelEarlierPreferences, markPreferenceOverlaps, preferenceCandidates, preferenceJudgementKey, preferenceStatementTimes } from './nativeMemoryPreferences.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
 import { forgetRequestStatus } from './memoryForgetStatus.mjs';
@@ -451,16 +452,21 @@ export class NativeMemoryStore {
    *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null,
    *   now?: () => Date, conversationTitles?: ConversationTitles | null,
    *   rejectionJudge?: { same: (request: any) => Promise<{ same: Map<number, string>, stated: Set<number> }> } | null,
-   *   report?: (line: string) => void, settleExtractionsMs?: number, sourceEnvelopeEnabled?: boolean, forgetTargetsEnabled?: boolean, personAliasHintEnabled?: boolean, personMergeEnabled?: boolean, standingInstructionsEnabled?: boolean, peopleAcrossProjectsEnabled?: boolean, replacedDeadlineMs?: number }} dependencies
+   *   preferenceJudge?: { available: boolean, overlaps: (request: any) => Promise<{ profile: number, preference: number }[]> } | null,
+   *   report?: (line: string) => void, settleExtractionsMs?: number, sourceEnvelopeEnabled?: boolean, forgetTargetsEnabled?: boolean, personAliasHintEnabled?: boolean, personMergeEnabled?: boolean, profileNameDedupeEnabled?: boolean, preferenceReconcileEnabled?: boolean, standingInstructionsEnabled?: boolean, peopleAcrossProjectsEnabled?: boolean, replacedDeadlineMs?: number }} dependencies
    *   `conversationTitles` names the conversations a memory came out of (the run ledger knows them; this store does not). `rejectionJudge` is the
    *   rejection list's own judge (`nativeMemoryRejections.mjs`), asked which other lines say what a forgotten one said
    *   (`nativeMemoryForgetEverywhere.mjs`); absent, only the lines that contain a forgotten line's words go with it. `memoryContexts` names
    *   the registered namespaces (the account's own and each shared GEO project's, `geoNativeMemoryContext.mjs`).
    */
-  constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, report = () => {},
-    settleExtractionsMs = 20_000, sourceEnvelopeEnabled = false, forgetTargetsEnabled = false, personAliasHintEnabled = false, personMergeEnabled = false, standingInstructionsEnabled = false, peopleAcrossProjectsEnabled = false, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
+  constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, preferenceJudge = null, report = () => {},
+    settleExtractionsMs = 20_000, sourceEnvelopeEnabled = false, forgetTargetsEnabled = false, personAliasHintEnabled = false, personMergeEnabled = false, profileNameDedupeEnabled = false, preferenceReconcileEnabled = false, standingInstructionsEnabled = false, peopleAcrossProjectsEnabled = false, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
     this.sessions = sessions;
     this.sourceEnvelopeEnabled = sourceEnvelopeEnabled;
+    this.preferenceReconcileEnabled = preferenceReconcileEnabled === true;
+    this.profileNameDedupeEnabled = profileNameDedupeEnabled === true;
+    this.preferenceJudge = preferenceJudge;
+    this.preferenceJudgements = new Map();
     this.standingInstructionsEnabled = standingInstructionsEnabled;
     this.peopleAcrossProjectsEnabled = peopleAcrossProjectsEnabled;
     this.forgetTargetsEnabled = forgetTargetsEnabled === true;
@@ -626,12 +632,37 @@ export class NativeMemoryStore {
     return files;
   }
 
+  /** Semantic pairs are cached only against the exact visible texts and revision times the judge saw. */
+  async #preferencePairs(userId, records) {
+    if (!this.preferenceReconcileEnabled || !this.preferenceJudge?.available) return [];
+    const key = preferenceJudgementKey(records), cached = this.preferenceJudgements.get(userId);
+    if (cached?.key === key && cached.until > this.now().getTime()) return cached.pairs;
+    const { profile, preferences } = preferenceCandidates(records);
+    if (!profile.length || !preferences.length) return [];
+    const pairs = this.preferenceJudge.overlaps({ userId, profile: profile.map(record => record.value), preferences: preferences.map(row => row.text) }).catch(() => []);
+    this.preferenceJudgements.delete(userId);
+    this.preferenceJudgements.set(userId, { key, pairs, until: this.now().getTime() + 300_000 });
+    while (this.preferenceJudgements.size > 20) this.preferenceJudgements.delete(this.preferenceJudgements.keys().next().value);
+    return pairs;
+  }
+
+  /** The same current/earlier labels on an explicit conversation read as on the page. */
+  async preferenceRecallText(userId, uri, text) {
+    if (!this.preferenceReconcileEnabled || !this.preferenceJudge?.available || typeof text !== 'string') return text;
+    if (!['profile', 'preferences'].includes(nativeMemoryFile(uri, this.sessions.memoryRoot(userId))?.type)) return text;
+    const own = this.memoryContexts ? await this.#fileContext(userId, uri) : null;
+    const files = (await this.files(userId, { context: own })).filter(file => !file.namespaceId && !file.sensitive
+      && !personProjectScope(file.projectId) && ['profile', 'preferences'].includes(file.type));
+    const records = await this.records(userId, { files });
+    return labelEarlierPreferences(text, records.filter(record => record.uri === uri).flatMap(record => record.earlierValues ?? []));
+  }
+
   /**
    * The account's memories as records (`publicRecord`'s shape plus `engine`, `nativeType`, `uri`, `contentHash` and, for a
    * profile line, `document`), newest change first.
-   * @param {string} userId @param {{ files?: any[], context?: any }} [options]
+   * @param {string} userId @param {{ files?: any[], context?: any, changedPreferenceUris?: string[] | null }} [options]
    */
-  async records(userId, { files = undefined, context = null } = {}) {
+  async records(userId, { files = undefined, context = null, changedPreferenceUris = null } = {}) {
     const held = files ?? await this.files(userId, { context });
     const revisions = await this.overlay.revisionsOfMany(userId, held.map((file) => file.uri));
     const sources = await this.overlay.sources(userId, held.map((file) => file.uri));
@@ -656,7 +687,7 @@ export class NativeMemoryStore {
         continue;
       }
       // The profile is one document; its lines are the items the page lists.
-      for (const line of profileStatements(file.body)) {
+      for (const line of profileStatements(this.profileNameDedupeEnabled ? withoutProfileNameDuplicates(file.body) : file.body)) {
         // A line's own conversation is the one whose commit brought it, not every conversation that touched the file: from the index of
         // origins when it has the line, else from the revisions the overlay still holds (a line already there when the oldest of them was
         // written, and unknown to the index, names nothing rather than a guess).
@@ -693,6 +724,35 @@ export class NativeMemoryStore {
     const withdrawn = new Set(this.sourceDeletion ? await this.sourceDeletion.hiddenMemoryUris(userId) : []);
     const visible=records.filter(record=>![...withdrawn].some(prefix=>record.uri===prefix||record.uri.startsWith(`${prefix}/`)));
     const protectedRecords=this.sourceDeletion?await this.sourceDeletion.redactRecords(userId,visible):visible;
+    if (this.personAliasHintEnabled && this.personMergeEnabled) {
+      const dismissed = await this.personEdges.dismissed(userId).catch(() => null);
+      const people = protectedRecords.filter(row => row.nativeType === 'people' && !row.sensitive);
+      // Use only identities that survived the final page fences, including filename fallback.
+      const candidates = [];
+      for (const record of people) {
+        const file = held.find(candidate => candidate.uri === record.uri);
+        const label = personLabel(record.uri, record.value);
+        if (await fenceWithdrawnMemoryBody(this.overlay, userId, record.uri, `# ${label}`, file.namespaceId) === null) continue;
+        candidates.push({ record, label, reading: personNameReading(label), aliases: confirmedAliases(record.value), file });
+      }
+      if (dismissed) for (const { record, label, reading, aliases, file } of candidates) {
+        record.possibleSamePerson = candidates.filter(other => other.record.id !== record.id
+          && other.file.namespaceId === file.namespaceId && personProjectScope(other.file.projectId) === personProjectScope(file.projectId)
+          && !dismissed.has(personPairId(record.uri, other.record.uri))
+          && (closePersonNames(label, other.label) || reading && reading === other.reading || aliases.includes(other.label) || other.aliases.includes(label)))
+          .slice(0, 8).map(other => ({ id: other.record.id, label: other.label }));
+      }
+    }
+    if (this.preferenceReconcileEnabled && this.preferenceJudge?.available) {
+      const eligible = held.filter(file => !file.namespaceId && !personProjectScope(file.projectId) && !file.sensitive
+        && ['profile', 'preferences'].includes(file.type));
+      const uris = new Set(eligible.map(file => file.uri));
+      const candidates = protectedRecords.filter(record => uris.has(record.uri));
+      const times = preferenceStatementTimes(eligible, revisions, origins);
+      const marked = markPreferenceOverlaps(candidates, await this.#preferencePairs(userId, candidates), times, changedPreferenceUris);
+      const labels = new Map(marked.filter(row => row.earlierValues?.length).map(row => [row.id, row]));
+      for (let i = 0; i < protectedRecords.length; i++) if (labels.has(protectedRecords[i].id)) protectedRecords[i] = labels.get(protectedRecords[i].id);
+    }
     return protectedRecords.sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
   }
 
@@ -1291,11 +1351,16 @@ export class NativeMemoryStore {
     const preferences = this.standingInstructionsEnabled ? orderStandingPreferences(visible) : [];
     const selected = [...new Map([...used, ...preferences].map(file => [file.uri, file])).values()];
     if (!selected.length) return [];
-    const files = (await this.files(userId, { uris: selected.map(file => file.uri) }))
+    const selectedUris = new Set(selected.map(file => file.uri));
+    const uris = new Set(selectedUris);
+    if (this.preferenceReconcileEnabled) for (const file of visible) {
+      if (['profile', 'preferences'].includes(nativeMemoryFile(file.uri, root)?.type)) uris.add(file.uri);
+    }
+    const files = (await this.files(userId, { uris: [...uris] }))
       .filter(file => !file.sensitive && (!file.projectId || file.projectId === projectId
         || personalMemoryTravels(file.uri, root, this.peopleAcrossProjectsEnabled)) && nativeMemoryFile(file.uri, root));
     const records = await this.records(userId, { files });
-    return files.flatMap(file => {
+    return files.filter(file => selectedUris.has(file.uri)).flatMap(file => {
       const sources = records.filter(record => record.uri === file.uri);
       if (!sources.length) return [];
       const receipt = sourceReceiptState(sources.map(record => ({ id: record.id, contentDigest: record.contentHash,
@@ -1304,7 +1369,7 @@ export class NativeMemoryStore {
       return [{ ...selected.find(row => row.uri === file.uri), ...file,
         ...(this.sourceEnvelopeEnabled ? { statementSources: sources.flatMap(record => record.sourceEnvelope
           ? [{ text: record.quoteUnit ?? record.value, source: record.sourceEnvelope }] : record.statementSources ?? []) } : {}),
-        body: sources.map(record => record.quoteUnit ?? record.value).join('\n'),
+        body: sources.map(record => labelEarlierPreferences(record.quoteUnit ?? record.value, record.earlierValues)).join('\n'),
         originalSources: receipt.originalSources, sourcePrivacy: receipt.sourcePrivacy,
         attribution: { schemaVersion: 1, origins, confirmed: false } }];
     });
@@ -1486,13 +1551,55 @@ export class NativeMemoryStore {
 
   // ----------------------------------------------------------------- writing
 
+  /** Keep only the newer of a judged profile/preference pair. This is an ordinary revision, never a forget rejection. */
+  async reconcilePreferences(userId, changedUris = null) {
+    if (!this.preferenceReconcileEnabled || !this.preferenceJudge?.available || changedUris?.length === 0) return { removed: 0 };
+    return withNativeMemoryWrite(this.overlay.database, userId, async () => {
+      this.#touch(userId);
+      const files = (await this.files(userId)).filter(file => !file.sensitive && !file.namespaceId
+        && !personProjectScope(file.projectId) && ['profile', 'preferences'].includes(file.type));
+      const records = await this.records(userId, { files, changedPreferenceUris: changedUris });
+      const older = records.filter(row => row.earlierValues?.length);
+      if (!older.length) return { removed: 0 };
+      // The model saw these exact bodies. A late engine update or a redacted view cannot authorize a rewrite.
+      for (const file of files) {
+        if (await this.sessions.read(userId, file.uri) !== file.body) return { removed: 0 };
+      }
+      let removed = 0;
+      for (const file of files) {
+        const prints = new Set(older.filter(row => row.uri === file.uri).flatMap(row => row.earlierValues.map(lineFingerprint)));
+        if (!prints.size) continue;
+        const lines = file.body.split('\n');
+        const keep = lines.filter(line => /^#{1,6}\s/u.test(line.trim()) || !prints.has(lineFingerprint(removalText(line))));
+        if (keep.length === lines.length) continue;
+        const next = keep.join('\n');
+        if (file.type === 'profile' || removalLines(next).length) await this.#write(userId, file, next, { actor: 'platform', reason: 'preference superseded across files' });
+        else await this.forgetFile(userId, file, { keepText: true, actor: 'platform', reason: 'preference superseded across files', reject: false });
+        removed += lines.length - keep.length;
+      }
+      return { removed };
+    }, { exclusive: true });
+  }
+
   /**
    * The person's own edit (`PATCH /api/memory/records/:id`): `value` replaces the file (a profile line replaces that line of
    * the document), `sensitive` keeps the file out of recall, `status: "archived"` is 「忘记」 with an undo. Compare-and-swap
    * on the text this module last read: a file that changed since is a 409, never an overwrite.
    * @param {string} userId @param {string} id @param {{ value?: string, sensitive?: boolean, status?: string, expectedVersion: number }} patch
    */
-  async update(userId, id, { value = undefined, sensitive = undefined, status = undefined, expectedVersion }) {
+  async update(userId, id, patch) {
+    const update = () => this.#updateOwned(userId, id, patch);
+    if (this.preferenceReconcileEnabled && patch.value !== undefined || this.#pairedProfileId(userId, id)) {
+      return withNativeMemoryWrite(this.overlay.database, userId, update, { exclusive: true });
+    }
+    return update();
+  }
+
+  #pairedProfileId(userId, id) {
+    return this.profileNameDedupeEnabled && String(id).slice(0, 27) === nativeFileId(`${this.sessions.memoryRoot(userId)}/profile.md`);
+  }
+
+  async #updateOwned(userId, id, { value = undefined, sensitive = undefined, status = undefined, expectedVersion }) {
     /** @type {{ file: any, line: any }} */
     let target;
     try {
@@ -1525,13 +1632,17 @@ export class NativeMemoryStore {
       let next;
       if (line) {
         const raw = file.body.split("\n");
+        const duplicates = this.profileNameDedupeEnabled && /^#\s/.test(line.raw.trim()) ? new Set(profileNameDuplicateLines(file.body)) : new Set();
         const date = this.now().toISOString().slice(0, 10);
         raw[line.index] = /^#\s/.test(line.raw.trim()) ? `# ${text.replace(/^#+\s*/, '')}` : `- ${text.replace(/^(?:[-*+]|\d+[.)])\s+/, "").replace(AS_OF, "")} (as of ${date})`;
-        next = raw.join("\n");
+        next = raw.filter((row, index) => index === line.index || !duplicates.has(row.trim())).join("\n");
       } else {
         next = text;
       }
       await this.#write(userId, file, next, { actor: "user", reason: "edited on the memory page", origin: "edit" });
+    }
+    if (value !== undefined && this.preferenceReconcileEnabled && !file.namespaceId && ['profile', 'preferences'].includes(file.type)) {
+      await this.reconcilePreferences(userId, [file.uri]).catch(() => this.report('native memory preference reconciliation unavailable'));
     }
     return this.getRecord(userId, line ? `${nativeFileId(file.uri)}_${lineFingerprint((/^#\s/.test(line.raw.trim()) ? `# ${String(value ?? '').trim().replace(/^#+\s*/, '')}` : String(value ?? '').trim()).replace(AS_OF, '')).slice(0, 12)}` : nativeFileId(file.uri))
       .catch(() => this.getRecord(userId, nativeFileId(file.uri))).catch(error => {
@@ -1583,7 +1694,7 @@ export class NativeMemoryStore {
       } else await activate();
     }
     await this.#withdrawSafetyCopies(userId, file, next);
-    await this.history?.retireWriteSessions(context,oldOrigins,removed);
+    if (reason !== 'preference superseded across files') await this.history?.retireWriteSessions(context,oldOrigins,removed);
     const oldUri = file.uri, source = await this.#bodySource(userId,file);
     // A removed value in a filename is still returned by list/search. Keep the
     // edited document at an opaque address; the before-image remains undoable.
@@ -1751,18 +1862,29 @@ export class NativeMemoryStore {
    * @param {string} userId @param {string} id @param {{ keepText?: boolean, actor?: string }} [options]
    * @returns {Promise<{ removed: boolean, uri: string, hash?: string }>} `hash`: the document's text now, when a line left it
    */
-  async remove(userId, id, { keepText = false, actor = "user" } = {}) {
+  async remove(userId, id, options = {}) {
+    const remove = () => this.#removeOwned(userId, id, options);
+    return this.#pairedProfileId(userId, id) ? withNativeMemoryWrite(this.overlay.database, userId, remove, { exclusive: true }) : remove();
+  }
+
+  async #removeOwned(userId, id, { keepText = false, actor = "user" } = {}) {
     const { file, line } = await this.#target(userId, id);
     // What else says the same is found first, so that the act the revisions share is named in the first of them.
     const plan = await this.#duplicatesPlan(userId, line ? [removalText(line.raw)] : removalLines(file.body), file);
     const act = plan.size ? newAct() : null;
     if (line) {
-      const raw = file.body.split("\n");
-      raw.splice(line.index, 1);
+      const duplicates = new Set(this.profileNameDedupeEnabled && file.type === 'profile' ? profileNameDuplicateLines(file.body) : []);
+      const paired = duplicates.size > 0 && (/^#\s/.test(line.raw.trim()) || duplicates.has(line.raw.trim()));
+      const title = file.body.split("\n").find(row => /^#\s/.test(row.trim()));
+      const raw = file.body.split("\n").filter((row, index) => index !== line.index && (!paired || row !== title && !duplicates.has(row.trim())));
       const next = raw.join("\n");
       await this.#write(userId, file, next, { actor, neutralizeRemovedPath: true, reason: `${keepText ? "forgotten on the memory page" : "deleted on the memory page"}${actSuffix(act)}` });
       // A delete takes the line out of the history too; a forget keeps it for the undo.
-      if (!keepText) await this.overlay.scrubLines(userId, file.uri, await this.#wordingsOf(userId, file.uri, line.raw.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")));
+      if (!keepText) {
+        const rows = paired ? [line.raw, ...duplicates, ...(title ? [title] : [])] : [line.raw];
+        const wordings = await Promise.all(rows.map(row => this.#wordingsOf(userId, file.uri, row.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, ""))));
+        await this.overlay.scrubLines(userId, file.uri, wordings.flat());
+      }
       const also = await this.#forgetDuplicates(userId, keepText ? plan : withoutJudged(plan), { act, keepText, actor });
       return { removed: true, uri: file.uri, hash: contentHash(next), ...(also ? { alsoForgot: also } : {}) };
     }
@@ -1792,8 +1914,8 @@ export class NativeMemoryStore {
 
   /** Gateway-only entry: evidence is checked against the bound human conversation before this method is called.
    * @param {{id:string}} user @param {{id:string,userId:string}} project
-   * @param {{a:string,b:string,distinct:boolean,engineSession:string}} decision */
-  async people(user, project, { a, b, distinct, engineSession }) {
+   * @param {{a:string,b:string,distinct:boolean,engineSession:string,confirmation:string,question?:string}} decision */
+  async people(user, project, { a, b, distinct, engineSession, confirmation, question = '' }) {
     if (!this.personMergeEnabled) throw new HttpError(400, 'memory_payload_invalid', 'People decisions are not enabled.');
     return withNativeMemoryWrite(this.overlay.database, user.id, async () => {
       this.#touch(user.id);
@@ -1813,6 +1935,12 @@ export class NativeMemoryStore {
       const keep = files.find(file => file.uri === a), merge = files.find(file => file.uri === b) ?? pending?.snapshot?.merge;
       if (!keep || !merge || a === b || keep.sensitive || merge.sensitive) throw new HttpError(400, 'memory_payload_invalid', 'Choose two available, different people files.');
       if (personProjectScope(keep.projectId) !== personProjectScope(merge.projectId)) throw new HttpError(403, 'memory_scope_denied', 'People files in different project scopes cannot be combined.');
+      const labels = [personLabel(a, keep.body), personLabel(b, merge.body)];
+      const ambiguous = labels[0] === labels[1] || files.some(file => file.type === 'people' && !file.sensitive && file.uri !== a && file.uri !== b
+        && personProjectScope(file.projectId) === personProjectScope(keep.projectId) && labels.includes(personLabel(file.uri, file.body)));
+      const [left, right] = ambiguous ? [a, b].map((uri, index) => `${labels[index]}（${uri.split('/').at(-1)}）`) : labels;
+      const refusal = personConsentRefusal(left, right, distinct, confirmation, question);
+      if (refusal) throw new HttpError(400, 'memory_payload_invalid', refusal);
       if (distinct) return this.personEdges.set(user.id, personPairId(a, b), true);
       const origins = await this.overlay.originsOf(user.id, [a, b]);
       /** @param {{uri:string,body:string,projectId?:string|null,sensitive?:boolean}} file @returns {import('./nativeMemoryPeople.mjs').PersonBefore} */
@@ -1845,6 +1973,12 @@ export class NativeMemoryStore {
   /** Remove exactly the judged lines through the same revision/rejection/history path as the tool. */
   async forgetLines(userId, file, lines, { act = null, engineSession = null, sweep = true } = {}) {
     const prints = new Set(lines.map(removalText).map(lineFingerprint));
+    if (this.profileNameDedupeEnabled && file.type === 'profile') {
+      const duplicates = profileNameDuplicateLines(file.body), title = file.body.split('\n').find(row => /^#\s/.test(row.trim()));
+      if (title && prints.has(lineFingerprint(removalText(title))) || duplicates.some(row => prints.has(lineFingerprint(removalText(row))))) {
+        for (const row of [...duplicates, ...(title ? [title] : [])]) prints.add(lineFingerprint(removalText(row)));
+      }
+    }
     const removed = removalLines(file.body).filter(text => prints.has(lineFingerprint(text)));
     if (!removed.length) return 0;
     const sweeping = sweep && this.forgetTargetsEnabled && this.overlay.deferredSummaryRebuildEnabled === true && this.history;
@@ -2067,6 +2201,13 @@ export class NativeMemoryStore {
     const wordings = [text];
     const prints = new Set([lineFingerprint(text)]);
     for (const revision of await this.overlay.revisionsOf(userId, uri, { limit: 200 })) {
+      if (this.profileNameDedupeEnabled && uri.endsWith('/memories/profile.md') && /^#\s/.test(text)) {
+        const name = lineFingerprint(removalText(text));
+        for (const body of [revision.before, revision.after]) for (const raw of String(body ?? '').split('\n')) {
+          const value = profileNameFieldValue(raw);
+          if (value && lineFingerprint(value) === name) wordings.push(removalText(raw));
+        }
+      }
       if (revision.actor !== "user" || revision.change !== "updated" || revision.before === null || revision.after === null) continue;
       const before = statements(revision.before);
       const after = statements(revision.after);
@@ -2082,7 +2223,7 @@ export class NativeMemoryStore {
     return wordings;
   }
 
-  /** @param {string} userId @param {any} file @param {{ keepText?: boolean, actor?: string, reason?: string, engineSession?: string | null, memorySweep?: import('./memoryHistoryPersistence.mjs').MemorySweep|null }} [options] */
+  /** @param {string} userId @param {any} file @param {{ keepText?: boolean, actor?: string, reason?: string, reject?: boolean, engineSession?: string | null, memorySweep?: import('./memoryHistoryPersistence.mjs').MemorySweep|null }} [options] */
   async forgetFile(userId,file,options={}) {
     return withNativeMemoryWrite(this.overlay.database,userId,async()=>{
       const context=await this.#fileContext(userId,file.uri);
@@ -2091,18 +2232,18 @@ export class NativeMemoryStore {
       return this.#forgetFileOwned(userId,file,options);
     });
   }
-  async #forgetFileOwned(userId, file, { keepText = false, actor = "user", reason = "", engineSession = null, memorySweep = /** @type {import('./memoryHistoryPersistence.mjs').MemorySweep|null} */ (null) } = {}) {
+  async #forgetFileOwned(userId, file, { keepText = false, actor = "user", reason = "", reject = true, engineSession = null, memorySweep = /** @type {import('./memoryHistoryPersistence.mjs').MemorySweep|null} */ (null) } = {}) {
     const context = await this.#fileContext(userId, file.uri);
     this.#touch(userId);
     const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
     const names = [...new Set([titleOf(file.type, file.uri, file.body), ...memoryNameVariants(file.uri)])].filter(name => hardTokens(name).length);
     const removedLines = await this.#aliasRemovalLines(userId, file, [...new Set([...removalLines(file.body), ...names])]);
     const activate = async () => { await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, removedLines); };
-    if (this.history && actor !== "platform") await this.history.rejectRemoved(context,file,
+    if (reject && this.history && actor !== "platform") await this.history.rejectRemoved(context,file,
       [...new Map([...statements(file.body).map(removalText), ...names].map(text => [lineFingerprint(text), text])).values()],this.rejectionJudge, { activate, memorySweep, allowDeferred: Boolean(memorySweep || actOf(reason) && this.overlay.deferredSummaryRebuildEnabled === true) });
-    else await activate();
+    else if (reject) await activate();
     await this.#withdrawSafetyCopies(userId, file, null);
-    await this.history?.retireWriteSessions(context,oldOrigins,statements(file.body));
+    if (reject) await this.history?.retireWriteSessions(context,oldOrigins,statements(file.body));
     const removed = await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.remove(userId, file.uri)));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change: "deleted", actor: /** @type {any} */ (actor),
       reason: reason || (keepText ? "forgotten on the memory page" : "deleted"), before: keepText ? file.body : null, after: null, engineSession, projectId: file.projectId,...await this.#bodySource(userId,file) });
@@ -2307,9 +2448,10 @@ export class NativeMemoryStore {
       const enumerate = place.type === "profile" ? profileStatements : statements;
       const after = new Set(enumerate(String(revision.after ?? "")).map(lineFingerprint));
       const present = new Set(enumerate(live.get(revision.uri)?.body ?? "").map(lineFingerprint));
+      const duplicateNames = new Set(this.profileNameDedupeEnabled && place.type === 'profile' ? profileNameDuplicateLines(revision.before ?? '') : []);
       for (const raw of String(revision.before ?? "").split("\n")) {
         const text = raw.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "");
-        if (!text || isLabelLine(raw) || place.type === 'profile' && isNeutralProfileHeading(raw) || /^#{1,6}\s/.test(raw.trim()) && !(place.type === 'profile' && /^#\s/.test(raw.trim()))) continue;
+        if (!text || duplicateNames.has(raw.trim()) || isLabelLine(raw) || place.type === 'profile' && isNeutralProfileHeading(raw) || /^#{1,6}\s/.test(raw.trim()) && !(place.type === 'profile' && /^#\s/.test(raw.trim()))) continue;
         const print = lineFingerprint(text);
         if (after.has(print) || present.has(print)) continue;
         const id = `${nativeFileId(revision.uri)}_${print.slice(0, 12)}`;
@@ -2382,22 +2524,25 @@ export class NativeMemoryStore {
     // A line: the line as the document had it, after the document's own lines.
     const raw = String(revision.before ?? "").split("\n").find((line) => lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")).slice(0, 12) === String(entry.id).slice(28));
     const line = (raw ?? `- ${entry.value}`).trim();
+    const duplicates = this.profileNameDedupeEnabled && memoryType === 'profile' ? profileNameDuplicateLines(revision.before) : [], beforeTitle = String(revision.before ?? '').split('\n').find(row => /^#\s/.test(row.trim()));
+    const paired = duplicates.length > 0 && (duplicates.includes(line) || line === beforeTitle?.trim());
+    const restoredLines = paired ? [...(beforeTitle ? [beforeTitle] : []), ...duplicates] : [line];
     const document = files.find((file) => file.uri === entry.uri);
     if (document) {
       const body = document.body.replace(/\s+$/, "");
-      if (/^#\s/.test(line) && /^#\s/m.test(body)) throw new HttpError(409, 'memory_conflict', 'The profile already has a title. Edit the current title instead.');
-      const restored = /^#\s/.test(line) ? `${line}\n${body}` : `${body}\n${line}`;
+      if (restoredLines.some(row => /^#\s/.test(row)) && /^#\s/m.test(body)) throw new HttpError(409, 'memory_conflict', 'The profile already has a title. Edit the current title instead.');
+      const restored = restoredLines.some(row => /^#\s/.test(row)) ? `${restoredLines.join('\n')}\n${body}` : `${body}\n${restoredLines.join('\n')}`;
       await this.#write(userId, document, restored, { actor: 'user', reason: 'restored from forgotten' });
-      await this.overlay.unreject(userId, this.#rejectionType(await this.#fileContext(userId, document.uri), memoryType), [entry.value]);
+      await this.overlay.unreject(userId, this.#rejectionType(await this.#fileContext(userId, document.uri), memoryType), paired ? restoredLines.map(removalText) : [entry.value]);
       // A judged request may remove several lines at once. Restoring one must leave the others available to restore too.
       const originallyKept = new Set(removalLines(revision.after ?? '').map(lineFingerprint));
-      const nowKept = new Set(removalLines(`${body}\n${line}`).map(lineFingerprint));
+      const nowKept = new Set(removalLines(restored).map(lineFingerprint));
       const stillForgotten = ['forgotten by conversation request', 'forgotten in a conversation'].some(prefix => revision.reason.startsWith(prefix))
         && removalLines(revision.before ?? '').some(text => !originallyKept.has(lineFingerprint(text)) && !nowKept.has(lineFingerprint(text)));
       if (!stillForgotten) await this.overlay.markUndone(userId, revision.id);
     } else {
       // The document itself was forgotten since: restore only the selected line, never another withdrawn title.
-      await this.#restoreText(userId, { uri: entry.uri, text: line, memoryType, projectId, revisionId: revision.id, reason: "restored from forgotten" });
+      await this.#restoreText(userId, { uri: entry.uri, text: restoredLines.join('\n'), memoryType, projectId, revisionId: revision.id, reason: "restored from forgotten" });
     }
     return this.getRecord(userId, id).catch(() => this.getRecord(userId, nativeFileId(entry.uri)));
   }
