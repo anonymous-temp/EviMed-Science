@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { OpenVikingEngine } from '../src/openVikingEngine.mjs';
+import { OPENVIKING_ENGINE_USER, OpenVikingEngine } from '../src/openVikingEngine.mjs';
 import { OPENVIKING_MEMORY_TYPES, OPENVIKING_SKILL_NAMES } from '../src/openVikingLayout.mjs';
 
-function fixture() {
+function fixture({ safety = false } = {}) {
+  const deployed = safety ? [...OPENVIKING_MEMORY_TYPES, 'safety_notes'] : OPENVIKING_MEMORY_TYPES;
+  const registrations = [];
   let time = 0, healthy = false, compileOk = true;
   const timers = new Map(), probes = [];
   let compileGate = null;
@@ -12,9 +14,13 @@ function fixture() {
   const digest = createHash('sha256').update(skill).digest('hex');
   const client = { configured: true, account: 'test',
     status: async () => ({ connected: healthy, version: 'vtest' }),
-    request: async ({ path }) => {
-      if (path.includes('/memory-templates/')) throw { upstreamStatus: 400 };
-      if (path.endsWith('/settings')) return { result: { memory_policy: { memory_types: [...OPENVIKING_MEMORY_TYPES] } } };
+    request: async ({ path, method, body }) => {
+      if (method === 'POST' && path.endsWith('/users')) {
+        registrations.push(body.user_id);
+        throw Object.assign(new Error('Already registered'), { code: 'memory_index_conflict' });
+      }
+      if (path.includes('/memory-templates/')) throw { upstreamStatus: deployed.includes(path.split('/').pop()) ? 400 : 404 };
+      if (path.endsWith('/settings')) return { result: { memory_policy: { memory_types: deployed } } };
       if (path === '/api/v1/content/download') return { bytes: Buffer.from(skill) };
       if (path.endsWith('/capabilities')) return { result: { configured: true, can_create: true } };
       if (path === '/api/v1/compile') { probes.push(time); if (compileGate) await compileGate; return { result: { task_id: 'probe' } }; }
@@ -22,13 +28,13 @@ function fixture() {
       return { result: {} };
     },
   };
-  const engine = new OpenVikingEngine({ client, config: { openVikingModelKey: 'test', openVikingEngineCheckMs: 600_000 },
+  const engine = new OpenVikingEngine({ client, config: { memorySafetyNotesEnabled: safety, openVikingModelKey: 'test', openVikingEngineCheckMs: 600_000 },
     pin: { version: 'test', skills: Object.fromEntries(OPENVIKING_SKILL_NAMES.map(name => [name, { installedSha256: digest, sourceSha256: digest }])) },
     readSkill: async () => skill, now: () => new Date(time), wait: async () => {},
     setTimer: (fn, ms) => { const timer = { fn, ms }; timers.set(timer, timer); return timer; },
     clearTimer: timer => timers.delete(timer),
   });
-  return { engine, probes, blockCompile: () => { let release; compileGate = new Promise(resolve => { release = resolve; }); return () => release(); }, setHealthy: value => { healthy = value; }, setCompile: value => { compileOk = value; },
+  return { engine, probes, registrations, blockCompile: () => { let release; compileGate = new Promise(resolve => { release = resolve; }); return () => release(); }, setHealthy: value => { healthy = value; }, setCompile: value => { compileOk = value; },
     delay: () => [...timers.values()][0]?.ms,
     advance: async () => { const timer = [...timers.values()][0]; assert.ok(timer); timers.delete(timer); time += timer.ms; timer.fn(); await engine.running; await new Promise(resolve => setImmediate(resolve)); },
     at: value => { time = value; },
@@ -71,4 +77,17 @@ test('native memory facts become visible while the unrelated compile probe is st
   assert.equal(f.engine.ready('knowledge').ok, false);
   release(); await checking;
   assert.equal(f.engine.ready('knowledge').ok, true);
+});
+
+test('an existing deployment enables the safety policy without registering its researchers or waiting for Compile', async () => {
+  const f = fixture({ safety: true });
+  f.setHealthy(true);
+  const resume = f.blockCompile();
+  const checking = f.engine.check();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(f.registrations, [OPENVIKING_ENGINE_USER]);
+  assert.ok(f.engine.status().facts.memoryTemplates.types.includes('safety_notes'));
+  assert.equal(f.engine.ready('nativeMemory').ok, true);
+  resume();
+  await checking;
 });
