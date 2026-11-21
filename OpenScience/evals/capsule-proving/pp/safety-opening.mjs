@@ -117,7 +117,7 @@ try {
   // Measure the gateway wall clock separately from aggregate engine request time. Keep routes only.
   report.forgetTiming = {};
   const restore = [];
-  function measure(target, method, label) {
+  const measure = (target, method, label) => {
     const original = target[method];
     target[method] = async function (...args) {
       const key = label(...args);
@@ -129,7 +129,7 @@ try {
       }
     };
     restore.push(() => { target[method] = original; });
-  }
+  };
   measure(client, 'request', input => input.path.startsWith('/api/v1/content/') || input.path.startsWith('/api/v1/fs') ? input.path : 'otherEngine');
   measure(lab.parts.history, 'rejectRemoved', () => 'historyReview');
   measure(nativeMemory.rejectionJudge, 'same', () => 'semanticReview');
