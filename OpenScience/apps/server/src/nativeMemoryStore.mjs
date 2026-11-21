@@ -19,6 +19,8 @@ import { neutralMemoryUri, removalStatement, containsRemoved, similarity, remova
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
+import { forgetRequestStatus } from './memoryForgetStatus.mjs';
+import { nativeExportTitle } from './nativeMemoryAccountExport.mjs';
 import { memoryHistoryLine, carriesPlatformContext, identifierShapesIn, maskIdentifiers, platformIdentifiersIn, projectContextLine, sourcePrivacyOf, MEMORY_SAFETY_NOTES_ANCHOR } from "@evimed/domain";
 import { actOf, duplicatesOf, withoutJudged } from "./nativeMemoryForgetEverywhere.mjs";
 import { recordForgetDuplicates, recordMapReplaced, recordPastedInstructionCheck } from "./nativeMemoryMetrics.mjs";
@@ -929,23 +931,68 @@ export class NativeMemoryStore {
    */
   async profile(userId, { holder = undefined } = {}) {
     const files = await this.files(userId);
-    const { titles, records: active } = await this.#withConversationTitles(userId, await this.records(userId, { files }));
+    const active = await this.records(userId, { files });
     // What the person forgot rides in the same list as `status: "archived"`: the page's 「已忘记的内容」 reads it from there, and
     // every other reader leaves an archived memory out.
-    const records = [...active, ...await this.forgotten(userId, { files }).catch(() => [])];
+    const scans = this.history && this.forgetTargetsEnabled ? await this.history.ledger.pendingForgetScans(userId, { includeScope: true }) : [];
+    const [archived, pending, forgetRequests] = await Promise.all([
+      this.forgotten(userId, { files, includeSources: Boolean(this.conversationTitles) }).catch(() => []),
+      this.pending(userId, { scans: scans.map(({ scope: _scope, ...scan }) => scan) }),
+      this.forgetActivity(userId, scans.flatMap(scan => scan.scope ? [scan.scope] : [])),
+    ]);
+    const { titles, records } = await this.#withConversationTitles(userId, [...active, ...archived]);
+    for (const record of records) {
+      if (record.status !== 'archived') continue;
+      record.evidence = record.evidence.filter(item => titles[item.conversationTitleKey]);
+      record.evidenceCount = record.evidence.length;
+      record.forgetStatus = scans.some(({ scope }) => scope && record.uri.startsWith(`${scope.root}/memories/`)
+        && (record.act && record.act === scope.act || removalLines(record.value).some(line => lineFingerprint(line) === scope.fingerprint)))
+        ? 'pending_verification' : 'executed';
+    }
     /** @type {Record<string, any[]>} */
     const groups = {};
     for (const kind of new Set(Object.values(PAGE_KIND_OF_TYPE))) groups[kind] = [];
     for (const record of records) (groups[record.kind] ??= []).push(record);
-    const pending = await this.pending(userId);
     return {
       ...(holder ? { holder } : {}), records, groups, activeCount: active.length, pendingCount: this.instructionWriteCheck || this.forgetTargetsEnabled ? pending.length : 0, episodeCount: 0,
-      conversations: titles, usage: {}, pending,
+      conversations: titles, usage: {}, pending, forgetRequests,
     };
   }
 
-  /** What the page asked the engine to remember and it has not written yet. @param {string} userId */
-  async pending(userId) {
+  /** The owner's recorded requests, with execution status independent of what the assistant said.
+   * @param {string} userId
+   * @param {{root:string,fingerprint:string,act:string|null}[]} scans
+   */
+  async forgetActivity(userId, scans) {
+    if (typeof this.overlay.forgetRequestCommits !== 'function') return [];
+    const contexts = new Set((await this.#contexts(userId)).map(context => context.userRoot));
+    const commits = await this.overlay.forgetRequestCommits(userId, { activity: true });
+    const fences = commits.length && this.sourceDeletion ? await this.sourceDeletion.ledger.recordsForOwner(userId) : [];
+    return commits.flatMap(commit => {
+      const root = parseArchiveUri(commit.archiveUri)?.userRoot;
+      if (!contexts.has(root)) return [];
+      const plan = commit.extraction.forgetRequests;
+      const source = parseArchiveUri(plan.sourceArchive ?? commit.archiveUri);
+      const sessionId = source && platformSessionOf(source.session);
+      if (sessionId && fences.some(fence => (!commit.projectId || fence.projectId === commit.projectId)
+        && (fence.nativeRoots?.length ? fence.nativeRoots : [fence.memoryUserRoot]).includes(source.userRoot)
+        && fence.sessionIds.includes(sessionId))) return [];
+      return plan.requests.map((request, index) => {
+        const status = forgetRequestStatus(request, plan);
+        const prints = new Set([...(request.intents ?? []), ...(request.candidates ?? []).map(candidate => candidate.text)].map(lineFingerprint));
+        const checkingCopies = status === 'executed' && scans.some(scan => scan.root === root
+          && (scan.act && scan.act === request.key?.slice(0, 12) || prints.has(scan.fingerprint)));
+        return { id: forgetRequestId(commit.archiveUri, index), text: request.quote,
+          at: request.requestMessage?.at ?? commit.createdAt, status: checkingCopies ? 'pending_verification' : status };
+      });
+    }).slice(0, 100);
+  }
+
+  /** What the page asked the engine to remember and it has not written yet.
+   * @param {string} userId
+   * @param {{scans?: any[]}} [options]
+   */
+  async pending(userId, { scans = undefined } = {}) {
     const writes = (await this.overlay.pendingCommits(userId, { origins: ["page"] })).map((commit) => ({
       id: commit.archiveUri, text: commit.pendingText ?? "", at: commit.createdAt, state: commit.state === "failed" ? "retrying" : "pending",
     }));
@@ -960,7 +1007,7 @@ export class NativeMemoryStore {
           ? [{ index: choice, text: candidate.text }] : []),
       }]);
     });
-    const scans = this.history && this.forgetTargetsEnabled ? await this.history.ledger.pendingForgetScans(userId) : [];
+    scans ??= this.history && this.forgetTargetsEnabled ? await this.history.ledger.pendingForgetScans(userId) : [];
     if (!this.instructionWriteCheck) return [...scans, ...confirmations, ...writes];
     const held = await this.overlay.pendingInstructionRevisions(userId);
     const files = await this.overlay.files(userId);
@@ -2222,10 +2269,10 @@ export class NativeMemoryStore {
    * are the only record of them — the engine no longer holds the file — and a forget that was undone, a hard delete (no text kept),
    * and what the platform's own checks removed are not here. A file that is live again at the same address, and a line the document
    * says again, are not forgotten any more.
-   * @param {string} userId @param {{ files?: any[] }} [options]
+   * @param {string} userId @param {{ files?: any[], includeSources?: boolean }} [options]
    * @returns {Promise<any[]>}
    */
-  async forgotten(userId, { files = undefined } = {}) {
+  async forgotten(userId, { files = undefined, includeSources = false } = {}) {
     const live = new Map((files ?? await this.files(userId)).map((file) => [file.uri, file]));
     /** @type {Map<string, any>} */
     const found = new Map();
@@ -2271,7 +2318,22 @@ export class NativeMemoryStore {
           contentHash: contentHash(text), document: { id: nativeFileId(revision.uri), uri: revision.uri } }));
       }
     }
-    return [...found.values()].slice(0, 100).map(({ raw: _raw, ...entry }) => entry);
+    const entries = [...found.values()].slice(0, 100);
+    if (includeSources && entries.length) {
+      const histories = await this.overlay.revisionsOfMany(userId, [...new Set(entries.map(entry => String(entry.uri)))]).catch(() => new Map());
+      const projects = await this.#sessionProjects(userId, histories);
+      for (const entry of entries) {
+        const history = (histories.get(entry.uri) ?? []).filter(revision => BigInt(revision.id) < BigInt(entry.forgottenRevision)).reverse();
+        // Only identify conversations whose engine revision actually introduced a removed line.
+        // The session that called forget may be a different conversation entirely.
+        const lines = memoryLines(entry.raw ?? entry.value);
+        const sources = lines.flatMap(line => conversationEvidence(history, projects, { line }))
+          .filter(item => item.sourceType === 'conversation' && item.projectId);
+        entry.evidence = [...new Map(sources.map(item => [`${item.projectId}\0${item.conversationId}`, item])).values()].slice(0, 8);
+        entry.evidenceCount = entry.evidence.length;
+      }
+    }
+    return entries.map(({ raw: _raw, ...entry }) => entry);
   }
 
   /**
@@ -2834,6 +2896,8 @@ export class NativeMemoryStore {
         const current = {};
         /** @type {{path:string,type:string,sha256:string}[]} */
         const files = [];
+        /** @type {{path:string,title:string|null}[]} */
+        const titles = [];
         let contentBytes = 0;
         for (const file of await this.files(userId, {context:this.memoryContexts ? context : null})) {
           if (!file.uri.startsWith(`${context.userRoot}/memories/`)) continue;
@@ -2846,8 +2910,10 @@ export class NativeMemoryStore {
           if (bytes + contentBytes > MAX_NATIVE_PACK_BYTES) throw new HttpError(413, 'memory_export_too_large', 'The native memory export exceeds the account archive limit.');
           current[path] = data;
           files.push({path,type:file.type,sha256:contentHash(body)});
+          titles.push({ path, title: nativeExportTitle(body) });
         }
-        current['manifest.json'] = Buffer.from(JSON.stringify({schemaVersion:1,files,
+        current['titles.json'] = Buffer.from(JSON.stringify({ schemaVersion: 1, files: titles }, null, 2));
+        current['manifest.json'] = Buffer.from(JSON.stringify({schemaVersion:1,files,titles:'titles.json',
           note:'仅包含当前可用的记忆；已撤回的内容和临时副本不在导出中。'}));
         pack = Buffer.from(zipSync(current));
       } else pack = await this.#engine(() => context.sessions.exportPack(userId));

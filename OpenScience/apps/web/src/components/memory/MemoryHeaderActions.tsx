@@ -19,10 +19,10 @@ function ForgottenHost({ onClose, onChanged }: { onClose: () => void; onChanged:
   const labels = useProjectLabels();
   const { data, failed, reload } = useCapsuleData(async () => {
     const [profile, mine] = await Promise.all([fetchMemoryProfile(), fetchMyCapsule()]);
-    return { records: profile.records, entries: mine.forgotten };
+    return { records: profile.records, entries: mine.forgotten, requests: profile.forgetRequests };
   });
   if (data) {
-    return <ForgottenDrawer records={data.records} entries={data.entries} projectName={(id) => (id ? labels.get(id) ?? null : null)} onClose={onClose} onChanged={onChanged} />;
+    return <ForgottenDrawer records={data.records} entries={data.entries} requests={data.requests} projectName={(id) => (id ? labels.get(id) ?? null : null)} onClose={onClose} onChanged={() => { reload(); onChanged(); }} />;
   }
   return (
     <Drawer title="已忘记的内容" onClose={onClose}>

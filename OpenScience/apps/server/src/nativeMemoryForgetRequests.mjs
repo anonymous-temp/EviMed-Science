@@ -169,6 +169,8 @@ export async function checkForgetRequests({ commit, context, overlay, store, jud
     const intents = request.intents.filter(text => !prior.has(lineFingerprint(text)));
     if (intents.length && !request.candidates.some(candidate => candidate.removed)) {
       await store.recordForgetIntent(userId, context, plan.sourceArchive ?? commit.archiveUri, intents, { act: request.key.slice(0, 12) });
+      request.intentRecorded = true;
+      await overlay.setForgetRequests(userId, commit.archiveUri, plan);
     }
     await store.fenceForgetRequest(userId, context, plan.sourceArchive ?? commit.archiveUri, request);
     request.status = 'completed';

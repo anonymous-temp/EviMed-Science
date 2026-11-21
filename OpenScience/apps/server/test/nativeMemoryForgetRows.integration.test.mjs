@@ -101,6 +101,43 @@ test('AL8 statement removes profile and independently restated notes without ori
   assert.deepEqual(await f.overlay.removals(f.userId), []);
 });
 
+test('FGT clears exact copies and judged paraphrases while a frozen sweep preserves a later version', options, async t => {
+  const f = await wired(t);
+  const target = f.seed('notes/target.md', `- ${fact}\n- ${allergy}`);
+  const exact = f.seed('notes/exact.md', `- ${fact} (as of 2026-11-17)\n- I prefer tea.`);
+  const semantic = f.seed('notes/semantic.md', `- ${restated}\n- I use green folders.`);
+  const edited = f.seed('notes/edited.md', `- ${restated}\n- I use a paper calendar.`);
+  const outsideSearch = f.seed('notes/not-retrieved.md', '- Midweek after dinner, I head to the pool.');
+  const originalFind = f.sessions.find.bind(f.sessions);
+  f.sessions.find = async (userId, query, options) => options?.target === f.root
+    ? [{ uri: semantic }, { uri: edited }] : originalFind(userId, query, options);
+  const owner = { id: f.userId };
+  const result = await f.store.forget(owner, f.project, target, { lines: [fact], engineSession: 'dsh-active' });
+  assert.equal(result.historyScanPending, true);
+  assert.equal(await f.sessions.read(f.userId, target), `- ${allergy}`);
+  assert.equal(await f.sessions.read(f.userId, exact), '- I prefer tea.');
+  assert.match(await f.sessions.read(f.userId, semantic), /On Wednesday evenings/);
+  const archived = async () => (await f.store.profile(f.userId)).records.filter(record => record.status === 'archived');
+  assert.ok((await archived()).some(row => row.forgetStatus === 'pending_verification'));
+
+  const next = `- ${restated}\n- I changed to a digital calendar.`;
+  const old = await f.sessions.read(f.userId, edited);
+  await f.sessions.replace(f.userId, edited, next);
+  await f.overlay.addRevision({ userId: f.userId, uri: edited, memoryType: 'notes', change: 'updated', actor: 'engine', before: old, after: next });
+  assert.equal((await f.overlay.revisionsOf(f.userId, edited))[0].after, next);
+
+  await f.history.drainForgetScans();
+  assert.deepEqual(await f.ledger.pendingForgetScans(f.userId), []);
+  assert.equal(await f.sessions.read(f.userId, semantic), '- I use green folders.');
+  assert.equal(await f.sessions.read(f.userId, edited), next, 'the worker cannot use a frozen before-image to delete the revised file');
+  assert.match(await f.sessions.read(f.userId, outsideSearch), /head to the pool/);
+  const readable = new Map((await f.store.files(f.userId)).map(file => [file.uri, file.body]));
+  assert.equal(readable.get(exact), '- I prefer tea.');
+  assert.equal(readable.get(semantic), '- I use green folders.');
+  assert.match(readable.get(outsideSearch), /head to the pool/);
+  assert.ok((await archived()).every(row => row.forgetStatus === 'executed'));
+});
+
 for (const mode of ['lines','statement']) test(`AL8 an imported memory is reachable by ${mode} forget and the independent sweep`, options, async t => {
   const f = await wired(t);
   const uri = `${f.root}/notes/imported.md`;

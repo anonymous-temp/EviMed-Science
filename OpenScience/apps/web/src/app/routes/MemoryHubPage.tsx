@@ -359,7 +359,7 @@ function MemoryHub() {
       controls={{
         onReset: reload,
         onShare: () => openShare("export"),
-        onForgotten: () => setDrawer("forgotten"),
+        onForgotten: () => { setDrawer("forgotten"); reload(); },
         onRemember: () => setDrawer("remember"),
         onImport: () => setDrawer("import"),
       }}
@@ -395,6 +395,7 @@ function MemoryHub() {
         <ForgottenDrawer
           records={records}
           entries={data.mine?.forgotten ?? []}
+          requests={data.profile?.forgetRequests}
           projectName={projectName}
           onClose={() => setDrawer(null)}
           onChanged={reload}

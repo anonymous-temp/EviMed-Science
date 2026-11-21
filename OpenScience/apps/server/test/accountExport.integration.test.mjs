@@ -424,9 +424,9 @@ test('account archive carries capsule input, edit and removal receipts without r
   const addCommit = async (userId, nativeRoot, state, index, privateText) => db.query(`INSERT INTO evimed_memory.native_commits
     (user_id,archive_uri,engine_session,origin,state,extraction,created_at) VALUES($1,$2,$3,'gateway',$4,$5::jsonb,$6)`,
     [userId, `${nativeRoot}/sessions/dsh-export-${index}/history/archive_001`, `dsh-export-${index}`, state, JSON.stringify({ forgetRequests: {
-      state: index === 0 ? 'applying' : 'completed', requests: ['pending', 'applying', 'completed', 'dismissed'].map(status => ({
+      state: index === 0 ? 'applying' : 'completed', salt: 'EX-PRIVATE-SALT', requests: ['pending', 'applying', 'completed', 'dismissed'].map(status => ({
         quote: privateText, requestMessage: { at, text: privateText }, status, candidates: [{ type: 'notes', uri: `${nativeRoot}/memories/notes/${privateText}.md`, text: privateText }],
-        intents: [privateText], removed: status === 'completed' ? 1 : 0 })), claims: [{ quote: privateText, message: 1, turnMessage: 0 }], falseClaims: 1 } }), at]);
+        intents: [privateText], key: 'EX-PRIVATE-REPLAY-KEY', removed: status === 'completed' ? 1 : 0 })), claims: [{ quote: privateText, message: 1, turnMessage: 0 }], falseClaims: 1 } }), at]);
   for (const [index, state] of ['pending', 'completed', 'failed', 'replayed', 'abandoned'].entries()) await addCommit(f.owner, root, state, index, forgotten);
   await addCommit(f.owner, shared.userRoot, 'completed', 10, forgotten);
   await addCommit(f.owner, unregistered, 'completed', 11, 'EX-UNREGISTERED-NAMESPACE');
@@ -487,6 +487,8 @@ test('account archive carries capsule input, edit and removal receipts without r
     assert.equal(native.forgetRequests.length, 6, 'personal and registered shared namespaces only');
     assert.deepEqual(native.forgetRequests[0].requests.map(row => row.status), ['pending', 'applying', 'completed', 'dismissed']);
     assert.equal(native.forgetRequests[0].completionReceipts.length, 1);
+    assert.deepEqual(native.forgetRequests[0].executionReceipts.map(row => [row.schemaVersion, row.status, row.scope.removedLines]),
+      [[1, 'pending_verification', 0], [1, 'requested', 0], [1, 'executed', 1], [1, 'not_executed', 0]]);
     assert.equal(native.revisions.find(row => row.id === edit).before, '', 'export does not restate an edited-away value; explicit undo keeps its private receipt');
     assert.equal(raw.includes(Buffer.from('EX-UNDOABLE-EDIT')), false);
     assert.equal(native.revisions.find(row => row.id === removal).undoable, true);
@@ -504,7 +506,7 @@ test('account archive carries capsule input, edit and removal receipts without r
     // created_at (milliseconds) then id, and the ids are hashes: asking for "the first offered one" failed in CI when
     // both rows landed in one millisecond. Every statement an offered import still exports is the allowed one.
     assert.deepEqual(native.imports.filter(row => row.state === 'offered').flatMap(row => row.statements.map(statement => statement.text)), ['EX-OFFERED-IMPORT']);
-    for (const value of [forgotten, withdrawn, foreign, 'EX-UNREGISTERED-NAMESPACE', 'EX-UNDONE-IMAGE', 'EX-OLD-ACCOUNT-INPUT']) {
+    for (const value of [forgotten, withdrawn, foreign, 'EX-UNREGISTERED-NAMESPACE', 'EX-UNDONE-IMAGE', 'EX-OLD-ACCOUNT-INPUT', 'EX-PRIVATE-SALT', 'EX-PRIVATE-REPLAY-KEY']) {
       assert.equal(raw.includes(Buffer.from(value)), false, `${value} must be absent from every archive entry`);
       assert.equal(archive.includes(Buffer.from(value)), false);
     }

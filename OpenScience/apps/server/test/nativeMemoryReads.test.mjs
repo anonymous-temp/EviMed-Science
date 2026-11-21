@@ -335,3 +335,21 @@ test('an identical admission committing at the same moment is read back instead 
   await assert.rejects(other.overlay.queueAdmission('u', input), error => error.constraint === 'native_admissions_pkey');
   assert.equal(other.inserts(), 1);
 });
+
+test('native ZIP titles map only filtered headings to opaque paths', async () => {
+  const { files, store } = engine({ count: 0, delay: 0 });
+  files.set(`${ROOT}/notes/private-withdrawn-name.md`, { body: '# Private withdrawn name\n- Keep this detail.', modTime: '' });
+  files.set(`${ROOT}/notes/plan.md`, { body: '# Research plan\n- Keep the schedule.', modTime: '' });
+  store.overlay.memoryForgetBody = async (_user, _uri, body) => body.replace(/^# Private withdrawn name\n/, '');
+  const zip = unzipSync(await store.exportPack('u1'));
+  const manifest = JSON.parse(Buffer.from(zip['manifest.json']).toString());
+  const titles = JSON.parse(Buffer.from(zip[manifest.titles]).toString());
+  assert.equal(titles.schemaVersion, 1);
+  assert.deepEqual(titles.files.map(entry => entry.path), manifest.files.map(entry => entry.path));
+  for (const { path, title } of titles.files) {
+    assert.match(path, /^memories\/[a-f0-9]{24}\.md$/);
+    const body = Buffer.from(zip[path]).toString();
+    assert.equal(title, body.includes('Keep the schedule.') ? 'Research plan' : null);
+  }
+  assert.doesNotMatch(Object.entries(zip).map(([path, bytes]) => `${path}\n${Buffer.from(bytes)}`).join('\n'), /private[- ]withdrawn[- ]name/i);
+});

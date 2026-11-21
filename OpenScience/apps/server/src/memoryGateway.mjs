@@ -9,6 +9,7 @@ import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';
 import { closePersonNames, confirmedAliases, personLabel } from './nativeMemoryInduction.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { historySearchText } from './memoryHistory.mjs';
+import { forgetToolStatus } from './memoryForgetStatus.mjs';
 import { openingProfileRead, selectOpeningEntries } from './memoryOpeningByUse.mjs';
 import { isMemorySummary, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
 import { ALL_ERROR_CODES, carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
@@ -1312,16 +1313,21 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             ...(targetsEnabled && args.statement !== undefined ? { statement: args.statement } : {}),
           };
           const outcome = await memoryTool.forget(ctx.user, ctx.project, target, Object.keys(options).length ? options : undefined);
+          const status = forgetToolStatus(outcome);
           const recallScope = outcome.historyScanPending
-            ? 'Earlier conversations and memory copies are still being checked; paraphrases may still be recalled until that check finishes. The current conversation still shows what was said. New conversations will not use the forgotten memory once these checks finish.'
-            : 'The current conversation still shows what was said. New conversations will not use the forgotten memory.';
+            ? 'Earlier conversations and memory copies are still being checked. The bounded check can miss paraphrases. The original conversation is still available.'
+            : 'The original conversation is still available. Other paraphrases may remain.';
           // A deferred copy scan qualifies the completed line removal; it does not turn it into a statement forget.
           const text = outcome.missingLines ? `No lines removed. Unmatched lines: ${JSON.stringify(outcome.missingLines)}. Available lines: ${JSON.stringify(outcome.availableLines)}. Retry with exact complete lines.`
             : outcome.removedLines ? `Removed ${outcome.removedLines} line(s) from: ${target}. ${outcome.fileRemoved ? "The empty file was deleted." : "Other lines were kept."} ${recallScope}`
             : outcome.historyScanPending ? `Recorded a history recall rejection for the statement and exact restatements. ${recallScope}`
             : outcome.historyRejected ? `Recorded a memory and history recall rejection for the statement. ${recallScope}`
             : outcome.removed ? `Deleted: ${target}. ${recallScope}` : `Not found: ${target}`;
-          local.push(toolText(message.id, text));
+          const receipt = { status, removedLines: outcome.removedLines ?? 0,
+            fileRemoved: outcome.fileRemoved === true || outcome.removed === true && outcome.removedLines === undefined,
+            historyRejected: outcome.historyRejected === true, historyScanPending: outcome.historyScanPending === true };
+          const reply = toolText(message.id, `${text}\nForget execution status: ${status}.`);
+          local.push({ ...reply, result: { ...reply.result, structuredContent: { forget: receipt } } });
         } else {
           if (ctx.shared) throw new HttpError(503, 'memory_scope_denied', 'Project memory deletion is unavailable.');
           forward.push({ ...message, params: { ...message.params, arguments: { uri: target } } });

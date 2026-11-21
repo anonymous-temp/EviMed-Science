@@ -122,7 +122,7 @@ test("deleting a project takes the engine's memories tagged with it and its conv
 
 test("the export carries the engine's pack, and deleting the account erases what the engine holds of it", options, async (t) => {
   const { app, base, headers, user, stub, engineUser, seed } = await fixture(t);
-  seed("preferences/tone.md", "Plain.", { type: "preferences" });
+  seed("preferences/tone.md", "# Writing tone\nPlain.", { type: "preferences" });
   // The account is known to the engine's overlay once a conversation has reached it (a run, the gateway); this fixture writes the file directly.
   await app.nativeMemory.overlay.noteRegistered(user.id);
   const exported = await fetch(`${base}/api/account/export`, { headers });
@@ -136,6 +136,8 @@ test("the export carries the engine's pack, and deleting the account erases what
   const manifest = JSON.parse(Buffer.from(pack["manifest.json"]).toString());
   assert.deepEqual(manifest.files.map((file) => file.type), ["preferences"], "the manifest lists the one memory by type");
   assert.match(Buffer.from(pack[manifest.files[0].path]).toString(), /Plain\./, "and the pack holds its current body");
+  assert.deepEqual(JSON.parse(Buffer.from(pack[manifest.titles]).toString()),
+    { schemaVersion: 1, files: [{ path: manifest.files[0].path, title: "Writing tone" }] });
   const deleted = await fetch(`${base}/api/account`, { method: "DELETE", headers, body: JSON.stringify({ confirm: user.id, password: PASSWORD }) });
   assert.equal(deleted.status, 200, await deleted.clone().text());
   assert.equal(stub.users.has(engineUser), false, "the engine no longer knows the account");

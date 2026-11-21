@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from '../src/accountExport.mjs';
-import { projectNativeMemoryAccountData } from '../src/nativeMemoryAccountExport.mjs';
+import { nativeExportTitle, projectNativeMemoryAccountData } from '../src/nativeMemoryAccountExport.mjs';
 import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { userRootUri } from '../src/openVikingLayout.mjs';
 
@@ -25,7 +25,34 @@ test('forget requests and completion receipts carry only facts, dates, kinds and
   assert.equal(result.forgetRequests.length, 1);
   assert.deepEqual(result.forgetRequests[0].requests[0], { at, targetKinds: ['notes', 'unstored-intent'], status: 'completed', removed: 1, alreadyRemoved: 0, toolRemoved: 0 });
   assert.equal(result.forgetRequests[0].completionReceipts.length, 1);
+  assert.deepEqual(result.forgetRequests[0].executionReceipts, [{ schemaVersion: 1, request: 0, status: 'executed',
+    scope: { removedLines: 1, previouslyRemovedLines: 0, toolRemovedLines: 0, recallRestrictionRecorded: null } }]);
   assert.equal(JSON.stringify(result).includes(forgotten), false);
+});
+
+test('forget export allowlists state, scope and the receipt version', () => {
+  const privateAuthority = 'do-not-export-replay-material';
+  const result = project(input({ commits: [{ createdAt: at, updatedAt: at, forgetRequests: {
+    state: privateAuthority, salt: privateAuthority, sourceArchive: uri, error: privateAuthority,
+    requests: [{ status: privateAuthority, requestMessage: { at: privateAuthority }, key: privateAuthority },
+      { status: 'pending', candidates: [{ uri, hash: privateAuthority }] },
+      { status: 'completed', intentRecorded: true, intents: [forgotten] }],
+  } }] }));
+  const [audit] = result.forgetRequests;
+  assert.equal(audit.state, 'unknown');
+  assert.equal(audit.requests[0].at, at);
+  assert.deepEqual(audit.executionReceipts.map(row => row.status), ['not_executed', 'pending_verification', 'executed']);
+  assert.equal(audit.executionReceipts[2].scope.recallRestrictionRecorded, true);
+  assert.doesNotMatch(JSON.stringify(result), /do-not-export-replay-material|viking:\/\/|PRIVATE WITHDRAWN/);
+});
+
+test('archive titles come only from an explicit plain heading in the current body', () => {
+  assert.equal(nativeExportTitle('\n# 研究安排\n- Monday'), '研究安排');
+  assert.equal(nativeExportTitle('# Weekly plan ###\n- Monday'), 'Weekly plan');
+  for (const body of ['- An unlabelled fact', '## Section\n- Monday', '# [Private path](a.md)', '# <img src=a>', '# **marked up**',
+    '# zero\u200bwidth', `# ${'x'.repeat(121)}`, '- A kept line\n# Later section']) {
+    assert.equal(nativeExportTitle(body), null);
+  }
 });
 
 test('rejected edit text is withheld while undo receipts and inactive held lines remain', () => {

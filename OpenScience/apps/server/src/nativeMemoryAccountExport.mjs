@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { lineFingerprint, memoryLines } from './nativeMemoryOverlay.mjs';
 import { containsRemoved } from './nativeMemoryRejections.mjs';
 import { OPENVIKING_KNOWN_MEMORY_TYPES } from './openVikingLayout.mjs';
+import { forgetRequestStatus } from './memoryForgetStatus.mjs';
 
 /** @typedef {Record<string, unknown>} NativeExportRow */
 /** @param {unknown} value @returns {NativeExportRow} */
@@ -12,6 +13,22 @@ const records = value => Array.isArray(value) ? value.map(record) : [];
 const text = value => typeof value === 'string' ? value : '';
 /** @param {unknown} value */
 const count = value => Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : 0;
+const forgetPlanStates = ['pending', 'applying', 'completed', 'failed', 'ineligible'];
+const forgetRequestStates = ['applying', 'completed', 'pending', 'confirmed', 'dismissed'];
+/** @param {unknown} value */
+const requestTime = value => typeof value === 'string'
+  && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(value)
+  && Number.isFinite(Date.parse(value)) ? value : null;
+
+/** A readable title is an explicit plain-text opening heading in the exported body.
+ * @param {string} body Already filtered for this export, with no fallback to a path or older version.
+ * @returns {string | null}
+ */
+export function nativeExportTitle(body) {
+  const heading = /^#\s+([^\r\n]+)$/.exec(body.trimStart().split(/\r?\n/, 1)[0]);
+  const title = heading?.[1].trim().replace(/\s+#+$/, '') ?? '';
+  return title.length <= 120 && !/[<>[\]`*_\\\p{Cc}\p{Cf}]/u.test(title) && /[\p{L}\p{N}]/u.test(title) ? title : null;
+}
 
 /** Content projections only: no quotes from forget plans, credentials, engine addresses or retry authority.
  * Removal fingerprints apply across categories inside the same namespace, including legacy unknown origins.
@@ -38,11 +55,18 @@ export function projectNativeMemoryAccountData(data, roots) {
   };
   const forgetRequests = data.commits.filter(row => row.forgetRequests).map(row => {
     const plan = record(row.forgetRequests);
-    return { at: row.createdAt, updatedAt: row.updatedAt, state: text(plan.state),
-      requests: records(plan.requests).map(request => ({ at: record(request.requestMessage).at ?? row.createdAt,
+    const requests = records(plan.requests);
+    return { at: row.createdAt, updatedAt: row.updatedAt, state: forgetPlanStates.includes(text(plan.state)) ? text(plan.state) : 'unknown',
+      requests: requests.map(request => ({ at: requestTime(record(request.requestMessage).at) ?? row.createdAt,
         targetKinds: [...new Set([...records(request.candidates).map(candidate => OPENVIKING_KNOWN_MEMORY_TYPES.includes(text(candidate.type)) ? text(candidate.type) : 'stored-line'),
           ...(Array.isArray(request.intents) && request.intents.length ? ['unstored-intent'] : [])])],
-        status: text(request.status), removed: count(request.removed), alreadyRemoved: count(request.alreadyRemoved), toolRemoved: count(request.toolRemoved) })),
+        status: forgetRequestStates.includes(text(request.status)) ? text(request.status) : 'unknown',
+        removed: count(request.removed), alreadyRemoved: count(request.alreadyRemoved), toolRemoved: count(request.toolRemoved) })),
+      executionReceipts: requests.map((request, index) => ({
+        schemaVersion: 1, request: index, status: forgetRequestStatus(request, plan),
+        scope: { removedLines: count(request.removed), previouslyRemovedLines: count(request.alreadyRemoved),
+          toolRemovedLines: count(request.toolRemoved), recallRestrictionRecorded: request.intentRecorded === true ? true : null },
+      })),
       completionReceipts: records(plan.claims).map(claim => ({ at: row.createdAt, kind: 'assistant-completion-claim', message: count(claim.message),
         requestMessage: Number.isSafeInteger(claim.turnMessage) && Number(claim.turnMessage) >= 0 ? Number(claim.turnMessage) : null })),
       falseCompletionClaims: count(plan.falseClaims) };

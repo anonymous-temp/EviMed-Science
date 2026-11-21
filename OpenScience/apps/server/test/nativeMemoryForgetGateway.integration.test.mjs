@@ -98,7 +98,7 @@ for (const fileRemoved of [false, true]) test(`AL8d deferred line forget reports
   assert.match(answer.blocks.join('\n'), /^Removed 1 line/);
   assert.match(answer.blocks.join('\n'), fileRemoved ? /The empty file was deleted/ : /Other lines were kept/);
   assert.match(answer.blocks.join('\n'), /Earlier conversations and memory copies are still being checked/);
-  assert.match(answer.blocks.join('\n'), /New conversations will not use the forgotten memory once these checks finish/);
+  assert.match(answer.blocks.join('\n'), /The bounded check can miss paraphrases.*\nForget execution status: pending_verification/);
   assert.equal(await f.ledger.forgetScanPending(f.userId, 'notes', [lineFingerprint(removalText(removed))]), true);
   const rejected = await f.overlay.rejectedFingerprints(f.userId, 'notes');
   assert.ok(rejected.has(lineFingerprint(removalText(removed))));
@@ -165,7 +165,7 @@ for (const availability of ['available', 'provider off', 'invalid answer', 'prov
   if (availability !== 'available') {
     const recorded = await f.memory.callTool('forget', { statement: examinationStatement });
     assert.equal(recorded.isError, false, recorded.blocks.join('\n'));
-    assert.equal(recorded.blocks.join('\n'), 'Recorded a history recall rejection for the statement and exact restatements. Earlier conversations and memory copies are still being checked; paraphrases may still be recalled until that check finishes. The current conversation still shows what was said. New conversations will not use the forgotten memory once these checks finish.');
+    assert.match(recorded.blocks.join('\n'), /^Recorded a history recall rejection for the statement and exact restatements\..*The bounded check can miss paraphrases.*\nForget execution status: pending_verification\.$/);
     assert.doesNotMatch(recorded.blocks.join('\n'), /private provider|private deadline/);
     assert.equal((await f.overlay.removals(f.userId)).length, 1);
     assert.equal((await f.store.forgotten(f.userId)).length, 1);
@@ -196,7 +196,7 @@ for (const availability of ['available', 'provider off', 'invalid answer', 'prov
     assert.equal(shown.removed.length, 1); assert.equal(shown.removed[0].removed, 0);
     assert.equal(lineFingerprint(shown.removed[0].text), lineFingerprint(examinationStatement));
   }
-  assert.equal(answer.blocks.join('\n'), 'Recorded a memory and history recall rejection for the statement. The current conversation still shows what was said. New conversations will not use the forgotten memory.');
+  assert.match(answer.blocks.join('\n'), /^Recorded a memory and history recall rejection for the statement\..*The original conversation is still available.*\nForget execution status: executed\.$/);
   const removals = await f.overlay.removals(f.userId);
   assert.equal(removals.length, 1);
   assert.equal(removals[0].fingerprint, lineFingerprint(examinationStatement));
@@ -229,7 +229,7 @@ for (const visibility of ['delayed indexing', 'later search']) test(`an empty hi
   f.store.rejectionJudge = { same: async () => { assert.fail('no original candidate needs semantic matching'); } };
   const answer = await f.memory.callTool('forget', { statement });
   assert.equal(answer.isError, false, answer.blocks.join('\n'));
-  assert.equal(answer.blocks.join('\n'), 'Recorded a memory and history recall rejection for the statement. The current conversation still shows what was said. New conversations will not use the forgotten memory.');
+  assert.match(answer.blocks.join('\n'), /^Recorded a memory and history recall rejection for the statement\..*The original conversation is still available.*\nForget execution status: executed\.$/);
   const removals = await f.overlay.removals(f.userId);
   assert.equal(removals.length, 1);
   assert.equal(removals[0].fingerprint, lineFingerprint(statement));
