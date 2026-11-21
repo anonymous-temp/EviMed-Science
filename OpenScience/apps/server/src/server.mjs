@@ -490,6 +490,7 @@ import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget
 import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler, createNativeCapsuleSearch } from "./capsuleGateway.mjs";
 import { MEMORY_GATEWAY_PATH, filterCapturedMessage, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
+import { humanInputReceipt } from './memoryHumanSegments.mjs';
 import { createMemoryAdmission } from "./memoryAdmission.mjs";
 import { isPlatformStartedRun } from "./memoryDispatch.mjs";
 import { OpenVikingSessions } from "./openVikingSessions.mjs";
@@ -7961,7 +7962,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           });
           // The profile is the conversation's from here: the next dispatch finds it there (`ResidentProfiles`).
           await resident.delivered();
-        });
+        }, { memoryInput: !automated && ctx.user.id === ctx.project.userId && (config.memoryHumanSegmentsEnabled || config.memoryClinicalSegmentsEnabled || config.memoryAccountPresentationEnabled || config.frontierSourcedInterestsEnabled)
+          ? humanInputReceipt(text) : null });
         const run = pluginService ? await pluginService.withAdmission(ctx.project, dispatch) : await dispatch();
         if (researchGoal) await researchGoals?.register(ctx.project, { sessionId: body.sessionId }).catch(() => {});
         sendJson(res, 202, { data: run });
@@ -8786,6 +8788,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     createDelegatedPolicy: async ({ user, project, claims }) => new GeoNativeFramePolicy({ authority: geoNativeAuthority,
       runtimeManager, config, user, project, claims, acceptInput: null, nativeInputs: geoNativeInputs }),
     prepareSelections: async (user, project, request) => {
+      if ((config.memoryHumanSegmentsEnabled || config.memoryClinicalSegmentsEnabled || config.memoryAccountPresentationEnabled || config.frontierSourcedInterestsEnabled)
+        && user.id === project.userId && request?.content?.length === 1 && request.content[0]?.type === 'text') {
+        const receipt = humanInputReceipt(request.content[0].text);
+        if (receipt) nativeInputRoute.originalInputs.set(request, receipt);
+      }
       if (!geoNativeSelections) return;
       const policy = await sharedContextPolicies.forProject(project);
       if (policy.kind !== "geo-project") return;

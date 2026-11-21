@@ -483,8 +483,10 @@ export class MemoryHistory {
     for (const [sourceIndex,line] of sourceLines.entries()) {
       if (!line.trim()) continue;
       let message; try { message = JSON.parse(line); } catch { throw Object.assign(new Error('memory_history_archive_invalid'), { code: 'memory_history_archive_invalid' }); }
-      // An unknown timestamp cannot distinguish human and automated turns in a
-      // mixed conversation. eligible() excludes any such automated conversation.
+      if (source.projectMessage) {
+        message = source.projectMessage(message);
+        if (!message) continue;
+      }
       if (await this.admitMessage(context, source, message)) { messages.push(message); sourceIndices.push(sourceIndex); }
       if (messages.length > MAX_MESSAGES) throw new MemoryHistoryLimitError('source_messages');
     }
@@ -628,8 +630,10 @@ export class MemoryHistory {
         }
         return archiveMessages;
       })());
-      const original = await originals.get(meta.archive_uri);
+      const archiveMessages = await originals.get(meta.archive_uri);
+      const original = verified.projectMessage ? archiveMessages.map(verified.projectMessage) : archiveMessages;
       const touched = [...new Set(messages.map(message=>message.index))].map(index=>original[index]);
+      if (verified.projectMessage && touched.some(message => !message)) return null;
       if (touched.some(message=>!message)) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
       const originalTexts = touched.map(message=>messageText(message,this.secretRedaction)).filter(Boolean);
       const proven = messages.every(message => {
@@ -644,17 +648,17 @@ export class MemoryHistory {
       if (!proven) return null;
       if (!forRemoval && await this.ledger.rejected(context,originalTexts,meta.archive_uri,
         touched.map(message=>({role:message.role,text:messageText(message,this.secretRedaction)??'',created_at:message.created_at})))) return null;
-      let title = historyTitle(verified.conversationTitle,'Conversation',this.secretRedaction);
+      let title = historyTitle(verified.projectMessage ? messages[0].text : verified.conversationTitle,'Conversation',this.secretRedaction);
       let projectTitle = historyTitle(verified.projectTitle ?? verified.project?.name,'Project',this.secretRedaction);
       // Titles are generated from the whole source, including passages absent from this chunk.
       // Checking only their truncated wording loses paraphrased or partially quoted withdrawals.
-      if (await this.ledger.rejected(context, original.map(message => messageText(message, this.secretRedaction)).filter(Boolean), meta.archive_uri)
+      if (await this.ledger.rejected(context, original.filter(Boolean).map(message => messageText(message, this.secretRedaction)).filter(Boolean), meta.archive_uri)
         || await this.ledger.rejected(context,[title])) title='Conversation';
       if (await this.ledger.rejected(context,[projectTitle])) projectTitle='Project';
       if (!await this.ledger.lookup(user.id,context.ownerCreatedAt,context.namespaceId,verified.projectId,verified.projectCreatedAt,candidate.uri)) return null;
       return { meta,hit:{ conversationTitle: redact(title), conversationUrl: verified.conversationUrl, projectId: verified.projectId, projectTitle: redact(projectTitle), scope: 'project',
         sessionId: meta.session_id, messages: this.secretRedaction ? messages.map(message=>({...message,text:redact(message.text)})) : messages, contextOnly: true, confirmed: false, privateByDefault: privateByDefault({ nativeType: 'people' }),
-        ...(forRemoval ? {originalMessages:original.map(message=>{
+        ...(forRemoval ? {originalMessages:original.filter(Boolean).map(message=>{
           const text=messageText(message,this.secretRedaction)??'';
           return {sourceRole:message.role,date:message.created_at,text:redact(text),messageHash:lineFingerprint(text)};
         }).filter(message=>message.text)} : {}),

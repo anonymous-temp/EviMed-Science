@@ -41,6 +41,7 @@ const routeFields = ["effectiveAgentId", "effectiveAgentVersion", "effectiveRunt
 export class NativeInputRoute {
   /** @param {{route:(project:any,sessionId:string,text:string,input?:{requestIds:string[],request:any})=>Promise<any>,now?:()=>number,ttlMs?:number}} options */
   constructor({ route, now = () => Date.now(), ttlMs = 24 * 60 * 60_000 }) {
+    this.originalInputs = new WeakMap();
     this.route = route;
     this.now = now; this.ttlMs = ttlMs;
     /** @type {Map<string, { fingerprint: string, promise: Promise<any> }>} */
@@ -129,6 +130,7 @@ export class NativeInputRoute {
     const text = nativeInputText(request.content);
     const route = await this.route(project, request.sessionId, text, { requestIds: [request.requestId], request });
     const envelope = { ownerId: project.userId, projectId: project.id, sessionId: request.sessionId, requestId: request.requestId,
+      ...(this.originalInputs.has(request) ? { memoryInput: this.originalInputs.get(request) } : {}),
       fingerprint, textDigest: textDigest(text), routeTextDigest: routeDigest(text),
       route: Object.fromEntries(routeFields.filter(key => route?.[key] !== undefined).map(key => [key, route[key]])),
       preparedAt: this.now(), expiresAt: this.now() + this.ttlMs };
@@ -171,6 +173,7 @@ export class NativeInputRoute {
   async routeFor(project, sessionId, requestIds, text) {
     const requestId = Array.isArray(requestIds) ? requestIds[0] : null;
     const envelope = await this.envelope(project, sessionId, /** @type {string} */ (requestId));
-    return envelope?.routeTextDigest === routeDigest(text) ? envelope.route : null;
+    if (envelope?.routeTextDigest !== routeDigest(text)) return null;
+    return envelope.memoryInput ? { ...envelope.route, memoryInput: envelope.memoryInput } : envelope.route;
   }
 }

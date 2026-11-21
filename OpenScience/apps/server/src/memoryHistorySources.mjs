@@ -1,6 +1,7 @@
 import { platformSessionOf } from './openVikingSessions.mjs';
 import { isPlatformStartedRun } from './memoryDispatch.mjs';
 import { isInternalProjectOf } from './internalProjects.mjs';
+import { provenArchiveInput } from './memoryHumanSegments.mjs';
 import { historyTitle } from './memoryHistory.mjs';
 
 /** The server's source authority and admission for original conversation history.
@@ -36,7 +37,9 @@ export function createMemoryHistorySources({ config, store, productDatabase, nat
       const runs = await agentRuns.conversationRuns(project, sessionId);
       if (!runs.length || runs.every(run => run.deleted === true)) return null;
       const named = runs.find(run => typeof run.title === 'string' && run.title.trim());
-      return { ...base, sessionId, runs, conversationTitle: historyTitle(named?.title ?? runs.at(-1)?.question), projectTitle: historyTitle(project.name,'Project'),
+      const restricted = runs.some(isPlatformStartedRun);
+      return { ...base, sessionId, runs, ...(restricted && config.memoryHumanSegmentsEnabled && memoryContext.kind === 'owned'
+        ? { projectMessage: message => provenArchiveInput(runs, message) ? message : null } : {}), conversationTitle: restricted ? 'Conversation' : historyTitle(named?.title ?? runs.at(-1)?.question), projectTitle: historyTitle(project.name,'Project'),
         conversationUrl: `/app/chat/${encodeURIComponent(sessionId)}` };
     },
     eligible: async (memoryContext, source) => {
@@ -46,7 +49,7 @@ export function createMemoryHistorySources({ config, store, productDatabase, nat
       // Raw archives cannot reliably date an undated message into a mixed
       // automated conversation, so exclude that entire conversation here.
       for (const run of source.runs) {
-        if (run.deleted || isPlatformStartedRun(run) || (await agentRegistry)?.get?.(run.effectiveAgentId ?? run.agentId)?.visibility === 'internal') return false;
+        if (run.deleted || (isPlatformStartedRun(run) && !source.projectMessage) || (await agentRegistry)?.get?.(run.effectiveAgentId ?? run.agentId)?.visibility === 'internal') return false;
       }
       if (vcrPrivacyStore && await vcrPrivacyStore.hasClinicalContext(memoryContext.ownerId, source.projectId,
         source.runs.map(run => ({ sessionId: source.sessionId, runId: run.id })))) return false;
