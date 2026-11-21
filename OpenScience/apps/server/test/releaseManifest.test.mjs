@@ -12,6 +12,7 @@ import {
   runtimeReleasePolicyError,
   validateReleaseManifest,
 } from "../src/releaseManifest.mjs";
+import { verifyReleaseImages } from "../../../scripts/ops/verify-release-images.mjs";
 import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -108,6 +109,17 @@ test("release manifest generator records exact images, tools, skills, and source
       // build produced them is not recoverable from the data.
       { name: "openviking", image: `${deps.openviking.image}:${deps.openviking.imageTag}@${deps.openviking.imageDigest}`, imageId: releaseEnv.OPEN_SCIENCE_OPENVIKING_IMAGE_ID },
     ]);
+    // Admit the generator's real mixture of local builds, Caddy and registry-pinned services.
+    const localIds = new Map([
+      [releaseEnv.OPEN_SCIENCE_WEB_CONTAINER_IMAGE, releaseEnv.OPEN_SCIENCE_WEB_IMAGE_ID],
+      [releaseEnv.OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE, releaseEnv.OPEN_SCIENCE_RUNTIME_IMAGE_ID],
+      [manifest.proxy.image, releaseEnv.OPEN_SCIENCE_CADDY_IMAGE_ID],
+      [manifest.services[0].image, releaseEnv.OPEN_SCIENCE_OPENLIST_IMAGE_ID],
+      [manifest.services[1].image, releaseEnv.OPEN_SCIENCE_OPENVIKING_IMAGE_ID],
+    ]);
+    assert.deepEqual(verifyReleaseImages(manifest, (image) => ({
+      Id: localIds.get(image), RepoDigests: image.includes("@") ? [image] : [],
+    })), ["web", "runtime", "caddy", "openlist", "openviking"]);
     // Every entry is digest-bound, not just whichever one sorts first — that
     // was the shape of the defect this list grew to close.
     for (const skill of manifest.skills) {
