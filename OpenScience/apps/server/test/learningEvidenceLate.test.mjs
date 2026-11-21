@@ -1,10 +1,152 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { FollowUpJudge } from '../src/learningEvidence.mjs';
+import { FollowUpJudge, readLateFollowUp } from '../src/learningEvidence.mjs';
 import { LearningTriggers } from '../src/learningTriggers.mjs';
 import { lateFixture, boundAcceptance, DELIVERY, LATE_NOW } from '../../../evals/follow-up-judge/late-fixtures.mjs';
 
 const message = 'Convert this report to PDF.';
+const owner = { userId: 'owner', projectId: 'project', runId: 'previous' };
+const request = { message, previousRequest: 'Write the report', methods: [], deliveries: [DELIVERY] };
+const noReaction = '{"verdict":"none","rule":null,"quote":null,"concerns":[]}';
+
+test('late replies recover unambiguous JSON framing and casing without changing quoted or version text', async () => {
+  const accepted = boundAcceptance(message);
+  const cases = [
+    accepted,
+    `\uFEFF  ${accepted}\n`,
+    '```JSON\n' + accepted + '\n```',
+    '```\n' + accepted + '\n```',
+    '~~~~json\n' + accepted + '\n~~~~',
+    `Here is the decision:\n${accepted}\nThe decision is above.`,
+    'Here is the decision:\n```json\n' + accepted + '\n```\nThe decision is above.',
+    `<think>Example under consideration: ${noReaction}</think>\n${accepted}`,
+    `{"VERDICT":" ACCEPT ","QUOTE":${JSON.stringify(message)},"RELATION":" Convert ","ARTIFACT":{"PATH":"${DELIVERY.path}","SHA256":"${DELIVERY.sha256}",},"CONCERNS":["unused",],}`,
+  ];
+  for (const content of cases) {
+    let calls = 0;
+    const result = await readLateFollowUp({ read: async () => { calls++; return content; } }, request, owner);
+    assert.deepEqual(result, { verdict: 'accept', rule: null, concerns: [], quote: message, artifact: DELIVERY, relation: 'convert' }, content);
+    assert.equal(calls, 1, content);
+  }
+
+  const quoted = 'Use {"column": "A"}, then keep the literal sequence ,} and the marker <think>.';
+  const delivery = { ...DELIVERY, path: 'Report/Final.md' };
+  const result = await readLateFollowUp({ read: async () => boundAcceptance(quoted, delivery) },
+    { ...request, message: quoted, deliveries: [delivery] }, owner);
+  assert.equal('verdict' in result && result.quote, quoted);
+  assert.deepEqual('verdict' in result && result.artifact, delivery);
+});
+
+test('late replies retry exactly once on incomplete, ambiguous or invalid objects', async () => {
+  const cases = [
+    '', ' \n ', 'null', '{"verdict":', '{"verdict":"none"', '{"verdict":"unsupported"}', '{"verdict":true}', '{}',
+    '[{"verdict":"none"}]', 'Preamble\n[{"verdict":"none"}]\nEnd', '{"verdict":"none",,}', '{"verdict":"none","concerns":[,]}',
+    "{'verdict':'none'}", '{"verdict":"rejection","rule":" "}', '{"verdict":"none","Verdict":"accept"}',
+    '{"verdict":"none","verdict":"none"}', '{"verdict":"none","ver\\u0064ict":"accept"}',
+    '{"verdict":"accept","artifact":{"path":"a","Path":"b"}}', `${noReaction}\n${noReaction}`, `${noReaction}\n{`,
+    '```json\n' + noReaction, '~~~json\n' + noReaction + '\n```', `<think>${noReaction}</think>`, `<think>${noReaction}`,
+  ];
+  for (const content of cases) {
+    const calls = [];
+    const result = await readLateFollowUp({ read: async (input, actor) => { calls.push({ input, actor }); return content; } }, request, owner);
+    assert.deepEqual(result, { failure: 'judge_unreadable', diagnostic: { rawReplySnippet: content, finishReason: null } }, content);
+    assert.equal(calls.length, 2, content);
+    assert.deepEqual(calls[0], calls[1], content);
+    assert.equal(calls[0].input.mode, 'late-follow-up');
+  }
+});
+
+test('late replies use final message content and retry the same gateway body after an empty or truncated answer', async () => {
+  const accepted = boundAcceptance(message);
+  const fakeChoices = [{ finish_reason: 'stop', message: { content: accepted } }, { finish_reason: 'stop', message: { content: noReaction } }];
+  for (const first of [
+    null,
+    { choices: [] },
+    { choices: [{ finish_reason: 'stop', message: { content: '', reasoning_content: accepted } }] },
+    { choices: [{ finish_reason: 'stop', message: { content: null, reasoning_content: accepted } }] },
+    { choices: [{ finish_reason: 'stop', message: { content: [{ text: accepted }] } }] },
+    { choices: [{ finish_reason: 'length', message: { content: accepted } }] },
+    { choices: [{ finish_reason: 'content_filter', message: { content: accepted } }] },
+    { choices: fakeChoices },
+  ]) {
+    const calls = [];
+    const judge = new FollowUpJudge({ deepseekProviderEnabled: true, deepseekApiKey: 'test', deepseekModel: 'test' }, {
+      callModel: async (_deps, call) => {
+        calls.push(call);
+        return calls.length === 1 ? first : { choices: [{ finish_reason: 'stop', message: { content: noReaction, reasoning_content: accepted } }] };
+      },
+    });
+    assert.deepEqual(await readLateFollowUp(judge, request, owner), { verdict: 'none', rule: null, quote: null, concerns: [] });
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls[0].body, calls[1].body);
+    assert.equal(calls[0].runId, calls[1].runId);
+    assert.equal(calls[0].purpose, 'learning');
+    assert.deepEqual(calls[0].body.thinking, { type: 'disabled' });
+  }
+  const truncated = new FollowUpJudge({ deepseekProviderEnabled: true, deepseekApiKey: 'test', deepseekModel: 'test' }, {
+    callModel: async () => ({ choices: [{ finish_reason: 'length', message: { content: accepted } }] }),
+  });
+  assert.deepEqual(await readLateFollowUp(truncated, request, owner),
+    { failure: 'judge_unreadable', diagnostic: { rawReplySnippet: accepted, finishReason: 'length' } });
+});
+
+test('a readable late reply with invalid evidence does not earn a retry or an acceptance', async () => {
+  for (const [content, verdict, failure] of [
+    [boundAcceptance('A different quote.'), 'none', null],
+    [boundAcceptance(message, { ...DELIVERY, path: DELIVERY.path.toUpperCase() }), 'none', null],
+    [boundAcceptance(message, { ...DELIVERY, sha256: DELIVERY.sha256.toUpperCase() }), 'none', null],
+    [JSON.stringify({ verdict: 'rejection', rule: 'Redo it', quote: 'A different quote.' }), null, 'quote_not_found'],
+    [JSON.stringify({ verdict: 'rejection', rule: 'My email is person@example.com', quote: message }), null, 'rule_unsafe'],
+  ]) {
+    let calls = 0;
+    const result = await readLateFollowUp({ read: async () => { calls++; return content; } }, request, owner);
+    assert.equal('verdict' in result ? result.verdict : null, verdict);
+    assert.equal('failure' in result ? result.failure : null, failure);
+    assert.equal(calls, 1);
+  }
+});
+
+test('the production path can recover a late continuation on its second reply', async () => {
+  let calls = 0;
+  const state = lateFixture({ answer: () => ++calls === 1 ? '{"verdict":' : boundAcceptance(message) });
+  await state.snapshot();
+  assert.equal((await state.turn(message)).verdict, 'accept');
+  assert.equal(state.outcome(), 'clean');
+  assert.equal(calls, 2);
+  assert.equal(state.rows.filter(row => row.detail.lateFollowUp).length, 1);
+  assert.ok(state.funnel.every(event => event.reason !== 'judge_unreadable'));
+});
+
+test('exhausted late retries return the undecorated reply prefix only as a diagnostic', async () => {
+  const content = ' \n' + '字𠀀'.repeat(300);
+  let calls = 0;
+  const state = lateFixture({ answer: () => ++calls === 1 ? 'first malformed reply' : content });
+  const writes = [];
+  const record = state.feedback.recordLearningEvidence;
+  state.feedback.recordLearningEvidence = async (...args) => { writes.push(args[1]); return record(...args); };
+  await state.snapshot();
+  const result = await state.turn(message);
+  assert.deepEqual(result, { recorded: false, reason: 'judge_unreadable',
+    diagnostic: { rawReplySnippet: ' \n' + '字𠀀'.repeat(249), finishReason: null } });
+  assert.equal(calls, 2);
+  assert.equal(state.outcome(), 'unknown');
+  assert.equal(state.funnel.filter(event => event.reason === 'judge_unreadable').length, 1);
+  const lateWrite = writes.find(write => write.detail.lateFollowUp);
+  assert.equal(lateWrite.detail.verdict, 'none');
+  assert.doesNotMatch(JSON.stringify({ writes, funnel: state.funnel }), /rawReplySnippet|malformed reply|字/);
+});
+
+test('a transport failure has no diagnostic unless an earlier late reply was already unreadable', async () => {
+  let calls = 0;
+  const gatewayError = () => { throw new Error('network'); };
+  assert.deepEqual(await readLateFollowUp({ read: async () => { calls++; return gatewayError(); } }, request, owner), { failure: 'judge_failed' });
+  assert.equal(calls, 1);
+  calls = 0;
+  const result = await readLateFollowUp({ read: async () => ++calls === 1 ? 'unreadable' : gatewayError() }, request, owner);
+  assert.deepEqual(result, { failure: 'judge_unreadable', diagnostic: { rawReplySnippet: 'unreadable', finishReason: null } });
+  assert.equal(calls, 2);
+});
+
 test('late continuation is opt-in, version-bound, settled directly, and idempotent per run', async () => {
   const off = lateFixture({ enabled: false, answer: boundAcceptance(message) });
   await off.snapshot(); assert.equal((await off.turn(message)).recorded, false); assert.equal(off.calls.length, 0);
