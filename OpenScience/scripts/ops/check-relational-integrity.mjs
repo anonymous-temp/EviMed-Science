@@ -8,6 +8,7 @@ import { migrateProductStore } from "../../apps/server/src/productPersistence.mj
 import { migrateMemorySettings } from "../../apps/server/src/memorySettingsPersistence.mjs";
 import { migrateUsageLedger } from "../../apps/server/src/usagePersistence.mjs";
 import { MemoryHistoryLedger } from "../../apps/server/src/memoryHistoryPersistence.mjs";
+import { migrateAgentApiKeys } from "../../apps/server/src/agentApiKeys.mjs";
 import { relationalIntegrity } from "../../apps/server/src/relationalIntegrity.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -32,6 +33,7 @@ async function main() {
     await migrateNotifications(database);
     await migrateUsageLedger(database);
     await migrateMemorySettings(database);
+    await migrateAgentApiKeys(database);
     await new MemoryHistoryLedger({ database, overlay: null }).migrate();
     const status = await relationalIntegrity(database, { validate });
     if (!status.ok) {

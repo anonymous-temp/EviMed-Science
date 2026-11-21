@@ -234,7 +234,7 @@ import { removeAnalysisSnapshots } from "./dataAnalysisArtifacts.mjs";
 import { createDataAnalysisRoutes } from "./dataAnalysisRoutes.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
 import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
-import { deleteSubjectAccounts } from "./agentApiKeys.mjs";
+import { deleteSubjectAccounts, migrateAgentApiKeys } from "./agentApiKeys.mjs";
 import { AgentObservations, HabitWriter } from "./agentMemoryObservations.mjs";
 import { createResearchHandoffRoutes } from "./researchHandoff.mjs";
 import {
@@ -11437,6 +11437,7 @@ async function readinessRelationalIntegrity(config, database) {
   // that exists rather than a missing table it would have to be taught to
   // tolerate — a tolerance that then hides a genuinely dropped table.
   await migrateMemorySettings(database);
+  await migrateAgentApiKeys(database);
   await new MemoryHistoryLedger({ database, overlay: null }).migrate();
   const status = await relationalIntegrity(database);
   if (config.production && !status.ok) {
