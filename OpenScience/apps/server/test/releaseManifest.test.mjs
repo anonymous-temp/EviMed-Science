@@ -214,6 +214,7 @@ test("release manifest generator records exact images, tools, skills, and source
         "scripts/ops/restore-drill.sh",
         "scripts/ops/configure-oidc.mjs",
         "scripts/ops/host-preflight.mjs",
+        "scripts/ops/verify-release-images.mjs",
         "scripts/ops/result-replay-deployment.mjs",
         "scripts/ops/result-replay-image-smoke.mjs",
         "scripts/ops/export-extension-acceptance-inputs.mjs",

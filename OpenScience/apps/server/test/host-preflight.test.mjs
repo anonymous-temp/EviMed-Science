@@ -425,6 +425,7 @@ test("host preflight verifies Docker, images, Compose, release identity, and pub
   assert.equal(result.online, true);
   assert.equal(result.docker.architecture, "amd64");
   assert.equal(calls.filter((call) => call[0] === "docker" && call[1] === "image").length, 3);
+  assert.ok(calls.some((call) => call.some((part) => part.endsWith("verify-release-images.mjs")) && call.includes(`--manifest=${fixture.dir}/release-manifest.json`)));
   assert.ok(calls.some((call) => call.includes("--verify-images")));
   assert.ok(calls.some((call) => call.some((part) => part.endsWith("configure-production-state.mjs")) && call.includes("--check")));
   assert.ok(calls.some((call) => call.some((part) => part.endsWith("configure-local-auth.mjs")) && call.includes("--check")));
