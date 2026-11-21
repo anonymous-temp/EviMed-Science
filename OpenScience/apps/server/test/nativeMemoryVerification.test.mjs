@@ -224,3 +224,20 @@ test('a malformed partial injected commit verdict cannot rewrite even its appare
   const after = '- Dose 21 mg.\n- Prefers concise replies.';
   assert.equal((await verification.assessCommit('u', [{ uri: 'profile', after }], [source('Dose 12 mg. Prefers concise replies.')])).rewrites[0].after, after);
 });
+
+test('commit judge requires every retained clause to cite verbatim user evidence from its own indexed source', async () => {
+  const sources = [source('I use WPS.'), source('Ask before expanding.', 'assistant')];
+  const text = 'I use WPS. Ask before expanding.';
+  const first = { clause: 'I use WPS.', source: 0, quote: 'I use WPS.' };
+  const second = { clause: 'Ask before expanding.', source: 1, quote: 'Ask before expanding.' };
+  for (const [corrected, evidence, valid] of [[text, [first], false], [text, [first, second], false],
+    [first.clause, [{ ...first, quote: 'Invented' }], false], [first.clause, [first], true]]) {
+    const judge = createVerificationJudge({ config: { deepseekApiKey: 'fake', deepseekModel: 'test' },
+      callModel: async (_deps, request) => {
+        assert.match(request.body.messages[0].content, /project stage requires a user-reported progress event/);
+        return response([{ index: 0, verdict: 'corrected', corrected, evidence }]);
+      } });
+    const result = await judge.judge({ userId: 'u', commit: true, maxAttempts: 1, lines: [{ text, sources }] });
+    assert.equal(result.results.size, valid ? 1 : 0);
+  }
+});
