@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { lineFingerprint } from "../src/nativeMemoryOverlay.mjs";
 import { extractionFacts } from "../src/nativeMemoryWorker.mjs";
 import { nativeMemoryCounters, nativeMemoryMetricFamilies, recordNativeExtraction, resetNativeMemoryMetrics } from "../src/nativeMemoryMetrics.mjs";
 import { parseArchiveUri, nativeMemoryFile } from "../src/openVikingSessions.mjs";
@@ -176,4 +177,22 @@ test('the worker removes an extracted name bullet that exactly repeats the real 
   const uri = `${root}/profile.md`;
   assert.equal(await sessions.read(userId, uri), '# 林舟\n- 喜欢游泳 (as of 2026-11-21)');
   assert.deepEqual((await store.records(userId)).map(row => row.value).sort(), ['林舟', '喜欢游泳'].sort());
+});
+
+test('the worker reconciles an extracted preference under the database lease and keeps neighbouring facts', options, async t => {
+  const f = await fixture(t, { config: { memoryPreferenceReconcileEnabled: true },
+    extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/preferences/language.md`, memory_type: 'preferences',
+      after: '- 回答一律用英文\n- 表格不超过五列' }] }),
+  });
+  const { userId, store, worker, sessions, overlay } = f;
+  Object.assign(store, { preferenceReconcileEnabled: true,
+    preferenceJudge: { available: true, overlaps: async () => [{ profile: 0, preference: 0 }] } });
+  worker.nativeMemory = store;
+  const profile = f.seed('profile.md', '# 用户\n- 回答一律用中文 (as of 2026-01-01)\n- 喜欢游泳', { type: 'profile' });
+  await f.commitConversation('preference-reconcile', [{ role: 'user', text: '以后回答用英文。' }]);
+  assert.equal(await worker.processCommits({ userId }), 1);
+  assert.equal(await sessions.read(userId, profile), '# 用户\n- 喜欢游泳');
+  assert.equal(await sessions.read(userId, `${f.root}/preferences/language.md`), '- 回答一律用英文\n- 表格不超过五列');
+  assert.ok(!(await overlay.rejectedFingerprints(userId, 'profile')).has(lineFingerprint('回答一律用中文')));
+  assert.ok((await overlay.revisionsOf(userId, profile)).some(row => row.reason === 'preference superseded across files'));
 });

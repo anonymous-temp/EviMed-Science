@@ -38,3 +38,21 @@ test('the real judge adapter validates the response and spends at most its daily
   assert.deepEqual(await judge.overlaps(input), []);
   assert.equal(calls, 1);
 });
+
+test('invalid timestamps, equivalent instants, and ambiguous judgements leave values active', () => {
+  for (const [a, b] of [['invalid', '2026-11-21'], ['2026-11-21T01:00:00+01:00', '2026-11-21T00:00:00Z']]) {
+    assert.ok(markPreferenceOverlaps(fixture(a, b), [{ profile: 0, preference: 0 }]).every(row => !row.earlierValues));
+  }
+  const pairs = [{ profile: 0, preference: 0 }, { profile: 0, preference: 1 }];
+  assert.ok(markPreferenceOverlaps(fixture('2026-11-20', '2026-11-21'), pairs).every(row => !row.earlierValues));
+});
+
+test('zero allowance and oversized requests spend no calls, including on the first request of the day', async () => {
+  let calls = 0;
+  for (const allowance of [0, 1]) {
+    const judge = createPreferenceJudge({ config: { memoryPreferenceReconcileEnabled: true, deepseekApiKey: 'fixture', deepseekModel: 'model', memoryPreferenceJudgeDailyCalls: allowance },
+      callModel: async () => { calls++; } });
+    assert.deepEqual(await judge.overlaps({ userId: 'u', profile: [allowance ? 'a'.repeat(24_000) : 'a'], preferences: ['b'] }), []);
+  }
+  assert.equal(calls, 0);
+});

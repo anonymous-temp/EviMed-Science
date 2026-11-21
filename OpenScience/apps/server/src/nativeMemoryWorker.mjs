@@ -533,7 +533,7 @@ export class NativeMemoryWorker {
   async processCommits({ userId = null, limit = 50 } = {}) {
     let settled = 0;
     for (const commit of await this.overlay.openCommits({ userId, limit, now: this.commitClock ? this.commitClock() : null })) {
-      const lease = { exclusive: this.config.memoryProfileNameDedupeEnabled === true || this.config.memoryPersonMergeEnabled === true };
+      const lease = { exclusive: this.config.memoryPreferenceReconcileEnabled === true || this.config.memoryProfileNameDedupeEnabled === true || this.config.memoryPersonMergeEnabled === true };
       try {
         if (commit.extraction.engineDeferred) {
           if (this.engineDeferred) settled += await withNativeMemoryWrite(this.overlay.database, commit.userId, () => this.engineDeferred.process(commit), lease) ? 1 : 0;
@@ -896,8 +896,10 @@ export class NativeMemoryWorker {
       // Failure leaves the extracted lines available; the next commit can retry the merge.
       await reconcileMemoryNames({ userId, context, overlay: this.overlay }).catch(() => this.report('native memory name reconciliation unavailable'));
     }
-    if (!sourceDeleted && this.config.memoryPreferenceReconcileEnabled === true && this.nativeMemory) {
-      await this.nativeMemory.reconcilePreferences(userId).catch(() => this.report('native memory preference reconciliation unavailable'));
+    if (!sourceDeleted && context.kind !== 'geo-project' && this.config.memoryPreferenceReconcileEnabled === true && this.nativeMemory) {
+      const changed = [...(operations.adds ?? []), ...(operations.updates ?? [])].map(row => row.uri)
+        .filter(uri => ['profile', 'preferences'].includes(nativeMemoryFile(uri, root)?.type));
+      await this.nativeMemory.reconcilePreferences(userId, changed).catch(() => this.report('native memory preference reconciliation unavailable'));
     }
     recordNativeOperations(counts);
     return counts.added + counts.updated + counts.deleted;
@@ -1166,8 +1168,9 @@ export class NativeMemoryWorker {
         await this.#afterWrite(userId, file.uri, file.type, { projectId: file.projectId, diffAfter: restored, diffBefore: '', fresh: true, archiveUri: null, memoryContext: context, extraOrigins: mergeOrigins });
       }
     }
-    if (this.config.memoryPreferenceReconcileEnabled === true && this.nativeMemory) {
-      await this.nativeMemory.reconcilePreferences(userId).catch(() => this.report('native memory preference reconciliation unavailable'));
+    if (context.kind !== 'geo-project' && this.config.memoryPreferenceReconcileEnabled === true && this.nativeMemory) {
+      const changed = written.filter(file => ['profile', 'preferences'].includes(file.type)).map(file => file.uri);
+      await this.nativeMemory.reconcilePreferences(userId, changed).catch(() => this.report('native memory preference reconciliation unavailable'));
     }
     return counts;
   }

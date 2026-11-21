@@ -46,6 +46,7 @@ function isEarlierLine(line: string, earlierValues: readonly string[] = []): boo
 
 /** The quiet line under a file's topic: what it says, in a breath. */
 export function fileSummary(record: Pick<WebStructuredMemory, "value" | "earlierValues">): string {
+  if (!record.earlierValues?.length) return memoryExcerpt(breath(record.value), 160);
   const statements = fileStatements(record.value).map((line) => isEarlierLine(line, record.earlierValues) ? `早先值：${line}` : line);
   return memoryExcerpt(statements.map((line) => line.replace(/[。.；;]+$/u, "")).join("；"), 160);
 }
@@ -55,7 +56,8 @@ export function displayMemoryText(record: WebStructuredMemory): string {
   const text = memoryText(record);
   if (!record.earlierValues?.length) return text;
   if (record.document) return isEarlierLine(text, record.earlierValues) ? `早先值：${text}` : text;
-  return text.replace(/\r\n/gu, "\n").split("\n").map((line) => isEarlierLine(line, record.earlierValues) ? `早先值：${line}` : line).join("\n");
+  return text.replace(/\r\n/gu, "\n").split("\n").map((line) => isEarlierLine(line, record.earlierValues)
+    ? line.replace(/^(\s*(?:(?:[-*+]|\d+[.)])\s+)?)/u, "$1早先值：") : line).join("\n");
 }
 
 /** The text a memory's drawer opens with and its edit starts from: a file's own text, else the sentence. */

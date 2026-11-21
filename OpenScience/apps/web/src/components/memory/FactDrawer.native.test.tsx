@@ -35,9 +35,10 @@ function show(record: ReturnType<typeof nativeFile>, props: Record<string, unkno
   return { onChanged, onClose, record };
 }
 
+beforeEach(() => { vi.clearAllMocks(); client.fetchMemorySources.mockResolvedValue([]); });
+afterEach(cleanup);
+
 describe("a memory kept as a file, opened from its row", () => {
-  beforeEach(() => { vi.clearAllMocks(); client.fetchMemorySources.mockResolvedValue([]); });
-  afterEach(cleanup);
 
   it('labels an external statement with the client and original time without inventing a conversation link', () => {
     const file = nativeFile('单位', '- 使用公制单位。');

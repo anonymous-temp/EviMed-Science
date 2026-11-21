@@ -307,8 +307,8 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
                 {lines.map((other) => (
                   <li key={other.id}>
                     {onOpenRecord && canOpenRecord?.(other.id)
-                      ? <button type="button" className="text-left hover:underline" onClick={() => onOpenRecord(other.id)}>{memoryExcerpt(other.value, 120)}</button>
-                      : memoryExcerpt(other.value, 120)}
+                      ? <button type="button" className="text-left hover:underline" onClick={() => onOpenRecord(other.id)}>{memoryExcerpt(displayMemoryText(other), 120)}</button>
+                      : memoryExcerpt(displayMemoryText(other), 120)}
                   </li>
                 ))}
               </ul>

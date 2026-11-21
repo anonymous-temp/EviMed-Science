@@ -34,7 +34,7 @@ describe("a memory kept as a file", () => {
     const line = nativeProfileLine("回答一律用中文。", { earlierValues: ["回答一律用中文。"], currentPreferenceId: "nm_current" });
     const file = nativeFile("回答语言", "- 回答一律用英文。\n- 表格不超过五列。", { earlierValues: ["回答一律用英文。"] });
     expect(displayMemoryText(line)).toBe("早先值：回答一律用中文。");
-    expect(displayMemoryText(file)).toBe("早先值：- 回答一律用英文。\n- 表格不超过五列。");
+    expect(displayMemoryText(file)).toBe("- 早先值：回答一律用英文。\n- 表格不超过五列。");
     expect(memoryText(line)).toBe("回答一律用中文。");
     expect(memoryText(file)).toBe("- 回答一律用英文。\n- 表格不超过五列。");
     expect(factItems([line], [])[0]?.text).toBe("早先值：回答一律用中文。");

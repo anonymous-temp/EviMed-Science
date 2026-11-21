@@ -205,7 +205,7 @@ test('profile and preference values use the newer revision, read with an earlier
     const profile = `${ROOT}/profile.md`, preference = `${ROOT}/preferences/language.md`, rejected = [];
     Object.assign(store, { preferenceReconcileEnabled: true, preferenceJudge: { available: true, overlaps: async () => [{ profile: 0, preference: 0 }] } });
     store.overlay.reject = async (...args) => rejected.push(args);
-    files.set(profile, { body: '# 用户\n- 回答一律用中文 (as of 2026-11-01)', modTime: newer === 'profile' ? '2026-11-03' : '2026-11-01' });
+    files.set(profile, { body: `# 用户\n- 回答一律用中文 (as of ${newer === 'profile' ? '2026-11-03' : '2026-11-01'})`, modTime: newer === 'profile' ? '2026-11-03' : '2026-11-01' });
     files.set(preference, { body: '- 回答一律用英文\n- 表格不超过五列', modTime: newer === 'preference' ? '2026-11-03' : '2026-11-01' });
     const records = await store.records('u1');
     const old = records.find(row => row.uri === (newer === 'profile' ? preference : profile));
@@ -227,6 +227,53 @@ test('profile and preference values use the newer revision, read with an earlier
   await store.reconcilePreferences('u1');
   assert.equal(files.has(preference), false, 'an empty old preference file is retired');
   assert.deepEqual(rejected, [], 'retiring that file still creates no withdrawal authority');
+});
+
+test('two superseded statements in one profile produce one rewrite and retain the other statements', async () => {
+  const { files, store, calls } = engine({ count: 0, delay: 0 }), profile = `${ROOT}/profile.md`, preference = `${ROOT}/preferences/work.md`;
+  files.set(profile, { body: '# User\n- Chinese\n- Five columns\n- Likes tea', modTime: '2026-11-01' });
+  files.set(preference, { body: '- English\n- Three columns', modTime: '2026-11-20' });
+  Object.assign(store, { preferenceReconcileEnabled: true, preferenceJudge: { available: true,
+    overlaps: async () => [{ profile: 0, preference: 0 }, { profile: 1, preference: 1 }] } });
+  assert.deepEqual(await store.reconcilePreferences('u1', [preference]), { removed: 2 });
+  assert.equal(files.get(profile).body, '# User\n- Likes tea');
+  assert.equal(files.get(preference).body, '- English\n- Three columns');
+  assert.equal(calls.replace, 1);
+});
+
+test('a concurrent withdrawal of the proposed current value makes the judged rewrite inapplicable', async () => {
+  const { files, store, calls } = engine({ count: 0, delay: 0 }), profile = `${ROOT}/profile.md`, preference = `${ROOT}/preferences/work.md`;
+  files.set(profile, { body: '# User\n- Chinese', modTime: '2026-11-01' });
+  files.set(preference, { body: '- English', modTime: '2026-11-20' });
+  Object.assign(store, { preferenceReconcileEnabled: true, preferenceJudge: { available: true, overlaps: async () => {
+    files.delete(preference); return [{ profile: 0, preference: 0 }];
+  } } });
+  assert.deepEqual(await store.reconcilePreferences('u1'), { removed: 0 });
+  assert.equal(files.get(profile).body, '# User\n- Chinese');
+  assert.equal(files.has(preference), false);
+  assert.equal(calls.replace, 0);
+});
+
+test('unrelated profile edits do not promote an old preference and sensitive or project facts never reach the judge', async () => {
+  const { files, store } = engine({ count: 0, delay: 0 }), profile = `${ROOT}/profile.md`, current = `${ROOT}/preferences/work.md`;
+  files.set(profile, { body: '# Mara\n- Chinese (as of 2026-01-01)\n- Swims', modTime: '2026-11-20' });
+  files.set(current, { body: '- English', modTime: '2026-11-01' });
+  const meta = new Map();
+  for (const [name, flags] of [['sensitive', { sensitive: true }], ['project', { projectId: 'other' }]]) {
+    const uri = `${ROOT}/preferences/${name}.md`;
+    files.set(uri, { body: '- Private', modTime: '2026-11-05' }); meta.set(uri, flags);
+  }
+  store.overlay.files = async () => meta;
+  let seen;
+  Object.assign(store, { preferenceReconcileEnabled: true, preferenceJudge: { available: true, overlaps: async input => {
+    seen = input; return [{ profile: input.profile.indexOf('Chinese'), preference: 0 }];
+  } } });
+  const records = await store.records('u1');
+  assert.deepEqual(seen.profile.sort(), ['Chinese', 'Swims']);
+  assert.deepEqual(seen.preferences, ['English']);
+  assert.deepEqual(records.find(row => row.value === 'Chinese').earlierValues, ['Chinese']);
+  assert.deepEqual(await store.reconcilePreferences('u1', [`${ROOT}/notes/else.md`]), { removed: 0 });
+  assert.equal(await store.preferenceRecallText('u1', profile, files.get(profile).body), '# Mara\n- [earlier value] Chinese (as of 2026-01-01)\n- Swims');
 });
 
 test('people cards offer only unconfirmed name hints on the page and honour a distinct-person decision', async () => {
