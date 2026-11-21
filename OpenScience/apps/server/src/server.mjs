@@ -3325,6 +3325,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // scientific axis of each method's record. Where the loop is on; the researcher's own 「停止学习」 and a capsule trial apply.
   const methodFeedback = learningService && config.learningEnabled ? new MethodFeedbackService({
     learning: learningService, runs: { list: project => agentRuns.list(project) },
+    admitPublishedRun: async (project, run) => Boolean(learningTriggers) && !run.automated
+      && !internalFor(project.userId, project.id) && await learningTriggers.refusalFor(project, run) === null,
     enabled: async (project, run) => {
       const state = await memoryPausedFor(memorySettings, project.userId, project.id, run.sessionId).catch(() => ({ learning: false, trial: false }));
       return !state.learning && !state.trial;

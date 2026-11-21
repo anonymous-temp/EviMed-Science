@@ -57,10 +57,12 @@ export class MethodFeedbackService {
    * `runs` lists one project's run ledger. `enabled` answers whether this run's learning is on for its owner (the
    * researcher's own switch, a capsule trial); absent, it is.
    * @param {{ learning: any, runs: { list: (project: any) => Promise<any[]> },
+   *   admitPublishedRun?: ((project: any, run: any) => Promise<boolean>) | null,
    *   enabled?: ((project: any, run: any) => Promise<boolean>) | null, report?: (code: string) => void, now?: () => Date }} dependencies
    */
-  constructor({ learning, runs, enabled = null, report = () => {}, now = () => new Date() }) {
+  constructor({ learning, runs, enabled = null, admitPublishedRun = null, report = () => {}, now = () => new Date() }) {
     if (!learning || !runs) throw new TypeError("Method feedback needs the method ledger and the run ledger.");
+    this.admitPublishedRun = admitPublishedRun;
     this.learning = learning; this.runs = runs; this.enabled = enabled; this.report = report; this.now = now;
   }
 
@@ -209,7 +211,9 @@ export class MethodFeedbackService {
     const run = await this.#run(project, runId);
     if (!run) return { recorded: [], unresolved: [], skipped: "run_unavailable", capabilityId: null };
     const capabilityId = typeof (run.effectiveAgentId ?? run.agentId) === "string" ? String(run.effectiveAgentId ?? run.agentId) : null;
-    if (!await this.#learnable(project, run)) return { recorded: [], unresolved: [], skipped: "not_learnable", capabilityId };
+    if (!await this.#learnable(project, run) || this.admitPublishedRun && !await this.admitPublishedRun(project, run)) {
+      return { recorded: [], unresolved: [], skipped: "not_learnable", capabilityId };
+    }
     const joined = await this.#record(project, run, {
       signal: "evidence_corrected", at, result, kind: "evidence",
       event: { id: `evidence-outcome:${outcomeClass}:${logEntryId}` },

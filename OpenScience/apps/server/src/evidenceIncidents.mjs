@@ -29,6 +29,7 @@
  *
  * @module evidenceIncidents
  */
+import { PLATFORM_PUBLISHER_USER_ID } from "@evimed/domain";
 import { randomUUID } from "node:crypto";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 
@@ -57,10 +58,10 @@ const text = (value, max = TEXT_LIMIT) => (typeof value === "string" && value.tr
  * @returns {typeof EVIDENCE_INCIDENT_CLASSES[number] | null}
  */
 export function evidenceIncidentClass({ category, trigger, refs }) {
+  if (trigger === "source_change" && (category === "correction" || category === "withdrawal")) return "source_changed";
   if (category === "withdrawal") return trigger === "challenge" && typeof refs?.claimId === "string" && refs.claimId ? "claim_withdrawn" : "card_withdrawn";
   if (category !== "correction") return null;
   if (trigger === "challenge") return "claim_amended";
-  if (trigger === "source_change") return "source_changed";
   if (trigger === "producer_edit") return "producer_correction";
   return null;
 }
@@ -165,11 +166,12 @@ export function createEvidenceOutcomes({ database, documents, ensureOwner, metho
     if (!EVIDENCE_OBSERVED_CLASSES.includes(/** @type {any} */ (outcomeClass))) return { ...skipped("source_change_is_not_the_methods"), capabilityId: null };
     if (!methodFeedback || !resolveProject) return { ...skipped("learning_off"), capabilityId: null };
     const lineage = card?.lineage ?? {};
-    if (!card || card.zone_kind !== "user") return { ...skipped(!card ? "card_gone" : "not_a_researchers_card"), capabilityId: null };
+    if (!card || card.zone_kind !== "user" || card.user_id === PLATFORM_PUBLISHER_USER_ID || card.producer?.kind === "platform") return { ...skipped(!card ? "card_gone" : "not_a_researchers_card"), capabilityId: null };
     if (typeof lineage.resultVersionId !== "string" || typeof lineage.runId !== "string") return { ...skipped("no_result_version_in_lineage"), capabilityId: null };
     // The result version is the author's own record: the project it belongs to and the digest the signal is bound to come from it.
     const version = await documents.get(String(card.user_id), "result-version", lineage.resultVersionId).catch(() => null);
     if (!version?.projectId || typeof version.payload?.digest !== "string") return { ...skipped("result_version_unavailable"), capabilityId: null };
+    if (!lineage.runId || version.payload.producer?.runId !== lineage.runId) return { ...skipped("result_producer_unbound"), capabilityId: null };
     const project = await resolveProject(String(card.user_id), version.projectId).catch(() => null);
     if (!project) return { ...skipped("project_unavailable"), capabilityId: null };
     const joined = await methodFeedback.fromEvidenceOutcome(project, {

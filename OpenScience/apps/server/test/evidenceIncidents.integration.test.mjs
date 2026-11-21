@@ -84,7 +84,7 @@ async function revise(saved, zone, claims, text) {
 }
 const append = (saved, zone, entry) => changeLog.append({ zoneId: zone.id, cardId: saved.id, ...entry });
 async function resultVersion() {
-  await documents.put("alice", "result-version", VERSION, { recordType: "result-version", versionId: VERSION, digest: DIGEST, projectId: "p1" }, { expectedRevision: 0, projectId: "p1" });
+  await documents.put("alice", "result-version", VERSION, { recordType: "result-version", versionId: VERSION, digest: DIGEST, producer: { runId: "run-1" }, projectId: "p1" }, { expectedRevision: 0, projectId: "p1" });
 }
 /** The consumer's position, back to where this test's own entries begin. */
 const resetCursor = () => db.query("INSERT INTO evimed_frontier.evidence_upkeep_state(name,cursor,payload) VALUES('learning-evidence-outcomes',$1,'{}') ON CONFLICT(name) DO UPDATE SET cursor=$1,payload='{}',lease_owner=NULL,lease_until=NULL", [baseline]);
@@ -285,4 +285,21 @@ test("the counters are exported as families, and nothing is exported for a consu
   assert.deepEqual(names, ["open_science_learning_evidence_incidents_total", "open_science_learning_evidence_observations_total", "open_science_learning_evidence_observations_skipped_total", "open_science_learning_evidence_outcomes_total"]);
   assert.deepEqual(evidenceOutcomeMetricFamilies(null), []);
   assert.deepEqual(evidenceOutcomeMetricFamilies(subject.stats())[0].series.map((entry) => entry.labels.class), [...EVIDENCE_INCIDENT_CLASSES]);
+});
+
+test("a changed source and a card naming another producer run never charge a personal method", options, async () => {
+  await resultVersion();
+  const mine = await resultCard(userZone, "Mismatched producer", [claim("Fewer strokes.", "Among 100 adults on the drug, 7 had a stroke")],
+    { resultVersionId: VERSION, runId: "another-run" });
+  await append(mine, userZone, { category: "withdrawal", trigger: "source_change" });
+  await append(mine, userZone, { category: "correction", trigger: "producer_edit" });
+  const feedback = feedbackDouble();
+  const subject = consumer({ methodFeedback: feedback, resolveProject: async (userId, id) => ({ userId, id }) });
+  await subject.tick();
+  assert.equal(feedback.calls.length, 0);
+  assert.deepEqual(subject.stats().skippedBecause, { source_change_is_not_the_methods: 1, result_producer_unbound: 1 });
+});
+
+test("withdrawal following a source change stays a source incident", () => {
+  assert.equal(evidenceIncidentClass({ category: "withdrawal", trigger: "source_change" }), "source_changed");
 });
