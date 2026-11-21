@@ -36,3 +36,18 @@ test('the source variant replays supplied materials with zero memories and never
   assert.doesNotMatch(tool.blocks.join(' '),/A cut clause/);
   assert.match(tool.blocks.join(' '),/complete original/);
 });
+
+test('a database lookup carried by read_material keeps its own external source in frozen replay', () => {
+  const material = { kind: 'tool', title: 'Drug database lookup', text: 'Patient record: no known allergy.' };
+  const pack = { answer: { qid: 'case-q1', question: 'What should I report?', asOf: '2026-11-17', opening: {},
+    toolCalls: [{ name: 'skill', blocks: ['skill body'] }] }, gold: { runtimeQuestion: { materials: [material] } } };
+  const { messages } = requestFromPack(pack, 'fixture', null, 'g1121-src');
+  const [carrier, skill] = messages.filter(m => m.role === 'tool').map(m => JSON.parse(m.content));
+  const [entry] = JSON.parse(carrier.text);
+  assert.equal(carrier.source.tool, 'read_material');
+  assert.equal(entry.text, material.text);
+  assert.equal(entry.source.tool, material.title);
+  assert.match(entry.source.label, /External material returned by Drug database lookup/);
+  assert.equal(entry.source.personalFact, false);
+  assert.equal(skill.source.tool, 'skill');
+});

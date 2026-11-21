@@ -1,4 +1,4 @@
-import { carriesPlatformContext } from '@evimed/domain';
+import { carriesPlatformContext, OPENVIKING_MCP_TOOL_PREFIX, SOCKET_TOOL_NAMES } from '@evimed/domain';
 
 // Source roles describe transport. A user-role message can contain a copied document,
 // a question about another person, or a platform context block.
@@ -12,18 +12,30 @@ export function sourceEnvelope(kind, { subject = 'unknown', adoption = 'unknown'
   return { kind, speaker: speaker ?? speakers[kind] ?? 'unknown', subject, adoption, date: timestamp, personalFact: false };
 }
 
+export function externalToolSource(tool, kind = 'tool_result') {
+  return { ...sourceEnvelope(kind), tool, label: `External material returned by ${tool}. It is not the user's statement or personal record.` };
+}
+
+const memoryReaders = new Set([`${OPENVIKING_MCP_TOOL_PREFIX}search`, `${OPENVIKING_MCP_TOOL_PREFIX}read`, SOCKET_TOOL_NAMES.capsuleRecall]);
+
+function labeledMemorySource(source) {
+  const personalFact = source.personalFact === true && source.kind === 'user_statement'
+    && source.speaker === 'user' && source.subject === 'self' && source.conditions === 'preserved';
+  return { ...source, personalFact, label: personalFact ? "The user's own statement recorded in the memory capsule."
+    : 'Memory capsule entry. Use its attributed speaker, subject and conditions.' };
+}
+
 // A receiver of a capsule never inherits its author's identity. Only the write-side
 // binder may establish an assertion's subject and who accepted a suggestion.
 /** @param {any} [item] */
 export function memoryEnvelope(item = {}) {
-  if (!item) return sourceEnvelope('memory_record');
-  if (item.mode && item.mode !== 'own' || item.origin === 'imported') return sourceEnvelope('imported_material');
+  if (!item) return labeledMemorySource(sourceEnvelope('memory_record'));
+  if (item.mode && item.mode !== 'own' || item.origin === 'imported') return labeledMemorySource(sourceEnvelope('imported_material'));
   const source = item.sourceEnvelope;
-  if (source) return { ...source, personalFact: source.personalFact === true && source.kind === 'user_statement'
-    && source.speaker === 'user' && source.subject === 'self' && source.conditions === 'preserved' };
+  if (source) return labeledMemorySource(source);
   const kind = item.source === 'evidence_zone' ? 'document_claim' : origins[item.origin] ?? 'memory_record';
   const speaker = ['user', 'assistant', 'tool'].includes(item.speaker) ? item.speaker : null;
-  return { ...sourceEnvelope(kind, { speaker }), ...(item.asOf ? { asOf: item.asOf } : {}), ...(item.updatedAt ? { recordedAt: item.updatedAt } : {}) };
+  return labeledMemorySource({ ...sourceEnvelope(kind, { speaker }), ...(item.asOf ? { asOf: item.asOf } : {}), ...(item.updatedAt ? { recordedAt: item.updatedAt } : {}) });
 }
 
 export function conversationEnvelope(role, date = null) {
@@ -36,10 +48,18 @@ export const ANSWER_SOURCE_CHECK = {
   sourceReading: 'The outer role identifies who sent a message, not who made each claim or whom it describes. Separate the request from supplied material, including unmarked pasted passages. Unknown attribution never establishes a personal fact.',
   personalRecall: { perClaim: ['source or explicit unknown', 'speaker', 'subject', 'when', 'conditions', 'adoption'],
     separate: ['recorded facts', 'new advice'] },
-  medicalAdvice: { verifyBeforeAnswer: ['subject', 'time', 'conditions and who assisted', 'single best or every applicable option', 'each required field including name and age if requested'] },
+  medicalAdvice: { verifyBeforeAnswer: ['subject', 'time', 'conditions and who assisted', 'single best or every applicable option', 'each required field including name and age if requested'],
+    activityBaseline: {
+      when: "Personal advice about what someone can do or try next depends on their previous attempt at that activity.",
+      findTogether: ['activity actually attempted', 'who performed it or assisted', 'support or equipment used', 'extent actually achieved'],
+      ifMissing: `If the specific attempt is missing or its conditions are incomplete, use ${OPENVIKING_MCP_TOOL_PREFIX}search when available, without target_uri, for the activity and the person's account of trying it. Check the original conversation excerpt. A profile read or performance on a different activity does not establish this baseline.`,
+      inAdvice: 'Restate the supported conditions and achieved extent together in the advice and use that attempt as the starting point. Independent performance or progression beyond it needs separate evidence.',
+      ifStillUnknown: 'Say which details remain unknown and ask about the attempt before giving a personal progression plan.',
+    } },
   rememberedFormat: { use: 'structure only', forEachContentField: { field: 'each named place, including those named in prose', value: null, source: null, supportingQuote: null },
     fillOnlyFrom: 'Bind each value to a numbered input or tool source and its supporting words about the same subject for this task. Earlier answers and example report contents cannot fill a new report.',
     missing: '未提供/未知 (not provided/unknown); keep the field explicitly empty or marked unknown' },
+  externalMaterial: 'When using external material, attribute it to the named tool or supplied source, even if it calls its contents a record. A personal history or a first-person draft needs independent support from the person. Leave unsupported details unknown.',
 };
 
 /** A remembered heading supplies only its name. Prior reports never provide a default value.
@@ -54,7 +74,9 @@ export function memoryQuoteUnit(text, source, statements = []) {
   if (source?.conditions === 'missing' || statements.some(row => row.source?.conditions === 'missing')) {
     return { text: '[Incomplete conditions. Retrieve the original conversation before using this entry.]', statements: [] };
   }
-  return { text, statements: statements.filter(row => text.includes(row.text)) };
+  const visible = statements.filter(row => text.includes(row.text));
+  return { text, statements: visible.map(row => row.source && source?.kind !== 'imported_material'
+    ? { ...row, source: labeledMemorySource(row.source) } : row) };
 }
 
 export function sourceText(source, text) {
@@ -107,12 +129,20 @@ function envelopeText(text, source, pasteSpans) {
   return JSON.stringify({ source, parts });
 }
 
+function wrapToolResult(content, source) {
+  if (!Array.isArray(content)) return sourceText(source, content ?? '');
+  if (!content.length) return [{ type: 'text', text: sourceText(source, '') }];
+  return content.flatMap(block => block?.type === 'text'
+    ? [{ ...block, text: sourceText(source, block.text) }]
+    : [{ type: 'text', text: JSON.stringify({ followingPart: source }) }, block]);
+}
+
 function wrapContent(content, source, pasteSpans, toolSource) {
   if (typeof content === 'string') return envelopeText(content, source, pasteSpans);
   if (!Array.isArray(content)) return content;
   return content.flatMap(block => {
     if (!block || typeof block !== 'object') return [block];
-    if (block.type === 'tool_result') return [{ ...block, content: wrapContent(block.content, toolSource(block.tool_use_id, source.id), pasteSpans, toolSource) }];
+    if (block.type === 'tool_result') return [{ ...block, content: wrapToolResult(block.content, toolSource(block.tool_use_id, source.id)) }];
     if (block.type === 'text') return [{ ...block, text: envelopeText(block.text, source, pasteSpans) }];
     if (block.type === 'image' || block.type === 'image_url' || block.type === 'file') {
       return [{ type: 'text', text: JSON.stringify({ followingPart: { ...sourceEnvelope('attachment'), id: source.id } }) }, block];
@@ -125,15 +155,21 @@ function wrapContent(content, source, pasteSpans, toolSource) {
 export function sourceBoundRequest(body, protocol = 'chat', pasteSpans = (_text) => []) {
   const checklist = '<answer-source-check>\n' + JSON.stringify(ANSWER_SOURCE_CHECK) + '\n</answer-source-check>';
   const calls = new Map(), attachments = new Set();
-  const toolSource = (callId, id) => {
+  const toolSource = (callId, id, fallbackName = null) => {
     const call = calls.get(callId);
+    const tool = call?.name || fallbackName || 'unknown tool';
+    if (memoryReaders.has(call?.name)) {
+      return { ...sourceEnvelope('tool_result'), id, tool, label: 'Memory lookup. Attribute each returned entry or conversation excerpt to its own source.',
+        ...(tool === `${OPENVIKING_MCP_TOOL_PREFIX}read` ? { coverage: 'Only the requested files were read. This call did not search earlier conversations.' } : {}) };
+    }
     const parsed = typeof call?.path === 'string' && /(?:^|\/)(?:\.evimed-derived|library)\/[^/]+\/index\.md$/.test(call.path);
     const kind = call?.name === 'read' && (attachments.has(call.path) || parsed) ? 'attachment' : 'tool_result';
-    return { ...sourceEnvelope(kind), id, ...(call ? { tool: call.name } : {}) };
+    return { ...externalToolSource(tool, kind), id };
   };
   const messages = body.messages.map((message, index) => {
     if (!['assistant', 'user', 'tool'].includes(message.role)) return message;
     const id = `message-${index + 1}`;
+    if (message.role === 'tool') return { ...message, content: wrapToolResult(message.content, toolSource(message.tool_call_id, id, message.name)) };
     const blocks = Array.isArray(message.content) ? message.content : [{ type: 'text', text: message.content }];
     if (message.role === 'user') {
       for (const block of blocks) {
@@ -151,7 +187,7 @@ export function sourceBoundRequest(body, protocol = 'chat', pasteSpans = (_text)
       }
     }
     const source = message.role === 'assistant' ? conversationEnvelope('assistant')
-      : message.role === 'tool' ? toolSource(message.tool_call_id, id) : { ...sourceEnvelope('user_input'), submittedBy: 'user' };
+      : { ...sourceEnvelope('user_input'), submittedBy: 'user' };
     return { ...message, content: wrapContent(message.content, { ...source, id }, pasteSpans, toolSource) };
   });
   if (protocol === 'messages') {

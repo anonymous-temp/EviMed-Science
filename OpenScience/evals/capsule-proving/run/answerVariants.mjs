@@ -1,3 +1,11 @@
+import { externalToolSource, sourceEnvelope } from '../../../apps/server/src/memorySourceEnvelope.mjs';
+
+/** In G9 the outer call reads a supplied attachment. Its title identifies the original lookup. */
+export function suppliedMaterialSource(kind, title) {
+  if (kind === 'tool') return externalToolSource(title || 'unknown tool');
+  return sourceEnvelope(kind === 'paste' ? 'pasted_material' : kind === 'document' ? 'attachment' : 'tool_result');
+}
+
 /** Answer-time controls, kept separate from the product gateway configuration. */
 export const ANSWER_KEYS = new Set(['forceSearch', 'fullContext', 'thinking', 'answerModel', 'answerBase', 'answerKeyFile', 'contextTokens', 'answerStyle']);
 export function answerOptions(config = {}) {
