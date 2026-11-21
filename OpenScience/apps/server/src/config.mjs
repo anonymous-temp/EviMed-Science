@@ -3445,6 +3445,7 @@ export function loadConfig(overrides = {}) {
     // selects the tier like the person's library (closure, parent, own cap) instead of the nearest three, flat.
     methodTaskOutcomesEnabled: overrides.methodTaskOutcomesEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_TASK_OUTCOMES_ENABLED", false),
     methodFailureStreak: boundedInteger(overrides.methodFailureStreak ?? process.env.OPEN_SCIENCE_METHOD_FAILURE_STREAK, 3, 2, 20, "OPEN_SCIENCE_METHOD_FAILURE_STREAK"),
+    methodOfficialRelevanceEnabled: overrides.methodOfficialRelevanceEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_OFFICIAL_RELEVANCE_ENABLED", false),
     methodOfficialInLoopEnabled: overrides.methodOfficialInLoopEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED", false),
     // A learned method's card carries up to two quotations it rests on, two situations it is not for, and whether it was used after its last
     // change and not corrected (plan 2026-11-04 item 11), off by default; SKILL.md and the digest never change. Off, the card is two lines.
