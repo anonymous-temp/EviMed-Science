@@ -460,6 +460,38 @@ test("a turn that was stopped, refused by the spending limit or failed in its se
   }
 });
 
+test("a turn ending on an unexecuted tool-call payload fails explicitly instead of recording the payload as an answer", async () => {
+  const payloads = [
+    '<tool_call>{"name":"search","arguments":{"q":"x"}}</tool_call>',
+    '{"tool_calls":[{"id":"call_1","type":"function","function":{"name":"search","arguments":"{}"}}]}',
+    '{"name":"search","arguments":',
+  ];
+  for (const payload of payloads) {
+    await withRun(null, async ({ dispatch, turn, reconcile }) => {
+      await dispatch();
+      turn([{ type: "text", text: "Working on it." }, { type: "text", text: payload }]);
+      const finished = await reconcile();
+      assert.equal(finished.status, "failed");
+      assert.equal(finished.errorCode, "runtime_session_error");
+      assert.equal(finished.errorSubCode, "unexecuted_tool_call");
+    });
+  }
+  await withRun(null, async ({ dispatch, turn, reconcile }) => {
+    await dispatch();
+    turn([{ type: "text", text: 'Here is an example:\n```json\n{"name":"search","arguments":{}}\n```' }]);
+    const finished = await reconcile();
+    assert.equal(finished.status, "succeeded", "a requested code example is not an unexecuted call");
+  });
+  await withRun(null, async ({ project, store, dispatch, reconcile, runtimeGone }) => {
+    const run = await dispatch();
+    store.noteRunEvent(project, run.id, { sessionId: "ses_verdict", event: { type: "message/assistant", seq: 1, text: payloads[0], interrupted: false } });
+    store.noteRunEvent(project, run.id, { sessionId: "ses_verdict", event: { type: "turn/end", seq: 2, turn: 1, endKind: "completed" } });
+    runtimeGone();
+    const finished = await reconcile();
+    assert.equal(finished.status, "failed", "the durable fallback cannot turn a raw payload into an answered turn");
+  });
+});
+
 test("a delegated child's failures are said, and a success in another session does not correct them", async () => {
   const child = [{
     info: { id: "child_1", role: "assistant", time: { created: 1, completed: 2 } },

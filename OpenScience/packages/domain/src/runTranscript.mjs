@@ -141,13 +141,45 @@ export function progressSignal(transcript, extra = {}) {
   return { messages, toolCalls: calls, subagentSteps, signature: `${messages}:${calls}:${subagentSteps}` }
 }
 
+/**
+ * Whether a whole assistant message is an unexecuted tool-call payload rather than prose.
+ * Deliberately excludes fenced examples and payloads introduced by ordinary sentences.
+ * @param {unknown} value @returns {boolean}
+ */
+export function isRawToolCallText(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return false
+  if (text.startsWith('<tool_call>')) {
+    const closing = text.indexOf('</tool_call>')
+    return closing < 0 || text.slice(closing + '</tool_call>'.length).trim() === ''
+  }
+  /** @param {any} call @returns {boolean} */
+  const namedCall = (call) => Boolean(call && typeof call === 'object' && !Array.isArray(call)
+    && (typeof call.name === 'string' || typeof call.function?.name === 'string'))
+  /** @param {any} call @returns {boolean} */
+  const wholeCall = (call) => namedCall(call) && (
+    (typeof call.name === 'string' && (Object.hasOwn(call, 'arguments') || Object.hasOwn(call, 'parameters'))
+      && Object.keys(call).every((key) => ['id', 'type', 'name', 'arguments', 'parameters'].includes(key)))
+    || (typeof call.function?.name === 'string' && Object.keys(call).every((key) => ['id', 'type', 'function'].includes(key)))
+  )
+  try {
+    const parsed = JSON.parse(text)
+    return Boolean(parsed && typeof parsed === 'object' && !Array.isArray(parsed) && (
+      wholeCall(parsed) || (Array.isArray(parsed.tool_calls) && parsed.tool_calls.length > 0 && parsed.tool_calls.every(wholeCall))
+    ))
+  } catch {
+    return !text.endsWith('}') && /^\{\s*"(?:tool_calls|name|function)"\s*:/.test(text)
+      && /"(?:tool_calls|function|arguments|parameters)"\s*:/.test(text)
+  }
+}
+
 /** @param {RunTranscript} transcript @returns {string} */
 export function finalAssistantText(transcript) {
   for (let index = transcript.messages.length - 1; index >= 0; index -= 1) {
     const message = transcript.messages[index]
     if (message.role !== 'assistant') continue
     const text = message.parts.filter((part) => part.type === 'text').map((part) => /** @type {TranscriptTextPart} */ (part).text).join('\n').trim()
-    if (text) return text
+    if (text) return isRawToolCallText(text) ? '' : text
   }
   return ''
 }

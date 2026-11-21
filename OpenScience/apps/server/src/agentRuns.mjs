@@ -78,6 +78,7 @@ import {
   gateIssueSeverity,
   isContractKind,
   isMcpToolName,
+  isRawToolCallText,
   isSocketToolName,
   mcpToolBaseName,
   mcpToolName,
@@ -1826,6 +1827,15 @@ function historyCursor(history) {
 
 function assistantFinished(message) {
   return Boolean(message?.info?.time?.completed ?? message?.completed ?? message?.info?.error);
+}
+
+/** @param {any[]} messages @returns {string} */
+function lastReplyText(messages) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const text = (messages[index]?.parts ?? []).filter((part) => part?.type === "text").map((part) => String(part.text ?? "")).join("\n").trim();
+    if (text) return text;
+  }
+  return "";
 }
 
 function parsedToolResult(part) {
@@ -6838,6 +6848,11 @@ export class AgentRunStore {
     const terminal = terminalFromMessages(ownEnd?.code
       ? [{ info: { error: { name: ownEnd.kind, code: ownEnd.code, subCode: ownEnd.subCode } } }, ...assistants]
       : assistants);
+    if (terminal.status === "succeeded" && isRawToolCallText(lastReplyText(assistants))) {
+      terminal.status = "failed";
+      terminal.errorCode = "runtime_session_error";
+      terminal.errorSubCode = "unexecuted_tool_call";
+    }
     // The sources this run went without — including those a delegated child
     // met — kept on the record so the conversation can offer the researcher a
     // form for them.
@@ -7682,7 +7697,8 @@ export class AgentRunStore {
         const open = tracker.rootTurn && tracker.rootTurn.endKind === null ? tracker.rootTurn : { endKind: null, replied: false };
         tracker.rootTurn = {
           endKind: null,
-          replied: event.type === "message/assistant" && !event.interrupted ? String(event.text ?? "").trim().length > 0 : open.replied,
+          replied: event.type === "message/assistant" && !event.interrupted
+            ? String(event.text ?? "").trim().length > 0 && !isRawToolCallText(event.text) : open.replied,
         };
       }
     }

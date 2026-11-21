@@ -530,6 +530,22 @@ test('GEO selection survives normal draft edits but clears on cancellation, expl
   hooks.dispose();
 });
 
+test('native Date display uses Shanghai by default, honours an explicit zone and leaves UTC storage alone', () => {
+  const sandbox = {};
+  vm.runInNewContext(`globalThis.target = { Date, Math };
+    (${installRuntimeUiPolyfills.toString()})(target, 'Asia/Shanghai');
+    (${installRuntimeUiPolyfills.toString()})(target, 'Asia/Shanghai');
+    const at = new target.Date('2026-11-21T01:23:00.000Z');
+    globalThis.result = {
+      displayed: at.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      explicit: at.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }),
+      stored: at.toISOString(),
+    };`, sandbox);
+  assert.equal(sandbox.result.displayed, '09:23');
+  assert.equal(sandbox.result.explicit, '01:23');
+  assert.equal(sandbox.result.stored, '2026-11-21T01:23:00.000Z');
+});
+
 test('Math.sumPrecise is supplied to the PDF viewer, in the page and in its worker source, and to nothing else', async () => {
   // Without it the kernel's pdf.js draws every CJK font with a substitute (live, Chromium 145, 2026-11-05).
   const math = Object.create(Math);

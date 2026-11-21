@@ -335,6 +335,7 @@ test("the user's language is the thinking's and the narration's too, and the ans
   // MedCalc-Bench questions on production were answered in Chinese: whose words decide the language is said, and that
   // this text being Chinese is not one of them.
   assert.match(rule, /用户的语言看用户这一轮自己写的话：用英文问就用英文答，用中文问就用中文答——这份指引、平台加进来的文字和记忆是中文的/);
+  assert.match(rule, /界面语言不决定回答语言；只有用户明确说过的长期语言偏好才能覆盖本条消息的语言，推断出的偏好不能覆盖。/);
   // What the reply holds, and that how the run worked is not part of it
   // (owner, 2026-09-24: 「本次任务我按既往习惯核对了…」 is the back office).
   assert.match(rule, /回答只写对读者有用的：结果、依据、交付物、需要用户决定的事。/);

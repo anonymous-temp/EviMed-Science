@@ -496,9 +496,12 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
  *
  * Deletable when the browsers the platform serves all ship `Math.sumPrecise`, or when upstream polyfills it itself.
  * Self-contained like the installer above: it is serialized into the frame's bootstrap.
+ * The native conversation's Date-localization calls also receive the product's display zone;
+ * an explicit zone still wins, and timestamp storage and ISO serialization are untouched.
  * @param {any} target Browser global, injectable for the contract test.
+ * @param {string} [timeZone] Display zone shared with the hosted pages.
  */
-export function installRuntimeUiPolyfills(target = globalThis) {
+export function installRuntimeUiPolyfills(target = globalThis, timeZone = 'Asia/Shanghai') {
   const polyfill = 'if(typeof Math.sumPrecise!=="function"){Object.defineProperty(Math,"sumPrecise",{configurable:true,writable:true,value:function(values){let sum=0,c=0;for(const x of values){const y=Number(x)-c,t=sum+y;c=(t-sum)-y;sum=t}return sum}})}';
   if (typeof target.Math?.sumPrecise !== 'function') {
     Object.defineProperty(target.Math, 'sumPrecise', { configurable: true, writable: true, value: function sumPrecise(/** @type {Iterable<any>} */ values) {
@@ -506,6 +509,19 @@ export function installRuntimeUiPolyfills(target = globalThis) {
       for (const x of values) { const y = Number(x) - c; const t = sum + y; c = (t - sum) - y; sum = t; }
       return sum;
     } });
+  }
+  const NativeDate = target.Date;
+  if (timeZone && typeof NativeDate === 'function') {
+    for (const method of ['toLocaleString', 'toLocaleDateString', 'toLocaleTimeString']) {
+      const native = NativeDate.prototype[method];
+      if (typeof native !== 'function' || native.__evimedTimeZone) continue;
+      const localized = /** @this {Date} @param {any} locales @param {any} options */ function (locales, options) {
+        const zoned = options?.timeZone === undefined ? { ...options, timeZone } : options;
+        return native.call(this, locales, zoned);
+      };
+      Object.defineProperty(localized, '__evimedTimeZone', { value: true });
+      Object.defineProperty(NativeDate.prototype, method, { configurable: true, writable: true, value: localized });
+    }
   }
   const NativeBlob = target.Blob;
   if (typeof NativeBlob !== 'function' || NativeBlob.__evimedSumPrecise) return;

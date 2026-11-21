@@ -66,10 +66,12 @@ test("every page the budget table names is a page the walk visits", () => {
   assert.equal(pageFindings("files", "desktop", clean({ controlKinds: 11 }), []).failures.length, 1);
 });
 
-test("the evidence zones' home keeps four borders and a published daily's lead allows ten controls", () => {
+test("the evidence zones' home keeps four borders and allows its required create action as the tenth control", () => {
   const zones = (overrides) => pageFindings("frontier-zones", "desktop", clean({ controlKinds: 8, colorKinds: 5, ...overrides }), []).failures;
   assert.deepEqual(zones({ borderKinds: 4 }), []);
   assert.deepEqual(zones({ borderKinds: 5 }), ["frontier-zones@desktop: 5 kinds of border (budget 4)"]);
+  assert.deepEqual(zones({ controlKinds: 10 }), []);
+  assert.deepEqual(zones({ controlKinds: 11 }), ["frontier-zones@desktop: 11 kinds of control (budget 10)"]);
   // The feed's own pages keep the reading page's three.
   assert.deepEqual(pageFindings("frontier", "desktop", clean({ controlKinds: 8, borderKinds: 4 }), []).failures, ["frontier@desktop: 4 kinds of border (budget 3)"]);
   const daily = (controlKinds) => pageFindings("frontier-daily", "desktop", clean({ controlKinds }), []).failures;
@@ -807,8 +809,8 @@ function context() {
             const mode = process.env.FAKE_SCHEDULES || "";
             return { headings: mode === "blank" ? [] : [mode === "heading" ? "自动化" : "定时任务"], newButton: mode !== "button" && mode !== "blank" };
           }
-          // The native surfaces the chat step reads: the developer-tools preference, the thinking-strength seat, the viewer chunk.
-          if (typeof fn === "function" && fn.name === "nativeSurfaceProbe") return { developerTools: true, effort: "思考强度，当前：高", documentChunk: { status: 200, type: "text/javascript; charset=utf-8" } };
+          // The native surfaces the chat step reads: the developer-tools preference, the composer's model seat, the viewer chunk.
+          if (typeof fn === "function" && fn.name === "nativeSurfaceProbe") return { developerTools: true, effort: process.env.FAKE_OPERATOR ? "选择模型，当前 deepseek-flash" : "思考强度，当前：高", documentChunk: { status: 200, type: "text/javascript; charset=utf-8" } };
           return { composer: !chatFailing(), stats: [] };
         },
       }],
@@ -3208,6 +3210,10 @@ test("the native surfaces the conversation depends on are read in the frame, and
   assert.match(nativeSurfaceFindings({ ...good, developerTools: null })[0], /unreadable/);
   assert.match(nativeSurfaceFindings({ ...good, effort: null })[0], /no thinking-strength control/);
   assert.match(nativeSurfaceFindings({ ...good, effort: "选择模型，当前 deepseek-flash" })[0], /not worded as the thinking strength/);
+  const operator = { ...good, effort: "选择模型，当前 deepseek-flash" };
+  assert.deepEqual(nativeSurfaceFindings(operator, true), []);
+  assert.match(nativeSurfaceFindings(good, true)[0], /not worded as the native model/);
+  assert.match(nativeSurfaceFindings({ ...operator, effort: null }, true)[0], /no model control/);
   assert.match(nativeSurfaceFindings({ ...good, documentChunk: { status: 404, type: "text/html" } })[0], /PDF viewer chunk answered 404/);
   assert.match(nativeSurfaceFindings({ ...good, documentChunk: null })[0], /not observable/);
 });

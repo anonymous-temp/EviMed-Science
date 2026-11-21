@@ -169,8 +169,10 @@ describe("humanSize", () => {
 });
 
 describe("formatClock", () => {
-  it("is hour and minute in one locale, and blank for a value that is not a time", () => {
+  it("is hour and minute in Shanghai regardless of the browser zone, and blank for a value that is not a time", () => {
     expect(formatClock(new Date("2026-01-01T14:05:00+08:00").toISOString())).toBe("14:05");
+    expect(formatClock("2026-01-01T06:05:00.000Z")).toBe("14:05");
+    expect(formatDateTime("2026-01-01T16:05:00.000Z", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })).toContain("2026/01/02");
     expect(formatClock(null)).toBe("");
     expect(formatClock("not a time")).toBe("");
   });

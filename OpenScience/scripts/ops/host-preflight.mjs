@@ -726,6 +726,9 @@ function defaultExecute(command, args, options) {
   }
   if (result.status !== 0) {
     const detail = (result.stderr || result.stdout || "").trim().slice(0, 512);
+    if (command === "docker" && args[0] === "image" && args[1] === "inspect") {
+      throw failure("preflight_image_missing", `Required release image is missing locally: ${args.at(-1)}. Restore the exact image before admission.`);
+    }
     throw failure(
       "preflight_command_failed",
       `${path.basename(command)} preflight command failed with exit ${result.status}${detail ? `: ${detail}` : "."}`,
@@ -890,6 +893,13 @@ export async function runHostPreflight({
     onCheck("result-replay-image", "isolated executor image matches host architecture");
   }
   onCheck("container-images", "Web, Runtime, and Caddy images match host architecture");
+
+  execute(
+    process.execPath,
+    [path.join(repoRoot, "scripts/ops/verify-release-images.mjs"), `--manifest=${config.manifestFile}`],
+    { cwd: repoRoot, env: values },
+  );
+  onCheck("release-image-presence", "every release manifest image is local and matches its recorded digests");
 
   // The runtime image is only used while a job runs, so between jobs no
   // container references it and `docker system prune -a` on a shared host takes

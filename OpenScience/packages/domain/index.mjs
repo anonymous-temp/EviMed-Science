@@ -437,12 +437,13 @@ export {
   toolViewPhraseTable,
 } from './src/toolViewPhrases.mjs'
 
-// runTranscript — 9 exports
+// runTranscript — 10 exports
 export {
   EMPTY_TRANSCRIPT,
   RUN_EVENT_TYPES,
   eviMedToolCalls,
   finalAssistantText,
+  isRawToolCallText,
   isRunTranscript,
   normalizeTurnEndKind,
   progressSignal,
