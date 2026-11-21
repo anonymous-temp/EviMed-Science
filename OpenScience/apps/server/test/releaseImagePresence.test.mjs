@@ -32,7 +32,7 @@ test("release admission inspects every manifest image and checks config and mani
 test("a pruned Caddy image fails admission by component and exact reference", () => {
   const local = images();
   assert.throws(() => verifyReleaseImages(manifest, (image) => {
-    if (image === manifest.proxy.image) throw new Error("No such image");
+    if (image === manifest.proxy.image) throw Object.assign(new Error("No such image"), { code: "release_image_missing" });
     return local[image];
   }), (error) => {
     assert.equal(error.code, "release_image_missing");
@@ -57,4 +57,18 @@ test("a present image with the wrong config or manifest digest is not accepted",
     assert.match(error.message, /openlist local image does not carry the required manifest digest/);
     return true;
   });
+});
+
+test("a digest-addressed inspect can use a descriptor or a daemon without RepoDigests", () => {
+  const pinned = manifest.services[0];
+  for (const meta of [{ Descriptor: { digest: manifestDigest } }, { RepoDigests: [] }]) {
+    const local = images();
+    local[pinned.image] = { Id: pinned.imageId, ...meta };
+    verifyReleaseImages(manifest, (ref) => local[ref]);
+  }
+});
+
+test("an unavailable Docker daemon is reported as an inspect failure", () => {
+  assert.throws(() => verifyReleaseImages(manifest, () => { throw new Error("daemon unavailable"); }),
+    (error) => error.code === "release_image_inspect_failed" && error.message.includes(manifest.web.image));
 });

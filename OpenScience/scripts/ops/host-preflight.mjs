@@ -726,7 +726,7 @@ function defaultExecute(command, args, options) {
   }
   if (result.status !== 0) {
     const detail = (result.stderr || result.stdout || "").trim().slice(0, 512);
-    if (command === "docker" && args[0] === "image" && args[1] === "inspect") {
+    if (command === "docker" && args[0] === "image" && args[1] === "inspect" && /no such (?:image|object)/i.test(detail)) {
       throw failure("preflight_image_missing", `Required release image is missing locally: ${args.at(-1)}. Restore the exact image before admission.`);
     }
     throw failure(
