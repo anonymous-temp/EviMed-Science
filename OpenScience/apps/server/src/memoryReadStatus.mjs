@@ -80,3 +80,22 @@ export function containsAnchor(text, anchors) {
       + (/[a-z0-9]$/i.test(anchor) ? '(?![a-z0-9])' : ''), 'u').test(normalized);
   });
 }
+
+export function literalFileName(uri) {
+  return uri?.split('/').at(-1)?.replace(/\.md$/, '');
+}
+
+export function hasLiteralHistoryMatch(hit, anchors) {
+  return !hit.withdrawn && hit.messages?.some(message => containsAnchor(message.text, anchors));
+}
+
+/** Check the returned bodies, not titles, lookup notices or source metadata. */
+export function literalRecallCheck(query, files, history, capsules) {
+  const anchors = literalAnchors(query);
+  const covered = anchors.length > 0 && (
+    files.some(hit => containsAnchor(hit.abstract, anchors) || containsAnchor(literalFileName(hit.uri), anchors))
+    || history.some(hit => hasLiteralHistoryMatch(hit, anchors))
+    || capsules.some(item => containsAnchor(item.content, anchors))
+  );
+  return { anchors, covered };
+}

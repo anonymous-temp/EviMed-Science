@@ -33,15 +33,17 @@ export async function* answersFrom(input) {
     for (const row of probeRows) {
       if (!Array.isArray(row.results) || !row.qid) continue;
       const detail = raw.details?.find(d => d.caseId === row.caseId);
-      yield {file:input,answer:{qid:row.qid,question:row.question, toolCalls:row.results.map(result => ({
+      yield {file:input,runId:row.runId ?? raw.report?.runId ?? raw.runId, answer:{qid:row.qid,question:row.question, toolCalls:row.results.map(result => ({
         name:'mcp__openviking__search',args:{query:row.question,limit:result.limit},blocks:result.blocks,isError:result.isError,
         ms:result.ms, returnedSessions:result.history?.returned,
+        literalFallbackEvidence:result.literalFallbackEvidence,
         // The probe records one fusedOrder per case, built from the last /find and /grep.
         historyTrace:result === row.results.at(-1) && detail?.fusedOrder ? {candidates:detail.fusedOrder, complete:true} : null,
       }))}};
     }
-    const answer = Array.isArray(raw.toolCalls) ? raw : unpack(raw).answer;
-    if (answer?.qid && Array.isArray(answer.toolCalls)) yield {file:input,answer};
+    const packed = Array.isArray(raw.toolCalls) ? null : unpack(raw);
+    const answer = packed ? packed.answer : raw;
+    if (answer?.qid && Array.isArray(answer.toolCalls)) yield {file:input,answer,sourceSessions:packed?.sessions};
   }
 }
 
