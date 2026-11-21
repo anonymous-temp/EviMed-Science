@@ -4278,6 +4278,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let researchGoals = null;
   agentRuns = new AgentRunStore(researchSessions, {
     ledgerRotationEnabled: config.agentRunLedgerRotationEnabled,
+    onLedgerRotation: (project, segments) => securityAudit(config, "run_ledger.rotate", "completed", {
+      userId: project.userId, detail: JSON.stringify({ projectId: project.id, ...segments }),
+    }),
     authorizeReservation: (project, input) => {
       if (!isDataAnalysisProject(project)) return;
       if (!dataAnalysisService) throw new HttpError(503, "product_state_unavailable", "Analysis admission is unavailable.");
@@ -8166,8 +8169,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             entries = appendBinaryArchiveEntry(entries, "memory/native-memory.zip", pack, config);
           }
           if (snapshot) entries = appendAccountStateArchiveEntry(entries, snapshot.data, config);
-          await securityAudit(config, "account.export", "completed", { userId: user.id });
+          const receipt = { id: randomBytes(16).toString("hex"), files: entries.filter(entry => entry.type === "file").length };
+          entries = addAccountArchiveManifest(entries, receipt.id, config);
           await sendUserArchive(res, user, entries);
+          await securityAudit(config, "account.export", "completed", {
+            userId: user.id, detail: JSON.stringify({ ...receipt, bytes: archiveEntryBytes(entries) }),
+          });
         }, { skillArtifacts, memoryForgetReader: productDocuments?.memoryForgetReader, nativeMemory: { contexts: nativeMemoryContexts, sourceDeletion }, readResultReview: resultProvenance ? async (actor, row) => {
           if (!exportProjects.has(row.projectId)) exportProjects.set(row.projectId, resultProvenance.scope(actor.id, row.projectId));
           const project = await exportProjects.get(row.projectId);
@@ -9708,6 +9715,15 @@ function appendMemoryArchiveEntry(entries, memory, config = null) {
   assertArchiveEntryLimit(entries.length + 1, config?.maxArchiveEntries, "account");
   assertArchiveByteLimit(archiveEntryBytes(entries) + entry.size, config?.maxArchiveBytes, "account");
   return [...entries, entry];
+}
+
+/** The manifest describes every other regular file in this exact archive plan. */
+function addAccountArchiveManifest(entries, id, config) {
+  const [account, ...rest] = entries;
+  const files = rest.filter(entry => entry.type === "file").map(entry => ({ path: entry.rel, bytes: entry.size }));
+  const data = Buffer.from(`${JSON.stringify({ ...JSON.parse(account.data.toString("utf8")), archive: { id, files } }, null, 2)}\n`);
+  assertArchiveByteLimit(data.length + archiveEntryBytes(rest), config.maxArchiveBytes, "account");
+  return [{ ...account, data, size: data.length }, ...rest];
 }
 
 /** One more file in an export archive, from bytes. */

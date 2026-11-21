@@ -684,7 +684,10 @@ async function writeNextLedger(project, event, maxBytes, rotationEnabled = false
         if (conflict?.code === "EEXIST") continue;
         throw conflict;
       }
-      return;
+      return {
+        sealed: { name: path.basename(tail), bytes: Buffer.byteLength(previousText) },
+        opened: { name: path.basename(next), bytes: Buffer.byteLength(text) },
+      };
     }
     if (!rotationEnabled) {
       invalidatePrefix(tail);
@@ -4662,6 +4665,7 @@ export class AgentRunStore {
     this.maxRuns = options.maxRuns ?? defaultMaxRuns;
     this.maxBytes = options.maxBytes ?? defaultMaxBytes;
     this.ledgerRotationEnabled = options.ledgerRotationEnabled === true;
+    this.onLedgerRotation = options.onLedgerRotation ?? null;
     this.ledgerPrefixes = new Map();
     this.ledgerPrefixFlights = new Map();
     this.ledgerPrefixBytes = 0;
@@ -4826,8 +4830,12 @@ export class AgentRunStore {
 
   async writeLedger(project, event, pending = []) {
     try {
-      return await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled, pending,
+      const rotation = await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled, pending,
         (file = null) => this.invalidateLedgerPrefix(project, file));
+      if (rotation && this.onLedgerRotation) {
+        // A receipt failure cannot turn a committed ledger mutation into a retry.
+        await Promise.resolve().then(() => this.onLedgerRotation(project, rotation)).catch(() => {});
+      }
     } finally {
       // A post-write reader must not join a snapshot begun before this commit.
       this.ledgerPrefixFlights.delete(`${project.rootDir}\0${project.metaDir}`);
@@ -5486,7 +5494,8 @@ export class AgentRunStore {
         assertDispatchIdentity(duplicate, session.sessionId, dispatchFingerprint);
         return { run: structuredClone(duplicate), owner: false };
       }
-      const active = [...runs.values()].find((run) => run.sessionId === session.sessionId && run.status === "running");
+      const retained = [...runs.values()].filter(run => run.deleted !== true);
+      const active = retained.find((run) => run.sessionId === session.sessionId && run.status === "running");
       // An adopted run is a placeholder for a session nobody had claimed. A
       // dispatch is somebody claiming it, so it takes the session over instead
       // of being refused by the placeholder -- otherwise the first real request
@@ -5521,9 +5530,8 @@ export class AgentRunStore {
           finishedAt: this.now().toISOString(),
           durationMs: Number.isSafeInteger(ceiling) && ceiling > 0 ? Math.min(worked, ceiling) : worked,
         });
-        runs.delete(active.id);
       }
-      if (runs.size >= this.maxRuns) {
+      if (retained.length - Number(adopted) >= this.maxRuns) {
         throw new HttpError(409, "agent_run_limit_reached", "This project has reached its agent run limit.");
       }
       const now = this.now().toISOString();
