@@ -1932,8 +1932,8 @@ export class NativeMemoryStore {
 
   /** Gateway-only entry: evidence is checked against the bound human conversation before this method is called.
    * @param {{id:string}} user @param {{id:string,userId:string}} project
-   * @param {{a:string,b:string,distinct:boolean,engineSession:string,confirmation:string,question?:string}} decision */
-  async people(user, project, { a, b, distinct, engineSession, confirmation, question = '' }) {
+   * @param {{a:string,b:string,distinct:boolean,engineSession:string,confirmation:string,question?:string,hinted?:boolean}} decision */
+  async people(user, project, { a, b, distinct, engineSession, confirmation, question = '', hinted = false }) {
     if (!this.personMergeEnabled) throw new HttpError(400, 'memory_payload_invalid', 'People decisions are not enabled.');
     return withNativeMemoryWrite(this.overlay.database, user.id, async () => {
       this.#touch(user.id);
@@ -1957,7 +1957,7 @@ export class NativeMemoryStore {
       const ambiguous = labels[0] === labels[1] || files.some(file => file.type === 'people' && !file.sensitive && file.uri !== a && file.uri !== b
         && personProjectScope(file.projectId) === personProjectScope(keep.projectId) && labels.includes(personLabel(file.uri, file.body)));
       const [left, right] = ambiguous ? [a, b].map((uri, index) => `${labels[index]}（${uri.split('/').at(-1)}）`) : labels;
-      const refusal = personConsentRefusal(left, right, distinct, confirmation, question);
+      const refusal = personConsentRefusal(left, right, distinct, confirmation, question, hinted);
       if (refusal) throw new HttpError(400, 'memory_payload_invalid', refusal);
       if (distinct) return this.personEdges.set(user.id, personPairId(a, b), true);
       const origins = await this.overlay.originsOf(user.id, [a, b]);

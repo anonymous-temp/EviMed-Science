@@ -26,18 +26,34 @@ export function personDecisionRefusal({ root, a, b, confirmation, messages }) {
   return null;
 }
 
+/** Only a single yes/no question whose subject is precisely the two card labels.
+ * @param {string} left @param {string} right @param {string} question */
+function singlePairQuestion(left, right, question) {
+  const named = (/** @type {string} */ label) => {
+    const name = label.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    return `(?:${name}|“${name}”|「${name}」|『${name}』|"${name}")`;
+  };
+  const a = named(left), b = named(right);
+  const chinese = new RegExp(`^(?:(?:请确认(?:一下)?|我想确认(?:一下)?)[：:]\\s*)?${a}\\s*(?:和|与|、)\\s*${b}\\s*(?:(?:是|指的是|指)同一(?:个)?人吗|是不是同一(?:个)?人|是否为同一(?:个)?人)[?？](?:\\s*(?:请)?回复\\s*是\\s*[/／]\\s*不是[。.]?)?$`, 'u');
+  const english = new RegExp(`^Are ${a} and ${b} the same person\\?(?:\\s*(?:Please )?[Rr]eply yes\\s*/\\s*no\\.?)?$`, 'u');
+  return chinese.test(question) || english.test(question);
+}
+
 /** A typed consent receipt names both current cards and the operation. Free text is never parsed for intent. */
-export function personConsentRefusal(left, right, distinct, confirmation, question = '') {
+export function personConsentRefusal(left, right, distinct, confirmation, question = '', hinted = false) {
   const relation = distinct ? '不是同一个人' : '是同一个人';
   const action = distinct ? '记录为不同人' : '合并';
+  const answer = String(confirmation ?? '').trim().replace(/[.。]$/u, '');
+  const previous = question.trim();
   for (const [a, b] of [[left, right], [right, left]]) {
     const asks = [`“${a}”和“${b}”是同一个人吗？`, `Are ${a} and ${b} the same person?`];
     const answers = distinct ? ['不是', '不是同一个人', 'no'] : ['是', '是的', '是同一个人', 'yes'];
-    if (asks.includes(question.trim()) && answers.includes(String(confirmation ?? '').trim().replace(/[.。]$/u, '').toLowerCase())) return null;
+    if (asks.includes(previous) && answers.includes(answer.toLowerCase())) return null;
+    if (!distinct && hinted && [...answers, '对', '没错'].includes(answer.toLowerCase()) && singlePairQuestion(a, b, previous)) return null;
     const sentence = `${a}和${b}${relation}`;
     const english = `${a} and ${b} are ${distinct ? 'different people' : 'the same person'}`;
     const forms = [sentence, `${sentence}，请${action}`, `更正一下，${sentence}，请${action}`, english];
-    if (forms.includes(String(confirmation ?? '').trim().replace(/[.。]$/u, ''))) return null;
+    if (forms.includes(answer)) return null;
   }
   return `Ask the person to reply with the full decision about these two cards: ${left}和${right}${relation}。`;
 }
@@ -84,7 +100,7 @@ export function mergePeopleText(keep, merge, label) {
 
 export const PERSON_MEMORY_TOOLS = {
   merge_people: {
-    description: 'Merge two people files ONLY after the person explicitly confirms in this conversation that they are the same person. Never infer identity from similar names or facts. Ask “<first name>”和“<second name>”是同一个人吗？ as a standalone question to bind a short yes or no. Quote the person’s complete latest answer verbatim. Both histories and conflicting facts are kept; the memory page can undo this operation.',
+    description: 'Merge two people files ONLY after the person explicitly confirms in this conversation that they are the same person. Never infer identity from similar names or facts. After a memory hint, ask one standalone yes/no question naming exactly those two cards, e.g. 「<first name>」和「<second name>」是同一个人吗？. If the question covers several pairs or the answer is unclear, ask the person to name both cards and state the decision. Quote the person’s complete latest answer verbatim. Both histories and conflicting facts are kept; the memory page can undo this operation.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['keep', 'merge', 'confirmation'], properties: {
       keep: { type: 'string' }, merge: { type: 'string' }, confirmation: { type: 'string', minLength: 1, maxLength: 6000 },
     } },

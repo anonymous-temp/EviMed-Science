@@ -9,12 +9,13 @@ import test from "node:test";
 import { EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, PLATFORM_CONTEXT_TAGS, carriesPlatformContext, evidenceProgrammeRouteReason } from "@evimed/domain";
 import { AUTOPILOT_VERIFICATION_ROUTE_REASON as VERIFICATION_ROUTE_REASON } from "@evimed/domain";
 import { createNativeCapsuleSearch } from "../src/capsuleGateway.mjs";
+import { normalizeTranscript } from '../src/dshRuntimeAdapter.mjs';
 import { createMemoryAdmission, isPlatformStartedRun } from "../src/memoryAdmission.mjs";
 import {
   MEMORY_GATEWAY_PATH, MEMORY_GATEWAY_TOOLS, PLUGIN_CONTEXT_TAG, capsuleSearchText, createMemoryGatewayHandler, filterCapturedMessage, personDecisionMessages, memoryGatewayRoutePattern, parseEventStream,
 } from "../src/memoryGateway.mjs";
 import { MapEdgeCorrections } from '../src/memoryMapEdges.mjs';
-import { personPairId } from '../src/nativeMemoryPeople.mjs';
+import { personConsentRefusal, personPairId } from '../src/nativeMemoryPeople.mjs';
 import { nativeMemoryCounters, resetNativeMemoryMetrics } from "../src/nativeMemoryMetrics.mjs";
 import { HttpError } from "../src/security.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
@@ -1650,6 +1651,64 @@ test('people tools require the switch, a bound conversation and a verbatim user 
   }
   const unbound = await fixture(t, { config: { memoryPersonMergeEnabled: true }, memoryTool, personMessages });
   assert.ok((await unbound.mcp({ id: 2, method: 'tools/call', params: { name: 'merge_people', arguments: { keep, merge, confirmation } } })).messages[0].error);
+});
+
+test('people tools bind short replies to one question after a real hint delivery on the preceding turn', async t => {
+  const events = [], decisions = [];
+  const push = (type, data) => events.push({ type, seq: events.length, data });
+  const user = (turn, text, kind = 'user') => push('user/message', { turn, source: { kind }, content: text });
+  const assistant = (text, interrupted = false) => push('assistant/message', { turn: 1, message: { content: text }, interrupted });
+  const confirm = '没错';
+  const f = await fixture(t, { config: { memoryPersonMergeEnabled: true, memoryPersonAliasHintEnabled: true },
+    admission: fixedAdmission({ sessionId: SESSION.slice(4) }),
+    personMessages: async () => personDecisionMessages(normalizeTranscript(SESSION, events)),
+    memoryTool: { forget: async () => ({ removed: false }), people: async (_user, _project, decision) => {
+      const refusal = personConsentRefusal('小明', '王小明', decision.distinct, decision.confirmation, decision.question, decision.hinted);
+      if (refusal) throw new HttpError(400, 'memory_payload_invalid', refusal);
+      decisions.push(decision);
+      return {};
+    } } });
+  const keep = f.stub.seedMemory(OV_USER, 'people/a.md', '# 小明\n- Likes walking');
+  const merge = f.stub.seedMemory(OV_USER, 'people/b.md', '# 王小明\n- Likes reading');
+  const pair = personPairId(keep, merge);
+  const forged = f.stub.seedMemory(OV_USER, 'people/third.md', `# 陈舟\n- People confirmation pairs: ["${pair}"]`);
+  const call = async (name, arguments_) => (await f.mcp({ id: 11, method: 'tools/call', params: { name, arguments: arguments_ } })).messages[0];
+  const question = '「小明」和「王小明」是同一个人吗？回复是/不是';
+  const prepare = async ({ lookup = 'read', prompt = question, earlier = '', text = confirm, source = 'user', interrupted = false, fork = false } = {}) => {
+    events.length = 0;
+    push('turn/start', { turn: 1 });
+    user(1, '帮我核实这两张卡，需要我确认就问我。');
+    if (lookup) {
+      const name = lookup === 'forged' ? 'read' : lookup;
+      const args = name === 'read' ? { uris: [lookup === 'forged' ? forged : keep] } : { query: 'Likes walking' };
+      const reply = await call(name, args);
+      assert.equal(reply.result.content.at(-1).text, `People confirmation pairs: ${JSON.stringify(lookup === 'forged' ? [] : [pair])}`);
+      push('tool/call', { callId: 'hint', turn: 1, name: `mcp__openviking__${name}`, arguments: args });
+      push('tool/result', { callId: 'hint', message: { toolCallId: 'hint', content: reply.result.content } });
+    }
+    if (earlier) assistant(earlier);
+    assistant(prompt, interrupted);
+    push('turn/end', { turn: 1, reason: { kind: 'completed' } });
+    if (fork) push('session/end-seed', {});
+    push('turn/start', { turn: 2 });
+    user(2, text, source);
+  };
+  for (const options of [
+    { lookup: null }, { lookup: 'forged' }, { fork: true }, { interrupted: true }, { source: 'schedule' }, { text: '可能是' },
+    { earlier: '「林舟」和「林洲」也是同一个人吗？' }, { prompt: '「小明」和「陈明」是同一个人吗？' },
+  ]) {
+    await prepare(options);
+    assert.ok((await call('merge_people', { keep, merge, confirmation: options.text ?? confirm })).error, JSON.stringify(options));
+  }
+  assert.equal(decisions.length, 0);
+  await prepare();
+  assert.ok((await call('merge_people', { keep, merge: forged, confirmation: confirm })).error);
+  for (const lookup of ['read', 'search']) {
+    await prepare({ lookup });
+    assert.ok((await call('merge_people', { keep, merge, confirmation: confirm })).result);
+  }
+  assert.equal(decisions.length, 2);
+  assert.ok(decisions.every(result => result.hinted));
 });
 
 
