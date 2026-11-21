@@ -634,10 +634,10 @@ export class LearningTriggers {
    * the next turn. Best effort, and under the same switches as every other lesson: the researcher's "stop learning", someone else's
    * capsule being tried, the platform's own work.
    *
-   * @param {any} project @param {{ event: any, runId: string }} correction
+   * @param {any} project @param {{ event: any, runId: string, replacementRunId?: string | null }} correction
    * @returns {Promise<{ queued: string[], skipped: string | null }>}
    */
-  async afterCorrection(project, { event, runId }) {
+  async afterCorrection(project, { event, runId, replacementRunId = null }) {
     const runs = await this.agentRuns.list(project).catch(() => []);
     const run = runs.find((/** @type {any} */ item) => item?.id === runId);
     if (!run) return { queued: [], skipped: this.#refused("run_unavailable") };
@@ -651,6 +651,12 @@ export class LearningTriggers {
     const guestInfluence = await this.#guestInfluenced(project, run);
     const lesson = correctionLessonFor({ run, runs, project, event, internalAgent: () => internal, guestInfluence });
     if (!lesson) return { queued: [], skipped: this.#refused("not_eligible") };
+    if (replacementRunId) {
+      // Keep the correction's original event and run. The follow-through is keyed by that pair, independent of repeated export/sharing.
+      const dispatchKey = `${event.id}:used-redo`;
+      lesson.idempotencyKey = `distill:${run.id}:correction:${dispatchKey}`;
+      lesson.payload = { ...lesson.payload, dispatchKey, confirmedRedo: { replacementRunId, correctionEventId: event.id } };
+    }
     return await this.queue(project, run, lesson) ? { queued: [lesson.trigger], skipped: null } : { queued: [], skipped: "enqueue_failed" };
   }
 

@@ -337,17 +337,18 @@ export class LearningEvidence {
    *   contextProvenance?: any,
    *   toolchainEnabled?: boolean, toolchainMinSimilarity?: number, readTraces?: typeof readToolTraces,
    *   similarity?: ReturnType<typeof createMethodSimilarity>,
-   *   lateFollowUpEnabled?: boolean, readDeliveryBindings?: typeof readLearningDeliveryBindings, funnel?: (event: any) => void,
+   *   lateFollowUpEnabled?: boolean, confirmedRedo?: ((project: any, run: any, use: any) => Promise<any>) | null, readDeliveryBindings?: typeof readLearningDeliveryBindings, funnel?: (event: any) => void,
    *   readShapes?: typeof readArtifactShapes, report?: (reason: string) => void, observe?: (outcome: string) => void, periodDays?: number, now?: () => Date }} dependencies
    *   `contextProvenance` names a shared GEO project's policy and observes what a person actually typed into a run of it
    *   (`geoContextProvenance.mjs`): such a project learns only from attributed human input, inside the project.
    */
   constructor({ feedback, jobs, agentRuns, triggers, judge = null, scripts = null, examples = null, methodsOpened = null, resolveProject = null, readShapes = readArtifactShapes,
     report = () => {}, observe = () => {}, periodDays = 90, now = () => new Date(), contextProvenance = null,
-    lateFollowUpEnabled = false, readDeliveryBindings = readLearningDeliveryBindings, funnel = () => {},
+    lateFollowUpEnabled = false, confirmedRedo = null, readDeliveryBindings = readLearningDeliveryBindings, funnel = () => {},
     toolchainEnabled = false, toolchainMinSimilarity = 0.8, readTraces = readToolTraces, similarity = createMethodSimilarity() }) {
     if (!feedback || !jobs || !agentRuns || !triggers) throw new TypeError("Learning evidence needs the feedback ledger, the job queue, the run ledger and the triggers.");
     this.lateFollowUpEnabled = lateFollowUpEnabled;
+    this.confirmedRedo = confirmedRedo;
     this.readDeliveryBindings = readDeliveryBindings;
     this.funnel = funnel;
     this.lateInFlight = new Set();
@@ -376,6 +377,47 @@ export class LearningEvidence {
     this.pending = new Set();
     /** @type {Map<string, number>} files already looked at by `noteFileUse`, project and path, and until when */
     this.seenUses = new Map();
+  }
+
+  /**
+   * A redo is confirmed by the correction ledger and a positive, version-bound use of its final result.
+   * A correction to the replacement takes priority over all of its positive reactions.
+   * @param {any} project @param {any} run @param {string} [eventId]
+   */
+  async redoLessonEvidence(project, run, eventId) {
+    if (!this.confirmedRedo || run.status !== "succeeded" || await this.#triggers.refusalFor(project, run)) return null;
+    const finished = Date.parse(run.finishedAt);
+    if (!Number.isFinite(finished)) return null;
+    const evidence = await this.feedback.learningEvidenceOf(project.userId, run.id);
+    if (learningRunOutcome(evidence.map(event => event.detail)) !== "clean") return null;
+    for (const use of evidence) {
+      const detail = use.detail;
+      if (!detail?.artifact || !(Date.parse(detail.at) >= finished)
+        || !(detail.resultUse || detail.lateFollowUp && detail.verdict === "accept")) continue;
+      const correction = await this.confirmedRedo(project, run, detail);
+      if (!correction || eventId && correction.id !== eventId || unsafeToKeep(correction.detail.instruction)) continue;
+      return { correction, useEventId: use.id, source: detail.resultUse?.source ?? detail.relation };
+    }
+    return null;
+  }
+
+  /** @param {any} project @param {any} run */
+  async considerRedo(project, run) {
+    const proof = await this.redoLessonEvidence(project, run);
+    if (!proof) return;
+    await this.#triggers.afterCorrection(project, { event: proof.correction, runId: proof.correction.detail.originalRunId,
+      replacementRunId: run.id });
+  }
+
+  /** @param {any} project @param {any} original @param {any} pointer */
+  async readRedoLesson(project, original, pointer) {
+    const replacement = (await this.agentRuns.list(project)).find(run => run.id === pointer.replacementRunId && run.sessionId === original.sessionId);
+    if (!replacement || await this.#triggers.refusalFor(project, original)) return null;
+    const proof = await this.redoLessonEvidence(project, replacement, pointer.correctionEventId);
+    if (!proof || proof.correction.detail.originalRunId !== original.id) return null;
+    const { original: before, successor: after } = proof.correction.detail;
+    return { replacementRunId: replacement.id, original: { versionId: before.versionId, digest: before.digest },
+      replacement: { versionId: after.versionId, digest: after.digest }, useEventId: proof.useEventId, source: proof.source };
   }
 
   /** Recheck all three reserved runs before a worker reads their transcripts. @param {any} project @param {any} run @param {any} job */
@@ -904,6 +946,9 @@ export class LearningEvidence {
     const events = await this.feedback.learningEvidenceOf(project.userId, run.id);
     const outcome = learningRunOutcome(events.map((/** @type {any} */ event) => event.detail));
     if (outcome === "corrected") { this.#funnel(project, run, "corrected", { clean: false }); return { settled: "corrected", routine: false, outcome }; }
+    if (outcome === "clean" && events.some(event => event.detail?.artifact)) {
+      await this.considerRedo(project, run).catch(() => this.#failed("record_failed"));
+    }
     const scope = learningScopeOf(run);
     let settling = events.find((/** @type {any} */ event) => event.detail?.evidence === "silent" || event.detail?.evidence === "follow-up");
     let shape = Array.isArray(settling?.detail?.shape) ? settling.detail.shape : [];

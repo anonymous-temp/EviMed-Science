@@ -3317,6 +3317,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     documents: productDocuments, feedback: feedbackEvents,
     runs: { list: project => agentRuns.list(project) },
     learning: () => (learningWorker ? learningTriggers : null),
+    onRevisionSettled: (project, run) => learningEvidence?.considerRedo(project, run) ?? Promise.resolve(),
     // And the correction itself, carried to the learned methods the corrected result's run read (N14).
     methods: () => methodFeedback,
     report: code => { void securityAudit(config, "result.correction", "failed", { code }).catch(() => {}); } }) : null;
@@ -4941,6 +4942,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         { userId, projectId: document.payload.provenance?.sourceProjectId ?? LEARNING_PROJECT_ID, runId: document.payload.provenance?.runId ?? document.id });
     };
     const distillation = new MethodDistillationRuns({
+      readConfirmedRedo: (project, run, pointer) => learningEvidence?.readRedoLesson(project, run, pointer) ?? Promise.resolve(null),
       correctionJudge,
       contextProvenance,
       scriptUses, verifyCode: (candidate, options) => codeVerification.verify(candidate, options), onCodeSkill: (outcome) => learningMetrics.observeCodeSkill(outcome),
@@ -5029,6 +5031,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       learningEvidence = new LearningEvidence({
       contextProvenance,
         lateFollowUpEnabled: config.learningLateFollowUpEnabled,
+        confirmedRedo: resultCorrections ? (project, run, use) => resultCorrections.confirmedRedo(project, run, use) : null,
         funnel: event => learningMetrics.observeFunnel(event),
         toolchainEnabled: config.learningToolchainRoutineEnabled,
         toolchainMinSimilarity: config.learningToolchainMinSimilarity,

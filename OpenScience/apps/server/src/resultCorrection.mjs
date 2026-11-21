@@ -48,15 +48,15 @@ const codeOf = (error) => (typeof error?.code === "string" && /^[a-z][a-z0-9_.-]
 
 export class ResultCorrectionService {
   /**
-   * @param {{ results: any, documents: any, feedback?: any, runs?: any, learning?: (() => any) | null, methods?: (() => any) | null,
+   * @param {{ results: any, documents: any, feedback?: any, runs?: any, learning?: (() => any) | null, onRevisionSettled?: ((project: any, run: any) => Promise<unknown>) | null, methods?: (() => any) | null,
    *   report?: (code: string) => void, now?: () => Date }} dependencies
    *   `learning`: answers the learning triggers when this deployment has them (`LearningTriggers.afterCorrection`).
    *   `methods`: answers the join from a correction to the methods the corrected result's run read, when this deployment
    *   has it (`MethodFeedbackService.fromCorrection`, N14).
    */
-  constructor({ results, documents, feedback = null, runs = null, learning = null, methods = null, report = () => {}, now = () => new Date() }) {
+  constructor({ results, documents, feedback = null, runs = null, learning = null, onRevisionSettled = null, methods = null, report = () => {}, now = () => new Date() }) {
     this.results = results; this.documents = documents; this.feedback = feedback; this.runs = runs; this.learning = learning;
-    this.methods = methods; this.report = report; this.now = now;
+    this.methods = methods; this.onRevisionSettled = onRevisionSettled; this.report = report; this.now = now;
   }
 
   /** The decoded bytes of a version, or null when they are not text, are too large, may not be read or cannot be read.
@@ -239,6 +239,7 @@ export class ResultCorrectionService {
     const settled = projectCorrectionOutcome({ ...outcome, settledAt: this.now().toISOString() });
     await this.documents.put(project.userId, "result-revision", staged.id, { ...staged, outcome: settled },
       { projectId: project.id, expectedRevision: row.revision });
+    if (final && run.status === "succeeded") await this.onRevisionSettled?.(project, run).catch(error => this.report(codeOf(error)));
   }
 
   /** @param {any} project @param {any} run @param {any} original @param {any} event */
@@ -247,6 +248,42 @@ export class ResultCorrectionService {
     if (!triggers?.afterCorrection) return;
     try { await triggers.afterCorrection(project, { event, runId: original.producer?.runId ?? run.id }); }
     catch (error) { this.report(codeOf(error)); }
+  }
+
+  /**
+   * Resolve the final replacement proven by an owner-bound correction and a use of those exact bytes.
+   * @param {any} project @param {any} run @param {any} use
+   */
+  async confirmedRedo(project, run, use) {
+    const artifact = use?.artifact;
+    if (!artifact || !this.feedback) return null;
+    const pinned = use.resultUse?.versionId;
+    const versions = pinned
+      ? [await this.results.get(project.userId, project.id, pinned).catch(() => null)]
+      : (await this.results.list(project.userId, { projectId: project.id, runId: run.id, path: artifact.path, limit: 50 })).items;
+    const successors = versions.filter(version => version?.path === artifact.path && version.digest === artifact.sha256
+      && version.producer?.runId === run.id && version.producer?.sessionId === run.sessionId && version.supersedesVersionId);
+    if (successors.length !== 1) return null;
+    const successor = successors[0];
+    const events = await this.feedback.listResultCorrections(project.userId, successor.versionId);
+    for (const event of events) {
+      const detail = event.detail;
+      if (event.projectId !== project.id || !detail?.instruction || !detail.revisionId
+        || detail.revisionRunId !== run.id || detail.successor?.versionId !== successor.versionId || detail.successor.digest !== successor.digest
+        || detail.original?.versionId !== successor.supersedesVersionId || !detail.originalRunId || detail.originalRunId === run.id) continue;
+      const staged = await this.documents.get(project.userId, "result-revision", detail.revisionId);
+      const revision = staged?.payload;
+      if (staged?.projectId !== project.id || revision?.state !== "bound" || revision.requestedBy !== project.userId
+        || revision.sessionId !== run.sessionId || revision.outcome?.status !== "settled"
+        || revision.outcome.successorVersionId !== successor.versionId || revision.instructionDigest !== detail.instructionDigest
+        || revision.versionId !== detail.original.versionId || revision.digest !== detail.original.digest
+        || !(run.kernelRequestIds ?? []).includes(revision.promptRequestId)) continue;
+      const original = await this.results.get(project.userId, project.id, detail.original.versionId).catch(() => null);
+      if (original?.digest !== detail.original.digest || original.producer?.runId !== detail.originalRunId
+        || original.producer?.sessionId !== run.sessionId) continue;
+      return event;
+    }
+    return null;
   }
 
   /**

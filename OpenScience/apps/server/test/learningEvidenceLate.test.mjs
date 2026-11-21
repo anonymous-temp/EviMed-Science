@@ -209,3 +209,33 @@ test('export and share evidence bind the archived owner, run and digest even whe
   assert.deepEqual(state.rows.filter(row => row.detail.resultUse).map(row => [row.runId, row.detail.resultUse.source, row.detail.artifact]),
     [[state.run.id, 'export', DELIVERY], [state.run.id, 'share', DELIVERY]]);
 });
+
+test('only a clean replacement with version-bound use contributes to a single original correction lesson', async () => {
+  const original = { id: 'corrected', sessionId: 'session', status: 'succeeded', transcript: { completeness: 'complete' } };
+  const state = lateFixture({ extraRuns: [original] });
+  const versionId = `rv_${'e'.repeat(64)}`;
+  const version = { versionId, path: DELIVERY.path, digest: DELIVERY.sha256, projectId: state.project.id,
+    producer: { kind: 'deliverable', runId: state.run.id, sessionId: state.run.sessionId } };
+  const correction = { id: 'feedback-correction', projectId: state.project.id, trigger: 'result-corrected',
+    detail: { instruction: 'Shorten just the introduction', originalRunId: original.id,
+      original: { versionId: `rv_${'d'.repeat(64)}`, digest: 'f'.repeat(64) },
+      successor: { versionId: version.versionId, digest: version.digest } } };
+  const jobs = new Map();
+  state.evidence.triggers = new LearningTriggers({ agentRuns: state.evidence.agentRuns, evidence: state.evidence,
+    jobs: { enqueue: async (_owner, _kind, payload, { idempotencyKey }) => { jobs.set(idempotencyKey, payload); } } });
+  state.evidence.confirmedRedo = async (_project, run, use) => run.id === state.run.id && use.artifact?.sha256 === version.digest ? correction : null;
+  await state.snapshot();
+  await state.evidence.considerRedo(state.project, state.run);
+  assert.equal(jobs.size, 0, 'silence');
+  await state.evidence.noteResultUse(state.project, { actorId: 'owner', version, source: 'export' });
+  await state.evidence.noteResultUse(state.project, { actorId: 'owner', version, source: 'share' });
+  assert.equal(jobs.size, 1, 'repeat use only supports the same correction');
+  const [payload] = jobs.values();
+  assert.equal(payload.runId, original.id);
+  assert.equal(payload.trigger, 'correction');
+  assert.deepEqual((await state.evidence.readRedoLesson(state.project, original, payload.confirmedRedo)).replacement,
+    { versionId, digest: version.digest });
+  await state.feedback.recordLearningEvidence('owner', { runId: state.run.id, projectId: state.project.id, key: 'correction',
+    detail: { evidence: 'result-corrected', at: new Date(LATE_NOW).toISOString() } });
+  assert.equal(await state.evidence.readRedoLesson(state.project, original, payload.confirmedRedo), null);
+});

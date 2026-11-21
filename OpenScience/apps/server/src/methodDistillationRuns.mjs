@@ -745,6 +745,7 @@ export class MethodDistillationRuns {
    *   onCodeSkill?: ((outcome: string) => void) | null,
    *   contextProvenance?: any,
    *   onEvidence?: ((counts: { kept: number, dropped: number }) => void) | null,
+   *   readConfirmedRedo?: ((project: any, run: any, pointer: any) => Promise<any>) | null,
    *   concise?: boolean, officialMethods?: ((userId: string) => Promise<readonly any[]>) | null, camp?: boolean, twoStage?: boolean, correctionJudge?: any}} dependencies
    *   `camp` (`OPEN_SCIENCE_LEARNING_CAMP_ENABLED`, false by default and never set for real accounts) reads a `camp` lesson: any finished lab run with
    *   a machine-checked outcome, with the camp section of the skill. `twoStage` (`OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED`, false by
@@ -756,7 +757,7 @@ export class MethodDistillationRuns {
    */
   constructor({ dispatch, readResult, learning, jobs = null, notifications = null, resolveProject = null, usedMethods = null, resetInstant = null,
     similarity = null, resolveRun = null, scriptUses = null, verifyCode = null, onCodeSkill = null, onEvidence = null, contextProvenance = null,
-    officialMethods = null, camp = false, twoStage = false, concise = false, correctionJudge = null }) {
+    officialMethods = null, camp = false, twoStage = false, concise = false, correctionJudge = null, readConfirmedRedo = null }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method distillation requires the bounded run dispatcher and result reader.");
     }
@@ -766,6 +767,7 @@ export class MethodDistillationRuns {
     this.readResult = readResult;
     this.learning = learning;
     this.correctionJudge = correctionJudge;
+    this.readConfirmedRedo = readConfirmedRedo;
     this.jobs = jobs;
     this.notifications = notifications;
     this.resolveProject = resolveProject;
@@ -889,6 +891,9 @@ export class MethodDistillationRuns {
   async execute({ job, project, run, feedback = [] }) {
     if (!methodSourceAllowsLearning(run)) throw new HttpError(409, 'distillation_run_unavailable', 'Original private memory sources cannot teach a reusable method.');
     const trigger = String(job.payload?.trigger ?? "");
+    const redoPointer = trigger === "correction" ? job.payload?.confirmedRedo : null;
+    const confirmedRedo = redoPointer ? await this.readConfirmedRedo?.(project, run, redoPointer) : null;
+    if (redoPointer && !confirmedRedo) throw new HttpError(409, "distillation_run_unavailable", "The confirmed replacement is no longer available as clean evidence.");
     // A shared GEO project's lesson reads only what a person's attributed input said (`GeoContextProvenance.observeRun`): the user turns of
     // the transcript are replaced by the observed human text, and nothing outside the project is shown.
     const policy = await this.contextProvenance?.policyFor(project);
@@ -952,6 +957,7 @@ export class MethodDistillationRuns {
         && sourceObservations.some(source=>source.humanText.includes(event.detail.quote ?? event.detail.instruction))) : feedback,
       relatedMethods: related, peerRuns, methodsUsed, shapes, toolTraces, scripts,
       ...(trigger === CAMP_TRIGGER ? { campEnabled: this.camp, camp: job.payload } : {}) });
+    if (confirmedRedo) Object.assign(input, { confirmedRedo });
     if (shared && trigger==='correction' && sourceObservations.length>1) {
       input.corrections.push(...sourceObservations.filter(source=>source.runId!==run.id).flatMap(source=>source.humanMessages.map(message=>
         ({source:'accepted-input',recordId:message.referenceId,key:null,text:message.text}))));
@@ -964,7 +970,7 @@ export class MethodDistillationRuns {
     const dispatchKey = typeof job.payload?.dispatchKey === "string" ? job.payload.dispatchKey.slice(0, 200) : "";
     // Two steps, frame then details (`OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED`); a shared GEO project's lesson keeps the one step its
     // frozen-input receipts are written for.
-    if (this.twoStage && !shared) return this.#executeTwoStage({ job, run, input, related, dispatchKey, policy });
+    if (this.twoStage && !shared && !confirmedRedo) return this.#executeTwoStage({ job, run, input, related, dispatchKey, policy });
     const priorDispatchId = distillationDispatchId(run.id, trigger, dispatchKey);
     const dispatchId = priorDispatchId + (shared ? '-gcp1' : '');
     const generationInputRef=shared?await this.contextProvenance.freezeInput(job.userId,policy,dispatchId,input,
@@ -981,6 +987,7 @@ export class MethodDistillationRuns {
       question: withSkillVariants(`Distil at most one reusable method from the finished run${peerRuns.length ? "s" : ""} described in `
         + `${DISTILLATION_INPUT_FILE}, using the method-distillation capability. `
         + "Read relatedMethods first and prefer amending an existing method over writing a near-duplicate. "
+        + (confirmedRedo ? "The owner used the exact final replacement after asking for the recorded correction. Learn only the specific change grounded in that correction. Usage does not confirm the rest of the replacement or its workflow. " : "")
         + (input.relatedMethods.some((/** @type {any} */ method) => method.readOnly)
           ? "A related method marked readOnly is the platform's own: build on it (reuse it through depends_on at its digest) and never amend, merge or retire it. " : "")
         + "Write SKILL.md and method-candidate.json and submit the method-candidate contract. "
@@ -999,6 +1006,9 @@ export class MethodDistillationRuns {
     if (!result || result.status === "running" || result.status === "pending") return { state: "pending", ...identityRecord };
     if (result.status !== "succeeded") {
       throw new HttpError(409, "method_distillation_run_failed", "The distillation run did not succeed.");
+    }
+    if (redoPointer && !await this.readConfirmedRedo?.(project, run, redoPointer)) {
+      throw new HttpError(409, "distillation_run_unavailable", "The confirmed replacement is no longer available as clean evidence.");
     }
     const applied = await this.applyCandidate(job, run, result.output ?? {}, { signal: input.signal,
       evidence: shared ? new Map(sourceObservations.map(source => [source.runId, source.humanText])) : evidenceCorpus(input), reactions: reactionCorpus(input),
