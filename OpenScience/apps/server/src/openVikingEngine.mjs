@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
-  OPENVIKING_MEMORY_TYPES, OPENVIKING_SKILLS_ROOT, OPENVIKING_SKILL_NAMES, skillUri,
+  OPENVIKING_KNOWN_MEMORY_TYPES, OPENVIKING_MEMORY_TYPES, OPENVIKING_SKILLS_ROOT, OPENVIKING_SKILL_NAMES, skillUri,
 } from "./openVikingLayout.mjs";
 
 /**
@@ -199,14 +199,19 @@ export class OpenVikingEngine {
   async #memoryTemplates() {
     const account = this.client.account;
     const missing = [];
-    for (const type of this.config.memorySafetyNotesEnabled ? [...OPENVIKING_MEMORY_TYPES, "safety_notes"] : OPENVIKING_MEMORY_TYPES) {
+    const expected = this.config.memorySafetyNotesEnabled ? OPENVIKING_KNOWN_MEMORY_TYPES : OPENVIKING_MEMORY_TYPES;
+    for (const type of OPENVIKING_KNOWN_MEMORY_TYPES) {
       try {
         await this.client.request({ path: `/api/v1/admin/accounts/${account}/memory-templates/${type}`, openVikingUser: OPENVIKING_ENGINE_USER });
       } catch (error) {
         if (notRegisteredYet(error)) return { ok: false, code: "openviking_registration_pending" };
-        if (/** @type {any} */ (error)?.upstreamStatus === 404) missing.push(type);
+        if (/** @type {any} */ (error)?.upstreamStatus === 404) {
+          if (expected.includes(type)) missing.push(type);
+          continue;
+        }
         else if (/** @type {any} */ (error)?.upstreamStatus !== 400) throw error;
       }
+      if (!expected.includes(type)) return { ok: false, code: "openviking_memory_types_mismatch", unexpectedTemplate: type };
     }
     if (missing.length) return { ok: false, code: "openviking_memory_templates_missing", missing };
     try {
@@ -219,10 +224,9 @@ export class OpenVikingEngine {
       path: `/api/v1/admin/accounts/${account}/users/${OPENVIKING_ENGINE_USER}/settings`, openVikingUser: OPENVIKING_ENGINE_USER,
     });
     const types = Array.isArray(settings?.result?.memory_policy?.memory_types) ? [...settings.result.memory_policy.memory_types].sort() : [];
-    const expected = [...OPENVIKING_MEMORY_TYPES, ...(this.config.memorySafetyNotesEnabled ? ["safety_notes"] : [])].sort();
-    return types.length === expected.length && types.every((type, index) => type === expected[index])
+    return types.length === expected.length && expected.every(type => types.includes(type))
       ? { ok: true, types }
-      : { ok: false, code: "openviking_memory_types_mismatch", types };
+      : { ok: false, code: "openviking_memory_types_mismatch", types, expected };
   }
 
   /** The admin routes do not know a trusted user until it is registered; a second registration answers 409. */

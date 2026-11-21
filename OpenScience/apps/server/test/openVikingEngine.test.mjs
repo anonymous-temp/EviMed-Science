@@ -37,6 +37,9 @@ function extendedByTheNewTypes(recording) {
   for (const exchange of recording.exchanges) {
     exchanges.push(exchange);
     if (exchange.path?.endsWith("/memory-templates/corrections")) {
+      // The older recording predates the optional template. An unregistered type answers 404.
+      exchanges.push({ ...exchange, path: exchange.path.replace(/corrections$/, "safety_notes"), status: 404,
+        response: { error: { code: "NOT_FOUND", message: "Template not found" } } });
       for (const type of added) exchanges.push({ ...exchange, path: exchange.path.replace(/corrections$/, type), response: JSON.parse(JSON.stringify(exchange.response ?? null).replaceAll("corrections", type)) });
     }
     const policy = exchange.response?.result?.memory_policy;
@@ -427,4 +430,17 @@ test("the engine's source says every one of those codes and no other of its fami
   const said = new Set([...text.matchAll(/"(openviking_[a-z_]+)"/g)].map((match) => match[1]).filter((code) => code !== "openviking_feature_unknown"));
   assert.ok(said.size >= 14, `the walk found only ${said.size} codes`);
   for (const code of said) assert.ok(READINESS_ERROR_CODES.includes(code), `${code} has no sentence in the registry`);
+});
+
+test("safety requires the switch, registered template and effective type policy to agree", async () => {
+  for (const enabled of [false, true]) for (const registered of [false, true]) for (const allowed of [false, true]) {
+    const { fetchImpl } = await replay("engine-check-ready", { transform(exchange) {
+      if (registered && exchange.path.endsWith("/memory-templates/safety_notes")) return { ...exchange, status: 400 };
+      if (allowed && exchange.path.endsWith("/settings")) exchange.response.result.memory_policy.memory_types.push("safety_notes");
+      return exchange;
+    } });
+    const { engine } = engineFor(fetchImpl, { config: { memorySafetyNotesEnabled: enabled, openVikingModelKey: "test" } });
+    const fact = (await engine.check()).facts.memoryTemplates;
+    assert.equal(fact.ok, enabled === registered && enabled === allowed, JSON.stringify({ enabled, registered, allowed, fact }));
+  }
 });
