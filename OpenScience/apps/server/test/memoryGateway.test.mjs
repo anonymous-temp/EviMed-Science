@@ -2109,7 +2109,10 @@ test('earlier-value labels preserve source receipts, missing-condition fences an
   f.stub.seedMemory(OV_USER, 'profile.md', body);
   const read = async () => (await f.call('GET', '/api/v1/content/read?uri=' + encodeURIComponent(uri))).json.result;
   const delivered = await read();
-  assert.deepEqual(JSON.parse(delivered).statements, [{ text: line, source }]);
+  // The delivered envelope labels memory entries as capsule records (SRC-FIX): not a tool result, and a
+  // preference line is not a first-person health fact.
+  assert.deepEqual(JSON.parse(delivered).statements, [{ text: line, source: {
+    ...source, label: 'Memory capsule entry. Use its attributed speaker, subject and conditions.', personalFact: false } }]);
   assert.equal(JSON.parse(delivered).text, annotated);
   const [external] = await f.handler.opening({ userId: USER, projectId: 'p1' });
   assert.equal(external.value, annotated);
