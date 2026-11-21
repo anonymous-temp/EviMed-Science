@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { unzipSync } from 'fflate';
-import { NativeMemoryStore } from "../src/nativeMemoryStore.mjs";
+import { NativeMemoryStore, nativeFileId } from "../src/nativeMemoryStore.mjs";
 import { NativeMemoryOverlay, contentHash, lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { reconcileMemoryNames } from '../src/nativeMemoryNames.mjs';
 
@@ -154,6 +154,35 @@ test('profile H1 is a visible editable row; forgetting the title preserves neigh
   assert.equal(restored.value, 'Mara Chen');
   assert.match(files.get(uri).body, /^# Mara Chen\n/);
   assert.doesNotMatch(files.get(uri).body, /Mara Santos/);
+});
+
+test('a profile H1 and its exact name bullet are one visible fact and forget and restore together', async () => {
+  for (const target of ['title', 'bullet']) {
+    const { files, store } = engine({ count: 0, delay: 0 });
+    const uri = `${ROOT}/profile.md`, rejected = [], revisions = [];
+    const body = '# 林舟\n- 姓名：林舟 (as of 2026-11-17)\n- 喜欢游泳 (as of 2026-11-17)';
+    store.overlay.addRevision = async row => { const revision = { ...row, id: `r${revisions.length}`, changedAt: '2026-11-17' }; revisions.push(revision); return revision; };
+    store.overlay.forgottenRevisions = async () => revisions.filter(row => row.reason.startsWith('forgotten') && !row.undoneAt).reverse();
+    store.overlay.revisionsOf = async () => revisions;
+    store.overlay.revisionsOfMany = async () => new Map([[uri, [...revisions].reverse()]]);
+    store.overlay.markUndone = async (_user, id) => { revisions.find(row => row.id === id).undoneAt = '2026-11-17'; };
+    store.overlay.reject = async (_user, _type, _uri, lines) => rejected.push(...lines);
+    files.set(uri, { body, modTime: '2026-11-17' });
+    const records = await store.records('u1');
+    assert.deepEqual(records.map(row => row.value).sort(), ['喜欢游泳', '林舟'].sort());
+    const id = target === 'title' ? records.find(row => row.value === '林舟').id
+      : `${nativeFileId(uri)}_${lineFingerprint('姓名：林舟').slice(0, 12)}`;
+    const title = records.find(row => row.value === '林舟');
+    await store.remove('u1', id, { keepText: true });
+    assert.equal(files.get(uri).body, '- 喜欢游泳 (as of 2026-11-17)');
+    assert.ok(rejected.includes('林舟')); assert.ok(rejected.some(row => row.startsWith('姓名：林舟')));
+    const forgotten = await store.forgotten('u1');
+    assert.equal(forgotten.length, 1); assert.equal(forgotten[0].value, '林舟');
+    await store.update('u1', forgotten[0].id, { status: 'active', expectedVersion: forgotten[0].version });
+    assert.equal(files.get(uri).body, body);
+    assert.equal((await store.records('u1')).filter(row => row.value === '林舟').length, 1);
+    assert.ok(title);
+  }
 });
 
 test('people cards offer only unconfirmed name hints on the page and honour a distinct-person decision', async () => {

@@ -5,7 +5,7 @@ import { checkForgetRequests } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash } from "node:crypto";
-import { checkMemoryNoteLabels, carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn } from "@evimed/domain";
+import { checkMemoryNoteLabels, carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn, withoutProfileNameDuplicates } from "@evimed/domain";
 import { filterCapturedMessage } from "./memoryGateway.mjs";
 import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
 import { HttpError } from './security.mjs';
@@ -1176,7 +1176,16 @@ export class NativeMemoryWorker {
     const sessions = memoryContext.sessions;
     let current = await sessions.read(userId, uri);
     if (current === null) return null;
-    // Check syntax only: no extra model call, no semantic keyword filter, no rewrite.
+    if (type === 'profile') {
+      const deduplicated = withoutProfileNameDuplicates(current);
+      if (deduplicated !== current) {
+        await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.replace(userId, uri, deduplicated));
+        await this.overlay.addRevision({ userId, uri, memoryType: type, change: 'updated', actor: 'platform',
+          reason: 'duplicate profile name', before: current, after: deduplicated, projectId });
+        current = deduplicated;
+      }
+    }
+    // The checks below add no model call and no semantic keyword filter. The exact name duplication above is the only text cleanup.
     // Count fresh writes, not replayed settlement receipts. Sensitive is sticky until the person changes it.
     if (type === 'notes' && this.config.memoryTemplatesDirectory === 'memory-templates-extraction-v2') {
       const labels = checkMemoryNoteLabels(current);

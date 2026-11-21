@@ -29,10 +29,38 @@ export function isNeutralProfileHeading(line) {
   return title !== undefined && structuralTitles.has(foldTitle(title));
 }
 
+const PROFILE_NAME_LABEL = /^(?:姓名|名字|称呼|name|nickname)\s*[:：]\s*(.+?)\s*$/iu;
+const PROFILE_AS_OF = /\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/iu;
+const foldName = value => String(value).normalize('NFKC').replace(/\s+/gu, ' ').trim().toLowerCase();
+
+/** Exact duplicate name bullets of a genuinely named H1, never a neutral scaffold or a different value.
+ * @param {unknown} body @returns {string[]} raw trimmed lines */
+export function profileNameDuplicateLines(body) {
+  const lines = String(body ?? '').replace(/\r\n/gu, '\n').split('\n');
+  const title = lines.map(line => /^#\s+(.+?)\s*$/u.exec(line.trim())?.[1]).find(value => value !== undefined);
+  if (title === undefined || isNeutralProfileHeading(`# ${title}`)) return [];
+  return lines.map(line => line.trim()).filter(line => {
+    if (/^#{1,6}\s/u.test(line)) return false;
+    const statement = line.replace(/^(?:[-*+]|\d+[.)])\s+/u, '').replace(PROFILE_AS_OF, '');
+    const name = PROFILE_NAME_LABEL.exec(statement)?.[1];
+    return name !== undefined && foldName(name) === foldName(title);
+  });
+}
+
+/** Remove only the exact duplicate name rows, leaving the named H1 as the one editable fact.
+ * @param {unknown} body */
+export function withoutProfileNameDuplicates(body) {
+  const text = String(body ?? '');
+  const duplicates = new Set(profileNameDuplicateLines(text));
+  return duplicates.size ? text.replace(/\r\n/gu, '\n').split('\n').filter(line => !duplicates.has(line.trim())).join('\n') : text;
+}
+
 /** Keep H1 identity for editing and origins; lower headings are structure.
  * @param {unknown} body @returns {string[]} */
 export function profileMemoryStatements(body) {
-  return String(body ?? '').split('\n').map(line => line.trim())
-    .filter(line => line && !isNeutralProfileHeading(line) && (/^#\s+/.test(line) || !/^#{1,6}\s/.test(line)))
+  const text = String(body ?? '');
+  const duplicates = new Set(profileNameDuplicateLines(text));
+  return text.split('\n').map(line => line.trim())
+    .filter(line => line && !duplicates.has(line) && !isNeutralProfileHeading(line) && (/^#\s+/.test(line) || !/^#{1,6}\s/.test(line)))
     .map(line => line.replace(/^(?:[-*+]|\d+[.)])\s+/, ''));
 }

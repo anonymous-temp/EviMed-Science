@@ -59,7 +59,9 @@ description: |
   When an existing profile is provided:
   1. Keep every existing bullet that is still valid, with its existing as-of date; do not
      rebuild the profile from only the latest conversation.
-  2. Add only genuinely new facts; merge semantic duplicates into one bullet.
+  2. Add only genuinely new facts; merge semantic duplicates into one bullet. When the H1 already holds
+     the person's real name or nickname, do not add a separate name, 姓名 or nickname bullet repeating it:
+     the H1 itself is the visible, editable and forgettable name record.
   3. For a changed state (role, employer, field of work, education), replace the old bullet
      with the latest stated value; keep dated prior states in NOTES or the person's history. A role or line of work
      stated beside an existing one, without saying the earlier one changed or ended, is a

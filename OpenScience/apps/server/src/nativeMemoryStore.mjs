@@ -1,5 +1,5 @@
 import { filterCapturedMessage } from './memoryGateway.mjs';
-import { isNeutralProfileHeading, profileMemoryStatements, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
+import { isNeutralProfileHeading, profileMemoryStatements, profileNameDuplicateLines, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
 import { readStatus } from './memoryReadStatus.mjs';
 import { mergePeopleFiles, undoPeopleMerge, redirectPeopleWrites } from './nativeMemoryPeopleStore.mjs';
 import { personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
@@ -1430,9 +1430,11 @@ export class NativeMemoryStore {
       if (identifierShapesIn(text).length) throw new HttpError(400, "memory_content_refused", "A memory cannot carry a credential or a personal identifier.");
       let next;
       if (line) {
-        const raw = file.body.split("\n");
+        const duplicates = new Set(profileNameDuplicateLines(file.body));
+        const raw = file.body.split("\n").filter(row => !/^#\s/.test(line.raw.trim()) || !duplicates.has(row.trim()));
+        const index = raw.findIndex(row => row === line.raw);
         const date = this.now().toISOString().slice(0, 10);
-        raw[line.index] = /^#\s/.test(line.raw.trim()) ? `# ${text.replace(/^#+\s*/, '')}` : `- ${text.replace(/^(?:[-*+]|\d+[.)])\s+/, "").replace(AS_OF, "")} (as of ${date})`;
+        raw[index] = /^#\s/.test(line.raw.trim()) ? `# ${text.replace(/^#+\s*/, '')}` : `- ${text.replace(/^(?:[-*+]|\d+[.)])\s+/, "").replace(AS_OF, "")} (as of ${date})`;
         next = raw.join("\n");
       } else {
         next = text;
@@ -1639,12 +1641,18 @@ export class NativeMemoryStore {
     const plan = await this.#duplicatesPlan(userId, line ? [removalText(line.raw)] : removalLines(file.body), file);
     const act = plan.size ? newAct() : null;
     if (line) {
-      const raw = file.body.split("\n");
-      raw.splice(line.index, 1);
+      const duplicates = new Set(file.type === 'profile' ? profileNameDuplicateLines(file.body) : []);
+      const paired = file.type === 'profile' && (/^#\s/.test(line.raw.trim()) || duplicates.has(line.raw.trim()));
+      const title = file.body.split("\n").find(row => /^#\s/.test(row.trim()));
+      const raw = file.body.split("\n").filter((row, index) => index !== line.index && (!paired || row !== title && !duplicates.has(row.trim())));
       const next = raw.join("\n");
       await this.#write(userId, file, next, { actor, neutralizeRemovedPath: true, reason: `${keepText ? "forgotten on the memory page" : "deleted on the memory page"}${actSuffix(act)}` });
       // A delete takes the line out of the history too; a forget keeps it for the undo.
-      if (!keepText) await this.overlay.scrubLines(userId, file.uri, await this.#wordingsOf(userId, file.uri, line.raw.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")));
+      if (!keepText) {
+        const rows = paired ? [line.raw, ...duplicates, ...(title ? [title] : [])] : [line.raw];
+        const wordings = await Promise.all(rows.map(row => this.#wordingsOf(userId, file.uri, row.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, ""))));
+        await this.overlay.scrubLines(userId, file.uri, wordings.flat());
+      }
       const also = await this.#forgetDuplicates(userId, keepText ? plan : withoutJudged(plan), { act, keepText, actor });
       return { removed: true, uri: file.uri, hash: contentHash(next), ...(also ? { alsoForgot: also } : {}) };
     }
@@ -1727,6 +1735,12 @@ export class NativeMemoryStore {
   /** Remove exactly the judged lines through the same revision/rejection/history path as the tool. */
   async forgetLines(userId, file, lines, { act = null, engineSession = null, sweep = true } = {}) {
     const prints = new Set(lines.map(removalText).map(lineFingerprint));
+    if (file.type === 'profile') {
+      const duplicates = profileNameDuplicateLines(file.body), title = file.body.split('\n').find(row => /^#\s/.test(row.trim()));
+      if (title && prints.has(lineFingerprint(removalText(title))) || duplicates.some(row => prints.has(lineFingerprint(removalText(row))))) {
+        for (const row of [...duplicates, ...(title ? [title] : [])]) prints.add(lineFingerprint(removalText(row)));
+      }
+    }
     const removed = removalLines(file.body).filter(text => prints.has(lineFingerprint(text)));
     if (!removed.length) return 0;
     const sweeping = sweep && this.forgetTargetsEnabled && this.overlay.deferredSummaryRebuildEnabled === true && this.history;
@@ -2188,9 +2202,10 @@ export class NativeMemoryStore {
       const enumerate = place.type === "profile" ? profileStatements : statements;
       const after = new Set(enumerate(String(revision.after ?? "")).map(lineFingerprint));
       const present = new Set(enumerate(live.get(revision.uri)?.body ?? "").map(lineFingerprint));
+      const duplicateNames = new Set(place.type === 'profile' ? profileNameDuplicateLines(revision.before ?? '') : []);
       for (const raw of String(revision.before ?? "").split("\n")) {
         const text = raw.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "");
-        if (!text || isLabelLine(raw) || place.type === 'profile' && isNeutralProfileHeading(raw) || /^#{1,6}\s/.test(raw.trim()) && !(place.type === 'profile' && /^#\s/.test(raw.trim()))) continue;
+        if (!text || duplicateNames.has(raw.trim()) || isLabelLine(raw) || place.type === 'profile' && isNeutralProfileHeading(raw) || /^#{1,6}\s/.test(raw.trim()) && !(place.type === 'profile' && /^#\s/.test(raw.trim()))) continue;
         const print = lineFingerprint(text);
         if (after.has(print) || present.has(print)) continue;
         const id = `${nativeFileId(revision.uri)}_${print.slice(0, 12)}`;
@@ -2248,13 +2263,16 @@ export class NativeMemoryStore {
     // A line: the line as the document had it, after the document's own lines.
     const raw = String(revision.before ?? "").split("\n").find((line) => lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")).slice(0, 12) === String(entry.id).slice(28));
     const line = (raw ?? `- ${entry.value}`).trim();
+    const duplicates = profileNameDuplicateLines(revision.before ?? ''), beforeTitle = String(revision.before ?? '').split('\n').find(row => /^#\s/.test(row.trim()));
+    const paired = memoryType === 'profile' && (duplicates.includes(line) || line === beforeTitle);
+    const restoredLines = paired ? [...(beforeTitle ? [beforeTitle] : []), ...duplicates] : [line];
     const document = files.find((file) => file.uri === entry.uri);
     if (document) {
       const body = document.body.replace(/\s+$/, "");
-      if (/^#\s/.test(line) && /^#\s/m.test(body)) throw new HttpError(409, 'memory_conflict', 'The profile already has a title. Edit the current title instead.');
-      const restored = /^#\s/.test(line) ? `${line}\n${body}` : `${body}\n${line}`;
+      if (restoredLines.some(row => /^#\s/.test(row)) && /^#\s/m.test(body)) throw new HttpError(409, 'memory_conflict', 'The profile already has a title. Edit the current title instead.');
+      const restored = restoredLines.some(row => /^#\s/.test(row)) ? `${restoredLines.join('\n')}\n${body}` : `${body}\n${restoredLines.join('\n')}`;
       await this.#write(userId, document, restored, { actor: 'user', reason: 'restored from forgotten' });
-      await this.overlay.unreject(userId, this.#rejectionType(await this.#fileContext(userId, document.uri), memoryType), [entry.value]);
+      await this.overlay.unreject(userId, this.#rejectionType(await this.#fileContext(userId, document.uri), memoryType), restoredLines.map(row => row.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, '')));
       // A judged request may remove several lines at once. Restoring one must leave the others available to restore too.
       const originallyKept = new Set(removalLines(revision.after ?? '').map(lineFingerprint));
       const nowKept = new Set(removalLines(`${body}\n${line}`).map(lineFingerprint));
