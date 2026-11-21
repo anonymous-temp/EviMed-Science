@@ -133,7 +133,7 @@ export function cleanLearningEvidence(value) {
     ...(record.lateFollowUp === true ? { lateFollowUp: true } : {}),
     ...(/^[a-f0-9]{64}$/.test(record.inputDigest ?? '') ? { inputDigest: record.inputDigest } : {}),
     ...(artifact ? { artifact } : {}),
-    ...(['build', 'convert', 'cite'].includes(record.relation) ? { relation: record.relation } : {}),
+    ...(['build', 'convert', 'cite', 'share'].includes(record.relation) ? { relation: record.relation } : {}),
     ...trace,
     rule: text(record.rule, limits.rule) || null,
     quote: text(record.quote, limits.quote) || null,

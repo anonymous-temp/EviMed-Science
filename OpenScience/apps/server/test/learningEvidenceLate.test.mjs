@@ -169,3 +169,24 @@ test('with late follow-up off, delivery queues the original half-hour job and on
   assert.equal(settled.outcome, 'clean');
   assert.equal(state.funnel.some((/** @type {any} */ event) => event.reason === 'clean'), true);
 });
+
+test('the late prompt has its own quotation protocol and keeps the exact shared artifact', async () => {
+  const shared = '就这个版本，我转发给导师了。';
+  const judge = new FollowUpJudge({ deepseekProviderEnabled: true, deepseekApiKey: 'test', deepseekModel: 'test' }, {
+    callModel: async (_gateway, { body }) => {
+      const prompt = body.messages[0].content;
+      assert.match(prompt, /already forwarded or shared/);
+      assert.match(prompt, /several versions fit/);
+      assert.doesNotMatch(prompt, /null for accept and none/);
+      return { choices: [{ message: { content: JSON.stringify({ verdict: 'accept', quote: shared, artifact: DELIVERY, relation: 'share' }) } }] };
+    },
+  });
+  const state = lateFixture();
+  state.evidence.judge = judge;
+  await state.snapshot();
+  assert.equal((await state.turn(shared)).verdict, 'accept');
+  const row = state.rows.find(row => row.detail.verdict === 'accept');
+  assert.deepEqual(row.detail.artifact, DELIVERY);
+  assert.equal(row.detail.quote, shared);
+  assert.equal(row.detail.relation, 'share');
+});
