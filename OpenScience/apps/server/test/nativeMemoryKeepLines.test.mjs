@@ -161,3 +161,14 @@ test('a containing prefix cannot erase a dose, unit, identifier or name boundary
     assert.deepEqual(result.outcomes, ['restored']);
   }
 });
+
+test('stable headings isolate long sections even when another section contains a near copy', () => {
+  const many = Array.from({ length: 245 }, (_, i) => '- Archive point ' + i);
+  const old = ['## North', ...many, '- Preserve specimen 17.', '## South', '- Withdraw specimen 99.'].join('\n');
+  const next = '## North\n- Short summary.\n## South\n- Preserve specimen 17. Different owner.';
+  const result = classify({ before: old, after: next, withdrawn: new Set([lineFingerprint('Withdraw specimen 99.')]) });
+  const [north, south] = result.after.split('## South');
+  for (const point of [...many, '- Preserve specimen 17.']) assert.ok(north.includes(point + '\n'));
+  assert.ok(!south.includes('Withdraw specimen'));
+  assert.equal(result.outcomes.filter(x => x === 'restored').length, 246);
+});

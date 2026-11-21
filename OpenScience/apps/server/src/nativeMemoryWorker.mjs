@@ -982,7 +982,18 @@ export class NativeMemoryWorker {
         accepted = result.after;
         if (accepted !== entry.after && accepted !== null && current !== accepted) {
           const acceptedBody = accepted;
-          await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.replace(userId, uri, acceptedBody));
+          // Invalidation may wait on database I/O. Recheck the entire after-image
+          // inside the mutation callback; a remote atomic precondition is unavailable on v0.5.3.
+          const digest = body => body === null ? null : createHash('sha256').update(body).digest('hex');
+          const expected = digest(entry.after);
+          const applied = await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, async () => {
+            const latest = await sessions.read(userId, uri);
+            if (latest === acceptedBody) return true;
+            if (digest(latest) !== expected) return false;
+            await sessions.replace(userId, uri, acceptedBody);
+            return true;
+          });
+          if (!applied) continue;
         }
         for (const outcome of result.outcomes) recordUnexplainedDeletions(outcome);
       }
