@@ -112,7 +112,7 @@ test("a run's files are read from its workspace, and a link, a missing file or a
   assert.deepEqual(shapes["out/plan.md"].labels, ["plan", "risks"]);
 });
 
-test("ambiguous output shapes ignore only a strict superset of same-run script operands", async () => {
+test("ambiguous output shapes ignore proven script extras around a primary match", async () => {
   const { scriptRelatedFiles } = await import("../src/artifactShapes.mjs");
   const files = ["result.docx", "scratch.md", "maker.py"];
   const tool = (tool, input, status = "completed") => ({ parts: [{ type: "tool", tool, input, status }] });
@@ -134,5 +134,11 @@ test("ambiguous output shapes ignore only a strict superset of same-run script o
   assert.equal(artifactShapesMatch([doc, helper], [doc]), true);
   assert.equal(artifactShapesMatch([doc], [doc, { ...helper, scriptRelated: false }]), false);
   assert.equal(artifactShapesMatch([doc], [{ ...doc, labels: ["budget", "assumptions"] }, helper]), false, "shared formats still need matching structure");
-  assert.equal(artifactShapesMatch([doc, helper], [doc, { format: "pdf", labels: [], scriptRelated: true }]), false, "neither inventory contains the other");
+  assert.equal(artifactShapesMatch([doc, helper], [doc, { format: "pdf", labels: [], scriptRelated: true }]), true);
+  const sameFormatHelper = { format: "docx", labels: ["budget", "assumptions"], scriptRelated: true };
+  assert.equal(artifactShapesMatch([doc], [doc, sameFormatHelper]), true);
+  assert.equal(artifactShapesMatch([sameFormatHelper], [sameFormatHelper]), false, "a helper-only pair cannot make a routine");
+  assert.equal(artifactShapesMatch([doc, { ...sameFormatHelper, scriptRelated: false }],
+    [{ format: "docx", labels: ["summary", "budget"] }, { format: "docx", labels: ["findings", "assumptions"] }]), false,
+  "unioning the labels across distinct files would equate two different document layouts");
 });

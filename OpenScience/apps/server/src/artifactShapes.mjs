@@ -11,7 +11,7 @@
  * Bounded everywhere, because the file is the model's: a file over `SHAPE_READ_BYTES` is not read (its shape is its format), an
  * Office entry that inflates past `SHAPE_ENTRY_BYTES` is not read, and a zip with a directory this reader does not follow
  * (Zip64, an entry out of bounds) has no labels. A reader that cannot read is not a failure: the shape then carries the format and
- * no labels, which matches on the format alone, and an unreadable path has no shape at all.
+ * no labels. That format alone cannot establish shared structure, and an unreadable path has no shape at all.
  *
  * Deletable when the kernel states what a turn produced as typed output.
  *
@@ -226,8 +226,7 @@ export function shapeOfBytes(relativePath, bytes) {
  * must have been written and then executed successfully in this run, even if
  * it is absent from the output inventory (unchanged bytes or a hidden helper). Its exact
  * quoted file operands link other changed files. No names, prose or extensions
- * are used to guess which output matters. This only permits ignoring an extra
- * format when another run delivered the common formats.
+ * are used to guess which output matters. This permits omitting a proven extra when primary files still match.
  * @param {readonly string[]} files @param {readonly any[]} messages
  * @param {string | null} [workspaceDir] @returns {Set<string>}
  */
@@ -282,7 +281,7 @@ export async function readArtifactShapes(project, files, run = null) {
     } catch { /* unreadable, escaped or linked: no shape */ }
     finally { await opened?.handle.close().catch(() => {}); }
   }
-  if (run && project.rootDir && !run.presentedFiles?.length) {
+  if (run && project.rootDir && !run.presentedFiles?.length && !Object.keys(run.artifactKinds ?? {}).length) {
     const transcript = await readRunTranscript(/** @type {any} */ (project), run.id).catch(() => null);
     if (transcript) {
       const scoped = scopeRunTranscript(transcript, run);
