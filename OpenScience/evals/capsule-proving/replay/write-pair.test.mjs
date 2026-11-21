@@ -15,3 +15,8 @@ test('paired review requires both complete extractions and evidence for all four
   delete review.labels.b;
   assert.throws(() => score(record, review), /incomplete/);
 });
+
+test('a statement promoted from an opinion to a stage is an addition requiring review', () => {
+  assert.deepEqual(addedLines({ a: '## Opinion\n- Study underway\n## Stage' },
+    { a: '## Opinion\n## Stage\n- Study underway' }), [{ file: 'a', heading: '## Stage', line: 'Study underway' }]);
+});

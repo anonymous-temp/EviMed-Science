@@ -4,9 +4,8 @@ import fs from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { renderMemoryTemplates } from '../../../deploy/web/openviking/memory-templates-src/build.mjs';
-import { pathToFileURL } from 'node:url';
 import { loadCases } from '../run/cases.mjs';
 import { openLab } from '../run/lab.mjs';
 import { memoryLines } from '../../../apps/server/src/nativeMemoryOverlay.mjs';
@@ -15,21 +14,28 @@ const digest = value => createHash('sha256').update(JSON.stringify(value)).diges
 const arms = ['old', 'next'];
 const labels = ['user', 'assistant_as_user', 'unadopted', 'material', 'other_error', 'structure'];
 
+function* sectionLines(body) {
+  let heading = '';
+  for (const raw of String(body ?? '').split('\n')) {
+    const [line] = memoryLines(raw);
+    if (!line) continue;
+    if (/^#{1,6}\s/.test(line)) heading = line;
+    yield { heading, line };
+  }
+}
+
 export function addedLines(before, after) {
   return Object.entries(after).flatMap(([file, body]) => {
     const counts = new Map();
-    for (const raw of String(before[file] ?? '').split('\n')) {
-      const [line] = memoryLines(raw);
-      if (line) counts.set(line, (counts.get(line) ?? 0) + 1);
+    for (const row of sectionLines(before[file])) {
+      const key = JSON.stringify(row);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     const added = [];
-    let heading = '';
-    for (const raw of body.split('\n')) {
-      const [line] = memoryLines(raw);
-      if (!line) continue;
-      if (/^#{1,6}\s/.test(line)) heading = line;
-      if (counts.get(line) > 0) counts.set(line, counts.get(line) - 1);
-      else added.push({ file, heading, line });
+    for (const row of sectionLines(body)) {
+      const key = JSON.stringify(row);
+      if (counts.get(key) > 0) counts.set(key, counts.get(key) - 1);
+      else added.push({ file, ...row });
     }
     return added;
   });
