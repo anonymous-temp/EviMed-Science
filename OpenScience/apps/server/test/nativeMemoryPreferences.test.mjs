@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createPreferenceJudge, markPreferenceOverlaps, parsePreferenceOverlaps } from '../src/nativeMemoryPreferences.mjs';
+import { createPreferenceJudge, labelEarlierPreferences, markPreferenceOverlaps, parsePreferenceOverlaps } from '../src/nativeMemoryPreferences.mjs';
 
 function fixture(profileAt, preferenceAt) {
   return [
@@ -20,6 +20,7 @@ test('only a confident offered pair is accepted', () => {
 test('the newer revision is current and the exact older line is labelled without marking its neighbour', () => {
   const marked = markPreferenceOverlaps(fixture('2026-11-01', '2026-11-02'), [{ profile: 0, preference: 0 }]);
   assert.deepEqual(marked[0].earlierValues, ['回答一律用中文。']);
+  assert.equal(labelEarlierPreferences('- 回答一律用中文。\r\n- 独立语句', marked[0].earlierValues), '- [earlier value] 回答一律用中文。\r\n- 独立语句');
   assert.equal(marked[0].currentPreferenceId, 'preference-file');
   assert.equal(marked[1].earlierValues, undefined);
   const reverse = markPreferenceOverlaps(fixture('2026-11-03', '2026-11-02'), [{ profile: 0, preference: 0 }]);

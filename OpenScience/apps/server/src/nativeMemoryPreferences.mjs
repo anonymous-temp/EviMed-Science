@@ -87,7 +87,7 @@ export function labelEarlierPreferences(text, earlierValues) {
   if (!earlierValues?.length) return text;
   const prints = new Set(earlierValues.map(lineFingerprint));
   return text.split('\n').map(line => {
-    const [, prefix, value] = /^(\s*(?:(?:[-*+]|\d+[.)])\s+)?)(.*)$/u.exec(line) ?? [];
+    const [, prefix, value] = /^(\s*(?:(?:[-*+]|\d+[.)])\s+)?)([\s\S]*)$/u.exec(line) ?? [];
     return value && !value.startsWith('#') && prints.has(lineFingerprint(value))
       ? `${prefix}[earlier value] ${value}` : line;
   }).join('\n');
