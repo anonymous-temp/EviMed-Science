@@ -1,5 +1,5 @@
 import { filterCapturedMessage } from './memoryGateway.mjs';
-import { isNeutralProfileHeading, profileMemoryStatements, profileNameDuplicateLines, withoutProfileNameDuplicates, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
+import { isNeutralProfileHeading, profileMemoryStatements, profileNameFieldValue, profileNameDuplicateLines, withoutProfileNameDuplicates, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
 import { readStatus } from './memoryReadStatus.mjs';
 import { mergePeopleFiles, undoPeopleMerge, redirectPeopleWrites } from './nativeMemoryPeopleStore.mjs';
 import { personConsentRefusal, personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
@@ -2067,6 +2067,13 @@ export class NativeMemoryStore {
     const wordings = [text];
     const prints = new Set([lineFingerprint(text)]);
     for (const revision of await this.overlay.revisionsOf(userId, uri, { limit: 200 })) {
+      if (this.profileNameDedupeEnabled && uri.endsWith('/memories/profile.md') && /^#\s/.test(text)) {
+        const name = lineFingerprint(removalText(text));
+        for (const body of [revision.before, revision.after]) for (const raw of String(body ?? '').split('\n')) {
+          const value = profileNameFieldValue(raw);
+          if (value && lineFingerprint(value) === name) wordings.push(removalText(raw));
+        }
+      }
       if (revision.actor !== "user" || revision.change !== "updated" || revision.before === null || revision.after === null) continue;
       const before = statements(revision.before);
       const after = statements(revision.after);

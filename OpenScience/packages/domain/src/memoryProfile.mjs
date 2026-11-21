@@ -32,6 +32,11 @@ export function isNeutralProfileHeading(line) {
 const PROFILE_NAME_LABEL = /^(?:(?:姓名|名字|昵称|称呼)\s*(?:[:：]|是|为)?\s*|(?:name|nickname)\s*[:：]\s*)(.+?)\s*$/iu;
 const PROFILE_AS_OF = /\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/iu;
 
+/** The value of an explicit name field, without its bullet or as-of annotation. @param {unknown} line */
+export function profileNameFieldValue(line) {
+  const statement = String(line ?? '').trim().replace(/^(?:[-*+]|\d+[.)])\s+/u, '').replace(PROFILE_AS_OF, '');
+  return PROFILE_NAME_LABEL.exec(statement)?.[1] ?? null;
+}
 
 /** Exact duplicate name bullets of a genuinely named H1, never a neutral scaffold or a different value.
  * @param {unknown} body @returns {string[]} raw trimmed lines */
@@ -41,10 +46,8 @@ export function profileNameDuplicateLines(body) {
   const [title] = titles;
   if (titles.length !== 1 || title === undefined || isNeutralProfileHeading(`# ${title}`)) return [];
   return lines.map(line => line.trim()).filter(line => {
-    if (/^#{1,6}\s/u.test(line)) return false;
-    const statement = line.replace(/^(?:[-*+]|\d+[.)])\s+/u, '').replace(PROFILE_AS_OF, '');
-    const name = PROFILE_NAME_LABEL.exec(statement)?.[1];
-    return name !== undefined && foldTitle(name) === foldTitle(title);
+    const name = profileNameFieldValue(line);
+    return name !== null && foldTitle(name) === foldTitle(title);
   });
 }
 
