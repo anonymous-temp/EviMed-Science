@@ -3,6 +3,7 @@ import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { MEMORY_SAFETY_NOTES_ANCHOR as anchor } from '@evimed/domain';
+import { MemoryHistory, MemoryHistoryLedger } from '../src/memoryHistory.mjs';
 import { ResidentProfiles } from '../src/residentProfile.mjs';
 import { createLabResidentProfiles } from '../../../evals/capsule-proving/run/lab.mjs';
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
@@ -146,4 +147,55 @@ test('legacy line migration survives retries, travels and follows an exact sourc
   await f.worker.migrateSafety(f.userId);
   assert.equal(await f.sessions.read(f.userId, copy.uri), null);
   assert.equal(calls, 1);
+});
+
+for (const deferred of [false, true]) test('a targeted withdrawal retracts extracted and unindexed safety echoes, deferred=' + deferred, options, async t => {
+  const f = await fixture(t, { config: { memorySafetyNotesEnabled: true, memorySafetyNotesMigrationEnabled: true } });
+  f.overlay.deferredSummaryRebuildEnabled = deferred;
+  f.store.forgetTargetsEnabled = true;
+  f.store.history = new MemoryHistory({ config: f.config,
+    ledger: new MemoryHistoryLedger({ database: f.database, overlay: f.overlay, client: f.sessions.client }),
+    contexts: null, resolveSource: async () => null, eligible: async () => true, admitMessage: async () => true });
+  f.worker.nativeMemory = f.store;
+  await f.sessions.setLearning(f.userId, true);
+  const statement = 'I reported an iohexol allergy.';
+  const fresh = 'I reported a latex allergy.';
+  const source = '# Owner\n- ' + statement + '\n- I prefer coffee.';
+  const uri = f.seed('people/old.md', source, { type: 'people' });
+  await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'people', body: source });
+  f.worker.classifySafety = async (_u, _uri, lines) => lines.includes('- ' + statement) ? [[2,2]] : [];
+  await f.worker.migrateSafety(f.userId);
+  const [copy] = await f.store.safetyNotes(f.userId, 'second');
+  const engineUri = f.root + '/safety_notes/owner.md';
+  const echo = 'I had an allergic reaction to iohexol.';
+  const judge = { same: async ({ candidates }) => ({ same: new Map(candidates.flatMap((row, i) =>
+    row.text === 'Owner\n' + echo
+      ? [[i, row.removed[0].fingerprint]] : [])), stated: new Set() }) };
+  f.worker.rejectionJudge = judge;
+  const mixed = '# Owner\n- ' + fresh + '\n- ' + echo;
+  f.stub.extract = () => ({ adds: [{ uri: engineUri, memory_type: 'safety_notes', after: mixed }] });
+  await f.commitConversation('latex', [{ role: 'user', text: fresh }], { projectId: 'first' });
+  await f.worker.processCommits({ userId: f.userId });
+  const origins = (await f.overlay.originsOf(f.userId, [engineUri])).get(engineUri);
+  assert.equal(origins.get(lineFingerprint(echo)).sources[0].safetyProjectionUri, copy.uri);
+  assert.equal(origins.get(lineFingerprint(fresh)).engineSession, 'dsh-session_latex');
+  const unindexed = f.seed('safety_notes/unsettled.md', '# Owner\n- ' + statement, { type: 'safety_notes' });
+  const other = f.seed('safety_notes/other.md', '# Other person\n- My sister reported an iohexol reaction.', { type: 'safety_notes' });
+  const result = await f.store.forget({ id: f.userId }, { id: 'first' }, uri, { lines: [statement] });
+  assert.equal(result.removedLines, 1);
+  const resident = createLabResidentProfiles({ config: f.config, memorySettings: f.memorySettings, nativeMemory: f.store });
+  for (const repeat of [false, true]) {
+    if (repeat) {
+      await f.database.query("UPDATE evimed_memory.native_accounts SET safety_scan_at=clock_timestamp()-interval '301 seconds' WHERE user_id=$1", [f.userId]);
+      await f.worker.migrateSafety(f.userId);
+    }
+    assert.equal(await f.sessions.read(f.userId, copy.uri), null);
+    assert.equal(await f.sessions.read(f.userId, unindexed), null);
+    assert.equal(await f.sessions.read(f.userId, engineUri), '# Owner\n- ' + fresh);
+    assert.match(await f.sessions.read(f.userId, other), /iohexol/);
+    assert.match(await f.sessions.read(f.userId, uri), /coffee/);
+    const opening = await resident.forDispatch(f.userId, { projectId: 'second', sessionId: null, attended: true });
+    assert.match(opening.text, /latex/);
+    assert.doesNotMatch(opening.text, /iohexol/);
+  }
 });

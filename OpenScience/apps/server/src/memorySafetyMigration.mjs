@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { MEMORY_NEVER_KEPT_TEXT } from '@evimed/domain';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { lineFingerprint, originalSources } from './nativeMemoryOverlay.mjs';
-import { removalRefusals, removalText } from './nativeMemoryRejections.mjs';
+import { REJECTION_JUDGE_MAX_CANDIDATES, removalRefusals, removalText } from './nativeMemoryRejections.mjs';
 import { nativeMemoryFile } from './openVikingSessions.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 
@@ -54,6 +54,74 @@ export function withdrawSafetyProjection(source, next, binding, copy) {
   const remaining = copy.split(/\r?\n/).filter(line =>
     !binding.lineHashes.includes(digest(line)) && !prints.has(lineFingerprint(removalText(line))));
   return { words, body: remaining.some(line => line.trim() && !/^\s*#/.test(line)) ? remaining.join('\n') : '' };
+}
+
+/** Scope an individual statement to its card and section. A shared heading or a drug name alone
+ * never identifies a fact. Different wording is decided by the existing strict statement judge. */
+export function safetyStatements(body, uri) {
+  const headings = [];
+  const rows = [];
+  for (const [index, line] of (body ?? '').split(/\r?\n/).entries()) {
+    const heading = /^(#{1,6})\s+(.+)$/.exec(line.trim());
+    if (heading) {
+      headings.length = heading[1].length - 1;
+      headings.push(heading[2]);
+    } else if (line.trim()) {
+      const text = removalText(line);
+      rows.push({ line, hash: digest(line), index, text, scoped: [...(headings[0] ? headings : [uri.split('/').at(-1), ...headings]), text].filter(Boolean).join('\n') });
+    }
+  }
+  return rows;
+}
+
+/** Return only matches among the supplied statements. Batch all candidates, including earlier
+ * cards without provenance, so the judge's per-call limit cannot truncate a withdrawal. */
+export async function matchSafetyStatements(userId, candidates, references, judge) {
+  const matches = new Map();
+  if (!references.length) return matches;
+  const options = references.map(row => ({ fingerprint: lineFingerprint(row.scoped), text: row.scoped }));
+  const unmatched = [];
+  for (const row of candidates) {
+    const exact = references.find(ref => lineFingerprint(ref.scoped) === lineFingerprint(row.scoped));
+    if (exact) matches.set(row, exact);
+    else unmatched.push(row);
+  }
+  if (judge) {
+    for (let i = 0; i < unmatched.length; i += REJECTION_JUDGE_MAX_CANDIDATES) {
+      const batch = unmatched.slice(i, i + REJECTION_JUDGE_MAX_CANDIDATES);
+      const result = await judge.same({ userId, requireAvailable: true, said: [],
+        candidates: batch.map(row => ({ text: row.scoped, removed: options })) });
+      for (const [index, fingerprint] of result.same) {
+        const ref = references.find(row => lineFingerprint(row.scoped) === fingerprint);
+        if (batch[index] && ref) matches.set(batch[index], ref);
+      }
+    }
+  }
+  return matches;
+}
+
+/** Install the original source before ordinary extraction attribution. The existing line-origin
+ * index keeps its first writer and prunes the entry when the line leaves the destination. */
+export async function inheritSafetyProjections(userId, uri, body, added, overlay, judge) {
+  const references = [];
+  for (const file of (await overlay.files(userId)).values()) {
+    if (!file.safetySource || file.uri === uri) continue;
+    for (const row of safetyStatements(file.body, file.uri)) {
+      if (file.safetySource.lineHashes.includes(digest(row.line))) references.push({ ...row, projection: file.uri, binding: file.safetySource });
+    }
+  }
+  const candidates = safetyStatements(body, uri).filter(row => added.has(lineFingerprint(row.text)));
+  const matches = await matchSafetyStatements(userId, candidates, references, judge);
+  if (!matches.size) return;
+  const origins = await overlay.originsOf(userId, [...new Set([...matches.values()].map(ref => ref.binding.uri))]);
+  const inherited = new Map();
+  for (const [row, ref] of matches) {
+    const prior = originalSources(origins.get(ref.binding.uri)?.get(lineFingerprint(ref.text)));
+    inherited.set(lineFingerprint(row.text), (prior.length ? prior : [{}]).map(source => ({
+      ...source, safetyProjectionUri: ref.projection, safetySourceUri: ref.binding.uri, safetyLineHash: digest(ref.line),
+    })));
+  }
+  await overlay.inheritOrigins(userId, uri, inherited);
 }
 
 /** One source per account per durable scheduling interval. Classify outside the writer fence.

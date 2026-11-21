@@ -1,4 +1,4 @@
-import { migrateSafetyNotes, safetyClassifier } from './memorySafetyMigration.mjs';
+import { inheritSafetyProjections, migrateSafetyNotes, safetyClassifier } from './memorySafetyMigration.mjs';
 import { statementSourceReviewer } from './memoryStatementSources.mjs';
 import { reconcileMemoryNames } from './nativeMemoryNames.mjs';
 import { keepUnexplainedLines } from './nativeMemoryKeepLines.mjs';
@@ -1333,6 +1333,9 @@ export class NativeMemoryWorker {
       if (held?.projectId !== projectId || fresh) {
         await sessions.setTags(userId, uri, [`project=${projectId}`]).then(() => recordNativeWrite("project_tag")).catch(() => {});
       }
+    }
+    if (type === 'safety_notes' && memoryContext.kind !== 'geo-project') {
+      await inheritSafetyProjections(userId, uri, body, brought, this.overlay, this.rejectionJudge);
     }
     await this.overlay.upsertFile({ userId, uri, memoryType: type, body, ...(projectId ? { projectId } : {}) });
     await this.overlay.setSources(userId, uri, sourcesNamedIn(body));

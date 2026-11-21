@@ -1325,6 +1325,12 @@ export class NativeMemoryOverlay {
         OR EXISTS (SELECT 1 FROM unnest($2::text[]) prefix WHERE src.uri=prefix OR starts_with(src.uri,prefix||'/'))) LIMIT $3`,
     [owner(userId),hidden,bound+1]);
     const uris = [...new Set([...hidden, ...copies.rows.map(row => String(row.uri))])];
+    if (uris.length) {
+      const echoes = await this.#query(`SELECT DISTINCT uri FROM evimed_memory.native_line_origins o
+        WHERE user_id=$1 AND EXISTS (SELECT 1 FROM jsonb_array_elements(o.sources) source
+          WHERE source->>'safetyProjectionUri'=ANY($2::text[])) LIMIT $3`, [owner(userId), uris, bound + 1]);
+      uris.push(...echoes.rows.map(row => String(row.uri)).filter(uri => !uris.includes(uri)));
+    }
     if (uris.length > bound) throw new HttpError(503, "memory_index_listing_too_large", "The complete privacy set exceeds its safe recall bound.");
     return uris;
   }

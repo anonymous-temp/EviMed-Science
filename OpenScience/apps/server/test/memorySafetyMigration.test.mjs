@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { migrateSafetyNotes, safetySelections, withdrawSafetyProjection } from '../src/memorySafetyMigration.mjs';
+import { inheritSafetyProjections, matchSafetyStatements, safetyStatements, migrateSafetyNotes, safetySelections, withdrawSafetyProjection } from '../src/memorySafetyMigration.mjs';
 import { contentHash, lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 
 const root = 'viking://user/owner/memories';
@@ -110,4 +110,38 @@ test('a missing type directory is created before binding and a refused write is 
   f.deps.sessions.replace = replace;
   await f.run();
   assert.equal(f.bindings.size, 1);
+});
+
+test('lineage preempts the extractor origin only for a projected statement', async () => {
+  const f = scene();
+  await f.run();
+  const [[uri, binding]] = f.bindings;
+  Object.assign(f.files.get(uri), { safetySource: binding });
+  const fresh = 'Independent safety fact.';
+  const rephrased = 'A confidently matched rephrasing.';
+  const original = f.text.split('\n')[1].slice(2);
+  let origins;
+  f.deps.overlay.inheritOrigins = async (_u, _uri, map) => { origins = map; };
+  const judge = { same: async ({ candidates, requireAvailable }) => {
+    assert.equal(requireAvailable, true);
+    const index = candidates.findIndex(row => row.text.endsWith(rephrased));
+    return { same: new Map([[index, candidates[index].removed[0].fingerprint]]) };
+  } };
+  await inheritSafetyProjections('owner', root + '/safety_notes/new.md',
+    ['# Account owner', original, rephrased, fresh].join('\n'), new Set([original, rephrased, fresh].map(lineFingerprint)), f.deps.overlay, judge);
+  for (const text of [original, rephrased]) {
+    const [ref] = origins.get(lineFingerprint(text));
+    assert.equal(ref.safetySourceUri, f.uri);
+    assert.equal(ref.safetyProjectionUri, uri);
+    assert.equal(ref.safetyLineHash, binding.lineHashes[0]);
+  }
+  assert.ok(!origins.has(lineFingerprint(fresh)));
+});
+
+test('literal matches preserve their subject and a failed semantic review propagates', async () => {
+  const references = safetyStatements('# Parent\n- Reported a reaction.', 'parent');
+  const children = safetyStatements('# Child\n- Reported a reaction.', 'child');
+  assert.equal((await matchSafetyStatements('owner', children, references, null)).size, 0);
+  await assert.rejects(matchSafetyStatements('owner', children, references,
+    { same: async () => { throw new Error('unavailable'); } }), /unavailable/);
 });

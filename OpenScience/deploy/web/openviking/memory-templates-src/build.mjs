@@ -92,7 +92,7 @@ export function renderMemoryTemplates({ variant = "full", decide: decideName = "
   }
   if (safetyNotes) {
     const people = rendered['people.yaml'];
-    const description = `  ${indented(MEMORY_SAFETY_NOTES_TEXT)}\n\n  ${language}\n\n  ${block}\n\n  ${decide}`;
+    const description = `  ${indented(MEMORY_SAFETY_NOTES_TEXT)}\n  Files named legacy-<digest>.md are read-only projections. Leave them at their original address. Never use facts from another card to populate the current card. Add a fact only when the current conversation supplies it.\n\n  ${language}\n\n  ${block}\n\n  ${decide}`;
     // Reuse the engine's ordinary per-person fields and patch merge, with a dedicated type/path.
     rendered['safety_notes.yaml'] = people.slice(0, people.indexOf('description: |'))
       .replace('memory_type: people', 'memory_type: safety_notes') + 'description: |\n' + description + '\n'
