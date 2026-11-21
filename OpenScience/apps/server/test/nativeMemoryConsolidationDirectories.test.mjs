@@ -31,21 +31,24 @@ test("one preference and one correction do not qualify as two files of the same 
 });
 
 test("the read-only eligibility snapshot reports every missing threshold even inside the hourly recheck window", async () => {
-  const state = { checkedAt: "2026-11-21T00:00:00.000Z", leaseUntil: "2026-11-21T00:06:00.000Z" };
+  const state = { consolidation_checked_at: new Date("2026-11-21T00:00:00.000Z"), consolidation_lease_until: new Date("2026-11-21T00:06:00.000Z"),
+    extraction_pending: true, latest_commit: new Date("2026-11-21T00:02:00.000Z") };
   const files = [file("profile.md"), file("preferences/self/a.md"), file("preferences/corrections/b.md"), file("notes/.overview.md")];
   const consolidation = new NativeMemoryConsolidation(/** @type {any} */ ({
     config: { nativeMemoryConsolidationEnabled: true, memoryEngineEnabled: true },
     now: () => new Date("2026-11-21T00:05:00.000Z"),
-    memorySettings: { settings: async () => ({ learningPaused: false }) },
-    overlay: {
-      configured: true, consolidationState: async () => state,
-      hasUnprovenNativeWrites: async () => true,
-      commitsOf: async () => [{ createdAt: "2026-11-21T00:02:00.000Z" }],
-    },
+    overlay: { configured: true },
     resources: { configured: true },
     sessions: { configured: true, memoryRoot: () => root, tree: async () => files },
   }));
-  const result = await consolidation.diagnose("alice");
+  const facts = await consolidation.diagnosticFacts({
+    async query(sql, args) {
+      assert.match(sql.trim(), /^SELECT/);
+      assert.deepEqual(args, ["alice"]);
+      return { rows: [state] };
+    },
+  }, "alice");
+  const result = await consolidation.diagnose("alice", facts);
   assert.deepEqual(result.blockers, ["hourly_check", "lease", "extraction_pending", "quiet_period", "too_few_files", "too_few_same_type"]);
   assert.equal(result.recheckRemainingMs, 55 * 60_000);
   assert.equal(result.quietRemainingMs, 7 * 60_000);

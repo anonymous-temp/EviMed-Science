@@ -7093,16 +7093,25 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!productDatabase) throw new HttpError(503, "product_state_unavailable", "Native memory state is unavailable.");
         const query = new URL(req.url ?? "/", apiBaseFromRequest(req, config)).searchParams;
         const after = query.has("after") ? safeId(query.get("after"), "account cursor") : "";
-        const result = await productDatabase.query("SELECT id FROM evimed_control.users WHERE id > $1 ORDER BY id LIMIT 6", [after]);
+        const { samples, more } = await productDatabase.transaction(async client => {
+          await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY");
+          const result = await client.query("SELECT id FROM evimed_control.users WHERE id > $1 ORDER BY id LIMIT 6", [after]);
+          const page = [];
+          for (const { id } of result.rows.slice(0, 5)) {
+            // No engine call while the read-only snapshot holds a pool connection.
+            page.push({ id, facts: await nativeMemoryWorker.consolidation.diagnosticFacts(client, id) });
+          }
+          return { samples: page, more: result.rows.length > page.length };
+        });
         const rows = [];
-        for (const { id } of result.rows.slice(0, 5)) {
-          try { rows.push(await nativeMemoryWorker.consolidation.diagnose(id)); }
+        for (const { id, facts } of samples) {
+          try { rows.push(await nativeMemoryWorker.consolidation.diagnose(id, facts)); }
           catch (error) {
             rows.push({ userId: id, eligible: null, blockers: ["unavailable"], code: safeLogId(error?.code) ?? "native_memory_diagnostic_failed" });
           }
         }
         res.setHeader("Cache-Control", "no-store");
-        sendJson(res, 200, { data: { rows, nextAfter: result.rows.length > rows.length ? rows.at(-1)?.userId : null } });
+        sendJson(res, 200, { data: { rows, nextAfter: more ? rows.at(-1)?.userId : null } });
         return;
       }
 

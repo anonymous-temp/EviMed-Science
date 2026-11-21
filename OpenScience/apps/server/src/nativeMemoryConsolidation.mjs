@@ -61,9 +61,9 @@ export const TASK_TIMEOUT_MS = 2 * 60 * 60_000;
 const LEASE_MS = 5 * 60_000;
 const DAY_MS = 24 * 60 * 60_000;
 
-/** @param {string|null|undefined} timestamp @param {number} duration @param {Date} now */
+/** @param {string|Date|null|undefined} timestamp @param {number} duration @param {Date} now */
 function remainingMs(timestamp, duration, now) {
-  const at = timestamp ? Date.parse(timestamp) : NaN;
+  const at = timestamp instanceof Date ? timestamp.getTime() : timestamp ? Date.parse(timestamp) : NaN;
   return Number.isFinite(at) ? Math.max(0, at + duration - now.getTime()) : 0;
 }
 
@@ -73,7 +73,7 @@ function remainingMs(timestamp, duration, now) {
  * @param {readonly { uri: string }[]} files @param {string} root
  */
 export function consolidationDirectories(files, root) {
-  return consolidationFileCounts(files, root).filter(({ types }) => types.some(({ files }) => files >= 2)).map(({ directory }) => directory);
+  return consolidationFileCounts(files, root).filter(({ types }) => types.some(type => type.files >= 2)).map(({ directory }) => directory);
 }
 
 /** @param {readonly { uri: string }[]} files @param {string} root */
@@ -89,7 +89,7 @@ function consolidationFileCounts(files, root) {
     directories.set(directory, types);
   }
   return [...directories].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([directory, counts]) => ({
-    directory, types: [...counts].map(([type, files]) => ({ type, files })).sort((a, b) => a.type.localeCompare(b.type)),
+    directory, types: [...counts].map(([type, count]) => ({ type, files: count })).sort((a, b) => a.type.localeCompare(b.type)),
   }));
 }
 
@@ -231,13 +231,36 @@ export class NativeMemoryConsolidation {
     return { root, files };
   }
 
+  /** Read metadata on the operator route's read-only client without entering lazy migrations.
+   * @param {{query:Function}} client @param {string} userId */
+  async diagnosticFacts(client, userId) {
+    if (!this.sessions?.configured || !this.overlay?.configured) return null;
+    const result = await client.query(`SELECT
+      a.consolidated_at, a.consolidation_checked_at, a.consolidation_lease_until, a.consolidation_task, a.consolidation_fingerprint,
+      s.learning_paused,
+      (SELECT max(created_at) FROM evimed_memory.native_commits WHERE user_id=u.id) AS latest_commit,
+      EXISTS (SELECT 1 FROM evimed_memory.native_commits WHERE user_id=u.id AND state IN ('pending','failed')
+        AND native_ingested_at IS NULL AND ingested_at IS NULL) AS extraction_pending,
+      ${this.config.memoryDeferredSummaryRebuildEnabled === true
+        ? "EXISTS (SELECT 1 FROM evimed_memory.native_summary_invalidations WHERE user_id=u.id)" : "false"} AS summary_pending,
+      ${this.overlay.sourceDeletion
+        ? "EXISTS (SELECT 1 FROM evimed_source_deletion.conversations WHERE user_id=u.id AND account_created_at=u.created_at AND cleanup='pending')" : "false"} AS source_pending
+      FROM evimed_control.users u LEFT JOIN evimed_memory.native_accounts a ON a.user_id=u.id
+      LEFT JOIN evimed_memory.settings s ON s.user_id=u.id WHERE u.id=$1`, [userId]);
+    return result.rows[0] ?? null;
+  }
+
   /** Operator snapshot of eligibility. It never schedules, leases or reads file bodies. */
-  async diagnose(userId) {
+  async diagnose(userId, facts) {
     if (!this.sessions?.configured || !this.overlay?.configured) return { userId, eligible: false, blockers: ["unavailable"] };
     const now = this.now();
-    const state = await this.overlay.consolidationState(userId);
+    if (!facts) return { userId, eligible: null, blockers: ["unavailable"] };
+    const state = { consolidatedAt: facts.consolidated_at, checkedAt: facts.consolidation_checked_at,
+      leaseUntil: facts.consolidation_lease_until, task: facts.consolidation_task, fingerprint: facts.consolidation_fingerprint };
     const timing = this.#timing(state, now);
-    const activity = await this.#activity(userId, now);
+    const activity = { learningPaused: facts.learning_paused === true, sourceCleanupPending: facts.source_pending === true,
+      summaryCleanupPending: facts.summary_pending === true, extractionPending: facts.extraction_pending === true,
+      quietRemainingMs: remainingMs(facts.latest_commit, QUIET_AFTER_COMMIT_MS, now) };
     const { root, files } = await this.#memoryFiles(userId);
     const directories = consolidationFileCounts(files, root);
     const missingFiles = Math.max(0, MIN_FILES - files.length);

@@ -34,6 +34,21 @@ test("it is off until switched on, and asks the engine nothing then", options, a
   assert.equal(f.stub.requests.filter((request) => request.path === "/api/v1/fs/tree").length, 0, "not even the files are listed");
 });
 
+test("operator facts come from a read-only database transaction and a read-only engine inventory", options, async t => {
+  const f = await account(t, { files: MIN_FILES });
+  const before = await f.overlay.consolidationState(f.userId);
+  const facts = await f.database.transaction(async client => {
+    await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY");
+    return f.consolidation.diagnosticFacts(client, f.userId);
+  });
+  const diagnosis = await f.consolidation.diagnose(f.userId, facts);
+  assert.equal(diagnosis.eligible, true);
+  assert.equal(diagnosis.files, MIN_FILES);
+  assert.deepEqual(diagnosis.blockers, []);
+  assert.deepEqual(await f.overlay.consolidationState(f.userId), before);
+  assert.equal(compile(f.stub).length, 0);
+});
+
 test("a due consolidation of changed files is submitted as the engine documents it, polled without blocking, and read back as revisions", options, async (t) => {
   const f = await account(t, {
     consolidate: ({ user }) => ({
