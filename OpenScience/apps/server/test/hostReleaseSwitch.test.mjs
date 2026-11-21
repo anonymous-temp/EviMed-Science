@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { releaseManifestFixture } from "./releaseFixture.mjs";
 import { MaintenanceService } from "../src/maintenanceService.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -65,6 +66,11 @@ const byService = (service) => Object.entries(state.containers).find(([, c]) => 
 const flag = (name) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
 const out = (text) => process.stdout.write(text);
 const [command] = args;
+if (command === "image" && args[1] === "inspect") {
+  const image = state.images[args.at(-1)];
+  if (!image) { process.stderr.write("No such image"); process.exit(1); }
+  out(JSON.stringify(image)); process.exit(0);
+}
 if (command === "compose") {
   if (args.includes("config")) { out(Object.entries(state.compose).map(([s, h]) => s + " " + h).join("\n") + "\n"); process.exit(0); }
   const up = args.indexOf("--no-deps");
@@ -169,7 +175,7 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
   const web = path.join(rel, "deploy/web");
   await mkdir(path.join(web, "monitoring"), { recursive: true });
   await mkdir(path.join(rel, "scripts/ops"), { recursive: true });
-  for (const script of ["configure-monitoring.mjs", "check-runtime-skill-digests.mjs", "result-replay-deployment.mjs", "prepare-host-ops-dependencies.mjs"]) {
+  for (const script of ["verify-release-images.mjs", "configure-monitoring.mjs", "check-runtime-skill-digests.mjs", "result-replay-deployment.mjs", "prepare-host-ops-dependencies.mjs"]) {
     await copyFile(path.join(repoRoot, "scripts/ops", script), path.join(rel, "scripts/ops", script));
   }
   // The production-state check (configure-production-state.mjs --check) reads the host's secrets; here it is a stand-in that answers
@@ -186,11 +192,15 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
   for (const name of ["internalProjects.mjs", "security.mjs"]) {
     await writeFile(path.join(rel, "apps/server/src", name), "import '@evimed/domain';\n");
   }
-  const skill = { name: "core", source: "runtime/skills/core", files: 25, digest: "sha256:recorded" };
-  await writeFile(path.join(web, "release-manifest.json"), JSON.stringify({
-    app: { releaseId }, source: { revision: NEW },
-    runtime: { image: `open-science-runtime:x-${NEW}` }, skills: [skill],
-  }));
+  await copyFile(path.join(repoRoot, "apps/server/src/releaseManifest.mjs"), path.join(rel, "apps/server/src/releaseManifest.mjs"));
+  const skill = { ...releaseManifestFixture.skills[0], files: 25 };
+  const manifest = {
+    ...releaseManifestFixture,
+    app: { ...releaseManifestFixture.app, releaseId },
+    runtime: { ...releaseManifestFixture.runtime, image: `open-science-runtime:x-${NEW}` },
+    skills: [skill],
+  };
+  await writeFile(path.join(web, "release-manifest.json"), JSON.stringify(manifest));
   await writeFile(path.join(web, ".env"), `OPEN_SCIENCE_RELEASE_ID=${releaseId}\nOPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\nOPEN_SCIENCE_MANAGED_BROWSER_ENABLED=${managedBrowser}\n`
     + "OPEN_SCIENCE_GEO_PROBE_URL=http://203.0.113.9:9999\nOPEN_SCIENCE_GEO_SOCIAL_URL=http://203.0.113.9:9966\n");
   await writeFile(path.join(web, "monitoring/open-science.rules.json"), "{}\n");
@@ -207,7 +217,9 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
     current,
     maintenanceStatus: await maintenanceResponse("release-content-1"),
     manifestFile: path.join(web, "release-manifest.json"),
-    revision: NEW,
+    revision: manifest.source.revision,
+    images: Object.fromEntries([manifest.web, manifest.runtime, manifest.proxy, ...manifest.services]
+      .map(({ image, imageId }) => [image, { Id: imageId, RepoDigests: image.includes("@") ? [image] : [] }])),
     runtimeImage: `open-science-runtime:x-${NEW}`,
     releaseId,
     restartDoesNotHelp,
@@ -223,7 +235,7 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
       [`${PROJECT}-open-science-release-receipt-1`]: container("open-science-release-receipt", "same", [{ source: `${through}/release-manifest.json`, destination: "/run/open-science/release-manifest.json" }], { stale: true }),
     },
     imageDigests: {
-      "/opt/evimed/socket/presets/evimed-universal/skills/core": imageDigestMatches ? { files: 25, digest: "sha256:recorded" } : { files: 25, digest: "sha256:the-base-image-copy" },
+      "/opt/evimed/socket/presets/evimed-universal/skills/core": imageDigestMatches ? { files: 25, digest: skill.digest } : { files: 25, digest: "sha256:the-base-image-copy" },
     },
   };
   const bin = path.join(root, "bin");
@@ -722,4 +734,18 @@ test("an invalid host dependency shadow refuses the switch before Docker or curr
   assert.match(result.stderr, /host_ops_dependency_invalid/);
   await assert.rejects(readFile(path.join(root, "docker.log"), "utf8"), { code: "ENOENT" });
   await assert.rejects(realpath(path.join(root, "current")), { code: "ENOENT" });
+});
+
+test("a pruned Caddy fails before shared configuration or current moves", { skip }, async (t) => {
+  const { root } = await host();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const file = path.join(root, "docker-state.json");
+  const state = JSON.parse(await readFile(file, "utf8"));
+  delete state.images[releaseManifestFixture.proxy.image];
+  await writeFile(file, JSON.stringify(state));
+  const result = await runSwitch(root);
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /release_image_missing.*caddy:2\.11\.4-alpine/);
+  assert.doesNotMatch(result.stdout, /production state follows|current ->/);
+  await assert.rejects(realpath(path.join(root, "current")));
 });

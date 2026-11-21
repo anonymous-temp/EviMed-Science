@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/lib/format";
 import { FileWarning } from "lucide-react";
 import { SOURCE_UPDATE_LABELS_ZH, SOURCE_UPDATE_WEIGHT } from "@evimed/domain";
 import type { SourceUpdate, SourceUpdateStatus } from "@/lib/claimCitations";
@@ -27,7 +28,7 @@ export function SourceUpdateBadges({ updates, updateStatus, className }: {
     <span className={cn("flex flex-wrap items-center gap-1", className)}>
       {updateStatus && (
         <Tag tone={updateStatus.state === "unavailable" || updateStatus.state === "changed" ? "warn" : "neutral"}
-          title={updateStatus.checkedAt ? `查询于 ${new Date(updateStatus.checkedAt).toLocaleString("zh-CN")}` : "尚无可用的查询时间"}>
+          title={updateStatus.checkedAt ? `查询于 ${formatDateTime(updateStatus.checkedAt)}` : "尚无可用的查询时间"}>
           {({ no_update: "未发现更新", changed: "文献有更新", unknown: "更新状态未知", unavailable: "更新查询不可用" })[updateStatus.state]}
         </Tag>
       )}

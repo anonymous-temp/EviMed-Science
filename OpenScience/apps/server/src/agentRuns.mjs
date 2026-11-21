@@ -1833,13 +1833,11 @@ function assistantFinished(message) {
   return Boolean(message?.info?.time?.completed ?? message?.completed ?? message?.info?.error);
 }
 
-/** @param {any[]} messages @returns {string} */
-function lastReplyText(messages) {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const text = (messages[index]?.parts ?? []).filter((part) => part?.type === "text").map((part) => String(part.text ?? "")).join("\n").trim();
-    if (text) return text;
-  }
-  return "";
+/** @param {any} message */
+function endsWithRawToolCall(message) {
+  const parts = message?.parts ?? [];
+  return !parts.some((part) => part.type === "tool") && isRawToolCallText(parts
+    .filter((part) => part.type === "text").map((part) => part.text).join("\n"));
 }
 
 function parsedToolResult(part) {
@@ -6111,6 +6109,10 @@ export class AgentRunStore {
     // would add here is the notices `uncorrectedToolFailures` writes, which a
     // runtime that is gone cannot be asked for. The verdict is the same one the
     // live path reaches from the same files, receipt and answer.
+    const turn = this.progressTrackers.get(run.id)?.rootTurn;
+    if (turn?.endKind === "completed" && turn.rawCall) {
+      return this.finishInternal(project, run.id, { status: "failed", errorCode: "runtime_session_error", errorSubCode: "unexecuted_tool_call", artifacts: [] });
+    }
     const receipt = await readDeliveryReceipt(project, run);
     // What exists decides, and what exists is read from the host copy of the
     // workspace — the one thing that outlives the container.
@@ -6866,7 +6868,7 @@ export class AgentRunStore {
     const terminal = terminalFromMessages(ownEnd?.code
       ? [{ info: { error: { name: ownEnd.kind, code: ownEnd.code, subCode: ownEnd.subCode } } }, ...assistants]
       : assistants);
-    if (terminal.status === "succeeded" && isRawToolCallText(lastReplyText(assistants))) {
+    if (terminal.status === "succeeded" && endsWithRawToolCall(assistants.at(-1))) {
       terminal.status = "failed";
       terminal.errorCode = "runtime_session_error";
       terminal.errorSubCode = "unexecuted_tool_call";
@@ -7630,7 +7632,7 @@ export class AgentRunStore {
         activity: new Map(),
         /** The kernel's last word on this run's direct children. @type {{ sessionId: string, running: boolean }[]} */
         kernelChildren: [],
-        /** How the run's own (root) turn stood the last time the stream spoke of it. @type {{ endKind: string | null, replied: boolean } | null} */
+        /** How the run's own (root) turn stood the last time the stream spoke of it. @type {{ endKind: string | null, replied: boolean, rawCall: boolean } | null} */
         rootTurn: null,
         discoveredAt: 0,
         /** @type {{ key: string, at: number, total: number, verified: number, unverified: number } | null} */
@@ -7710,13 +7712,15 @@ export class AgentRunStore {
     if (!observed.child && !observed.replay) {
       const event = observed.event;
       if (event.type === "turn/end") {
-        tracker.rootTurn = { endKind: String(event.endKind ?? ""), replied: tracker.rootTurn?.replied ?? false };
+        tracker.rootTurn = { endKind: String(event.endKind ?? ""), replied: tracker.rootTurn?.replied ?? false, rawCall: tracker.rootTurn?.rawCall ?? false };
       } else if (ROOT_TURN_ACTIVITY.has(event.type)) {
-        const open = tracker.rootTurn && tracker.rootTurn.endKind === null ? tracker.rootTurn : { endKind: null, replied: false };
+        const open = tracker.rootTurn && tracker.rootTurn.endKind === null ? tracker.rootTurn : { endKind: null, replied: false, rawCall: false };
+        const assistant = event.type === "message/assistant" && !event.interrupted;
+        const rawCall = assistant && isRawToolCallText(event.text);
         tracker.rootTurn = {
           endKind: null,
-          replied: event.type === "message/assistant" && !event.interrupted
-            ? String(event.text ?? "").trim().length > 0 && !isRawToolCallText(event.text) : open.replied,
+          replied: assistant ? Boolean(event.text?.trim()) && !rawCall : open.replied,
+          rawCall: assistant ? rawCall : event.type === "tool/call" || event.type === "tool/result" ? false : open.rawCall,
         };
       }
     }

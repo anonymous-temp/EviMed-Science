@@ -147,30 +147,49 @@ export function progressSignal(transcript, extra = {}) {
  * @param {unknown} value @returns {boolean}
  */
 export function isRawToolCallText(value) {
-  const text = String(value ?? '').trim()
-  if (!text) return false
+  if (typeof value !== 'string') return false
+  let text = value.trim()
   if (text.startsWith('<tool_call>')) {
-    const closing = text.indexOf('</tool_call>')
-    return closing < 0 || text.slice(closing + '</tool_call>'.length).trim() === ''
+    text = text.slice('<tool_call>'.length).trim()
+    if (text.endsWith('</tool_call>')) text = text.slice(0, -'</tool_call>'.length).trim()
   }
-  /** @param {any} call @returns {boolean} */
-  const namedCall = (call) => Boolean(call && typeof call === 'object' && !Array.isArray(call)
-    && (typeof call.name === 'string' || typeof call.function?.name === 'string'))
-  /** @param {any} call @returns {boolean} */
-  const wholeCall = (call) => namedCall(call) && (
-    (typeof call.name === 'string' && (Object.hasOwn(call, 'arguments') || Object.hasOwn(call, 'parameters'))
-      && Object.keys(call).every((key) => ['id', 'type', 'name', 'arguments', 'parameters'].includes(key)))
-    || (typeof call.function?.name === 'string' && Object.keys(call).every((key) => ['id', 'type', 'function'].includes(key)))
-  )
-  try {
-    const parsed = JSON.parse(text)
-    return Boolean(parsed && typeof parsed === 'object' && !Array.isArray(parsed) && (
-      wholeCall(parsed) || (Array.isArray(parsed.tool_calls) && parsed.tool_calls.length > 0 && parsed.tool_calls.every(wholeCall))
-    ))
-  } catch {
-    return !text.endsWith('}') && /^\{\s*"(?:tool_calls|name|function)"\s*:/.test(text)
-      && /"(?:tool_calls|function|arguments|parameters)"\s*:/.test(text)
+  if (!text.startsWith('{')) return false
+  /** @param {any} record @param {string[]} keys */
+  const only = (record, keys) => record != null && typeof record === 'object' && !Array.isArray(record)
+    && Object.keys(record).every(key => keys.includes(key))
+  /** @param {any} call */
+  const named = (call) => typeof call?.name === 'string' && /^[\w./:-]+$/.test(call.name)
+    && [call.arguments, call.parameters].some(args => typeof args === 'string' || (args !== null && typeof args === 'object' && !Array.isArray(args)))
+  /** @param {any} call */
+  const wholeCall = (call) => {
+    if (!call || (call.type !== undefined && call.type !== 'function') || (call.id !== undefined && typeof call.id !== 'string')) return false
+    if (only(call, ['id', 'type', 'function'])) return only(call.function, ['name', 'arguments', 'parameters']) && named(call.function)
+    return only(call, ['id', 'type', 'name', 'arguments', 'parameters']) && named(call)
   }
+  /** @param {any} body */
+  const envelope = (body) => wholeCall(body) || (only(body, ['tool_calls']) && Array.isArray(body.tool_calls)
+    && body.tool_calls.length > 0 && body.tool_calls.every(wholeCall))
+  try { return envelope(JSON.parse(text)) } catch { /* A stream can stop inside its arguments. */ }
+
+  // Accept an incomplete envelope only if closing its open JSON containers produces a call.
+  // In particular a complete example followed by prose cannot become a call this way.
+  if (!/^\{\s*"(?:name|id|type|function|tool_calls)"\s*:/.test(text) || !/"(?:arguments|parameters)"\s*:/.test(text)) return false
+  const closers = []
+  let quoted = false
+  let escaped = false
+  for (const ch of text) {
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === '"') quoted = false
+    } else if (ch === '"') quoted = true
+    else if (ch === '{') closers.push('}')
+    else if (ch === '[') closers.push(']')
+    else if ((ch === '}' || ch === ']') && closers.pop() !== ch) return false
+  }
+  if (!closers.length) return false
+  const tail = quoted ? (escaped ? '\\"' : '"') : text.endsWith(':') ? '{}' : ''
+  try { return envelope(JSON.parse(text + tail + closers.reverse().join(''))) } catch { return false }
 }
 
 /** @param {RunTranscript} transcript @returns {string} */

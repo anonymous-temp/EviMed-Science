@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/lib/format";
 import { geoClaimApplicability, geoClaimAssessmentIdentity, geoClaimForStatement, geoStatementAssessmentIdentity } from "@evimed/domain";
 import { useEffect, useRef, useState } from "react";
 import { PenLine } from "lucide-react";
@@ -207,7 +208,7 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
           </div>}
           {canConverse && <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" actionKind="draft" disabled={handing} onClick={() => void act(statement, "conclusion")}><PenLine size={16} aria-hidden="true" />让 AI 更新项目结论或文章</Button><Button variant="secondary" size="sm" actionKind="draft" disabled={handing} onClick={() => void act(statement, "treatment")}><PenLine size={16} aria-hidden="true" />让 AI 创建出处或问题群处置任务</Button></div>}
           <ErrorCorrections inline geoId={geoId} project={project} corrections={actions.filter(action => action.need.errorIds.some(id => data.errors.some(row => row.id === id && geoClaimAssessmentIdentity(row) === geoClaimAssessmentIdentity(statement))))} canRun={canConverse} onAsk={() => void act(statement, "conclusion")} />
-          {history.length > 1 && <div className="text-caption text-text-3">{history.slice().reverse().map((entry) => { const item = (entry.assessment?.statements ?? []).find(row => geoStatementAssessmentIdentity(row) === geoStatementAssessmentIdentity(statement)); return <p key={entry.version}>{entry.assessment.judgedAt ? `${new Date(entry.assessment.judgedAt).toLocaleString("zh-CN")} ` : "历史"}判定：{item ? verdictWords[item.verdict] : "未覆盖此句"}</p>; })}</div>}
+          {history.length > 1 && <div className="text-caption text-text-3">{history.slice().reverse().map((entry) => { const item = (entry.assessment?.statements ?? []).find(row => geoStatementAssessmentIdentity(row) === geoStatementAssessmentIdentity(statement)); return <p key={entry.version}>{entry.assessment.judgedAt ? `${formatDateTime(entry.assessment.judgedAt)} ` : "历史"}判定：{item ? verdictWords[item.verdict] : "未覆盖此句"}</p>; })}</div>}
           {feedback.map(row => <div key={row.id} className="text-ui text-text-2"><p>反馈：{row.note}</p><p>{statusWords[row.status] ?? "复核状态未知"} · 提交时原判定：{verdictWords[row.original.verdict]}</p>{row.result && <p>复核结果：{verdictWords[row.result.statements.find(item => geoStatementAssessmentIdentity(item) === geoStatementAssessmentIdentity(row.original))?.verdict ?? "unverifiable"]}</p>}</div>)}
         </section>;
       })}

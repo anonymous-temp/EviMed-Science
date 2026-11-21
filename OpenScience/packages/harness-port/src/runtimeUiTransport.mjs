@@ -516,7 +516,9 @@ export function installRuntimeUiPolyfills(target = globalThis, timeZone = 'Asia/
       const native = NativeDate.prototype[method];
       if (typeof native !== 'function' || native.__evimedTimeZone) continue;
       const localized = /** @this {Date} @param {any} locales @param {any} options */ function (locales, options) {
-        const zoned = options?.timeZone === undefined ? { ...options, timeZone } : options;
+        const zoned = options !== null && options?.timeZone === undefined
+          ? Object.create(options === undefined ? null : Object(options), { timeZone: { value: timeZone } })
+          : options;
         return native.call(this, locales, zoned);
       };
       Object.defineProperty(localized, '__evimedTimeZone', { value: true });

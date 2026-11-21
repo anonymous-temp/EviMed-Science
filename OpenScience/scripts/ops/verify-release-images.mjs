@@ -21,12 +21,16 @@ export function releaseImageEntries(manifest) {
 }
 
 function inspectLocalImage(image) {
-  const docker = process.env.OPEN_SCIENCE_RUNTIME_CONTAINER_BIN ?? "docker";
-  const result = spawnSync(docker, ["image", "inspect", "--format", "{{json .}}", image], {
+  const result = spawnSync("docker", ["image", "inspect", "--format", "{{json .}}", image], {
     encoding: "utf8", timeout: 10_000, maxBuffer: 2 * 1024 ** 2, stdio: ["ignore", "pipe", "pipe"],
   });
-  if (result.error || result.status !== 0) throw fail("release_image_missing", `${image} is not available locally.`);
-  const info = JSON.parse(result.stdout);
+  if (result.error || result.status !== 0) {
+    const missing = !result.error && /no such (?:image|object)/i.test(result.stderr);
+    throw fail(missing ? "release_image_missing" : "release_image_inspect_failed",
+      missing ? "image is missing locally" : "could not inspect the local Docker image");
+  }
+  let info;
+  try { info = JSON.parse(result.stdout); } catch { throw fail("release_image_invalid", "Docker returned invalid image metadata"); }
   if (!info || typeof info !== "object" || !SHA256.test(info.Id ?? "")) {
     throw fail("release_image_invalid", `${image} returned invalid local image metadata.`);
   }
@@ -40,14 +44,20 @@ export function verifyReleaseImages(manifest, inspect = inspectLocalImage) {
     try {
       info = inspect(entry.image);
     } catch (error) {
-      if (["release_image_invalid", "release_image_mismatch", "release_image_digest_mismatch"].includes(error?.code)) throw error;
-      throw fail("release_image_missing", `${entry.name} image is missing locally: ${entry.image}. Restore the exact release image before admission.`);
+      const missing = error?.code === "release_image_missing";
+      throw fail(error?.code ?? "release_image_inspect_failed", missing
+        ? `${entry.name} image is missing locally: ${entry.image}. Restore the exact release image before admission.`
+        : `Could not inspect ${entry.name} image ${entry.image}: ${error.message}`);
     }
     if (info.Id !== entry.imageId) {
       throw fail("release_image_mismatch", `${entry.name} local image ID differs from the release manifest: ${entry.image}; expected ${entry.imageId}, found ${info.Id ?? "none"}.`);
     }
     const digest = entry.image.match(/@(sha256:[a-f0-9]{64})$/)?.[1];
-    if (digest && !(Array.isArray(info.RepoDigests) && info.RepoDigests.some((reference) => reference.endsWith(`@${digest}`)))) {
+    // Inspect was addressed by the complete repo@digest, never by a fallback tag.
+    // Containerd can expose the manifest as a descriptor instead of a RepoDigest.
+    const repoDigests = info.RepoDigests ?? [];
+    if (digest && (repoDigests.length || info.Descriptor?.digest) && info.Descriptor?.digest !== digest
+      && !repoDigests.some((reference) => reference.endsWith(`@${digest}`))) {
       throw fail("release_image_digest_mismatch", `${entry.name} local image does not carry the required manifest digest ${digest}: ${entry.image}.`);
     }
   }

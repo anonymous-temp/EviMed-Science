@@ -43,6 +43,14 @@ describe("formatRelativeTime elapsed and absolute display", () => {
     expect(formatRelativeTime("2026-09-27T08:00:00Z", now)).toBe("2026-09-27 16:00");
     expect(formatRelativeTime("", now)).toBe("");
   });
+  it("reads legacy offsetless server timestamps as UTC on every display path", () => {
+    const instant = "2026-09-25T16:05:00";
+    expect(formatClock(instant)).toBe("00:05");
+    expect(formatDate(instant)).toBe("2026-09-26");
+    expect(formatDateTime(instant, { hour: "2-digit", minute: "2-digit", hour12: false })).toBe("00:05");
+    expect(formatRelativeTime("2026-09-26 07:00:00", now)).toBe("1 小时前");
+    expect(formatDate("2026-09-26T00:05:00+09:00")).toBe("2026-09-25");
+  });
   it("allows a schedule's chosen zone and leaves date-only values unchanged", () => {
     expect(formatDateTime("2026-09-26T08:00:00Z", { timeZone: "UTC", hour: "2-digit", minute: "2-digit", hour12: false })).toBe("08:00");
     expect(formatDate("2026-09-26")).toBe("2026-09-26");
@@ -170,7 +178,7 @@ describe("humanSize", () => {
 
 describe("formatClock", () => {
   it("is hour and minute in Shanghai regardless of the browser zone, and blank for a value that is not a time", () => {
-    expect(formatClock(new Date("2026-01-01T14:05:00+08:00").toISOString())).toBe("14:05");
+    expect(formatClock("2026-01-01T14:05:00+08:00")).toBe("14:05");
     expect(formatClock("2026-01-01T06:05:00.000Z")).toBe("14:05");
     expect(formatDateTime("2026-01-01T16:05:00.000Z", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })).toContain("2026/01/02");
     expect(formatClock(null)).toBe("");

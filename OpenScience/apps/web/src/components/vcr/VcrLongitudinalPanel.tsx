@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/format";
 import { useRef, useState } from 'react';
 import { Download, FileUp, PenLine } from 'lucide-react';
 import { Select } from '@/components/ui/Input';
@@ -21,7 +22,7 @@ import { VcrToolbarActions, type VcrToolbarAction } from './VcrToolbarActions';
 import { DRAFT_PREFIX } from './vcrActionWords';
 
 const number = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('zh-CN', { maximumFractionDigits: 3 }) : '—';
-const date = (value?: string) => value ? new Date(value).toLocaleDateString('zh-CN') : '时间未记录';
+const date = (value?: string) => value ? formatDate(value) : '时间未记录';
 function download(name: string, text: string, type: string) {
   const url = URL.createObjectURL(new Blob([text], { type }));
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url);

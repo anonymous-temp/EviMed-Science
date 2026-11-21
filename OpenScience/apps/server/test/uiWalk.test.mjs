@@ -16,6 +16,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync } from "node:zlib";
 import {
@@ -24,7 +25,7 @@ import {
   matrixFindings, matrixProbe, matrixRoute, measure, measureStructure, MISSING_RECORDS, ORIGINAL_MIN_WIDTH,
   pageFindings, pageProbe, PAGE_PROBES, pdfFrameReady, pdfPreviewFindings, pdfProbe, pdfSourceTitle, pickVcrStudies, probeFindings,
   readerFindings, readerProbe, readerReady, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, rowClickFindings, rowClickShown,
-  rowClickVerdict, rowProbe, nativeSurfaceFindings, schedulesFindings, schedulesProbe, SECTION_SHAPES_BY_PAGE, skillCreateFindings, skillCreateProbe, skillReturnProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
+  rowClickVerdict, rowProbe, nativeSurfaceFindings, nativeSurfaceProbe, schedulesFindings, schedulesProbe, SECTION_SHAPES_BY_PAGE, skillCreateFindings, skillCreateProbe, skillReturnProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
   OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
@@ -66,12 +67,13 @@ test("every page the budget table names is a page the walk visits", () => {
   assert.equal(pageFindings("files", "desktop", clean({ controlKinds: 11 }), []).failures.length, 1);
 });
 
-test("the evidence zones' home keeps four borders and allows its required create action as the tenth control", () => {
+test("the evidence zones keep four borders and both zones and topics retain the nine-control budget", () => {
   const zones = (overrides) => pageFindings("frontier-zones", "desktop", clean({ controlKinds: 8, colorKinds: 5, ...overrides }), []).failures;
   assert.deepEqual(zones({ borderKinds: 4 }), []);
   assert.deepEqual(zones({ borderKinds: 5 }), ["frontier-zones@desktop: 5 kinds of border (budget 4)"]);
-  assert.deepEqual(zones({ controlKinds: 10 }), []);
-  assert.deepEqual(zones({ controlKinds: 11 }), ["frontier-zones@desktop: 11 kinds of control (budget 10)"]);
+  for (const view of ["frontier-zones", "frontier-topic"]) {
+    assert.deepEqual(pageFindings(view, "desktop", clean({ controlKinds: 10 }), []).failures, [`${view}@desktop: 10 kinds of control (budget 9)`]);
+  }
   // The feed's own pages keep the reading page's three.
   assert.deepEqual(pageFindings("frontier", "desktop", clean({ controlKinds: 8, borderKinds: 4 }), []).failures, ["frontier@desktop: 4 kinds of border (budget 3)"]);
   const daily = (controlKinds) => pageFindings("frontier-daily", "desktop", clean({ controlKinds }), []).failures;
@@ -3202,6 +3204,25 @@ test("Inbox selection controls get no budget allowance, and selection controls o
 });
 
 
+test("the native probe waits for the visible composer's own role-specific seat", async () => {
+  const button = (label, visible = true) => ({ getClientRects: () => visible ? [{}] : [], getAttribute: () => label });
+  let mounted = false;
+  let waits = 0;
+  const card = { querySelectorAll: () => [button("思考强度", false), button("选择模型，当前 flash"), ...(mounted ? [button("思考强度，当前：高")] : [])] };
+  const editor = { ...button(""), closest: (selector) => selector === '[class$="_card"]' ? card : null };
+  const sandbox = {
+    location: { pathname: "/frame" }, getComputedStyle: () => ({ visibility: "visible" }),
+    document: { querySelectorAll: (selector) => selector.includes("contenteditable") ? [editor] : [button("模型帮助")] },
+    fetch: async () => ({ json: async () => ({}) }),
+    setTimeout: (callback) => { waits++; mounted = true; callback(); },
+  };
+  const probe = runInNewContext(`(${nativeSurfaceProbe.toString()})`, sandbox);
+  assert.equal((await probe(false)).effort, "思考强度，当前：高");
+  assert.equal(waits, 1);
+  assert.equal((await probe(true)).effort, "选择模型，当前 flash");
+  assert.equal(waits, 1);
+});
+
 test("the native surfaces the conversation depends on are read in the frame, and each defect is its own failure", () => {
   const good = { developerTools: true, effort: "思考强度，当前：高", documentChunk: { status: 200, type: "text/javascript; charset=utf-8" } };
   assert.deepEqual(nativeSurfaceFindings(good), []);
@@ -3212,6 +3233,8 @@ test("the native surfaces the conversation depends on are read in the frame, and
   assert.match(nativeSurfaceFindings({ ...good, effort: "选择模型，当前 deepseek-flash" })[0], /not worded as the thinking strength/);
   const operator = { ...good, effort: "选择模型，当前 deepseek-flash" };
   assert.deepEqual(nativeSurfaceFindings(operator, true), []);
+  assert.match(nativeSurfaceFindings({ ...operator, effort: "模型帮助" }, true)[0], /not worded as the native model/);
+  assert.match(nativeSurfaceFindings({ ...operator, effort: "思考强度说明" })[0], /not worded as the thinking strength/);
   assert.match(nativeSurfaceFindings(good, true)[0], /not worded as the native model/);
   assert.match(nativeSurfaceFindings({ ...operator, effort: null }, true)[0], /no model control/);
   assert.match(nativeSurfaceFindings({ ...good, documentChunk: { status: 404, type: "text/html" } })[0], /PDF viewer chunk answered 404/);

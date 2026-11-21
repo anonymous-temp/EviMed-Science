@@ -145,6 +145,10 @@ EXPECTED_RELEASE_ID=$(env -u OPEN_SCIENCE_RELEASE_ID node --env-file="${REL}/Ope
   process.stdout.write(id);
 ' "${REL}/OpenScience/deploy/web/release-manifest.json")
 
+# The host preflight may have run before another job pruned an image.
+# Recheck the exact candidate on the same daemon Compose will use, before changing shared state.
+node "${REL}/OpenScience/scripts/ops/verify-release-images.mjs" "--manifest=${REL}/OpenScience/deploy/web/release-manifest.json"
+
 # Validate the optional executor before moving current or changing host state.
 RESULT_REPLAY=$(node --env-file="${REL}/OpenScience/deploy/web/.env" --input-type=module -e '
   const { resultReplayDeployment } = await import(process.argv[1]);

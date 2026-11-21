@@ -31,9 +31,7 @@ import { ValidityBar, validitySpan } from "./ValidityBar";
 
 function when(value: string | null | undefined) {
   if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return formatDateTime(date, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return formatDateTime(value, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function failed(error: unknown) {
