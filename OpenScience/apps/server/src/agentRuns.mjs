@@ -804,6 +804,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
         ...(event.nativeTurn ? { nativeTurn: validateNativeTurn(event.nativeTurn) } : {}),
         ...(event.kernelRequestIds ? { kernelRequestIds: event.kernelRequestIds.map(storedKernelRequestId) } : {}),
         ...(event.personalSkillGeneration ? { personalSkillGeneration: normalizePersonalSkillGeneration(event.personalSkillGeneration) } : {}),
+        ...(event.runtimeStartupId ? { runtimeStartupId: safeStoredId(event.runtimeStartupId, "runtime startup id") } : {}),
         sessionId: safeStoredId(event.sessionId, "sessionId"),
         mode,
         agentId: event.agentId,
@@ -4687,6 +4688,7 @@ export class AgentRunStore {
     this.runtimeWorkspaceRoot = options.runtimeWorkspaceRoot ?? (async (project) => project.workspaceDir);
     this.runtimeGeneration = options.runtimeGeneration ?? (async () => null);
     this.runtimePersonalSkills = options.runtimePersonalSkills ?? (() => null);
+    this.runtimeStartupId = options.runtimeStartupId ?? (() => null);
     // The evidence card a research session was started from (flywheel F06, `evidenceOrigins.mjs`): asked when a run is
     // reserved, so both roads that start one — the dispatch route and an adopted native turn — record it the same way,
     // and told once the run exists so the card's citations can be counted. Absent, no run carries one.
@@ -5538,6 +5540,7 @@ export class AgentRunStore {
       const id = safeId(this.id(), "agent run id");
       if (runs.has(id)) throw new HttpError(409, "agent_run_id_conflict", "Agent run id already exists.");
       const personalSkillGeneration = normalizePersonalSkillGeneration(await this.runtimePersonalSkills(project, { nativeTurn, startedAt }));
+      const runtimeStartupId = this.runtimeStartupId(project, { nativeTurn, startedAt });
       // A label that cannot be read leaves the run as it would have been (`evidenceOrigins.mjs`).
       const originCardId = this.originCardOf ? await Promise.resolve().then(() => this.originCardOf?.(project, session)).catch(() => null) : null;
       const event = {
@@ -5571,6 +5574,7 @@ export class AgentRunStore {
         startedAt: startedAt == null ? now : storedTimestamp(startedAt, "startedAt"),
         baselineCursor,
         ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
+        ...(runtimeStartupId ? { runtimeStartupId } : {}),
       };
       // The caller's final admission check sees the same immutable ledger
       // snapshot that this reservation owns under the project storage lock.

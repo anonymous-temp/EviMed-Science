@@ -175,6 +175,8 @@ Unknown is not zero. Unread resource data is not a stopped runtime. Unmeasured s
 
 Show a numerical progress percentage only with a real measured denominator. Use observed stages and last update for unbounded work. Never manufacture countdowns or stage changes. Long duration is not failure; distinguish connection state from task outcome. Action-required badges count actions the current person can take. Automatic recovery belongs in status, not an unanswerable to-do.
 
+Conversation startup uses the cover's status for plugin application and memory maintenance. Retry these temporary refusals within a bounded wait, keep the same conversation intent and draft, and offer the reader a retry only after automatic recovery ends.
+
 ## DS10 General conversation and long tasks
 
 The native conversation is the general operating entry, with one composer. Home/logo/new conversation must not inherit specialist binding, study title or GEO progress. Preserve explicit resume links, history and drafts. Simple tasks can finish as text; ordinary Office/code/data files are valid deliverables without a professional-report ceremony.

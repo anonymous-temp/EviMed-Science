@@ -2611,6 +2611,8 @@ export interface WebRuntimeStartStatus {
   startStage: "environment" | "sync" | "kernel" | null;
   /** The last start of this project that was refused, while it is recent. */
   startError: { code: string; status: number; at: string } | null;
+  /** A server admission currently waiting for a plugin apply or memory maintenance. */
+  startWait?: "plugin_apply_in_progress" | "memory_source_cleanup_busy";
   /** The previous task's runtime has not been confirmed closed: a start is refused until it is, and the
    *  control plane is retrying it. The opening says so before it has been refused. */
   cleanupPending: boolean;
@@ -2630,6 +2632,7 @@ export async function fetchWebRuntimeStatus(): Promise<WebRuntimeStartStatus> {
     provider: typeof value?.provider === "string" ? value.provider : null,
     startStage: value?.startStage === "environment" || value?.startStage === "sync" || value?.startStage === "kernel" ? value.startStage : null,
     startError: value?.startError && typeof value.startError.code === "string" ? value.startError : null,
+    ...(value?.startWait === "plugin_apply_in_progress" || value?.startWait === "memory_source_cleanup_busy" ? { startWait: value.startWait } : {}),
     cleanupPending: value?.cleanupPending === true,
   };
 }

@@ -20,6 +20,66 @@ function fixture(enabled = true) {
   return { project, manager };
 }
 
+test('API conversation creation retries only pre-creation admission refusals within its budget', async () => {
+  const { project, manager } = fixture();
+  let time = 0, attempts = 0;
+  const clock = { now: () => time, pause: async ms => { time += ms; } };
+  manager.start = async (_project, options) => {
+    attempts++;
+    assert.equal(options.admissionWaitMs, 110_000 - time);
+    if (attempts === 1) throw new HttpError(409, 'memory_source_cleanup_busy', 'rebuilding summaries');
+    if (attempts === 2) throw new HttpError(423, 'plugin_apply_in_progress', 'applying settings');
+    return { ready: true };
+  };
+  assert.deepEqual(await manager.startForConversation(project, { waitForAdmission: true }, clock), { ready: true });
+  assert.equal(attempts, 3);
+  time = 0;
+  manager.start = async () => { time += 109_900; throw new HttpError(409, 'memory_source_cleanup_busy', 'still rebuilding'); };
+  await assert.rejects(manager.startForConversation(project, { waitForAdmission: true }, clock), { code: 'memory_source_cleanup_busy' });
+  assert.equal(time, 110_000);
+});
+
+test('startup receipts retain failed handshake steps and the recovery of the same kernel generation', async () => {
+  const { project, manager } = fixture();
+  const observed = deferred();
+  const runtime = { startupId: 'startup_probe', memoryGatewayUrl: 'configured' };
+  manager.runtimes.set(manager.key(project), runtime);
+  const steps = { health: { attempts: 2, elapsedMs: 15, sinceBridgeMs: 30, code: null, lastFailure: 'gateway_timeout' } };
+  let calls = 0;
+  manager.callKernel = async () => ++calls === 1 ? { registered: false, steps } : {
+    registered: true, steps: { ...steps, tools_registered: { attempts: 1, elapsedMs: 40, sinceBridgeMs: 40, code: null } },
+  };
+  const receipts = [];
+  manager.recordStartupStep = async (_project, step, _began, error, fields) => {
+    receipts.push({ step, error, ...fields });
+    if (fields.state === 'registered') observed.resolve(undefined);
+  };
+  const timeout = setTimeout(() => observed.resolve(undefined), 1000);
+  manager.observeMemoryRegistration(project, runtime, { windowMs: 500, pollMs: 10 });
+  await observed.promise;
+  clearTimeout(timeout);
+  assert.deepEqual(receipts.map(row => row.state), ['waiting', 'registered']);
+  assert.ok(receipts.every(row => row.step === 'memory_registration' && row.startupId === runtime.startupId));
+  assert.equal(receipts.at(-1).steps.health.lastFailure, 'gateway_timeout');
+  assert.equal(receipts.at(-1).steps.tools_registered.elapsedMs, 40);
+});
+
+test('a missing tool registration ends with a bounded receipt and does not restart the runtime', async () => {
+  const { project, manager } = fixture();
+  const receipt = deferred();
+  const runtime = { startupId: 'startup_missing', memoryGatewayUrl: 'configured' };
+  manager.runtimes.set(manager.key(project), runtime);
+  manager.callKernel = async () => ({ registered: false, steps: {} });
+  manager.recordStartupStep = async (_project, _step, _began, error, fields) => {
+    assert.equal(fields.state, 'timed_out');
+    assert.equal(error.code, 'memory_tools_registration_timeout');
+    receipt.resolve(undefined);
+  };
+  manager.observeMemoryRegistration(project, runtime, { windowMs: 0 });
+  await receipt.promise;
+  assert.equal(manager.runtimes.get(manager.key(project)), runtime);
+});
+
 test('gateway source receipts can append while dispatch awaits the kernel, and the same session stays fenced', async () => {
   const { project, manager } = fixture(), entered = deferred(), ack = deferred();
   let receiptWritten = false, competingEntered = false;

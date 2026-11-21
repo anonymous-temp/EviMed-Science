@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { HttpError } from "./security.mjs";
 import { PLUGIN_ID, defaultConfiguration, exportPluginPayload, pluginEntry, projectPluginId } from "./pluginService.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
@@ -132,10 +133,22 @@ function upstreamWarning(proof) {
  * never shown to the researcher.
  *
  * @param {any} runtime @param {any} project @param {any} candidate @param {any} previous
- * @param {() => Promise<void>} guard @param {string} pluginId @param {any} [fallback]
+ * @param {() => Promise<void>} guard @param {string} pluginId @param {any} [fallback] @param {boolean} [verifyExisting]
  */
-export async function applyPluginCandidate(runtime, project, candidate, previous, guard, pluginId = PLUGIN_ID, fallback = null) {
+export async function applyPluginCandidate(runtime, project, candidate, previous, guard, pluginId = PLUGIN_ID, fallback = null, verifyExisting = false) {
   let apply;
+  if (verifyExisting) {
+    try {
+      await guard();
+      const proof = await runtime.probePlugin(project, candidate, pluginId);
+      await guard();
+      return { phase: "effective", effective: candidate, generation: proof.generation, error: null, detail: upstreamWarning(proof) };
+    } catch {
+      await guard();
+      // A cold start can carry the desired revision but fail its live proof.
+      // Use the usual candidate replacement and rollback in that case.
+    }
+  }
   try {
     await guard();
     await runtime.replacePluginRuntime(project, candidate);
@@ -281,11 +294,12 @@ export class PluginApplyWorker {
         await this.jobs.withLease(job.userId, job.id, job.leaseToken, c => c.query(`UPDATE evimed_product.plugin_application_state SET phase='applying'
           WHERE user_id=$1 AND id=$2 AND desired_revision=$3`, [job.userId, id, current.revision]));
         const pluginId = jobPluginId(job);
+        const baseline = this.runtime.runtimePluginConfig?.(project);
+        const verifyExisting = pluginId === PLUGIN_ID && isDeepStrictEqual(baseline, candidate);
         let previous = current.last_good;
         /** Why the configuration the runtime was already running did not prove, when it did not. */
         let baselineFailure = null;
-        if (!previous) {
-          const baseline = this.runtime.runtimePluginConfig(project);
+        if (!previous && !verifyExisting) {
           if (baseline) {
             try {
               const proof = await this.runtime.probePlugin(project, baseline, pluginId);
@@ -303,7 +317,7 @@ export class PluginApplyWorker {
         // What an unconfigured project runs: revision 0 at the entry's
         // defaults, exactly what `startKernel` launches when no document exists.
         const fallback = { revision: 0, ...defaultConfiguration(pluginEntry(pluginId, this.service.registry), this.service.maxTimeoutMs ?? 15000) };
-        const applied = await applyPluginCandidate(this.runtime, project, candidate, previous, guard, pluginId, fallback);
+        const applied = await applyPluginCandidate(this.runtime, project, candidate, previous, guard, pluginId, fallback, verifyExisting);
         await guard();
         /** @type {Record<string, any> | null} */
         const detail = applied.detail || baselineFailure ? { ...applied.detail, ...(baselineFailure ? { baseline: baselineFailure } : {}) } : null;

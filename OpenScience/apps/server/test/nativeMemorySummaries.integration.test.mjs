@@ -220,14 +220,17 @@ for (const finishes of [true, false]) test(`empty-file forget maintenance meets 
   await f.store.forget({ id: f.userId }, { id: 'default' }, uri, { lines: ['A temporary night shift.'] });
   assert.equal(await f.sessions.read(f.userId, uri), null);
   assert.equal((await f.database.query('SELECT 1 FROM evimed_memory.history_fences WHERE owner_id=$1', [f.userId])).rows.length, 0);
+  const service = new PluginService(f.database, { admissionWaitMs: finishes ? 2000 : 120 });
+  service.scope = async () => ({});
+  await assert.rejects(service.withAdmission({ id: 'default', userId: f.userId }, async () => {
+    assert.fail('the persisted summary ticket must block opening before the worker leases it');
+  }, { waitForSummaries: true, waitMs: 0 }), { code: 'memory_source_cleanup_busy' });
   let entered, release;
   const started = new Promise(resolve => { entered = resolve; }), held = new Promise(resolve => { release = resolve; });
   t.after(() => release());
   f.stub.beforeReindex = async () => { entered(); await held; };
   const draining = f.worker.drainSummaryInvalidations(f.userId);
   await started;
-  const service = new PluginService(f.database, { admissionWaitMs: finishes ? 2000 : 120 });
-  service.scope = async () => ({});
   let ran = 0;
   const admitted = service.withAdmission({ id: 'default', userId: f.userId }, async () => { ran++; return 'accepted'; });
   try {

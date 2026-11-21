@@ -16,8 +16,8 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { PluginService } from "../src/pluginService.mjs";
 
 /** A database whose shared project lock is refused for the first `busyFor` asks. */
-function lockedDatabase(busyFor,nativeBusyFor=0) {
-  const state = { asked: 0, nativeAsked:0, transactions: 0, inserted: 0 };
+function lockedDatabase(busyFor,nativeBusyFor=0,summaryBusyFor=0) {
+  const state = { asked: 0, nativeAsked:0, summariesAsked:0, transactions: 0, inserted: 0 };
   const database = {
     state,
     async transaction(work) {
@@ -28,6 +28,11 @@ function lockedDatabase(busyFor,nativeBusyFor=0) {
           if (/to_regclass\('evimed_memory\.native_writer_leases'\)/.test(sql)) return {rows:[{present:true}],rowCount:1};
           if (/FROM evimed_memory\.native_writer_leases/.test(sql)) {
             state.nativeAsked++;return {rows:state.nativeAsked>nativeBusyFor?[]:[{}],rowCount:1};
+          }
+          if (/to_regclass\('evimed_memory\.native_summary_invalidations'\)/.test(sql)) return { rows: [{ present: true }] };
+          if (/FROM evimed_memory\.native_summary_invalidations/.test(sql)) {
+            state.summariesAsked++;
+            return { rows: state.summariesAsked > summaryBusyFor ? [] : [{}] };
           }
           if (/pg_try_advisory_xact_lock_shared/.test(sql)) {
             state.asked += 1;
@@ -159,4 +164,22 @@ test('memory maintenance exceeding the admission bound returns the retryable cod
   });
   assert.ok(Date.now() - began >= 100);
   assert.equal(ran, 0); assert.equal(database.state.inserted, 0);
+});
+
+test('opening waits for a pending summary rebuild even between exclusive writer leases', async () => {
+  const waits = [];
+  const database = lockedDatabase(1, 0, 1);
+  const service = serviceOn(database, 2_000);
+  assert.equal(await service.withAdmission(project, async () => 'opened', {
+    waitForSummaries: true, onWait: code => waits.push(code),
+  }), 'opened');
+  assert.deepEqual(waits, ['plugin_apply_in_progress', 'memory_source_cleanup_busy']);
+  assert.equal(database.state.summariesAsked, 2);
+});
+
+test('a queued summary that cannot finish within the opening budget keeps the session uncreated', async () => {
+  const service = serviceOn(lockedDatabase(0, 0, Infinity), 2_000);
+  await assert.rejects(service.withAdmission(project, async () => assert.fail('creation must wait'), {
+    waitForSummaries: true, waitMs: 20,
+  }), { code: 'memory_source_cleanup_busy' });
 });

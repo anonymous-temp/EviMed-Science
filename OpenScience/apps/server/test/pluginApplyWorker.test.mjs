@@ -7,6 +7,31 @@ import { RuntimeManager } from '../src/runtimeManager.mjs';
 import { CITE_VERSION } from './fixtures/pins.mjs';
 const candidate={revision:2,enabled:false,settings:{timeoutMs:5000}};
 const previous={revision:1,enabled:true,settings:{timeoutMs:4000}};
+test('a cold runtime already carrying the exact revision is live-probed without restarting', async () => {
+  let probed = 0;
+  const runtime = {
+    replacePluginRuntime: () => assert.fail('a proved configuration needs no restart'),
+    probePlugin: async (_project, config) => { assert.deepEqual(config, candidate); probed++; return { generation: 'cold' }; },
+  };
+  const result = await applyPluginCandidate(runtime, {}, candidate, null, async () => {}, PLUGIN_ID, null, true);
+  assert.deepEqual([result.phase, result.generation, probed], ['effective', 'cold', 1]);
+});
+
+test('an unproven cold runtime uses the ordinary guarded replacement', async () => {
+  const calls = [];
+  const runtime = {
+    replacePluginRuntime: async () => { calls.push('replace'); },
+    probePlugin: async () => {
+      calls.push('probe');
+      if (calls.length === 1) throw new Error('cold proof failed');
+      return { generation: 'replacement' };
+    },
+  };
+  const result = await applyPluginCandidate(runtime, {}, candidate, null, async () => {}, PLUGIN_ID, null, true);
+  assert.equal(result.generation, 'replacement');
+  assert.deepEqual(calls, ['probe', 'replace', 'probe']);
+});
+
 test('candidate failure restores and independently verifies the previous configuration',async()=>{
   const calls=[];
   const runtime={replacePluginRuntime:async(_p,config)=>{calls.push(['start',config.revision]);return {generation:String(config.revision)};},

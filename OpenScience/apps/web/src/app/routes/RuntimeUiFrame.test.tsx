@@ -484,6 +484,39 @@ describe("native frame identity and readiness", () => {
       await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
       expect(screen.queryByRole("alert")).toBeNull();
     });
+
+    it("deduplicates the shell and iframe refusals and waits for memory maintenance", async () => {
+      vi.useFakeTimers();
+      mocks.start.mockRejectedValueOnce(new WebApiError("Maintenance in progress.", { status: 409, code: "memory_source_cleanup_busy" }));
+      const { container } = mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      notice(container.querySelector("iframe")!, "memory_source_cleanup_busy");
+      expect(screen.getByText("正在整理记忆")).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_100); });
+      expect(mocks.create).toHaveBeenCalledTimes(2);
+      const frame = container.querySelector("iframe")!;
+      const post = vi.spyOn(frame.contentWindow!, "postMessage");
+      emit(frame, { type: "evimed.runtime-ui.ready" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
+      expect(screen.queryByText("正在整理记忆")).toBeNull();
+    });
+
+    it("automatically retries after the native session call reports maintenance", async () => {
+      vi.useFakeTimers();
+      const { container } = mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      const frame = container.querySelector("iframe")!;
+      const post = vi.spyOn(frame.contentWindow!, "postMessage");
+      emit(frame, { type: "evimed.runtime-ui.ready" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: false, error: "memory_source_cleanup_busy" });
+      expect(screen.getByText("正在整理记忆")).toBeInTheDocument();
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_100); });
+      expect(mocks.create).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
   });
 
   describe("a conversation opened while every research environment of the deployment is taken", () => {

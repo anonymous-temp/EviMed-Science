@@ -7796,6 +7796,15 @@ test("tombstones replay across rotation without using the live run quota", async
   assert.equal((await restarted.list(project)).length, 3);
 });
 
+test("a run's startup receipt id survives replay without changing older ledger rows", async t => {
+  const { project, binding, createStore } = await rotationFixture(t);
+  const before = await createStore().createRun(project, binding("older"));
+  const recorded = await createStore({ runtimeStartupId: () => "startup_probe" }).createRun(project, binding("newer"));
+  const replayed = await createStore().list(project);
+  assert.equal(replayed.find(run => run.id === recorded.id).runtimeStartupId, "startup_probe");
+  assert.equal(Object.hasOwn(replayed.find(run => run.id === before.id), "runtimeStartupId"), false);
+});
+
 // Count actual file-body reads and JSONL parsing, independently of cache internals.
 function observeLedgerIO(t) {
   const reads = [], parsed = [];

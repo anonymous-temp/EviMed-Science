@@ -4332,6 +4332,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // The independent reviewer's findings, first in a finished run's notices.
     ...(review ? { reviewNotices: (project, runId) => review.service.reviewNoticesForRun(project.userId, project.id, runId) } : {}),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
+    runtimeStartupId: (project, observation) => runtimeManager.runtimeStartupId(project, observation),
     runtimePersonalSkills: (project, observation = {}) => {
       if (observation.nativeTurn) {
         const runtime = runtimeManager.runtimes.get(runtimeManager.key(project));
@@ -8578,7 +8579,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // what replaced it — one shape whatever kernel is running.
       if (pathname === "/api/runtime/sessions" && req.method === "POST") {
         const ctx = await context(req, res);
-        const created = await runtimeManager.createRuntimeSession(ctx.project);
+        const created = await runtimeManager.createRuntimeSession(ctx.project, { waitForAdmission: true });
         if (!created.id) throw new HttpError(502, "runtime_session_create_failed", "The runtime returned no session id.");
         sendJson(res, 200, { data: created });
         return;

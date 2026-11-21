@@ -410,6 +410,38 @@ test('an isolated health timeout leaves immediate profile reads and remember ava
   } finally { await bridge.close(); await gateway.close() }
 })
 
+test('registration retries one transient handshake failure and never replays a tool call', async () => {
+  let upstream = 0
+  const gateway = await fakeGateway(() => ({
+    status: ++upstream === 2 ? 200 : 503, body: '{"status":"ok"}',
+  }))
+  const steps = []
+  const { bridge, call } = await startBridge({ gatewayUrl: gateway.url, retryRegistration: true,
+    onRegistrationStep: (step, elapsedMs, code) => steps.push({ step, elapsedMs, code }),
+  })
+  const mcp = (method, params = {}) => call('/mcp', { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) })
+  try {
+    assert.equal((await mcp('tools/list')).status, 200)
+    assert.deepEqual(steps.map(({ step, code }) => [step, code]), [['tools_list', 'http_503'], ['tools_list', null]])
+    assert.ok(steps.every(({ elapsedMs }) => Number.isFinite(elapsedMs) && elapsedMs >= 0))
+    assert.equal((await mcp('tools/call', { name: 'forget' })).status, 503)
+    assert.equal(gateway.seen.length, 3)
+  } finally { await bridge.close(); await gateway.close() }
+})
+
+test('registration stops after two failed health forwards and keeps both reasons observable', async () => {
+  const gateway = await fakeGateway(() => ({ status: 503, body: '{}' }))
+  const codes = []
+  const { bridge, call } = await startBridge({ gatewayUrl: gateway.url, retryRegistration: true,
+    onRegistrationStep: (_step, _elapsedMs, code) => codes.push(code),
+  })
+  try {
+    assert.equal((await call('/health')).status, 503)
+    assert.equal(gateway.seen.length, 2)
+    assert.deepEqual(codes, ['http_503', 'http_503'])
+  } finally { await bridge.close(); await gateway.close() }
+})
+
 test('a second health timeout in a row brings the cooldown back, and an answer from the gateway resets the count', async () => {
   let hangHealth = true
   const gateway = await fakeGateway(req => String(req.url).endsWith('/health') && hangHealth ? { hang: true } : { body: '{"status":"ok"}' })

@@ -224,6 +224,14 @@ export const OPENVIKING_REQUEST_ERROR_CODES = Object.freeze([
   "memory_index_response_invalid", "memory_index_request_invalid",
 ]);
 
+const MCP_HANDSHAKE_METHODS = new Set(["initialize", "server/discover", "notifications/initialized", "ping", "tools/list"]);
+
+/** MCP uses POST even for metadata. Keep the writer fence for every mixed, unknown or tool-call batch. */
+function isReadOnlyMcpHandshake(body) {
+  const messages = Array.isArray(body) ? body : [body];
+  return messages.length > 0 && messages.every(message => MCP_HANDSHAKE_METHODS.has(message?.method));
+}
+
 /** @param {number} status the engine's own */
 function requestErrorCode(status) {
   if (status === 401 || status === 403) return "memory_index_auth_failed";
@@ -478,7 +486,8 @@ export class OpenVikingClient {
    */
   async request(input) {
     const method=String(input.method??'GET').toUpperCase(), route=String(input.path??'');
-    const reads=route.startsWith('/api/v1/search/') || route==='/api/v1/fs/attrs/stat';
+    const reads=route.startsWith('/api/v1/search/') || route==='/api/v1/fs/attrs/stat'
+      || method === 'POST' && route === '/mcp' && isReadOnlyMcpHandshake(input.body);
     if(this.writeAdmission && input.userId && !['GET','HEAD'].includes(method) && !reads) return this.writeAdmission(input.userId,()=>this.performRequest(input));
     return this.performRequest(input);
   }

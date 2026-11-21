@@ -52,6 +52,7 @@ export const Config = Schema.object({
 export async function apply(ctx, config) {
   // The port reads the deployment's launch switch rather than the plugin row: the row is part
   // of the kernel's recorded config dump, and a new key there would change the attested baseline for a setting that is ours alone.
-  const retryHealthTimeout = config.retryHealthTimeout === true || isLaunchFlagEnabled('EVIMED_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED')
-  await registerMemoryBridge(ctx, { ...config, retryHealthTimeout })
+  const isolation = isLaunchFlagEnabled('EVIMED_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED')
+  const retryHealthTimeout = config.retryHealthTimeout === true || isolation
+  await registerMemoryBridge(ctx, { ...config, retryHealthTimeout, retryRegistration: isolation })
 }

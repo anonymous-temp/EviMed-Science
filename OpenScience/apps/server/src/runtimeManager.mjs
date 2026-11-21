@@ -963,6 +963,11 @@ const DEFAULT_BACKGROUND_YIELD_WAIT_MS = 30_000;
  *  read as that retirement (`recentlyYielded`): the window between the
  *  runtime coming up for a bounded run and the run's prompt reaching it. */
 const YIELD_MARK_MS = 120_000;
+const CONVERSATION_ADMISSION_WAIT_MS = 110_000;
+const CONVERSATION_ADMISSION_RETRY_MS = 1_000;
+const CONVERSATION_ADMISSION_REFUSALS = new Set(["memory_source_cleanup_busy", "plugin_apply_in_progress"]);
+const MEMORY_REGISTRATION_WINDOW_MS = 180_000;
+const MEMORY_REGISTRATION_STEPS = ["listen", "health", "initialize", "tools_list", "tools_registered"];
 
 function publicRuntimeStatus(runtime, fields = {}) {
   return {
@@ -985,6 +990,7 @@ function publicRuntimeStatus(runtime, fields = {}) {
     provider: fields.provider ?? null,
     startStage: fields.startStage ?? null,
     startError: fields.startError ?? null,
+    ...(fields.startWait ? { startWait: fields.startWait } : {}),
     cleanupPending: fields.cleanupPending === true,
     // What a remote runtime's guest reported at start: its kernel release and
     // the Landlock level the kernel's write fence got there (plan §3.1 #9).
@@ -1014,6 +1020,7 @@ function publicRuntimeStatusFromState(state, fields = {}) {
     provider: fields.provider ?? null,
     startStage: fields.startStage ?? null,
     startError: fields.startError ?? null,
+    ...(fields.startWait ? { startWait: fields.startWait } : {}),
     cleanupPending: fields.cleanupPending === true,
     sandbox: state?.sandbox && typeof state.sandbox === "object" ? state.sandbox : null,
   };
@@ -3834,6 +3841,8 @@ export class RuntimeManager {
     this.lastOrphanCleanup = null;
     /** Where each pending start is, by project key (`RUNTIME_START_STAGES`). */
     this.startProgress = new Map();
+    /** @type {Map<string, Map<symbol, string>>} */
+    this.startAdmissionWaits = new Map();
     /** Pending starts an opening has asked for or joined, by project key:
      *  read when that start makes room (`makeRoomFor`), so an opening that
      *  finds a warm-up's start under way still counts as one. */
@@ -3887,6 +3896,105 @@ export class RuntimeManager {
   /** @param {Record<string, any>} project @param {string} stage one of `RUNTIME_START_STAGES` */
   noteStartStage(project, stage) {
     this.startProgress.set(this.key(project), { stage, at: Date.now() });
+  }
+
+  async withRuntimeStartAdmission(project, operation, waitMs = undefined) {
+    const key = this.key(project);
+    const ticket = Symbol();
+    const began = Date.now();
+    let reason = null;
+    const endWait = async (error = null) => {
+      if (!reason) return;
+      const waits = this.startAdmissionWaits.get(key);
+      waits?.delete(ticket);
+      if (waits?.size === 0) this.startAdmissionWaits.delete(key);
+      const observed = reason;
+      reason = null;
+      await this.recordStartupStep(project, "admission", began, error, { reason: observed });
+    };
+    try {
+      return await this.pluginService.withAdmission(project, async () => {
+        await endWait();
+        return operation();
+      }, {
+        waitMs,
+        waitForSummaries: this.config.memoryDeferredSummaryRebuildEnabled === true,
+        onWait: code => {
+          const waits = this.startAdmissionWaits.get(key) ?? new Map();
+          waits.set(ticket, code);
+          this.startAdmissionWaits.set(key, waits);
+          reason = code;
+        },
+      });
+    } catch (error) {
+      await endWait(error);
+      throw error;
+    }
+  }
+
+  async recordStartupStep(project, step, began, error = null, fields = {}) {
+    const reason = error?.code ?? error?.name;
+    const code = error ? (/^[a-z][a-z0-9_.-]{0,63}$/i.test(reason ?? "") ? reason : "runtime_start_step_failed") : null;
+    const entry = { step, elapsedMs: Math.max(0, Date.now() - began), code, ...fields };
+    process.stderr.write(`runtime startup ${project.userId}/${project.id}: ${JSON.stringify(entry)}\n`);
+    await appendRuntimeEvent(project, "startup_step", entry, this.config);
+  }
+
+  async observeStartupStep(project, step, startupId, operation) {
+    if (!startupId) return operation();
+    const began = Date.now();
+    let failure = null;
+    try { return await operation(); }
+    catch (error) { failure = error; throw error; }
+    finally { await this.recordStartupStep(project, step, began, failure, { startupId }); }
+  }
+
+  /** Observe the exact generation without extending admission, waking a kernel or blocking chat. */
+  observeMemoryRegistration(project, runtime, { windowMs = MEMORY_REGISTRATION_WINDOW_MS, pollMs = 5_000 } = {}) {
+    const { startupId } = runtime;
+    if (!startupId || !runtime.memoryGatewayUrl) return;
+    const began = Date.now();
+    const key = this.key(project);
+    let last = "";
+    const check = async () => {
+      if (this.runtimes.get(key) !== runtime || runtime.closedByManager || runtime.exitedAt) return;
+      /** @type {Record<string, {attempts:number,elapsedMs:number,sinceBridgeMs:number,code:string|null,lastFailure:string|null}>} */
+      const steps = {};
+      let failure = null;
+      let ready = false;
+      try {
+        const snapshot = await this.callKernel(runtime, project, "evimedPlugins/memoryRegistration", {}, AbortSignal.timeout(3_000));
+        if (!snapshot) failure = { code: "memory_bridge_missing" };
+        for (const step of MEMORY_REGISTRATION_STEPS) {
+          const value = snapshot?.steps?.[step];
+          if (!value || ![value.attempts, value.elapsedMs, value.sinceBridgeMs].every(number => Number.isSafeInteger(number) && number >= 0)) continue;
+          const diagnostic = code => typeof code === "string" && /^[a-z0-9_.-]{1,64}$/i.test(code) ? code : null;
+          steps[step] = { attempts: value.attempts, elapsedMs: value.elapsedMs, sinceBridgeMs: value.sinceBridgeMs,
+            code: diagnostic(value.code), lastFailure: diagnostic(value.lastFailure) };
+        }
+        ready = snapshot?.registered === true && steps.tools_registered?.code === null;
+      } catch (error) {
+        failure = error;
+      }
+      if (this.runtimes.get(key) !== runtime || runtime.closedByManager || runtime.exitedAt) return;
+      const expired = Date.now() - began >= windowMs;
+      const state = ready ? "registered" : expired ? "timed_out" : "waiting";
+      const fingerprint = JSON.stringify({ state, steps, code: failure?.code });
+      if (last !== fingerprint) {
+        last = fingerprint;
+        await this.recordStartupStep(project, "memory_registration", began,
+          failure ?? (expired && !ready ? { code: "memory_tools_registration_timeout" } : null), { startupId, state, steps });
+      }
+      if (!ready && !expired) setTimeout(observe, Math.min(pollMs, windowMs - (Date.now() - began))).unref();
+    };
+    const observe = () => { void this.independentWork(check).catch(() => {}); };
+    observe();
+  }
+
+  runtimeStartupId(project, { nativeTurn = null, startedAt = null } = {}) {
+    const runtime = this.runtimes.get(this.key(project));
+    if (nativeTurn && !(Date.parse(startedAt ?? "") >= Date.parse(runtime?.startedAt ?? ""))) return null;
+    return runtime?.startupId ?? null;
   }
 
   usesRuntimeController() {
@@ -4809,7 +4917,7 @@ export class RuntimeManager {
 
   /**
    * @param {Record<string, any>} project
-   * @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any, modelGatewayProfile?: string }} [options] `opening`: the researcher is
+   * @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any, modelGatewayProfile?: string, admissionWaitMs?: number }} [options] `opening`: the researcher is
    *   opening a conversation in this project (the shell's own start of its
    *   frame) rather than a request of a surface that is already open — see
    *   `makeRoomFor`. It shapes only a start this call begins; one already
@@ -4863,7 +4971,7 @@ export class RuntimeManager {
   }
 
   /** @param {Record<string, any>} project @param {any} options @param {boolean} withPluginAdmission @param {any} attempt */
-  async startAdmittedPrepared(project, { opening = false, speculative = false, dispatch = false, boundedScope = null, replaceRuntime = null, modelGatewayProfile = "" }, withPluginAdmission, attempt) {
+  async startAdmittedPrepared(project, { opening = false, speculative = false, dispatch = false, boundedScope = null, replaceRuntime = null, modelGatewayProfile = "", admissionWaitMs = undefined }, withPluginAdmission, attempt) {
     const key = this.key(project);
     const contextPolicy = await this.contextPolicyFor(project);
     if (this.sourceMaintenance.has(key)) throw new HttpError(409, "runtime_busy", "Source cleanup is in progress.");
@@ -4893,7 +5001,7 @@ export class RuntimeManager {
         if (pending) return pending;
         throw new HttpError(409, "runtime_busy", "The runtime was replaced while this request waited; retry shortly.");
       };
-      return withPluginAdmission && this.pluginService ? this.pluginService.withAdmission(project, warm) : warm();
+      return withPluginAdmission && this.pluginService ? this.withRuntimeStartAdmission(project, warm, admissionWaitMs) : warm();
     }
     this.assertOwnerNotRetired(project);
     if (opening) this.openingStarts.add(key);
@@ -5028,7 +5136,7 @@ export class RuntimeManager {
     // is on the record as `cleanup_failed` with its retry entry; the start
     // still fails with its own cause.
     const started = Promise.resolve().then(() => this.runtimeStartScope.run(startupScope, async () => {
-      try { return await (withPluginAdmission && this.pluginService ? this.pluginService.withAdmission(project, create) : create()); }
+      try { return await (withPluginAdmission && this.pluginService ? this.withRuntimeStartAdmission(project, create, admissionWaitMs) : create()); }
       finally { startupScope.open = false; }
     })).catch(async (error) => {
       if (created) await this.closeRejectedStart(project, created, error).catch(() => {});
@@ -5047,6 +5155,7 @@ export class RuntimeManager {
       if (runtime === created) this.pluginService?.database?.afterRollback?.((/** @type {unknown} */ error) => this.closeRejectedStart(project, runtime, error));
       this.startFailures.delete(key);
       this.noteRoomFound(project);
+      if (runtime === created) this.observeMemoryRegistration(project, runtime);
       try {
         this.onRuntimeStart(project, runtime);
       } catch {
@@ -5085,6 +5194,8 @@ export class RuntimeManager {
 
   async startKernel(project, modelGatewayScope = null, modelGatewayProfile = "") {
     const key = this.key(project);
+    const startupId = this.config.memoryEngineEnabled === true ? randomId("startup_") : null;
+    const observe = (step, operation) => this.observeStartupStep(project, step, startupId, operation);
     const contextPolicy = await this.contextPolicyFor(project);
     if (contextPolicy.kind === "geo-project" && this.config.runtimeProvider === "agentbay") throw new HttpError(409, "runtime_context_provider_unsupported", "The selected provider cannot prove an immutable shared context mount.");
     const contextGeneration = contextPolicy.kind === "geo-project" ? await this.prepareSharedContext(project, contextPolicy) : null;
@@ -5097,14 +5208,15 @@ export class RuntimeManager {
     const password = randomId("pw_");
     // What the provider cannot start without, refused before anything is
     // written: Docker's daemon, AgentBay's settings.
-    await this.provider.preflight?.();
-    let pluginConfig = this.pluginOverrides?.get(key) ?? (this.pluginService ? (await this.pluginService.get(project.userId, project)).desired
+    await observe("provider_preflight", () => this.provider.preflight?.());
+    let pluginConfig = this.pluginOverrides?.get(key) ?? (this.pluginService
+      ? (await observe("plugin_config", () => this.pluginService.get(project.userId, project))).desired
       : { revision: 0, enabled: true, settings: { timeoutMs: 15000 } });
     // Before the plan, because the plan reads the result: both this side and
     // the privileged controller decide whether to mount the directory by
     // looking at it. Rebuilt every launch, so a method retired between two runs
     // is gone from the next one.
-    const mountedMethods = contextGeneration?.mounted ?? await this.syncCapsuleMethods(project);
+    const mountedMethods = contextGeneration?.mounted ?? await observe("capsule_methods", () => this.syncCapsuleMethods(project));
     const capsuleMethodsMounted = mountedMethods.count;
     let personalSkillGeneration = this.personalSkillOverrides.get(key) ?? null;
     // An exclusive composite apply already froze its personal reference/pins.
@@ -5166,7 +5278,7 @@ export class RuntimeManager {
     // The provider's own preparation: a container's plan, directories and
     // orphan cleanup, or a cloud session with the project's files carried in.
     // The memory gateway's address, read once per launch: empty when the deployment has no memory engine.
-    const memoryGatewayUrl = await this.memoryGatewayUrlFor(project);
+    const memoryGatewayUrl = await observe("memory_gateway_plan", () => this.memoryGatewayUrlFor(project));
     // And whether the project is a 「循证 GEO」 one: the method pack is mounted for it alone (`geoSkillsFor`).
     const geoSkills = await this.geoSkillsFor(project);
     const remediation = contextGeneration ? await remediateStartupContext(this.config, project, contextPolicy) : [];
@@ -5175,7 +5287,7 @@ export class RuntimeManager {
       try { patientMatchingGeneration = await this.patientMatchingGenerationResolver(project); if (patientMatchingGeneration) await this.preparePatientMatchingGeneration(project, patientMatchingGeneration); }
       catch (error) { this.noteStartFinding(project, "patient_matching_generation_unavailable", error); patientMatchingGeneration = null; }
     }
-    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration, extensionGeneration, patientMatchingGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration });
+    const plan = await observe("provider_prepare", () => this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration, extensionGeneration, patientMatchingGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration }));
 
     // Nothing is copied into a project any more: the image carries the skill
     // roots and the agent packages read-only, shared across every project. The
@@ -5207,7 +5319,7 @@ export class RuntimeManager {
       // (read-only, shared across every project), so there is nothing to copy
       // here. The retired kernel needed three copying passes at this point;
       // they are gone with it.
-      const dshSync = await this.provider.bootstrap(project, plan, { budgetScope: modelGatewayScope });
+      const dshSync = await observe("profile_bootstrap", () => this.provider.bootstrap(project, plan, { budgetScope: modelGatewayScope }));
       if (dshSync.workloadTokenFile) this.startingWorkloads.set(key, { workloadTokenFile: dshSync.workloadTokenFile });
       mcpSync = {
         copied: 0,
@@ -5293,7 +5405,7 @@ export class RuntimeManager {
     let child;
     try {
       if (contextGeneration) await this.assertSharedDesired(project, contextGeneration);
-      child = await this.independentWork(() => this.provider.launch(project, plan, { port, password }));
+      child = await observe("provider_launch", () => this.independentWork(() => this.provider.launch(project, plan, { port, password })));
     } catch (error) {
       // A provider that holds something outside this process — a cloud
       // session — lets it go and says why; the Docker provider has nothing to
@@ -5331,6 +5443,7 @@ export class RuntimeManager {
       patientMatchingProven: false,
       // The memory gateway address this runtime was launched with (empty when the deployment has no memory engine).
       memoryGatewayUrl: String(plan.memoryGatewayUrl ?? ""),
+      startupId,
       // Whether it was launched with the GEO method pack mounted.
       geoSkills: plan.geoSkills === true,
       // The kernel that is actually running, from one binding. This was once
@@ -5485,10 +5598,10 @@ export class RuntimeManager {
       });
     }));
     try {
-      await this.waitUntilReady(runtime);
+      await observe("kernel_ready", () => this.waitUntilReady(runtime));
       this.assertStartupRunning(runtime);
       if (runtime.workloadTokenFile) {
-        await this.provider.writeWorkloadToken(project, runtime);
+        await observe("workload_token_refresh", () => this.provider.writeWorkloadToken(project, runtime));
         this.assertStartupRunning(runtime);
       }
       if (contextGeneration) {
@@ -5677,6 +5790,8 @@ export class RuntimeManager {
     // The previous runtime's close is not confirmed yet (`failedRuntimeStops`): a start is refused until it
     // is, and the shell that is about to ask can say so first.
     const cleanupPending = this.failedRuntimeStops.has(key);
+    const waits = [...(this.startAdmissionWaits.get(key)?.values() ?? [])];
+    const startWait = waits.includes("memory_source_cleanup_busy") ? "memory_source_cleanup_busy" : waits.at(-1);
     if (runtime) {
       return publicRuntimeStatus(runtime, {
         stale: false,
@@ -5687,6 +5802,7 @@ export class RuntimeManager {
         agentsGenerated: runtime.agentsGenerated,
         capsuleMethodsMounted: runtime.capsuleMethodsMounted,
         provider,
+        startWait,
       });
     }
     // Where a start is, or why the last one did not happen, for the shell that
@@ -5697,7 +5813,7 @@ export class RuntimeManager {
     const startError = failure && Date.now() - failure.at < START_FAILURE_VISIBLE_MS
       ? { code: failure.code, status: failure.status, at: new Date(failure.at).toISOString() }
       : null;
-    const fields = { provider, startStage, startError, cleanupPending };
+    const fields = { provider, startStage, startError, cleanupPending, startWait };
     const state = await readRuntimeState(project);
     if (state) return publicRuntimeStatusFromState(state, fields);
     return publicRuntimeStatus(null, fields);
@@ -7613,14 +7729,14 @@ export class RuntimeManager {
     const entry = this.pluginService ? this.pluginService.entry(pluginId) : pluginEntry(pluginId);
     const tools = expectedPluginTools(entry);
     const settings = provenPluginSettings(entry);
-    const proof = await this.callKernel(runtime, project, "evimedPlugins/verify", {}, AbortSignal.timeout(45000));
-    const mismatch = this.runtimeGeneration(project) !== generation
-      ? "the runtime was replaced while it was being probed"
-      : pluginProofMismatch(proof, expected, entry.version, settings, tools);
-    if (mismatch) {
-      throw new HttpError(502, "plugin_probe_invalid", `The runtime did not prove the expected plugin configuration: ${mismatch}.`);
-    }
-    return { generation, upstream: pluginUpstreamHealth(proof.upstream) };
+    return this.observeStartupStep(project, "plugin_probe", runtime.startupId, async () => {
+      const proof = await this.callKernel(runtime, project, "evimedPlugins/verify", {}, AbortSignal.timeout(45000));
+      const mismatch = this.runtimeGeneration(project) !== generation
+        ? "the runtime was replaced while it was being probed"
+        : pluginProofMismatch(proof, expected, entry.version, settings, tools);
+      if (mismatch) throw new HttpError(502, "plugin_probe_invalid", `The runtime did not prove the expected plugin configuration: ${mismatch}.`);
+      return { generation, upstream: pluginUpstreamHealth(proof.upstream) };
+    });
   }
 
   /** @param {any} project @param {{ by?: 'user' | 'platform' | null }} [options] who asked for the restart */
@@ -8090,12 +8206,12 @@ export class RuntimeManager {
    * loopback for exactly this reason — out of reach of a remote caller.
    *
    * @param {Record<string, any>} project
-   * @param {{opening?: boolean, sessionId?: string}} [options] explicit module opens may yield idle connected runtimes; `sessionId` asks the kernel for that id (idempotent for the same workspace)
+   * @param {{opening?: boolean, sessionId?: string, waitForAdmission?: boolean}} [options] explicit module opens may yield idle connected runtimes; `sessionId` asks the kernel for that id (idempotent for the same workspace)
    * @returns {Promise<{ id: string, kernel: string }>}
    */
-  async createRuntimeSession(project, { opening = false, sessionId = undefined } = {}) {
+  async createRuntimeSession(project, { opening = false, sessionId = undefined, waitForAdmission = false } = {}) {
     this.assertInteractiveRuntimeAvailable(project);
-    const runtime = await this.start(project, { opening });
+    const runtime = await this.startForConversation(project, { opening, waitForAdmission });
     if (runtime.modelGatewayScope) this.assertInteractiveRuntimeAvailable(project);
     this.beginProxy(project);
     try {
@@ -8115,6 +8231,21 @@ export class RuntimeManager {
       return { id: String(value?.sessionId ?? ""), kernel: RUNTIME_KERNEL_NAME };
     } finally {
       this.endProxy(project);
+    }
+  }
+
+  /** Retry only startup refusals, before any call can create a session. */
+  async startForConversation(project, { opening = false, waitForAdmission = false } = {},
+    { now = Date.now, pause = sleep } = {}) {
+    const deadline = now() + (waitForAdmission ? CONVERSATION_ADMISSION_WAIT_MS : 0);
+    for (;;) {
+      try { return await this.start(project, { opening, ...(waitForAdmission ? { admissionWaitMs: Math.max(0, deadline - now()) } : {}) }); }
+      catch (error) {
+        const remaining = deadline - now();
+        if (remaining <= 0 || !CONVERSATION_ADMISSION_REFUSALS.has(error?.code)) throw error;
+        await pause(Math.min(remaining, CONVERSATION_ADMISSION_RETRY_MS));
+        if (now() >= deadline) throw error;
+      }
     }
   }
 
@@ -9052,7 +9183,16 @@ export class RuntimeManager {
           return withSessionPromptAdmission(this,project,sessionId,operation,{stop:endpoint==='session/cancel'});
         },
         admit: (endpoint, operation, payload) => {
-          if (endpoint !== "session/prompt") return policy.admitOperation ? policy.admitOperation(endpoint, payload, operation) : policy.withAuthority ? policy.withAuthority(operation) : operation();
+          if (endpoint !== "session/prompt") {
+            const authorized = () => policy.admitOperation ? policy.admitOperation(endpoint, payload, operation) : policy.withAuthority ? policy.withAuthority(operation) : operation();
+            if (endpoint !== "session/create" || !this.pluginService) return authorized();
+            return this.withRuntimeStartAdmission(project, () => {
+              if (this.runtimes.get(this.key(project)) !== runtime) {
+                throw new HttpError(423, "plugin_apply_in_progress", "The runtime changed during conversation admission.");
+              }
+              return authorized();
+            }, 12_000);
+          }
           const prompt = async () => {
             await this.assertPersonalSkillPromptGeneration(project, payload?.args?.request ?? {});
             return operation();
