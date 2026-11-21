@@ -512,3 +512,13 @@ test('a pending lesson checks the retained transcript and feedback before sendin
     dispatch:async()=>assert.fail('withdrawn evidence reached dispatch'),readResult:async()=>({status:'running'})});
   await assert.rejects(distillation.execute({project,run,job:{userId:'u1',projectId:'p',payload:{trigger:'correction'}}}),{code:'distillation_run_unavailable'});
 });
+
+test("renaming an official procedure cannot copy it into the personal library", async () => {
+  const service = ledger();
+  const official = { name: "official-weekly", body: BODY };
+  const distil = new MethodDistillationRuns({ learning: service, officialMethods: async () => [official],
+    dispatch: async () => assert.fail(), readResult: async () => assert.fail() });
+  const result = await distil.applyCandidate(job, { id: "run_1" }, { skill: SKILL, candidate: { operation: "create" } });
+  assert.equal(result.skipped, "official_read_only");
+  assert.equal(service.created.length, 0);
+});

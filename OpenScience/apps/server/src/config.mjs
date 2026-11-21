@@ -3451,6 +3451,9 @@ export function loadConfig(overrides = {}) {
     // The official tier in the learning loop (§5.4 defect 14), off by default: official methods join distillation's related methods and the
     // consolidation's screen and decide as read-only documents, a person's method may depend on one (`sha256:` + its pack sha), and the mount
     // selects the tier like the person's library (closure, parent, own cap) instead of the nearest three, flat.
+    methodTaskOutcomesEnabled: overrides.methodTaskOutcomesEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_TASK_OUTCOMES_ENABLED", false),
+    methodFailureStreak: boundedInteger(overrides.methodFailureStreak ?? process.env.OPEN_SCIENCE_METHOD_FAILURE_STREAK, 3, 2, 20, "OPEN_SCIENCE_METHOD_FAILURE_STREAK"),
+    methodOfficialRelevanceEnabled: overrides.methodOfficialRelevanceEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_OFFICIAL_RELEVANCE_ENABLED", false),
     methodOfficialInLoopEnabled: overrides.methodOfficialInLoopEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED", false),
     // A learned method's card carries up to two quotations it rests on, two situations it is not for, and whether it was used after its last
     // change and not corrected (plan 2026-11-04 item 11), off by default; SKILL.md and the digest never change. Off, the card is two lines.
@@ -3463,6 +3466,7 @@ export function loadConfig(overrides = {}) {
     // file it reuses, which sub-skills are new, under the `method-frame` contract) and then each new sub-skill is written as its own method that
     // pins what it builds on. Off, a lesson is the one step it was and the skill text is byte-identical.
     methodCorrectionPrecedenceEnabled: overrides.methodCorrectionPrecedenceEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_CORRECTION_PRECEDENCE_ENABLED", false),
+    methodInlineDetailEnabled: overrides.methodInlineDetailEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_INLINE_DETAIL_ENABLED", false),
     methodTwoStageDistillationEnabled: overrides.methodTwoStageDistillationEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED", false),
     // Short method cards with optional detail attachments; existing methods change only through ordinary revisions.
     methodConciseDistillationEnabled: overrides.methodConciseDistillationEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_CONCISE_DISTILLATION_ENABLED", false),

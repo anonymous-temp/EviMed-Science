@@ -51,6 +51,7 @@ import { withLearnedLibrary, deferLearnedLibraryObserver } from './learnedLibrar
  * @module learningService
  */
 
+import { taskOutcomeWindow } from "./methodTaskOutcomes.mjs";
 import { createHash } from "node:crypto";
 
 import {
@@ -575,6 +576,10 @@ export class LearningService {
       updatedAt: at,
       ...(bodyChanged ? { personCorrection: null } : {}),
     };
+    if ((bodyChanged || personCorrection) && current.payload.taskOutcomes) {
+      delete payload.taskOutcomes;
+      payload.taskOutcomesSince = at;
+    }
     if (personCorrection && current.payload.status !== 'retired') payload.personCorrection = this.correctionPrecedence ? proof : await this.#correctionStamp(userId, payload);
     if (payload.files === undefined) delete payload.files;
     if ((bodyChanged || personCorrection) && current.payload.status !== 'retired') {
@@ -1052,6 +1057,11 @@ export class LearningService {
       updatedAt: at,
     };
     if (payload.files === undefined) delete payload.files;
+    if (payload.taskOutcomes || payload.taskOutcomesSince) {
+      delete payload.taskOutcomes;
+      payload.taskOutcomesSince = at;
+      if (!this.correctionPrecedence) delete payload.correctionRecoveryStopped;
+    }
     if (payload.scope === undefined) delete payload.scope;
     // Restoring a held method is the person's explicit choice between the two instructions. Automatic regressions
     // carry a link/targetDigest and retain their normal conflict checks.
@@ -1167,6 +1177,37 @@ export class LearningService {
       }
     }
     throw new HttpError(409, "product_revision_conflict", "Concurrent method observations did not settle.");
+  }
+
+  /** Persist the sample and any resulting status change in one version-checked write.
+   * @param {string} userId @param {string} methodId @param {string} digest @param {any} sample @param {number} threshold */
+  async recordTaskOutcome(userId, methodId, digest, sample, threshold) {
+    return withLearnedLibrary(this.documents, userId, async () => {
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const document = await this.getMethod(userId, methodId);
+        const payload = document.payload;
+        if (payload.status !== "approved" || payload.contentDigest !== digest || payload.provenance?.origin === "explicit"
+          || methodPersonCorrection(payload, true) || methodPersonCorrection(payload)) return;
+        const window = taskOutcomeWindow(payload, sample, threshold);
+        if (!window) return;
+        const changed = Boolean(payload.taskOutcomes?.demoted) !== window.demoted || window.retire;
+        const next = { ...payload, taskOutcomes: window };
+        if (window.retire) {
+          next.status = "retired";
+          next.statusChangedAt = this.now().toISOString();
+          next.statusReason = `带有这条做法的连续 ${window.samples.length} 次任务交付失败或收到针对该做法的纠正，已停用。可以从版本历史恢复。`;
+          next.correctionRecoveryStopped = true;
+        }
+        try {
+          await this.documents.put(userId, "method", methodId, next, { expectedRevision: document.revision, telemetry: !changed });
+        } catch (error) {
+          if (error?.code === "product_revision_conflict" && attempt < 7) continue;
+          throw error;
+        }
+        if (changed) this.#mountChanged(userId);
+        return;
+      }
+    });
   }
 
   /**

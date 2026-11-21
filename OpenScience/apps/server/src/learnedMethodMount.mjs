@@ -32,7 +32,7 @@ import { CONTEXT_ITEM_FIELDS, contextPolicyIdentity } from "./geoContextItems.mj
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
-import { METHOD_FILE_PREFIXES, METHOD_MOUNT, abstractMembersOf, computeMethodLevels, learnedMethodCardEntry, methodCardFacts, mountedMethodDigest, renderMethodSkill } from "@evimed/domain";
+import { METHOD_FILE_PREFIXES, METHOD_MOUNT, METHOD_SIMILARITY_PAIR_FLOOR, abstractMembersOf, computeMethodLevels, learnedMethodCardEntry, methodCardFacts, mountedMethodDigest, renderMethodSkill } from "@evimed/domain";
 import { EVIDENCE_PROJECT_ID, FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID } from "./internalProjects.mjs";
 import { createMethodSimilarity } from "./methodSimilarity.mjs";
 
@@ -307,7 +307,7 @@ export function learnedMethodCardBytes(payload, directoryName, cardDirectory, ca
  * @param {any} learning `LearningService`
  * @param {{userId: string, contextPolicy?: any, contextItems?: any, contextProvenance?: any, projectId: string, maxCount?: number, maxBytes?: number, family?: "geo" | "research" | null,
  *   scopeId?: string | null, query?: string | null, similarity?: { nearest: Function } | null, keep?: Iterable<string> | null,
- *   cardDirectory?: string | null, onLeftOut?: ((methodId: string) => void) | null, pyramid?: boolean, minSimilarity?: number, cardEvidence?: boolean, skipPendingRetirements?: boolean}} scope
+ *   cardDirectory?: string | null, onLeftOut?: ((methodId: string) => void) | null, pyramid?: boolean, minSimilarity?: number, cardEvidence?: boolean, taskOutcomes?: boolean, skipPendingRetirements?: boolean}} scope
  * @returns {Promise<MountedLearnedMethod[] & { mode?: "embedding" | "lexical" | "recent", topScore?: number | null, kept?: MountedLearnedMethod[], levels?: Map<string, number> }>}
  */
 export async function selectLearnedMethods(learning, scope) {
@@ -433,6 +433,8 @@ export async function selectLearnedMethods(learning, scope) {
 
   const plan = await planMethodSelection(/** @type {Map<string, PlanEntry>} */ (entries), candidates, {
     query: scope.query, similarity: scope.similarity, pyramid, minSimilarity: scope.minSimilarity,
+    deprioritized: scope.taskOutcomes ? new Set(candidates.filter(entry => entry.payload.taskOutcomes?.demoted
+      && entry.payload.taskOutcomes.digest === entry.payload.contentDigest).map(entry => entry.id)) : undefined,
     fits: (/** @type {PlanEntry} */ entry) => fits(/** @type {Entry} */ (entry)),
   });
 
@@ -539,7 +541,7 @@ function orderByLevel(methods, levels) {
  * @param {Map<string, PlanEntry>} entries the whole library by id
  * @param {readonly PlanEntry[]} candidates the entries this run may be offered by similarity or exposure, most recently approved first
  * @param {{ query?: string | null, similarity?: { nearest: Function } | null, pyramid?: boolean, minSimilarity?: number, nearest?: number,
- *   explore?: number, abstractMax?: number, functionalMax?: number, recentFallback?: boolean, pinned?: readonly PlanEntry[],
+ *   explore?: number, abstractMax?: number, functionalMax?: number, recentFallback?: boolean, deprioritized?: Set<string>, pinned?: readonly PlanEntry[],
  *   fits?: ((entry: PlanEntry) => boolean) | null, screenRanked?: ((ranked: PlanEntry[]) => Promise<Set<string> | null>) | null }} [options]
  * @returns {Promise<{ pinned: {entry: PlanEntry, reason: string}[], ranked: {entry: PlanEntry, reason: string}[], reused: {entry: PlanEntry, reason: string}[],
  *   parents: {entry: PlanEntry, reason: string}[], explored: {entry: PlanEntry, reason: string}[], mode: "embedding" | "lexical" | "recent",
@@ -572,8 +574,9 @@ export async function planMethodSelection(entries, candidates, options = {}) {
   /** @type {Map<string, number>} closeness to the query of every candidate the similarity scored, for choosing a parent */
   const scores = new Map();
   const query = String(options.query ?? "").trim();
-  const pool = candidates.filter((entry) => !taken.has(entry.id));
-  if (query && options.similarity && pool.length) {
+  // Demoted bodies can still be explored or explicitly reused. They no longer displace a relevant healthy card.
+  const pool = candidates.filter((entry) => !taken.has(entry.id) && !options.deprioritized?.has(entry.id));
+  if (query && options.similarity && (pool.length || options.deprioritized?.size)) {
     try {
       // The pyramid asks for every candidate's closeness, so a parent can be chosen by it; the flat mount asks for the nearest only.
       const near = await options.similarity.nearest(query, pool.map((entry) => entry.source), {
@@ -798,7 +801,7 @@ export function officialMethodDocument(method) {
  * @param {readonly import('./officialPacks.mjs').OfficialMethod[]} methods the account's official methods (`OfficialPacks.methodsFor`)
  * @param {{ scopeId?: string | null, family?: "geo" | "research" | null, query?: string | null, similarity?: { nearest: Function, pairs: Function } | null,
  *   personal?: readonly any[], maxCount?: number, maxBytes?: number, cardDirectory?: string | null, keep?: Iterable<string> | null,
- *   onLeftOut?: ((methodKey: string) => void) | null, inLoop?: boolean, pyramid?: boolean, minSimilarity?: number,
+ *   onLeftOut?: ((methodKey: string) => void) | null, inLoop?: boolean, relevance?: boolean, pyramid?: boolean, minSimilarity?: number,
  *   personalDependencies?: readonly { name: string, digest?: string }[] }} scope
  * @returns {Promise<any[] & { leftOut: { id: string, name: string, reason: "personal_method", twin: { id: string, name: string }, score: number }[], deltaMode: "embedding" | "lexical" | null, kept: any[] }>}
  */
@@ -823,6 +826,7 @@ export async function selectOfficialMethods(methods, scope) {
   const maxCount = Number.isSafeInteger(scope.maxCount) ? Number(scope.maxCount) : inLoop ? OFFICIAL_METHOD_MOUNT.inLoop : OFFICIAL_METHOD_MOUNT.nearest;
   const maxBytes = Number.isSafeInteger(scope.maxBytes) ? Number(scope.maxBytes) : Number.POSITIVE_INFINITY;
   const query = String(scope.query ?? "").trim();
+  const floor = scope.relevance ? Math.max(METHOD_SIMILARITY_PAIR_FLOOR, Number(scope.minSimilarity) || 0) : undefined;
   const runScope = scope.scopeId == null ? CONVERSATION_SCOPE : scope.scopeId;
   const docOf = (/** @type {any} */ method) => ({ id: method.key,
     payload: { frontmatter: { name: method.name, description: method.description, whenToUse: method.whenToUse }, contentDigest: `sha256:${method.sha}` }, method });
@@ -835,14 +839,17 @@ export async function selectOfficialMethods(methods, scope) {
   if (inLoop) {
     if (!methods?.length || maxCount <= 0 || scope.family === null || scope.family === "geo") return result;
     const cap = Math.min(maxCount, OFFICIAL_METHOD_MOUNT.inLoop);
+    const versions = new Map(methods.map(method => [method.name, `sha256:${method.sha}`]));
+    /** @param {{name:string, digest?:string}} pin */
+    const currentPin = pin => versions.has(pin?.name) && versions.get(pin.name) === pin.digest;
     /** @type {Map<string, PlanEntry & { method: any }>} */
     const entries = new Map(methods.map((method) => [method.key, { id: method.key, name: method.name,
-      dependencies: Array.isArray(method.dependencies) ? method.dependencies : [], derivedFrom: [], role: method.role ?? null,
+      dependencies: (method.dependencies ?? []).filter(currentPin), derivedFrom: [], role: method.role ?? null,
       approvedAt: 0, carried: 0, source: docOf(method), method }]));
     const inScope = (/** @type {PlanEntry} */ entry) => /** @type {any} */ (entry).method.scope.includes(runScope);
-    const reused = new Set((scope.personalDependencies ?? []).map((dependency) => String(dependency?.name ?? "")));
+    const reused = new Set((scope.personalDependencies ?? []).filter(currentPin).map((dependency) => String(dependency?.name ?? "")));
     const plan = await planMethodSelection(entries, [...entries.values()].filter(inScope), {
-      query: scope.similarity ? query : null, similarity: scope.similarity ?? null, pyramid: scope.pyramid === true, minSimilarity: scope.minSimilarity,
+      query: scope.similarity ? query : null, similarity: scope.similarity ?? null, pyramid: scope.pyramid === true, minSimilarity: floor ?? scope.minSimilarity,
       nearest: Math.min(cap, OFFICIAL_METHOD_MOUNT.nearest), explore: 0, recentFallback: false, fits: inScope,
       pinned: [...entries.values()].filter((entry) => reused.has(entry.name)),
       screenRanked: async (hits) => {
@@ -871,7 +878,7 @@ export async function selectOfficialMethods(methods, scope) {
   if (!docs.length) return result;
   /** @type {any[]} */
   let near;
-  try { near = await scope.similarity.nearest(query, docs, { limit: Math.min(maxCount, OFFICIAL_METHOD_MOUNT.nearest) }); } catch { return result; }
+  try { near = await scope.similarity.nearest(query, docs, { limit: Math.min(maxCount, OFFICIAL_METHOD_MOUNT.nearest), ...(floor ? { minScore: floor } : {}) }); } catch { return result; }
   const hits = near.map((hit) => hit.method).filter(Boolean);
   if (!hits.length) return result;
 

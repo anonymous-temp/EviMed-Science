@@ -398,3 +398,14 @@ test("a card's outcome with nothing to join is a labelled skip: no run in the le
   assert.equal((await f.service.fromEvidenceOutcome({ id: "evimed-evidence", userId: USER }, outcome)).skipped, "not_learnable");
   assert.equal((await f.learning.getMethod(USER, method.id)).payload.scientific, undefined);
 });
+
+test("withdrawn learning permission also applies when a published outcome arrives later", async () => {
+  const f = fixture();
+  const method = await f.method();
+  f.run({ invoked: [method] });
+  f.service.admitPublishedRun = async () => false;
+  const result = await f.service.fromEvidenceOutcome(PROJECT, { runId: "run-1", result: { versionId: version(1), digest: hex("a") },
+    at: "2026-10-06T08:00:00.000Z", logEntryId: "45", outcomeClass: "claim_amended" });
+  assert.equal(result.skipped, "not_learnable");
+  assert.equal((await f.learning.getMethod(USER, method.id)).payload.scientific, undefined);
+});

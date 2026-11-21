@@ -173,6 +173,7 @@ import { createMethodSimilarity } from "./methodSimilarity.mjs";
 import { NativeInputRoute } from "./nativeInputRoute.mjs";
 import { createResearchDispatchContext } from "./researchDispatchContext.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
+import { methodTaskOutcomes } from "./methodTaskOutcomes.mjs";
 import { methodObservationSessionsForRun, runMethodObservations } from "./methodObservations.mjs";
 import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "./learningMetrics.mjs";
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
@@ -1570,14 +1571,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // of the traffic — leaves none the control plane can scope to its turn (`readRunStateProjection`), and used to be counted for
     // nothing: not carried, not read. What the control plane gave the conversation when its first prompt arrived is its receipt then.
     const read = await agentRuns.runWorkflowProjection(project, run);
-    const learnedGiven = run.sessionId ? runtimeManager.methodsGivenTo(project, String(run.sessionId)) : [];
-    // The platform's official methods the conversation was offered are carried like any other card (`officialGivenTo`).
-    const officialOffered = run.sessionId ? runtimeManager.officialGivenTo(project, String(run.sessionId)).offered : [];
-    const given = [...learnedGiven, ...officialOffered.map((method) => ({ ...method, reason: "similarity" }))];
-    if (!read && !given.length) return;
-    const projection = { ...(read ?? {}),
-      mountedMethods: Array.isArray(read?.mountedMethods) && read.mountedMethods.length ? read.mountedMethods
-        : given.map(({ name, digest, reason }) => ({ name, digest, reason })) };
+    const recorded = config.methodTaskOutcomesEnabled ? run.methodsLoaded ?? (run.nativeTurn
+      ? runtimeManager.methodReceiptFor(project, run.sessionId, run.startedAt) ?? [] : null) : null;
+    const projection = { ...(read ?? {}), mountedMethods: Array.isArray(read?.mountedMethods) && read.mountedMethods.length ? read.mountedMethods : recorded };
+    if (!projection.mountedMethods) {
+      const learnedGiven = run.sessionId ? runtimeManager.methodsGivenTo(project, String(run.sessionId)) : [];
+      const officialOffered = run.sessionId ? runtimeManager.officialGivenTo(project, String(run.sessionId)).offered : [];
+      const given = [...learnedGiven, ...officialOffered.map((method) => ({ ...method, reason: "similarity" }))];
+      if (!read && !given.length) return;
+      projection.mountedMethods = given.map(({ name, digest, reason }) => ({ name, digest, reason }));
+    }
     // The whole library: a researcher's methods follow them across projects
     // (`selectLearnedMethods`), so a use is attributed wherever it happens —
     // of the kind of work this run's runtime carried (L-G7), so a research
@@ -1624,6 +1627,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         methodsLoaded: derived.methodsLoaded,
         methodsInvoked: derived.methodsInvoked,
       });
+    }
+    if (config.methodTaskOutcomesEnabled && learningTriggers && !run.automated && !internalFor(project.userId, project.id)
+      && !await learningTriggers.refusalFor(project, run)) {
+      for (const entry of methodTaskOutcomes(run, derived, methods)) {
+        await learningService.recordTaskOutcome(project.userId, entry.methodId, entry.digest, entry.sample, config.methodFailureStreak)
+          .catch(error => securityAudit(config, "learning.task_outcome", "failed", { runId: run.id, code: error?.code ?? "method_outcome_failed" }));
+      }
     }
     // A read with no proven mount stays a read. Mounted ordinary conversations
     // already earned one run observation above, even without a workflow receipt.
@@ -3327,6 +3337,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // scientific axis of each method's record. Where the loop is on; the researcher's own 「停止学习」 and a capsule trial apply.
   const methodFeedback = learningService && config.learningEnabled ? new MethodFeedbackService({
     learning: learningService, runs: { list: project => agentRuns.list(project) },
+    admitPublishedRun: async (project, run) => Boolean(learningTriggers) && !run.automated
+      && !internalFor(project.userId, project.id) && await learningTriggers.refusalFor(project, run) === null,
     enabled: async (project, run) => {
       const state = await memoryPausedFor(memorySettings, project.userId, project.id, run.sessionId).catch(() => ({ learning: false, trial: false }));
       return !state.learning && !state.trial;
@@ -4347,6 +4359,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     ...(review ? { reviewNotices: (project, runId) => review.service.reviewNoticesForRun(project.userId, project.id, runId) } : {}),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
     runtimeStartupId: (project, observation) => runtimeManager.runtimeStartupId(project, observation),
+    runtimeMethodReceipt: config.learningEnabled && config.methodTaskOutcomesEnabled ? async (project, sessionId, startedAt = null) => {
+      const offered = runtimeManager.methodReceiptFor(project, sessionId, startedAt);
+      if (!offered?.length) return null;
+      const state = await memoryPausedFor(memorySettings, project.userId, project.id, sessionId).catch(() => null);
+      return state && !state.trial ? offered : null;
+    } : null,
     runtimePersonalSkills: (project, observation = {}) => {
       if (observation.nativeTurn) {
         const runtime = runtimeManager.runtimes.get(runtimeManager.key(project));
@@ -4982,6 +5000,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       officialMethods: officialInLoop,
       // Lab switches, both off by default: the training camp's lesson and two-stage distillation.
       camp: config.learningCampEnabled === true,
+      taskOutcomes: config.methodTaskOutcomesEnabled === true,
+      inlineDetail: config.methodInlineDetailEnabled === true,
       twoStage: config.methodTwoStageDistillationEnabled === true,
       concise: config.methodConciseDistillationEnabled === true,
     });
@@ -5085,6 +5105,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         return user ? store.requireProject(user, projectId).catch(() => null) : null;
       },
       runsOf: (project) => agentRuns.list(project),
+      onNamedFailure: config.methodTaskOutcomesEnabled ? async (userId, projectId, run, methodId, digest) => {
+        if (run.automated || run.terminalConflict || !Number.isFinite(Date.parse(run.finishedAt)) || !learningTriggers) return;
+        const user = await store.userById(userId);
+        const project = user && await store.requireProject(user, projectId);
+        if (!project || internalFor(userId, projectId) || await learningTriggers.refusalFor(project, run)) return;
+        await learningService.recordTaskOutcome(userId, methodId, digest, { runId: run.id, at: run.finishedAt,
+          startedAt: run.startedAt ?? run.createdAt, opened: true, failed: true, corrected: true }, config.methodFailureStreak);
+      } : null,
       onApplied: (outcome) => learningMetrics.observeApplied(outcome),
       audit: (event, detail) => securityAudit(config, event, "failed", detail),
       // The platform's official methods a run opened are counted in their own, platform-wide records (`OfficialPacks.recordApplied`), never in the account's.

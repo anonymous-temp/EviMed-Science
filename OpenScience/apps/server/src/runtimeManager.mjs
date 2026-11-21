@@ -3737,7 +3737,7 @@ export class RuntimeManager {
      * run-state file the control plane can scope to its turn. Bounded: only a conversation still being prompted needs one.
      * The platform's official methods it was offered, and the ones the person's own methods kept out of its mount, ride beside them (`official`,
      * `officialLeftOut`: the receipt of the tier, `selectOfficialMethods`).
-     * @type {Map<string, { learned: {id: string, name: string, digest: string, reason: string}[], official: {id: string, name: string, digest: string}[], officialLeftOut: any[] }>}
+     * @type {Map<string, { offeredAt: number, learned: {id: string, name: string, digest: string, reason: string}[], official: {id: string, name: string, digest: string}[], officialLeftOut: any[] }>}
      */
     this.sessionMethods = new Map();
     /** Launches that went ahead although the deployment disagrees with its
@@ -4089,13 +4089,15 @@ export class RuntimeManager {
   /**
    * The learned-method library's experiment switches as the mount reads them (`materializeCapsuleMethods`), each off by default so the
    * same commit runs with and without it (plan 2026-11-04 §5.4).
-   * @returns {{ pyramid: boolean, minSimilarity: number, officialInLoop: boolean, cardEvidence: boolean, skipPendingRetirements: boolean }}
+   * @returns {{ pyramid: boolean, minSimilarity: number, officialRelevance: boolean, officialInLoop: boolean, cardEvidence: boolean, taskOutcomes: boolean, skipPendingRetirements: boolean }}
    */
   methodSelectionSwitches() {
     return {
       pyramid: this.config?.methodPyramidEnabled === true,
       minSimilarity: Number(this.config?.methodMountMinSimilarity ?? 0) || 0,
+      officialRelevance: this.config?.methodOfficialRelevanceEnabled === true,
       officialInLoop: this.config?.methodOfficialInLoopEnabled === true,
+      taskOutcomes: this.config?.methodTaskOutcomesEnabled === true,
       cardEvidence: this.config?.methodCardEvidenceEnabled === true,
       skipPendingRetirements: this.config?.methodPendingRetirementMountEnabled === true,
     };
@@ -4395,7 +4397,7 @@ export class RuntimeManager {
         if (sessionId) {
           const given = `${key}\u0000${sessionId}`;
           this.sessionMethods.delete(given);
-          this.sessionMethods.set(given, { learned: mounted.learned ?? [], official: mounted.official ?? [], officialLeftOut: mounted.officialLeftOut ?? [] });
+          this.sessionMethods.set(given, { offeredAt: Date.now(), learned: mounted.learned ?? [], official: mounted.official ?? [], officialLeftOut: mounted.officialLeftOut ?? [] });
           while (this.sessionMethods.size > 2048) this.sessionMethods.delete(/** @type {string} */ (this.sessionMethods.keys().next().value));
         }
         runtime.capsuleMethodsMounted = mounted.count;
@@ -4430,6 +4432,14 @@ export class RuntimeManager {
    */
   methodsGivenTo(project, sessionId) {
     return this.sessionMethods.get(`${this.key(project)}\u0000${sessionId}`)?.learned ?? [];
+  }
+
+  /** A recovered native turn can only use a receipt that already existed when it began.
+   * @param {Record<string,any>} project @param {string} sessionId @param {string | null} [startedAt] */
+  methodReceiptFor(project, sessionId, startedAt = null) {
+    const held = this.sessionMethods.get(`${this.key(project)}\u0000${sessionId}`);
+    if (!held || (startedAt !== null && !(Date.parse(startedAt) >= held.offeredAt))) return null;
+    return [...held.learned, ...held.official.map(method => ({ ...method, reason: "similarity" }))];
   }
 
   /**

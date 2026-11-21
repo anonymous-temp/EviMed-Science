@@ -221,3 +221,19 @@ test("in the loop, a hit the person's own method covers is left out before anyth
   assert.deepEqual(picked.map((entry) => entry.id), ["official:daily:mail"], "the covered hit's dependency is not pulled in for it");
   assert.equal(picked.deltaMode, "embedding");
 });
+
+test("task relevance can leave every embedding hit out in either official selection mode", async () => {
+  const { createMethodSimilarity } = await import("../src/methodSimilarity.mjs");
+  const similarity = createMethodSimilarity({ embed: async texts => texts.map(text => text === ASK ? [1, 0] : [0, 1]) });
+  for (const inLoop of [false, true]) {
+    assert.equal((await selectOfficialMethods(methods, { query: ASK, inLoop, similarity })).length, 3);
+    assert.equal((await selectOfficialMethods(methods, { query: ASK, inLoop, similarity, relevance: true })).length, 0);
+  }
+});
+
+test("a stale personal pin cannot pull a replacement official body into the task", async () => {
+  const original = methods[0];
+  const replacement = { ...original, sha: "b".repeat(64) };
+  const selected = await selectOfficialMethods([replacement], { inLoop: true, query: "", personalDependencies: [pinTo(original)] });
+  assert.deepEqual(selected.map(row => row.id), []);
+});

@@ -807,6 +807,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
         ...(event.kernelRequestIds ? { kernelRequestIds: event.kernelRequestIds.map(storedKernelRequestId) } : {}),
         ...(event.personalSkillGeneration ? { personalSkillGeneration: normalizePersonalSkillGeneration(event.personalSkillGeneration) } : {}),
         ...(event.runtimeStartupId ? { runtimeStartupId: safeStoredId(event.runtimeStartupId, "runtime startup id") } : {}),
+        ...(event.methodsLoaded ? { methodsLoaded: normalizeMethodDigests(event.methodsLoaded) } : {}),
         sessionId: safeStoredId(event.sessionId, "sessionId"),
         mode,
         agentId: event.agentId,
@@ -4699,6 +4700,7 @@ export class AgentRunStore {
     this.readChildSessionActivity = options.readChildSessionActivity ?? (async () => []);
     this.runtimeWorkspaceRoot = options.runtimeWorkspaceRoot ?? (async (project) => project.workspaceDir);
     this.runtimeGeneration = options.runtimeGeneration ?? (async () => null);
+    this.runtimeMethodReceipt = options.runtimeMethodReceipt ?? null;
     this.runtimePersonalSkills = options.runtimePersonalSkills ?? (() => null);
     this.runtimeStartupId = options.runtimeStartupId ?? (() => null);
     // The evidence card a research session was started from (flywheel F06, `evidenceOrigins.mjs`): asked when a run is
@@ -5554,6 +5556,8 @@ export class AgentRunStore {
       if (runs.has(id)) throw new HttpError(409, "agent_run_id_conflict", "Agent run id already exists.");
       const personalSkillGeneration = normalizePersonalSkillGeneration(await this.runtimePersonalSkills(project, { nativeTurn, startedAt }));
       const runtimeStartupId = this.runtimeStartupId(project, { nativeTurn, startedAt });
+      const methodsLoaded = nativeTurn && this.runtimeMethodReceipt
+        ? normalizeMethodDigests(await this.runtimeMethodReceipt(project, session.sessionId, startedAt ?? now)) : null;
       // A label that cannot be read leaves the run as it would have been (`evidenceOrigins.mjs`).
       const originCardId = this.originCardOf ? await Promise.resolve().then(() => this.originCardOf?.(project, session)).catch(() => null) : null;
       const event = {
@@ -5588,6 +5592,7 @@ export class AgentRunStore {
         baselineCursor,
         ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
         ...(runtimeStartupId ? { runtimeStartupId } : {}),
+        ...(methodsLoaded?.length ? { methodsLoaded } : {}),
       };
       // The caller's final admission check sees the same immutable ledger
       // snapshot that this reservation owns under the project storage lock.
@@ -5696,6 +5701,10 @@ export class AgentRunStore {
         throw new HttpError(502, "runtime_prompt_rejected", "Runtime rejected the prompt before accepting it.");
       }
       await this.recordRuntimePersonalSkills(project, record.id);
+      if (this.runtimeMethodReceipt) {
+        const methodsLoaded = normalizeMethodDigests(await this.runtimeMethodReceipt(project, sessionId));
+        if (methodsLoaded?.length) await this.recordLearning(project, record.id, { methodsLoaded }).catch(() => null);
+      }
       const accepted = await this.markDispatch(project, record.id, "accepted");
       this.clinicalRepairSenders.set(record.id, async (repairText) => {
         const updated = await this.recordKernelRequest(project, record.id, randomId("req_"));

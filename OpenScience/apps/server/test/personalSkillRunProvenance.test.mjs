@@ -37,3 +37,33 @@ test("cold and adopted runs retain exact personal pins through later runtime cha
     assert(!ledger.includes("must never be recorded"));
   } finally { await store.closeAll(); await fs.rm(root, { recursive: true, force: true }); }
 });
+
+test("accepted and adopted turns persist only their own offered methods across a restart", async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "method-receipt-"));
+  const project = { userId: "owner", id: "project", rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.mkdir(project.workspaceDir);
+  await fs.mkdir(project.metaDir);
+  const binding = { sessionId: "session", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+  const receipt = { name: "official-reference", digest: "sha256:" + "e".repeat(64), reason: "similarity" };
+  const mounted = [{ ...receipt, body: "transient-method-body" }];
+  const offeredAt = Date.now() - 1000;
+  let sent = false;
+  const options = { model: "deepseek/deepseek-v4-flash", runtimeMethodReceipt: (_project, sessionId, startedAt) =>
+    sent && sessionId === binding.sessionId && (!startedAt || Date.parse(startedAt) >= offeredAt) ? mounted : null };
+  const store = new AgentRunStore({ get: async () => binding }, options);
+  store.scheduleMonitor = () => {};
+  t.after(() => store.closeAll());
+  const run = await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "cold" }, async () => { sent = true; return { accepted: true }; });
+  assert.deepEqual(run.methodsLoaded, [receipt]);
+  await store.cancelSession(project, binding.sessionId);
+  const adopted = (await store.reserveRun(project, binding, { nativeTurn: { startSeq: 10, userSeq: 11 }, startedAt: new Date().toISOString() })).run;
+  assert.deepEqual(adopted.methodsLoaded, [receipt]);
+  await store.cancelSession(project, binding.sessionId);
+  const older = (await store.reserveRun(project, binding, { nativeTurn: { startSeq: 1, userSeq: 2 }, startedAt: new Date(offeredAt - 1000).toISOString() })).run;
+  assert.equal(older.methodsLoaded, undefined);
+  const restarted = new AgentRunStore({}, { model: options.model });
+  t.after(() => restarted.closeAll());
+  assert.deepEqual((await restarted.list(project)).find(item => item.id === run.id).methodsLoaded, [receipt]);
+  assert.ok(!(await fs.readFile(path.join(project.metaDir, "runs.jsonl"), "utf8")).includes("transient-method-body"));
+});

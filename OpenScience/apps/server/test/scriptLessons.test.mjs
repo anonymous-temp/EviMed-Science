@@ -225,3 +225,9 @@ test("a snippet that carries a credential is dropped before anything is stored, 
   assert.deepEqual(await make(execute).afterSettle({ userId: "u1", id: "p" }, { id: "run_gone", sessionId: "c" }), { recorded: 0, queued: [] });
   assert.equal(counts.get("no_transcript"), 1);
 });
+
+test("repeated bare invocations of other interpreters supply no script identity", () => {
+  for (const command of ["node analysis.js", "Rscript analysis.R", "bash analysis.sh"]) {
+    assert.deepEqual(pythonSnippetsOfCall("bash", { command }), []);
+  }
+});

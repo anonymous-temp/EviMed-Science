@@ -15,7 +15,7 @@ const NOW = Date.parse("2026-10-23T12:00:00.000Z");
 const BODY = ["## Purpose", "Do a thing.", "", "## When to Use", "When it is needed.", "", "## Inputs", "A frozen input.", "", "## Workflow", "1. Do it.", "",
   "## Verification", "- It was done.", "", "## Constraints", "- Never do the other thing.", "", "## Output", "The thing."].join("\n");
 
-async function fixture() {
+async function fixture(options = {}) {
   const documents = productDocumentsDouble();
   const learning = new LearningService({ documents, now: () => new Date("2026-10-20T00:00:00.000Z") });
   const make = (/** @type {string} */ name) => learning.createCandidate("u1", {
@@ -40,6 +40,7 @@ async function fixture() {
     runsOf: async () => runs,
     now: () => NOW,
     onApplied: (outcome) => applied.push(outcome),
+    ...options,
   });
   const mounted = (/** @type {any} */ method) => mountedMethodDigest(method.payload, sha256);
   const run = (/** @type {string} */ id, /** @type {any[]} */ opened, extra = {}) => runs.push({ id, status: "succeeded", methodsInvoked: opened.map((method) => ({ name: method.payload.frontmatter.name, digest: mounted(method) })), ...extra });
@@ -289,4 +290,17 @@ test("an account with evidence and no method of its own or of the platform's is 
   });
   assert.deepEqual(await settle.settleUser("u1"), { runs: 0, corrected: 0, clean: 0, unattributed: 0, stale: 0, failed: 0 });
   assert.deepEqual(walked, []);
+});
+
+test("only an attributed correction or rejection can revise a completed task to failed", async () => {
+  const seen = [];
+  const f = await fixture({ onNamedFailure: async (_user, _project, run) => { seen.push(run.id); } });
+  for (const verdict of ["correction", "rejection", "preference", "none"]) {
+    f.run(verdict, [f.grade]);
+    f.event(verdict, { evidence: "follow-up", verdict, concerns: [{ id: f.grade.id, digest: f.mounted(f.grade) }] });
+  }
+  f.run("unattributed", [f.grade]);
+  f.event("unattributed", { evidence: "follow-up", verdict: "correction" });
+  await f.settle.settleUser("u1");
+  assert.deepEqual(seen.sort(), ["correction", "rejection"]);
 });

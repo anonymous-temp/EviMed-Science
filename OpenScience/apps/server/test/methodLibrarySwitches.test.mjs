@@ -207,3 +207,14 @@ test("correction precedence defaults off, reaches the web service, and can be se
   assert.match(await readFile(path.join(repoRoot, 'deploy/web/docker-compose.yml'), 'utf8'), /OPEN_SCIENCE_METHOD_CORRECTION_PRECEDENCE_ENABLED:/);
   assert.match(await readFile(path.join(repoRoot, 'deploy/web/.env.example'), 'utf8'), /OPEN_SCIENCE_METHOD_CORRECTION_PRECEDENCE_ENABLED=false/);
 });
+
+test("the read-only container diagnostic reports the same card flag as the server", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const script = path.join(repoRoot, "scripts/ops/read-method-card-setting.mjs");
+  const key = "OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED";
+  for (const value of [undefined, "", "true", "OFF", "0", "yes"]) {
+    const env = value === undefined ? {} : { [key]: value };
+    const row = JSON.parse(execFileSync(process.execPath, [script], { env, encoding: "utf8" }));
+    assert.deepEqual(row, { setting: key, enabled: configUnder(env).methodCardEvidenceEnabled, source: value ? "environment" : "default" });
+  }
+});

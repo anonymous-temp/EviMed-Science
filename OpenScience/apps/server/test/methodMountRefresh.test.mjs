@@ -58,6 +58,8 @@ test("a conversation's first message chooses what the running runtime carries, a
     assert.equal(f.manager.lastMountedLearnedMethods.get(f.manager.key(f.project)).find((method) => method.name === "grade-first").reason, "similarity");
     // What the conversation was given is its receipt when the runtime left none: the answer line plans and delegates nothing.
     const given = f.manager.methodsGivenTo(f.project, "s1");
+    assert.equal(f.manager.methodReceiptFor(f.project, "s1", "2000-01-01T00:00:00Z"), null);
+    assert.deepEqual(f.manager.methodReceiptFor(f.project, "s1"), given);
     assert.deepEqual(given.map((method) => [method.name, method.reason]).sort(), [["grade-first", "similarity"], ["slide-titles", "explore"]]);
     assert.match(given[0].digest, /^sha256:[0-9a-f]{64}$/);
     assert.deepEqual(f.manager.methodsGivenTo(f.project, "another-session"), []);

@@ -429,11 +429,28 @@ export class LearningEvidence {
     return shape;
   }
 
+  /** A parent and its children have separate call sequences. Joining the last tool of one
+   * session to the first tool of another invents an ordered step. Prefer the root chain;
+   * when the root has none, a single distinct completed child chain is unambiguous.
+   * @param {any} project @param {any} run */
+  async #toolchainOf(project, run) {
+    if (run.automated || run.status !== "succeeded") return null;
+    const traces = await this.readTraces(project, run.id).catch(() => []);
+    const children = new Map();
+    for (const trace of traces) {
+      const chain = toolchainFingerprint([trace]);
+      if (!chain) continue;
+      if (trace.sessionId === run.sessionId) return chain;
+      children.set(JSON.stringify(chain.tools), chain);
+    }
+    return children.size === 1 ? children.values().next().value : null;
+  }
+
   /** The shape evidence of uncorrected work; files always take precedence. @param {any} project @param {any} run */
   async #workShape(project, run) {
     const shape = await this.#shapeOf(project, run);
     if (shape.length || !this.toolchainEnabled || leftFiles(run)) return leftFiles(run) ? { shape } : {};
-    const toolchain = toolchainFingerprint(await this.readTraces(project, run.id).catch(() => []));
+    const toolchain = await this.#toolchainOf(project, run);
     return toolchain ? { toolchain } : {};
   }
 
@@ -464,6 +481,8 @@ export class LearningEvidence {
       if (!ledgers.has(projectId)) ledgers.set(projectId, await this.agentRuns.list(peerProject).catch(() => []));
       const peer = ledgers.get(projectId).find((/** @type {any} */ item) => item.id === member.runId);
       if (!peer || leftFiles(peer) || await this.#triggers.refusalFor(peerProject, peer, { runs: ledgers.get(projectId) })) continue;
+      // Older evidence could join calls across sessions. Re-bind it to the retained run trace.
+      if (!toolchainsMatch(member.toolchain, await this.#toolchainOf(peerProject, peer), { minSimilarity: 1 })) continue;
       const question = await this.#requestOf(peerProject, peer);
       if (!question) continue;
       documents.push({ id: `${projectId}:${member.runId}`, payload: { frontmatter: { description: question } }, member });
@@ -850,7 +869,7 @@ export class LearningEvidence {
     let shape = Array.isArray(settling?.detail?.shape) ? settling.detail.shape : [];
     if (!shape.length) shape = await this.#shapeOf(project, run);
     const toolchain = this.toolchainEnabled && !shape.length && !leftFiles(run)
-      ? settling?.detail?.toolchain ?? toolchainFingerprint(await this.readTraces(project, run.id).catch(() => [])) : null;
+      ? await this.#toolchainOf(project, run) : null;
     let settled = settling?.detail?.evidence ?? null;
     if (!settling || (toolchain && !settling.detail?.toolchain)) {
       const at = this.now().toISOString();
