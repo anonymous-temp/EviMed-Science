@@ -55,13 +55,13 @@
 
 import {
   LEARNING_CORRECTION_VERDICTS, LEARNING_EVIDENCE_VERDICTS, LEARNING_FOLLOW_UP_WINDOW_MS, LEARNING_RULE_VERDICTS, LEARNING_STEER_VERDICTS,
-  METHOD_SIMILARITY_PAIR_FLOOR, cleanLearningEvidence, toolchainFingerprint, toolchainsMatch, isLearningCorrection, methodSourceIdentifierShapesIn, isResearcherOwnedWork, learningRunOutcome,
+  METHOD_INDUCTION_MIN_TRAJECTORIES, METHOD_SIMILARITY_PAIR_FLOOR, cleanLearningEvidence, toolchainFingerprint, toolchainsMatch, isLearningCorrection, methodSourceIdentifierShapesIn, isResearcherOwnedWork, learningRunOutcome,
 } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { readLearningDeliveryBindings } from "./learningDeliveryBindings.mjs";
 import { followUpAnchors, renderFollowUpAnchors } from "@evimed/domain/follow-up-examples";
 import { readArtifactShapes } from "./artifactShapes.mjs";
-import { CONVERSATION_SCOPE, deliveredSomething, leftFiles, learningScopeOf, routineLessonFor, routineGroupFor, routinePeriodMs } from "./learningTriggers.mjs";
+import { CONVERSATION_SCOPE, deliveredSomething, leftFiles, learningScopeOf, routineLessonFor, routineGroupFor, routinePeriodMs, lessonPeers } from "./learningTriggers.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { endedBeforeReset } from "./memorySettings.mjs";
@@ -376,6 +376,28 @@ export class LearningEvidence {
     this.pending = new Set();
     /** @type {Map<string, number>} files already looked at by `noteFileUse`, project and path, and until when */
     this.seenUses = new Map();
+  }
+
+  /** Recheck all three reserved runs before a worker reads their transcripts. @param {any} project @param {any} run @param {any} job */
+  async routineSourcesAllowed(project, run, job) {
+    const peers = lessonPeers(job.payload);
+    if (peers.length !== METHOD_INDUCTION_MIN_TRAJECTORIES - 1 || new Set([run.id, ...peers.map(peer => peer.runId)]).size !== METHOD_INDUCTION_MIN_TRAJECTORIES) return false;
+    const sources = [{ project, run }];
+    for (const peer of peers) {
+      const home = peer.projectId && peer.projectId !== project.id
+        ? await this.resolveProject?.(project.userId, peer.projectId).catch(() => null) : project;
+      if (!home || home.userId !== project.userId) return false;
+      const member = (await this.agentRuns.list(home)).find(item => item.id === peer.runId);
+      if (!member) return false;
+      sources.push({ project: home, run: member });
+    }
+    for (const source of sources) {
+      if (Date.parse(source.run.finishedAt) < this.now().getTime() - this.periodMs
+        || await this.#triggers.refusalFor(source.project, source.run)) return false;
+      const events = await this.feedback.learningEvidenceOf(project.userId, source.run.id);
+      if (learningRunOutcome(events.map(event => event.detail)) !== "clean") return false;
+    }
+    return true;
   }
 
   /** The triggers, however they were given. @returns {any} */
@@ -909,13 +931,17 @@ export class LearningEvidence {
     // A shared GEO project's runs feed no script lesson: the recurrence a code skill is counted over is the account's, across projects.
     if ((await this.contextProvenance?.policyFor(project))?.kind !== 'geo-project') await this.scripts?.afterSettle(project, run).catch(() => null);
     if (!shape.length && !toolchain) { this.#funnel(project, run, "no_shape", { clean: true }); return { settled, routine: false, outcome }; }
-    // The clean runs of this scope in this run's period: the family a routine is counted over.
-    const period = Math.floor(Date.parse(String(run.finishedAt ?? run.startedAt ?? "")) / this.periodMs);
-    if (!Number.isFinite(period)) { this.#funnel(project, run, "outside_window", { shape }); return { settled, routine: false, outcome }; }
+    const ended = Date.parse(String(run.finishedAt ?? run.startedAt ?? ""));
+    const through = this.now().getTime();
+    if (!Number.isFinite(ended) || ended < through - this.periodMs || ended > through) { this.#funnel(project, run, "outside_window", { shape }); return { settled, routine: false, outcome }; }
     const resetAt = await this.#triggers.resetInstantOf?.(project.userId);
     const policy = await this.contextProvenance?.policyFor(project);
-    let family = (await this.feedback.cleanSettledRuns(project.userId, { scope, ...(this.toolchainEnabled ? { toolchainEnabled: true } : {}),
-      ...(policy?.kind === 'geo-project' ? {projectId:policy.controlProjectId} : {}), from: new Date(period * this.periodMs), to: new Date((period + 1) * this.periodMs) }))
+    // Anchor the rolling horizon to settlement time, so a late receipt for an older run may pair with newer runs
+    // that are still within retention.
+    const window = { scope, completedWithin: true, toolchainEnabled: this.toolchainEnabled,
+      ...(policy?.kind === 'geo-project' ? { projectId: policy.controlProjectId } : {}),
+      from: new Date(through - this.periodMs), to: new Date(through + 1) };
+    let family = (await this.feedback.cleanSettledRuns(project.userId, window))
       // A run that ended before the account reset its memory is no peer of a routine, however recently it was settled (review M-11).
       .filter((member) => {
         if (!endedBeforeReset({ finishedAt: member.endedAt ?? member.at }, resetAt ?? null)) return true;
@@ -930,13 +956,21 @@ export class LearningEvidence {
     }
     const guest = guestInfluence || await this.#triggers.guestInfluenced?.(project, run).catch(() => false) === true;
     if (toolchain) family = await this.#withRequestSimilarity(project, { ...run, toolchain }, family);
-    const lesson = routineLessonFor({ run, scope, shape, family, guestInfluence: guest, toolchain,
-      toolchainEnabled: this.toolchainEnabled, minSimilarity: this.toolchainMinSimilarity });
-    const group = routineGroupFor({ run, shape, family, toolchain, toolchainEnabled: this.toolchainEnabled, minSimilarity: this.toolchainMinSimilarity });
+    const input = { run, scope, shape, guestInfluence: guest, toolchain, toolchainEnabled: this.toolchainEnabled, minSimilarity: this.toolchainMinSimilarity };
+    const group = routineGroupFor({ ...input, family });
     this.#funnel(project, run, "clean", { shape, clean: true, cleanRuns: group.count });
-    if (!lesson) this.#funnel(project, run, group.count < 3 ? "fewer_than_three_clean" : "routine_not_due", { shape });
-    const queued = lesson ? await this.#triggers.queue(project, run, lesson) : false;
-    if (lesson) this.#funnel(project, run, queued ? "routine_queued" : "enqueue_failed", { shape });
-    return { settled, routine: queued, outcome };
+    if (group.count < METHOD_INDUCTION_MIN_TRAJECTORIES) {
+      this.#funnel(project, run, "fewer_than_three_clean", { shape });
+      return { settled, routine: false, outcome };
+    }
+    const enqueue = (available, client = null) => {
+      const lesson = routineLessonFor({ ...input, family: available });
+      return lesson ? this.#triggers.queue(project, run, lesson, client) : null;
+    };
+    const queued = this.feedback.reserveRoutine
+      ? await this.feedback.reserveRoutine(project.userId, window, run.id, group.matching, enqueue)
+      : await enqueue(group.matching);
+    this.#funnel(project, run, queued === null ? "routine_not_due" : queued ? "routine_queued" : "enqueue_failed", { shape });
+    return { settled, routine: queued === true, outcome };
   }
 }

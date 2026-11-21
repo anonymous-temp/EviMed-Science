@@ -90,7 +90,7 @@ const familyOf = (n, extra = {}) => Array.from({ length: n }, (_, index) => ({
 }));
 const weekly = [{ format: "docx", labels: ["summary", "findings", "next steps"] }];
 
-test("a routine is τ clean trajectories of one shape, every Nth, and is queued once per run", () => {
+test("a routine takes three unused clean trajectories of one shape", () => {
   assert.equal(METHOD_INDUCTION_MIN_TRAJECTORIES, 3, "the routine threshold is the domain's number");
   const subject = run({ id: "run_now" });
   const lessonAfter = (before) => routineLessonFor({ run: subject, scope: "clinical-evidence-synthesis", shape: weekly, family: familyOf(before) });
@@ -104,9 +104,7 @@ test("a routine is τ clean trajectories of one shape, every Nth, and is queued 
     peers: [{ runId: "fam_0", projectId: "aspirin" }, { runId: "fam_1", projectId: "statins" }],
   }, "each peer by run and by the project its transcript is in");
   assert.equal(third.idempotencyKey, "distill:run_now:routine", "keyed by the run alone, so a run is induced from once however often it is settled");
-  assert.equal(lessonAfter(3), null);
-  assert.equal(lessonAfter(4), null);
-  assert.deepEqual(lessonAfter(5)?.payload.peers.map((peer) => peer.runId), ["fam_3", "fam_4"], "the sixth fires again, from the two before it");
+  assert.deepEqual(lessonAfter(5)?.payload.peers.map((peer) => peer.runId), ["fam_0", "fam_1"], "use the oldest two available peers even with a backlog");
   // The run is counted in once, never against itself: its own row in the family is not one of its peers.
   const own = { runId: "run_now", shape: weekly };
   assert.equal(routineLessonFor({ run: subject, scope: "conversation", shape: weekly, family: [...familyOf(1), own] }), null);
@@ -159,7 +157,7 @@ test("a file-free routine requires both toolchain and request similarity with th
   assert.equal(routineLessonFor({ ...input, toolchainEnabled: true, shape: weekly, family: familyOf(2) })?.payload.shapeKind, "artifact");
 });
 
-test("a routine's period is fixed, counted from the epoch, so positions do not move", () => {
+test("diagnostic periods keep stable epoch labels", () => {
   const edge = Math.floor(Date.UTC(2026, 8, 10) / PERIOD) * PERIOD + PERIOD;
   assert.equal(routinePeriodOf(new Date(edge - 1)) + 1, routinePeriodOf(new Date(edge)));
   assert.equal(routinePeriodOf({ finishedAt: new Date(edge + HOUR).toISOString() }), routinePeriodOf(new Date(edge + 5 * 24 * HOUR)));

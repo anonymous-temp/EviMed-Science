@@ -410,19 +410,20 @@ export class FeedbackEvents {
    *
    * Replay passes `requireShape: false`: acceptance is independent of leaving a file. Routine matching keeps the shape requirement.
    * The shape comes from an event of the run that carries one (the settling `silent` row, or the follow-up), so a use that arrives after
-   * the settling needs none of its own; the window is the one in which that event was recorded.
+   * the settling needs none of its own. A rolling evidence window reads completion time with an event-time fallback for legacy rows.
    *
-   * @param {string} userId @param {{ scope: string, from: Date, to: Date, limit?: number, projectId?: string|null, toolchainEnabled?: boolean, requireShape?: boolean }} window
+   * @param {string} userId @param {{ scope: string, from: Date, to: Date, limit?: number, projectId?: string|null, toolchainEnabled?: boolean, requireShape?: boolean, completedWithin?: boolean, transactionClient?: any }} window
    * @returns {Promise<{ runId: string, projectId: string | null, at: string, endedAt: string | null, shape: any[], toolchain?: any }[]>}
    */
-  async cleanSettledRuns(userId, { scope, from, to, limit = 200, projectId = undefined, toolchainEnabled = false, requireShape = true }) {
+  async cleanSettledRuns(userId, { scope, from, to, limit = 200, projectId = undefined, toolchainEnabled = false, requireShape = true, completedWithin = false, transactionClient = null }) {
     productInteger(limit, 1, 1000);
     if (projectId != null) productId(projectId,"project");
-    await migrateProductStore(this.database);
-    const result = await this.database.query(`SELECT DISTINCT ON (e.subject_id) e.subject_id, e.project_id, e.occurred_at, e.detail->>'endedAt' AS ended_at, e.detail->'shape' AS shape, e.detail->'toolchain' AS toolchain
+    if (!transactionClient) await migrateProductStore(this.database);
+    const time = completedWithin ? "COALESCE((e.detail->>'endedAt')::timestamptz, e.occurred_at)" : "e.occurred_at";
+    const result = await (transactionClient ?? this.database).query(`SELECT DISTINCT ON (e.subject_id) e.subject_id, e.project_id, e.occurred_at, e.detail->>'endedAt' AS ended_at, e.detail->'shape' AS shape, e.detail->'toolchain' AS toolchain
       FROM evimed_product.feedback_events e
       WHERE e.user_id=$1 AND e.trigger_kind='learning-evidence' AND e.subject_type='run' AND e.detail->>'scope'=$2
-        AND e.occurred_at >= $3 AND e.occurred_at < $4
+        AND ${time} >= $3 AND ${time} < $4
         AND ($7::boolean=false OR e.project_id IS NOT DISTINCT FROM $8::text)
         AND e.detail->>'evidence' IN ('silent','follow-up','used') AND ($10::boolean=false OR e.detail ? 'shape' OR ($9::boolean AND e.detail ? 'toolchain'))
         AND EXISTS (SELECT 1 FROM evimed_product.feedback_events k
@@ -441,6 +442,40 @@ export class FeedbackEvents {
         ...(toolchainEnabled && row.toolchain ? { toolchain: row.toolchain } : {}) }))
       .sort((left, right) => left.at.localeCompare(right.at) || left.runId.localeCompare(right.runId))
       .slice(-limit));
+  }
+
+  /**
+   * A distill job reserves the anchor and peers in the same transaction that queues them. Historical routine jobs
+   * already list the same sources. Keep their reservations across retries and terminal outcomes: even a failed
+   * job can have written a method before losing its lease.
+   * @param {string} userId @param {any} window @param {string} runId @param {any[]} matching
+   * @param {(available: any[], client: any) => Promise<boolean|null>} enqueue
+   */
+  async reserveRoutine(userId, window, runId, matching, enqueue) {
+    await migrateProductStore(this.database);
+    return this.database.transaction(async client => {
+      const user = productId(userId, "user");
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('learning-routine:' || $1, 0))", [user]);
+      const candidates = [runId, ...matching.map(peer => peer.runId)];
+      const { rows } = await client.query(`SELECT DISTINCT source.run_id
+        FROM evimed_product.jobs j
+        CROSS JOIN LATERAL (
+          SELECT j.payload->>'runId' AS run_id
+          UNION ALL
+          SELECT CASE WHEN jsonb_typeof(p.value)='string' THEN p.value #>> '{}' ELSE p.value->>'runId' END
+          FROM jsonb_array_elements(CASE WHEN jsonb_typeof(j.payload->'peers')='array' THEN j.payload->'peers' ELSE '[]'::jsonb END) AS p(value)
+          UNION ALL
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(j.payload->'peerRunIds')='array' THEN j.payload->'peerRunIds' ELSE '[]'::jsonb END)
+        ) source
+        WHERE j.user_id=$1 AND j.kind='distill' AND j.payload->>'trigger'='routine' AND source.run_id=ANY($2::text[])`,
+      [user, candidates]);
+      const used = new Set(rows.map(row => row.run_id));
+      if (used.has(runId)) return null;
+      const current = await this.cleanSettledRuns(user, { ...window, requireShape: false, transactionClient: client });
+      const visible = new Set(current.map(member => member.runId));
+      if (!visible.has(runId)) return null;
+      return enqueue(matching.filter(peer => visible.has(peer.runId) && !used.has(peer.runId)), client);
+    });
   }
 
   /** @param {string} userId @param {string} id */

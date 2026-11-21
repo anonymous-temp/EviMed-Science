@@ -134,24 +134,7 @@ const automatedRun = (run) => run?.automated === true || run?.trigger === "autom
 
 const DAY_MS = 86_400_000;
 
-/**
- * How long one routine period lasts. A routine's family is the scope's
- * clean runs that settled in the same period as the run that completes it.
- *
- * Why it is bounded at all: what a routine induction reads of each peer is its
- * transcript — which the retention sweep removes after
- * `transcriptRetentionDays` (`TRANSCRIPT_RETENTION_DAYS`, 90 by default). A
- * peer older than that is a number, not evidence. So the period is the
- * retention, and the composition root sets both from the same configuration.
- *
- * Why fixed periods rather than a window sliding back from each run: "every
- * Nth" needs positions that do not move. In a sliding window every run's
- * position shifts each time an old run leaves it, and a researcher who works at
- * a steady pace — one run leaving the window for each one entering it — holds a
- * constant count, which is a multiple of N on every run or on none. A fixed
- * period only grows between its two boundaries. What that costs is a group still
- * short of N when its period ends, which starts again in the next one.
- */
+/** The rolling evidence horizon follows the lifetime of a readable run transcript. */
 export const ROUTINE_PERIOD_DAYS = TRANSCRIPT_RETENTION_DAYS;
 
 /** @param {unknown} days @returns {number} the period in ms; the default for anything but a positive number */
@@ -166,8 +149,7 @@ function finishedMs(run) {
 }
 
 /**
- * The routine period a moment belongs to, or null for one with no readable time. Counted from the Unix epoch, so every reader agrees
- * on the boundaries.
+ * The diagnostics period a moment belongs to, counted from the Unix epoch.
  * @param {any} at a run (its finish) or an instant (a Date or an ISO string) @param {number} [periodMs]
  * @returns {number | null}
  */
@@ -295,11 +277,11 @@ export function learningTriggersFor({ run, runs, project = null, internalAgent =
  */
 export function routineGroupFor({ run, shape, family, toolchain = null, toolchainEnabled = false, minSimilarity = 0.8 }) {
   const artifact = Array.isArray(shape) && shape.length > 0;
-  const matching = (family ?? []).filter((member) => member.runId !== run?.id && (artifact
+  const matching = [...new Map((family ?? []).filter((member) => member.runId !== run?.id && (artifact
     ? artifactShapesMatch(member.shape, shape)
     : toolchainEnabled && !(Array.isArray(member.shape) && member.shape.length) && !leftFiles(run)
       && toolchainsMatch(member.toolchain, toolchain, { minSimilarity })
-      && Number(member.requestSimilarity) >= METHOD_SIMILARITY_PAIR_FLOOR));
+      && Number(member.requestSimilarity) >= METHOD_SIMILARITY_PAIR_FLOOR)).map(member => [member.runId, member])).values()];
   const count = new Set(matching.map(member => member.runId)).size + 1;
   return { matching, count };
 }
@@ -307,10 +289,8 @@ export function routineGroupFor({ run, shape, family, toolchain = null, toolchai
 /**
  * The routine lesson a settled run completes, or null: τ = `METHOD_INDUCTION_MIN_TRAJECTORIES` clean trajectories of one scope whose
  * files are the same shape (EvoDS's threshold in the place it was meant for — what the work did three times, uncorrected, not the
- * third success). `family` is every other clean run of the scope in the period, oldest first, each with the shape of what it left
- * (`FeedbackEvents.cleanSettledRuns`); the run itself is counted in. Every Nth, not only the Nth: a routine seen again is new
- * evidence for the method it produced, and the distillation reads the related methods before it proposes anything. The key names
- * the run alone, so one run is induced from at most once however often it is settled.
+ * third success). `family` contains unused clean runs inside the rolling horizon, oldest first. A durable job
+ * reserves the anchor and both peers together so any of the three can be safely settled again.
  *
  * Pure. The shapes decide "the same": `artifactShapesMatch` (format, and structure where there is any); a run with no file has no
  * shape and teaches no routine by default. With toolchainEnabled, file-free work requires matching tool bigrams AND request similarity.
@@ -322,7 +302,7 @@ export function routineGroupFor({ run, shape, family, toolchain = null, toolchai
 export function routineLessonFor({ run, scope, shape, family, guestInfluence = false, toolchain = null, toolchainEnabled = false, minSimilarity = 0.8 }) {
   const artifact = Array.isArray(shape) && shape.length > 0;
   const { matching, count } = routineGroupFor({ run, shape, family, toolchain, toolchainEnabled, minSimilarity });
-  if (!run?.id || count < METHOD_INDUCTION_MIN_TRAJECTORIES || count % METHOD_INDUCTION_MIN_TRAJECTORIES !== 0) return null;
+  if (!run?.id || count < METHOD_INDUCTION_MIN_TRAJECTORIES) return null;
   return {
     trigger: "routine",
     idempotencyKey: `distill:${run.id}:routine`,
@@ -333,7 +313,7 @@ export function routineLessonFor({ run, scope, shape, family, guestInfluence = f
       scope,
       capabilityId: scope === CONVERSATION_SCOPE ? null : scope,
       // By run and project: a run id names a transcript only inside its own project, and a peer may be in another of the researcher's.
-      peers: matching.slice(-(METHOD_INDUCTION_MIN_TRAJECTORIES - 1)).map((member) => ({ runId: member.runId, projectId: member.projectId ?? null })),
+      peers: matching.slice(0, METHOD_INDUCTION_MIN_TRAJECTORIES - 1).map((member) => ({ runId: member.runId, projectId: member.projectId ?? null })),
       ...(guestInfluence ? { guestInfluence: { uncorroborated: true } } : {}),
     },
   };
@@ -431,7 +411,7 @@ export function campLessonFor({ run, outcome, anchors = [], scope = null, enable
 
 export class LearningTriggers {
   /**
-   * `routinePeriodDays` is the transcript retention (`ROUTINE_PERIOD_DAYS`), which a routine's period is (its family is read from the
+   * The rolling evidence horizon follows transcript retention (its family is read from the
    * feedback ledger, `LearningEvidence`, and no longer from every ledger the researcher owns). `evidence` is told of every finished run and every
    * correction, to keep what the researcher did to it and to settle it (`learningEvidence.mjs`); without it the loop is what it was
    * before 2026-10-23. `onRefused(reason)` is told of every run or correction a gate turned away (`LEARNING_REFUSAL_REASONS`).
@@ -579,12 +559,14 @@ export class LearningTriggers {
    * Queue one lesson. Best effort: a lesson that could not be queued must not be the reason a run reports failure, and must not be
    * silent either.
    * @param {any} project @param {any} run @param {{ trigger: string, idempotencyKey: string, payload: Record<string, any> }} lesson
+   * @param {any} [transactionClient]
    * @returns {Promise<boolean>}
    */
-  async queue(project, run, lesson) {
+  async queue(project, run, lesson, transactionClient = null) {
     try {
       const policy = await this.contextProvenance?.policyFor(project);
       let payload = lesson.payload;
+      if (transactionClient && lesson.trigger === "routine") payload = { ...payload, rollingEvidence: true };
       if (policy?.kind === 'geo-project') {
         const sourceRunIds = [...new Set([run.id,...(payload.sourceRunIds??[]),...(payload.feedback??[]).flatMap(event=>event.detail?.sourceRunIds??[])])];
         const observations = [];
@@ -597,7 +579,8 @@ export class LearningTriggers {
         payload = { ...payload, sourceProjectId: project.id, contextPolicy: contextPolicyIdentity(policy),
           inputReceiptRefs: [...new Set(observations.flatMap(source=>source.inputReceiptRefs))], sourceRunIds };
       }
-      await this.jobs.enqueue(project.userId, "distill", payload, { idempotencyKey: lesson.idempotencyKey, projectId: project.id });
+      await this.jobs.enqueue(project.userId, "distill", payload, { idempotencyKey: lesson.idempotencyKey, projectId: project.id,
+        ...(transactionClient ? { transactionClient } : {}) });
       return true;
     } catch (error) {
       this.#diagnose(project, run, "enqueue_failed");
@@ -607,6 +590,7 @@ export class LearningTriggers {
         code: typeof error?.code === "string" ? error.code : "learning_enqueue_failed",
         detail: lesson.trigger,
       }).catch(() => {});
+      if (transactionClient) throw error;
       return false;
     }
   }

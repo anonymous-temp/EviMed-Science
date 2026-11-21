@@ -710,3 +710,23 @@ test("routine shapes describe presented or receipt-classified deliveries and exc
   assert.equal(state.lessons.length, 1);
   assert.ok(state.ledger.rows.filter(row => row.detail.shape).every(row => row.detail.shape.length === 1 && row.detail.shape[0].format === "docx"));
 });
+
+test("routine settlement supplies a rolling horizon spanning the old epoch cut", async () => {
+  const state = setup();
+  const horizon = routinePeriodMs(ROUTINE_PERIOD_DAYS);
+  const cut = Math.floor(NOW / horizon) * horizon;
+  const rows = [cut - 60_000, cut - 120_000].map((time, index) => ({
+    runId: `rolling_${index}`, projectId: project.id, endedAt: new Date(time).toISOString(),
+    shape: [{ format: "md", labels: ["summary", "findings"] }],
+  }));
+  state.ledger.cleanSettledRuns = async (_owner, { from, to, completedWithin }) => {
+    assert.equal(completedWithin, true);
+    assert.equal(from.getTime(), NOW - horizon);
+    assert.equal(to.getTime(), NOW + 1);
+    assert.ok(from.getTime() < cut && to.getTime() > cut);
+    return rows;
+  };
+  await used(state);
+  assert.equal((await state.evidence.settle({ job: settleJob() })).routine, true);
+  assert.deepEqual(state.lessons[0].payload.peers.map(peer => peer.runId), rows.map(row => row.runId));
+});
