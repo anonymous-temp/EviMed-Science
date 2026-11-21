@@ -9068,6 +9068,12 @@ test("a dispatch's recalled memories are on the run, as ids and kinds and never 
     assert.doesNotMatch(await readFile(path.join(project.metaDir, 'runs.jsonl'), 'utf8'), /memoryRecall|memory:a/);
     assert.deepEqual((await store.list(project))[0].recalledMemories, appended.recalledMemories);
 
+    // Receipts for a run that starts after the cutoff remain usable.
+    store.recallCutoff = async () => Date.parse(run.startedAt) - 1;
+    const fresh = { ...operation, id:'fresh' };
+    await store.recordLearning(project, run.id, { recallOperations: [fresh] });
+    assert.deepEqual((await store.list(project))[0].memoryRecall.operations.map(op => op.id), ['fresh']);
+
     // Whose conversation a gateway call is: the running runs, with their session.
     assert.deepEqual(await store.activeRuns(project), [{ id: run.id, sessionId: "ses_recall" }]);
   } finally {
