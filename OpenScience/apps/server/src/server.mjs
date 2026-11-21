@@ -491,6 +491,7 @@ import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler, createNativeCapsuleSearch } from "./capsuleGateway.mjs";
 import { MEMORY_GATEWAY_PATH, filterCapturedMessage, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
 import { createClinicalSegments } from './memoryClinicalSegments.mjs';
+import { createAccountProjections } from './memoryAccountProjections.mjs';
 import { humanInputReceipt } from './memoryHumanSegments.mjs';
 import { createMemoryAdmission } from "./memoryAdmission.mjs";
 import { isPlatformStartedRun } from "./memoryDispatch.mjs";
@@ -1710,7 +1711,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The password derivation's gate is the process's one, and its limits are the deployment's (review C4e).
   configurePasswordKdfGate({ concurrency: config.capsuleKdfConcurrency, maxWaiting: config.capsuleKdfMaxWaiting, maxWaitMs: config.capsuleKdfMaxWaitMs });
   // The researcher's standing profile and the decision whether a dispatch hands it over (review M6, `residentProfile.mjs`).
+  const accountProjections = createAccountProjections({ config, native: nativeMemory, overlay: nativeMemoryOverlay, methods: learningService,
+    provenance: contextProvenance, settings: memorySettings, contexts: nativeMemoryContexts,
+    projectFor: async (userId, projectId) => store.requireProject(await store.userById(userId), projectId),
+    projectRuns: project => agentRuns.researcherRuns(project),
+    deleted: (project, sessionId) => sourceDeletion?.ledger.get(project, sessionId),
+    clinical: (userId, projectId, refs) => vcrPrivacyStore?.hasClinicalContext(userId, projectId, refs) ?? false });
   const residentProfiles = new ResidentProfiles({
+    presentation: (userId,projectId,sessionId) => accountProjections.presentation(userId,projectId,sessionId),
     config, store: memorySettings, capsules: capsuleService, contextPolicies: sharedContextPolicies,
     nativeFiles: config.memoryEngineEnabled ? (userId, projectId, limit) => nativeMemory.openingFiles(userId, projectId, limit) : null,
     nativeIndex: config.memoryEngineEnabled ? (userId, projectId) => nativeMemory.openingIndex(userId, projectId) : null,

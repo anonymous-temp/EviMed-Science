@@ -112,11 +112,11 @@ export function lookupLine({ omitted = 0, capsule = 0 }) {
  * later, shorter one may still fit; the rest is counted in the line beside the profile.
  *
  * @param {{ capsuleFacts?: readonly any[], card?: any | null, capsuleCount?: number, maxRecords?: number, maxTokens?: number,
- *   nativeFiles?: any[], safetyFiles?: any[], config?: any, nativeIndex?: { counts: Record<string, number>, historySearchEnabled?: boolean } | null }} input
+ *   presentation?: any[], nativeFiles?: any[], safetyFiles?: any[], config?: any, nativeIndex?: { counts: Record<string, number>, historySearchEnabled?: boolean } | null }} input
  * @returns {{ text: string, profile: string, memos: any[], omitted: number, index: string, safety: string, standing: string }}
  *   `profile` is the memos alone; `index`, when opted in, also participates in the delivery digest.
  */
-export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleCount = 0, maxRecords = 24, maxTokens = CAPSULE_PROFILE_MAX_TOKENS, nativeFiles = [], safetyFiles = [], config = {}, nativeIndex = null }) {
+export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleCount = 0, maxRecords = 24, maxTokens = CAPSULE_PROFILE_MAX_TOKENS, nativeFiles = [], safetyFiles = [], presentation = [], config = {}, nativeIndex = null }) {
   const candidates = [...mostUsedMemos(nativeFiles, config), ...capsuleFactMemos(capsuleFacts)];
   const bound = Math.max(0, Math.trunc(Number(maxRecords)) || 0);
   // Room kept for the line, so saying what was left out cannot itself break the budget.
@@ -125,7 +125,8 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
   const safety = config.memorySafetyNotesEnabled === true
     ? renderSafetyNotes(safetyFiles, { maxTokens: Math.max(0, maxTokens - reserve - estimatePromptTokens(header)) })
     : { text: '', memos: [] };
-  const standingCandidates = standingPreferenceMemos(nativeFiles, config);
+  const local = standingPreferenceMemos(nativeFiles, config);
+  const standingCandidates = [...local, ...presentation.filter(memo => !local.some(item => item.content.includes(memo.content)))];
   /** @type {ReturnType<typeof standingPreferenceMemos>} */ const standingMemos = [];
   const standingHeader = '用户本人的持续偏好（保留原适用范围，本次明确要求优先）：';
   const renderStanding = () => standingMemos.length
@@ -219,7 +220,7 @@ export function nativeSessionResident({ residentProfiles, activeRuns, startedByP
 export class ResidentProfiles {
   /**
    * @param {{ config: any, store: any, capsules?: { profileFacts: Function, lookupCount?: Function } | null,
-   *   contextPolicies?: any, projectCard?: ((userId: string, projectId: string) => Promise<readonly any[]>) | null,
+   *   presentation?: ((userId:string, projectId:string, sessionId:string)=>Promise<any[]>) | null, contextPolicies?: any, projectCard?: ((userId: string, projectId: string) => Promise<readonly any[]>) | null,
    *   nativeFiles?: ((userId: string, projectId: string, limit: number) => Promise<any[]>) | null,
    *   nativeIndex?: ((userId: string, projectId: string) => Promise<{ counts: Record<string, number> }>) | null,
    *   safetyNotes?: ((userId: string, projectId: string) => Promise<any[]>) | null }} dependencies
@@ -228,11 +229,12 @@ export class ResidentProfiles {
    *   项目 tab shows); without it no card is handed over. `contextPolicies` says whether the project is a shared GEO project, whose
    *   conversations are handed the project's card and none of the owner's personal capsule profile.
    */
-  constructor({ config, store, capsules = null, projectCard = null, contextPolicies = null, nativeFiles = null, nativeIndex = null, safetyNotes = null }) {
+  constructor({ config, store, capsules = null, projectCard = null, presentation = null, contextPolicies = null, nativeFiles = null, nativeIndex = null, safetyNotes = null }) {
     this.config = config;
     this.store = store;
     this.capsules = capsules;
     this.projectCard = projectCard;
+    this.presentation = presentation;
     this.contextPolicies = contextPolicies;
     this.nativeFiles = nativeFiles;
     this.nativeIndex = nativeIndex;
@@ -312,7 +314,9 @@ export class ResidentProfiles {
       ? await this.nativeIndex(userId, projectId).then(index => ({ ...index, historySearchEnabled: this.config.memoryHistorySearchEnabled !== false })).catch(() => null) : null;
     const safetyFiles = !shared && this.config?.memoryEngineEnabled === true && this.config?.memorySafetyNotesEnabled === true && this.safetyNotes
       ? await this.safetyNotes(userId, projectId).catch(() => Object.assign([], { unavailable: true })) : [];
-    const block = renderResidentProfile({ capsuleFacts, card, capsuleCount, maxRecords: this.maxRecords, nativeFiles, safetyFiles, config: this.config, nativeIndex });
+    const presentation = !shared && sessionId && !pause.trial && this.config.memoryEngineEnabled && this.config.memoryAccountPresentationEnabled && this.presentation
+      ? await this.presentation(userId, projectId, sessionId).catch(() => []) : [];
+    const block = renderResidentProfile({ capsuleFacts, card, capsuleCount, maxRecords: this.maxRecords, nativeFiles, safetyFiles, presentation, config: this.config, nativeIndex });
     if (!block.text) return none("empty");
     if (block.omitted > 0) recordResidentOmitted(block.omitted);
 
