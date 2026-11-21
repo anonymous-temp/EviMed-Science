@@ -196,7 +196,7 @@ export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
   "evimed_memory.native_files": "the overlay's cached memory bodies, source labels and derived recall/use counters; the current memory files themselves leave through memory/native-memory.zip",
   "evimed_memory.native_sources": "derived knowledge-source and DOI status links used to label native memory files; the labelled memory content itself leaves through memory/native-memory.zip",
   "evimed_memory.native_rejections": "private removal fingerprints and matching text retained only to prevent forgotten information from returning; exporting that text would disclose the information the person removed",
-  "evimed_memory.native_line_origins": "derived line fingerprints and engine archive/revision bindings used for provenance checks; deployment-specific authority rather than portable memory content",
+  "evimed_memory.native_line_origins": "derived line fingerprints, statement attribution and engine archive/revision bindings used for provenance checks; deployment-specific authority rather than portable memory content",
   "evimed_memory.native_reset_tombstones": "outstanding cleanup authority for engine extractions accepted before a memory reset; importing it would not identify work in another deployment",
   "evimed_memory.native_instruction_checks": "content-hash attribution verdicts, source identities and pending line fingerprints; derived retry receipts without conversation or memory text",
   "evimed_memory.native_writer_leases": "short-lived ownership leases preventing concurrent engine writes and erasure; operational locking state that cannot transfer to another deployment",

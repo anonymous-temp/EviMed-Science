@@ -77,12 +77,21 @@ export function diverseHistoryCandidates(candidates, key = candidate => candidat
 
 /** Keep an exchange around its matching words inside the old 8*6000 budget.
  * Called only after full-message rejection/provenance checks. */
-export function compactHistoryMessages(messages, query, scorer, maxChars, seen) {
+export function compactHistoryMessages(messages, query, scorer, maxChars, seen, whole = false) {
   const terms = historyTokens(query);
   const windows = historyWindows(messages).map((window,index)=>({ window,index,score:scorer.score(window) }))
     .sort((a,b)=>b.score-a.score||a.index-b.index);
   const window = windows.find(w=>w.window.some(m=>!seen.has(`${m.index}\0${m.text}`)))?.window ?? [];
   const fresh = window.filter(m=>!seen.has(`${m.index}\0${m.text}`));
+  if (whole) {
+    return fresh.filter(message => {
+      const size = JSON.stringify({ source: message.sourceEnvelope, text: message.text }).length + 1;
+      if (size > maxChars) return false;
+      maxChars -= size;
+      seen.add(`${message.index}\0${message.text}`);
+      return true;
+    });
+  }
   const allowance = Math.max(1,Math.floor(maxChars/(fresh.length||1))-80);
   return fresh.map(message=>{
     seen.add(`${message.index}\0${message.text}`);

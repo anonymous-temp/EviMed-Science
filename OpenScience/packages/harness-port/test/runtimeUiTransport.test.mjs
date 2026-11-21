@@ -550,3 +550,23 @@ test('Math.sumPrecise is supplied to the PDF viewer, in the page and in its work
   assert.equal(native.Math.sumPrecise, own);
   assert.equal(await new native.Blob(['pdfjsVersion Math.sumPrecise']).text().then((t) => (t.match(/typeof Math/g) ?? []).length), 1);
 });
+
+test('a surviving paste range accompanies the native HTTP prompt and keeps its text intact', async () => {
+  const { target, calls } = browser();
+  const listeners = new Map();
+  target.addEventListener = (/** @type {string} */ type, /** @type {any} */ fn) => listeners.set(type, fn);
+  target.removeEventListener = (/** @type {string} */ type) => listeners.delete(type);
+  const hooks = installRuntimeUiTransport({ ...frame, sourceEnvelope: true }, target);
+  const node = { tagName: 'TEXTAREA', value: 'Review: ', selectionStart: 8, selectionEnd: 8 };
+  listeners.get('beforeinput')({ target: node, isTrusted: true, inputType: 'insertFromPaste' });
+  node.value += 'sample record';
+  listeners.get('input')({ target: node });
+  const content = [{ type: 'text', text: node.value }];
+  node.value = ''; // A controlled composer resets the textarea after submission.
+  const body = { type: 'client-request', method: 'session/prompt', payload: { args: { request: { sessionId: 's', content } } } };
+  await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'), { method: 'POST', body: JSON.stringify(body) });
+  const request = JSON.parse(calls[0][1].body).payload.args.request;
+  assert.deepEqual(request.content, content);
+  assert.deepEqual(request.evimedPasteRanges, [{ part: 0, spans: [[8, 21]] }]);
+  hooks.dispose();
+});

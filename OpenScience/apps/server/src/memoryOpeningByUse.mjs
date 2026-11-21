@@ -60,6 +60,10 @@ export function openingProfileRead(text, root, config) {
   const explicit = config?.memoryOpeningByUseEnabled === true && Number(config.memoryOpeningMaxChars) > 0;
   if (!upstreamCut && !explicit) return text;
   const notice = 'Profile is partial; use mcp__openviking__read to read the complete profile.md.\n';
+  if (config?.memorySourceEnvelopeEnabled === true) {
+    const fits = !upstreamCut && (!explicit || text.length + `<user-profile uri="${root}/profile.md">\n\n</user-profile>`.length <= config.memoryOpeningMaxChars);
+    return fits ? text : notice.trimEnd();
+  }
   let selected = upstreamCut ? openingProfile(text) : text;
   const room = explicit ? Math.max(0, Number(config.memoryOpeningMaxChars) - `<user-profile uri="${root}/profile.md">\n\n</user-profile>`.length) : Infinity;
   if (!upstreamCut && selected.trim().length <= room) return text;
@@ -159,11 +163,11 @@ export function mostUsedMemos(files, config) {
   const limit = Math.max(0, Math.min(100, Math.trunc(Number(config.memoryOpeningTopK ?? 5)) || 0));
   return files.filter(file => count(file) > 0 && !file.sensitive && String(file.body ?? '').trim())
     .sort((a, b) => count(b) - count(a) || lastUse(b) - lastUse(a) || String(a.uri).localeCompare(String(b.uri)))
-    .slice(0, limit).map(file => ({
+    .slice(0, limit).filter(file => config.memorySourceEnvelopeEnabled !== true || String(file.body).length <= 400).map(file => ({
       id: `native-used:${file.uri}`, memoryType: 'native_most_used', kind: 'note', scope: file.projectId ? 'project' : 'user',
       origin: 'unknown', updatedAt: file.updatedAt ?? null,
-      content: `Most used · ${file.uri}\n${String(file.body).split('\n').filter(bodyLine => bodyLine.trim()).slice(0, 3).join('\n').slice(0, 400)}`,
-      originalSources: file.originalSources ?? [], attribution: file.attribution, sourcePrivacy: file.sourcePrivacy,
+      content: `Most used · ${file.uri}\n${config.memorySourceEnvelopeEnabled === true ? file.body : String(file.body).split('\n').filter(bodyLine => bodyLine.trim()).slice(0, 3).join('\n').slice(0, 400)}`,
+      statementSources: file.statementSources, originalSources: file.originalSources ?? [], attribution: file.attribution, sourcePrivacy: file.sourcePrivacy,
     }));
 }
 
@@ -176,7 +180,7 @@ export function standingPreferenceFile(file) {
 
 /** @typedef {{ uri: string, body?: string, sensitive?: boolean, updatedAt?: string | null,
  * modTime?: string | null, usedCount?: number, lastUsedAt?: string | null,
- * originalSources?: unknown[], attribution?: unknown, sourcePrivacy?: unknown }} StandingPreferenceFile */
+ * originalSources?: unknown[], attribution?: unknown, sourcePrivacy?: unknown, statementSources?: any[] }} StandingPreferenceFile */
 /** Recency first so a correction gets a chance before a frequently used old rule.
  * @param {StandingPreferenceFile[]} files */
 export function orderStandingPreferences(files) {
@@ -204,7 +208,7 @@ export function standingPreferenceMemos(files, config) {
     }
     if (kept.length) memos.push({ id: `native-standing:${file.uri}`, memoryType: 'native_standing_preference',
       kind: 'preference', scope: 'user', origin: 'engine', content: kept.join('\n'), updatedAt: file.updatedAt ?? null,
-      originalSources: file.originalSources ?? [], attribution: file.attribution, sourcePrivacy: file.sourcePrivacy });
+      statementSources: file.statementSources, originalSources: file.originalSources ?? [], attribution: file.attribution, sourcePrivacy: file.sourcePrivacy });
   }
   return memos;
 }

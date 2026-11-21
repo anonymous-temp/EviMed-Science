@@ -45,8 +45,8 @@ export function safetyNoteFile(file, { memoryRoot, projectId, hiddenUris = [], p
 
 /** A bounded safety-only view, newest file first, with the ordinary block's escaping and provenance.
  * Files have already passed the store's deletion redaction and source-receipt readers.
- * @param {any[]} files @param {{ maxTokens: number, maxChars?: number, lineMaxChars?: number }} options */
-export function renderSafetyNotes(files, { maxTokens, maxChars = SAFETY_NOTES_MAX_CHARS, lineMaxChars = SAFETY_NOTE_LINE_MAX_CHARS }) {
+ * @param {any[]} files @param {{ maxTokens: number, maxChars?: number, lineMaxChars?: number, sourceBound?: boolean }} options */
+export function renderSafetyNotes(files, { maxTokens, sourceBound = false, maxChars = SAFETY_NOTES_MAX_CHARS, lineMaxChars = SAFETY_NOTE_LINE_MAX_CHARS }) {
   if (/** @type {any} */ (files).unavailable) return { text: '安全历史暂时无法读取；提供个人建议前，用 mcp__openviking__search 查找并读取对应人的文件；这不代表没有已记录的风险。', memos: [] };
   const rows = files.map(file => ({ file, lines: safetyNoteLines(file.body, file.type) })).filter(row => row.lines.length)
     .sort((a, b) => String(b.file.updatedAt ?? b.file.modTime ?? '').localeCompare(String(a.file.updatedAt ?? a.file.modTime ?? ''))
@@ -57,7 +57,7 @@ export function renderSafetyNotes(files, { maxTokens, maxChars = SAFETY_NOTES_MA
   let partial = false;
   const render = (items, more) => [HEADER,
     // Reuse the ordinary memory envelope rather than interpreting reported history as instructions.
-    ...(items.length ? renderMemoryContext(items).split('\n').slice(1) : []),
+    ...(items.length ? renderMemoryContext(items, { sourceBound }).split('\n').slice(1) : []),
     ...(more ? [SAFETY_NOTES_MORE] : []), ...(coverage ? [coverage] : []), CHECK].join('\n');
   const fits = text => [...text].length <= maxChars && estimatePromptTokens(text) <= maxTokens;
   for (const { file, lines } of rows) {
@@ -69,7 +69,7 @@ export function renderSafetyNotes(files, { maxTokens, maxChars = SAFETY_NOTES_MA
       scope: file.projectId && file.projectId !== 'default' ? 'project' : 'user', origin: file.origin ?? 'unknown',
       content,
       updatedAt: file.updatedAt ?? file.modTime ?? null, originalSources: file.originalSources ?? [],
-      sourcePrivacy: file.sourcePrivacy, attribution: file.attribution };
+      statementSources: file.statementSources, sourcePrivacy: file.sourcePrivacy, attribution: file.attribution };
     // Always leave room for an overflow notice; never hide the existence of older people.
     if (truncated || !fits(render([...memos, memo], true))) { partial = true; continue; }
     memos.push(memo);

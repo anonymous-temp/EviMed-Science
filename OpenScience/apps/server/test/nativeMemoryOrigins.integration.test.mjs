@@ -264,3 +264,22 @@ for (const title of [...Object.values(MEMORY_PROFILE_NEUTRAL_TITLES), 'Profile',
     }
   });
 }
+
+test('a bound statement survives commit, overlay and read, and an edit cannot inherit the binding', options, async t => {
+  const f = await fixture(t, { config: { memorySourceEnvelopeEnabled: true }, extract: () => ({ adds: [
+    { uri: f.root + '/profile.md', memory_type:'profile', after:'# User\n- I use the rail.' },
+  ] }) });
+  f.store.sourceEnvelopeEnabled = true;
+  const { statementSourceReviewer } = await import('../src/memoryStatementSources.mjs');
+  f.worker.reviewStatementSources = statementSourceReviewer({config:f.config,callModel:async () => ({
+    choices:[{message:{content:JSON.stringify({rows:[{line:0,kind:'user_statement',subject:'self',message:0,quote:'I use the rail.',conditions:'preserved'}]})}}],
+  })});
+  await f.commitConversation('rail',[{role:'user',text:'I use the rail.',at:'2026-11-13T09:00:00Z'}]);
+  await f.worker.processCommits({userId:f.userId});
+  const record = (await f.store.records(f.userId)).find(r => r.value === 'I use the rail.');
+  assert.equal(record.sourceEnvelope.kind,'user_statement');
+  assert.equal(record.sourceEnvelope.personalFact,true);
+  await f.store.update(f.userId,record.id,{value:'The nurse holds the rail.',expectedVersion:record.version});
+  const edited = (await f.store.records(f.userId)).find(r => r.value === 'The nurse holds the rail.');
+  assert.equal(edited.sourceEnvelope,null);
+});

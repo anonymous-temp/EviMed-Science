@@ -1,3 +1,5 @@
+import { memoryEnvelope, memoryQuoteUnit } from './memorySourceEnvelope.mjs';
+import { visibleStatementSources } from './memoryStatementSources.mjs';
 import { readStatus, searchStatusText, measuredRead, memorySourceLabel, literalIndexMatch } from './memoryReadStatus.mjs';
 import { PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
@@ -394,12 +396,13 @@ const CAPSULE_ITEM_CHARS = 800;
  * Null when there is nothing to add.
  * @param {readonly Record<string, any>[]} items @returns {string | null}
  */
-export function capsuleSearchText(items) {
+export function capsuleSearchText(items, sourceBound = false) {
   const lines = [];
   for (const item of (Array.isArray(items) ? items : []).slice(0, CAPSULE_ITEMS_MAX)) {
     const content = String(item?.content ?? "").replace(/<\/?[A-Za-z][^>]*>/g, "").trim();
     if (!content) continue;
-    const clipped = [...content].length > CAPSULE_ITEM_CHARS ? `${[...content].slice(0, CAPSULE_ITEM_CHARS - 1).join("")}…` : content;
+    if (sourceBound) lines.push(JSON.stringify({ source: memoryEnvelope(item) }));
+    const clipped = sourceBound && [...content].length > CAPSULE_ITEM_CHARS ? "[Full entry exceeds the excerpt budget.]" : [...content].length > CAPSULE_ITEM_CHARS ? `${[...content].slice(0, CAPSULE_ITEM_CHARS - 1).join("")}…` : content;
     if (item.source === "evidence_zone") { lines.push(`- ${clipped}`); continue; }
     const kind = String(item.factKind ?? "note").replace(/[^a-z_]/g, "") || "note";
     const reference = item.mode && item.mode !== "own" ? ` · 参考胶囊${item.capsuleTitle ? `《${String(item.capsuleTitle).replace(/[\r\n<>]/g, " ").slice(0, 60)}》` : ""}` : "";
@@ -543,7 +546,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         : measuredRead(() => historySearch(request), capsuleWaitMs),
       reason ? skipped(reason) : !capsuleSearch ? skipped('disabled') : measuredRead(() => capsuleSearch(request), capsuleWaitMs),
     ]);
-    return { history: history.items.map(hit => hit.withdrawn ? { withdrawn: true, messages: [] } : hit), capsules: capsule.items, searchStatus: {
+    return { history: history.items.map(hit => hit.withdrawn ? { withdrawn: true, messages: [] } : hit), capsules: config.memorySourceEnvelopeEnabled === true ? capsule.items.map(item => ({ ...item, sourceEnvelope: memoryEnvelope(item) })) : capsule.items, searchStatus: {
       memoryFiles: files.readStatus ?? readStatus((files.memories?.length || files.entries?.length) ? 'searched' : 'empty'),
       earlierConversations: history.status, receivedCapsules: files.capsuleReadStatus ?? capsule.status,
     } };
@@ -742,7 +745,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const capsule = await measuredRead(() => capsuleSearch({ user: ctx.user, project: ctx.project,
         query: String(body.query), limit: Number(body.limit) || 5, contextPolicy: ctx.memoryContext.policy }), capsuleWaitMs);
       result.capsuleReadStatus = capsule.status;
-      const text = capsuleSearchText(capsule.items);
+      const text = capsuleSearchText(capsule.items, config.memorySourceEnvelopeEnabled === true);
       if (text) {
         if (context) result.rendered = [result.rendered, text].filter(Boolean).join('\n');
         else result.capsuleContext = text;
@@ -976,7 +979,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const startupProfile = !ctx.shared && uri === `${ctx.userRoot}/memories/profile.md` && ctx.query.get('model_use') !== 'true';
       if (!startupProfile) await noteUsed(ctx, [absolute(uri, ctx.userRoot)]);
       return { status: 200, ...(ctx.origin === 'agent-api' && startupProfile ? { elided: openingProfileRead(text, `${ctx.userRoot}/memories`, config) !== text } : {}), json: { ...ok(startupProfile
-        ? openingProfileRead(text, `${ctx.userRoot}/memories`, config) : await ctx.recallText(uri, text)), readStatus: readStatus('searched') }, outcome: "forwarded" };
+        ? openingProfileRead(config.memorySourceEnvelopeEnabled === true && ctx.origin !== 'agent-api' ? await ctx.recallText(uri, text) : text, `${ctx.userRoot}/memories`, config) : await ctx.recallText(uri, text)), readStatus: readStatus('searched') }, outcome: "forwarded" };
     },
     async list(ctx) {
       let uri = String(ctx.query.get("uri") ?? "");
@@ -1158,7 +1161,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             const extra = await supplementarySearch(ctx, args, result.result);
             const content = [{ type: 'text', text: JSON.stringify(result.result) },
               { type: 'text', text: searchStatusText(extra.searchStatus) }];
-            const capsuleText = capsuleSearchText(extra.capsules);
+            const capsuleText = capsuleSearchText(extra.capsules, config.memorySourceEnvelopeEnabled === true);
             if (capsuleText) content.push({ type: 'text', text: capsuleText });
             const original = historySearchText(extra.history, { semanticSecrets: config.memoryHistorySecretRedactionEnabled === true });
             if (original) content.push({ type: 'text', text: original });
@@ -1355,7 +1358,13 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         recallText: async (/** @type {string} */ uri, /** @type {string} */ text) => {
           sourceFiles ??= ctx.fileMetadata();
           const metadata = (await sourceFiles).get(uri);
-          if (metadata && ['origin', 'attribution', 'speaker', 'asOf', 'updatedAt', 'earlierValue'].some(key => metadata[key] != null)) text = `[Memory source ${memorySourceLabel(metadata)}]\n${text}`;
+          if (config.memorySourceEnvelopeEnabled === true && ctx.origin !== 'agent-api') {
+            const origins = await overlay?.originsOf?.(user.id, [uri]).catch(() => new Map());
+            const bound = visibleStatementSources(text, origins?.get(uri));
+            // Keep the whole fenced body. A line map may clarify an attribution but never replaces its context.
+            const source = memoryEnvelope(metadata);
+            text = JSON.stringify({ source, ...memoryQuoteUnit(text, source, bound) });
+          } else if (metadata && ['origin', 'attribution', 'speaker', 'asOf', 'updatedAt', 'earlierValue'].some(key => metadata[key] != null)) text = `[Memory source ${memorySourceLabel(metadata)}]\n${text}`;
           if (observationFile(uri, `${userRoot}/memories`)) return `[seen once — observed choice, not a standing preference]\n${text}`;
           if (config.memoryPersonAliasHintEnabled !== true || nativeMemoryFile(uri, `${userRoot}/memories`)?.type !== 'people') return text;
           if (!await ctx.personIdentityVisible(uri, text)) return text;

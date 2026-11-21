@@ -3095,6 +3095,7 @@ export function loadConfig(overrides = {}) {
     memoryForgetToolHintEnabled: overrides.memoryForgetToolHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_FORGET_TOOL_HINT_ENABLED", false),
     // Same setting selects the engine's read-only template mount in compose and its post-write format check.
     memoryTemplatesDirectory: parseMemoryTemplatesDirectory(overrides.memoryTemplatesDirectory ?? process.env.OPEN_SCIENCE_MEMORY_TEMPLATES_DIR),
+    memorySourceEnvelopeEnabled: overrides.memorySourceEnvelopeEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SOURCE_ENVELOPE_ENABLED", false),
     memoryPastedInstructionCheckEnabled: overrides.memoryPastedInstructionCheckEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED", false),
     memoryPastedInstructionRobustEnabled: overrides.memoryPastedInstructionRobustEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_ROBUST_ENABLED", false),
     // The page's import of what another assistant remembered (`nativeMemoryImport.mjs`): one Flash call splits the pasted text, the person

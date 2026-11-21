@@ -1067,9 +1067,9 @@ export class NativeMemoryOverlay {
    * `origin` is given — each line `after` has and `before` did not is recorded as brought by it (the first row of a line stays: the
    * line's source is the first commit that brought it). With no `origin` (the person's own edit, a restore, a platform check) lines only leave.
    * @param {string} userId @param {string} uri
-   * @param {{ after: string, before?: string, origin?: { revisionId?: string | number | null, engineSession?: string | null, archiveUri?: string | null, projectId?: string | null, projectCreatedAt?:string|null, at?: string | null } | null }} change
+   * @param {{ after: string, before?: string, statementSources?: Record<string,any>, origin?: { revisionId?: string | number | null, engineSession?: string | null, archiveUri?: string | null, projectId?: string | null, projectCreatedAt?:string|null, at?: string | null } | null }} change
    */
-  async syncOrigins(userId, uri, { after, before = "", origin = null }) {
+  async syncOrigins(userId, uri, { after, before = "", origin = null, statementSources = {} }) {
     const enumerate = String(uri).endsWith('/memories/profile.md') ? profileMemoryStatements : memoryLines;
     const prints = (/** @type {string} */ text) => [...new Set(enumerate(String(text ?? "").split("\n").filter((line) => !LABEL_LINE.test(line.trim())).join("\n")).map(lineFingerprint))];
     const present = prints(after);
@@ -1080,10 +1080,10 @@ export class NativeMemoryOverlay {
     const had = new Set(prints(before));
     const brought = present.filter((print) => !had.has(print));
     if (!brought.length) return;
-    await this.#query(`INSERT INTO evimed_memory.native_line_origins (user_id, uri, fingerprint, revision_id, engine_session, archive_uri, project_id, added_at,project_created_at)
-      SELECT $1, $2, print, $4::bigint, $5, $6, $7, COALESCE($8::timestamptz, clock_timestamp()),$9 FROM unnest($3::text[]) AS brought(print)
+    await this.#query(`INSERT INTO evimed_memory.native_line_origins (user_id, uri, fingerprint, revision_id, engine_session, archive_uri, project_id, added_at,project_created_at,statement_source)
+      SELECT $1, $2, print, $4::bigint, $5, $6, $7, COALESCE($8::timestamptz, clock_timestamp()),$9,$10::jsonb -> print FROM unnest($3::text[]) AS brought(print)
       ON CONFLICT (user_id, uri, fingerprint) DO NOTHING`,
-    [owner(userId), String(uri), brought, origin.revisionId == null ? null : String(origin.revisionId), origin.engineSession ?? null, origin.archiveUri ?? null, origin.projectId ?? null, origin.at ?? null,projectCreatedAt]);
+    [owner(userId), String(uri), brought, origin.revisionId == null ? null : String(origin.revisionId), origin.engineSession ?? null, origin.archiveUri ?? null, origin.projectId ?? null, origin.at ?? null,projectCreatedAt,JSON.stringify(statementSources)]);
   }
 
   /**
@@ -1101,6 +1101,7 @@ export class NativeMemoryOverlay {
       const lines = byUri.get(String(row.uri)) ?? new Map();
       lines.set(String(row.fingerprint), { revisionId: row.revision_id == null ? null : String(row.revision_id), engineSession: row.engine_session ?? null,
         archiveUri: row.archive_uri ?? null, projectId: row.project_id ?? null, projectCreatedAt:row.source_epoch??null, addedAt: instant(row.added_at),
+        ...(row.statement_source ? { statementSource: row.statement_source } : {}),
         ...(Array.isArray(row.sources) && row.sources.length ? { sources: row.sources } : {}) });
       byUri.set(String(row.uri), lines);
     }

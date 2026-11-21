@@ -1,3 +1,4 @@
+import { memoryEnvelope, memoryQuoteUnit } from './memorySourceEnvelope.mjs';
 import { readStatus, withReadStatus } from './memoryReadStatus.mjs';
 /**
  * `recall` as an integrator asks it: memory, the facts of the capsules in
@@ -70,9 +71,9 @@ const NATIVE_RECALL_READ = 50;
  * every memory's text, joined with the engine's own semantic search), the account's memories and this project's, never a
  * sensitive one. A native memory has no validity interval, so there is no time a question can be asked about.
  * @param {{ search: (userId: string, query: string) => Promise<{ items: any[], readStatus?: any }> }} nativeMemory
- * @param {{ recallEnabled?: boolean }} [options] the deployment's recall switch (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED`)
+ * @param {{ recallEnabled?: boolean, sourceBound?: boolean }} [options] the deployment's recall switch (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED`)
  */
-export function nativeRecallSource(nativeMemory, { recallEnabled = true } = {}) {
+export function nativeRecallSource(nativeMemory, { recallEnabled = true, sourceBound = false } = {}) {
   return {
     recallEnabled,
     /** @param {string} userId @param {string} query @param {{ projectId?: string | null }} [scope] */
@@ -82,19 +83,28 @@ export function nativeRecallSource(nativeMemory, { recallEnabled = true } = {}) 
         .filter((record) => !privateByDefault(record) && record.sensitive !== true && record.status === "active"
           && (record.scope === "user" || (record.scope === "project" && projectId != null && record.scopeId === projectId)))
         .slice(0, NATIVE_RECALL_READ)
-        .map((record) => ({
+        .map(record => {
+          const full = String(record.value ?? '').replace(/<!-- MEMORY_FIELDS[\s\S]*?-->/g, '').trim();
+          const chars = [...full];
+          const source = sourceBound ? memoryEnvelope(record) : null;
+          const original = record.quoteUnit ?? full;
+          const unit = sourceBound && [...original].length <= NATIVE_RECALL_CHARS
+            ? memoryQuoteUnit(original, source, record.statementSources) : null;
+          return {
           id: String(record.id),
           memoryType: "native",
           kind: record.kind,
           scope: record.scope,
-          content: [...String(record.value ?? "").replace(/<!-- MEMORY_FIELDS[\s\S]*?-->/g, "").trim()].slice(0, NATIVE_RECALL_CHARS).join(""),
+          content: chars.slice(0, NATIVE_RECALL_CHARS).join(""),
           updatedAt: record.updatedAt ?? null,
           confidence: record.confidence ?? null,
           importance: record.importance ?? null,
           origin: record.origin,
+          ...(sourceBound ? { sourceEnvelope: source, quoteUnit: unit?.text ?? null, statementSources: unit?.statements ?? [] } : {}),
           attribution: record.attribution, originalSources: record.originalSources,
           speaker: record.speaker, statementKind: record.statementKind, asOf: record.asOf, earlierValue: record.earlierValue,
-        }));
+          };
+        });
       return withReadStatus(items, found.readStatus ?? readStatus(items.length ? 'searched' : 'empty'));
     },
   };
