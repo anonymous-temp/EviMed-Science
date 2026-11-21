@@ -153,15 +153,29 @@ export function createAgentMemoryRoutes({
     // A key that resolves to the platform's publishing account is no key: nothing speaks for that account.
     if (!keyAccount || isPlatformAccount(keyAccount)) throw new HttpError(401, "agent_key_invalid", "The API key is not valid.");
 
-    await apiKeys.countMemoryRequest?.(identity.userId, identity.keyId);
-
-    // Whom this request is for (rule 2). Checked after the rate limit, so a
-    // flood of made-up subjects is a flood of refusals, not of accounts.
-    const named = req.headers["x-subject"];
-    if (named !== undefined && !identity.subjects) {
-      throw new HttpError(400, "agent_key_subject_unsupported", "Only an integration key may name a subject.");
+    const action = url.pathname.slice(AGENT_MEMORY_PATH.length).replace(/^\//, "");
+    const method = req.method ?? "GET";
+    const operation = AGENT_MEMORY_ENDPOINTS.find(endpoint => {
+      const [verb, template] = endpoint.split(" ");
+      const parts = template.slice(1).split("/");
+      const actual = action.split("/");
+      return verb === method && parts.length === actual.length && parts.every((part, i) => part === "{id}" || part === actual[i]);
+    }) ?? (action === "" && method === "GET" ? "GET /" : "unknown");
+    const refused = error => audit?.('agent-memory.request', 'refused', {
+      keyId: identity.keyId, userId: keyAccount.id, operation, code: error.code,
+    });
+    let subject;
+    try {
+      await apiKeys.countMemoryRequest?.(identity.userId, identity.keyId);
+      const named = req.headers['x-subject'];
+      if (named !== undefined && !identity.subjects) {
+        throw new HttpError(400, 'agent_key_subject_unsupported', 'Only an integration key may name a subject.');
+      }
+      subject = named === undefined ? null : assertAgentSubject(Array.isArray(named) ? '' : named);
+    } catch (error) {
+      await refused(error);
+      throw error;
     }
-    const subject = named === undefined ? null : assertAgentSubject(Array.isArray(named) ? "" : named);
     /**
      * The account this request reads and writes: the subject's, or the key's
      * own. A subject is given its account the first time something is written
@@ -225,14 +239,6 @@ export function createAgentMemoryRoutes({
       return wanted;
     };
 
-    const action = url.pathname.slice(AGENT_MEMORY_PATH.length).replace(/^\//, "");
-    const method = req.method ?? "GET";
-    const operation = AGENT_MEMORY_ENDPOINTS.find(endpoint => {
-      const [verb, template] = endpoint.split(" ");
-      const parts = template.slice(1).split("/");
-      const actual = action.split("/");
-      return verb === method && parts.length === actual.length && parts.every((part, i) => part === "{id}" || part === actual[i]);
-    }) ?? (action === "" && method === "GET" ? "GET /" : "unknown");
     const reply = async (status, payload) => {
       const json = JSON.stringify(payload);
       if (Buffer.byteLength(json) > MAX_RESPONSE_BYTES) throw new HttpError(413, "agent_memory_response_too_large", "Request fewer records or a smaller result.");
@@ -246,7 +252,7 @@ export function createAgentMemoryRoutes({
     try {
       return await withMemoryPayer(meter ? { payer, meter } : null, serve);
     } catch (error) {
-      await audit?.('agent-memory.request', 'refused', { keyId: identity.keyId, userId: keyAccount.id, operation, code: error.code });
+      await refused(error);
       throw error;
     }
     async function serve() {
