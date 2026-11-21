@@ -45,6 +45,7 @@
  * @module @evimed/harness-port/runtime-ui-reply-checks
  */
 
+import { isRawToolCallText } from '@evimed/domain';
 import { frameStyles } from './runtimeUiStyles.mjs';
 
 /** Services this body needs outright: the slot registry. */
@@ -101,6 +102,19 @@ export function replyCheckSummary(check) {
   return { text: parts.join(' · '), items, cautions };
 }
 
+/** Whether the settled answer itself is an unexecuted tool-call payload. @param {any} node @returns {boolean} */
+export function rawToolCallAnswer(node) {
+  const finalNode = node?.data?.finalNode;
+  if (!finalNode) return false;
+  const candidates = [finalNode.content, finalNode.message?.content, finalNode.parts, finalNode.text];
+  for (const content of candidates) {
+    const text = typeof content === 'string' ? content : Array.isArray(content)
+      ? content.filter((part) => part?.type === 'text').map((part) => String(part.text ?? '')).join('\n') : '';
+    if (text.trim()) return isRawToolCallText(text);
+  }
+  return false;
+}
+
 /**
  * @param {any} ctx Native Cordis client context.
  * @param {any} [_config]
@@ -139,6 +153,10 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
 
   /** @param {any} props */
   function AssistantStep(props) {
+    if (props?.groupPart !== 'reasoning' && rawToolCallAnswer(props?.node)) {
+      return h('div', { role: 'alert', 'data-evimed-run-error': 'unexecuted_tool_call', style: { ...text, color: 'var(--dsw-alias-state-error-primary)' } },
+        '这次回答没有完成：工具调用没有执行，请重试。');
+    }
     const Shadowed = kit.shadowed(slot, 'assistant-step', AssistantStep);
     const state = kit.useFrameState((/** @type {any} */ frameState) => frameState.replyChecks);
     let model = null;
@@ -154,4 +172,4 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
 }
 
 /** The body as the socket's build composes it. */
-export const BODY = Object.freeze({ name: 'reply-checks', inject, parts: Object.freeze([frameStyles, replyCheckFor, replyCheckSummary, apply]) });
+export const BODY = Object.freeze({ name: 'reply-checks', inject, parts: Object.freeze([isRawToolCallText, frameStyles, replyCheckFor, replyCheckSummary, rawToolCallAnswer, apply]) });

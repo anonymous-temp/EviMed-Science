@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { apply, BODY, replyCheckFor, replyCheckSummary } from '../src/runtimeUiReplyChecks.mjs';
+import { apply, BODY, rawToolCallAnswer, replyCheckFor, replyCheckSummary } from '../src/runtimeUiReplyChecks.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, realReact, renderStatic } from './helpers/frameFakes.mjs';
 
 /** A kernel whose assistant step is a real component, so the pass-through can be seen. */
@@ -91,6 +91,21 @@ test('a turn whose process is folded draws the answer node twice; the row follow
   }
   assert.equal(renderStatic(f.ours.component, { node, groupPart: 'reasoning' }), '<div data-kernel-assistant="12">answer</div>',
     'inside the fold the kernel draws the reasoning part, and the row would otherwise appear there too');
+});
+
+test('an unexecuted tool-call payload is replaced by a clear failure instead of drawn as the answer', () => {
+  const f = frame();
+  const raw = '<tool_call>{"name":"search","arguments":{"q":"x"}}</tool_call>';
+  const node = { kind: 'assistant-step', data: { finalNode: { seq: 13, content: [{ type: 'text', text: raw }] } } };
+  assert.equal(rawToolCallAnswer(node), true);
+  assert.equal(rawToolCallAnswer({ data: { finalNode: { content: [{ type: 'text', text: 'The answer.' }] } } }), false);
+  const rendered = renderStatic(f.ours.component, { node });
+  assert.match(rendered, /role="alert"/);
+  assert.match(rendered, /这次回答没有完成：工具调用没有执行，请重试。/);
+  assert.doesNotMatch(rendered, /data-kernel-assistant|tool_call|search/);
+  assert.match(renderStatic(f.ours.component, { node, groupPart: 'reasoning' }), /data-kernel-assistant="13"/);
+  const ordinary = { node: { data: { finalNode: { seq: 14, content: [{ type: 'text', text: 'The answer.' }] } } } };
+  assert.equal(renderStatic(f.ours.component, ordinary), '<div data-kernel-assistant="14">answer</div>');
 });
 
 test('outside a frame nothing is taken over', () => {
