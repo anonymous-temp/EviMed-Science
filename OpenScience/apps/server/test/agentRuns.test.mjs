@@ -532,7 +532,8 @@ test("starts immutable open-domain and specialist run identities from research-s
       assert.ok(["started", "dispatch", "progress", "notice", "finished", "learning"].includes(event.event), `unknown ledger event ${event.event}`);
     }
     assert.equal(ledger.includes("prompt"), false);
-    assert.equal(ledger.includes("content"), false);
+    // A recall receipt can carry a SHA-256 contentHash. All other occurrences still fail.
+    assert.equal(ledger.replace(/"contentHash":"[a-f0-9]{64}"/g, "").includes("content"), false);
     assert.equal(ledger.includes("token"), false);
   });
 });

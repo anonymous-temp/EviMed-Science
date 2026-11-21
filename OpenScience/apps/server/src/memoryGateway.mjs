@@ -602,7 +602,10 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     ctx.stage(admitted.sessionId, given.mode === 'context' ? 'opening.context' : (ctx.route === 'mcp' ? 'mcp.search' : 'rest.search'), given.query, items, searchStatus);
     const capsules = config.memorySourceEnvelopeEnabled === true
       ? capsule.items.map(item => ({ ...item, sourceEnvelope: memoryEnvelope(item) })) : capsule.items;
-    return { history: visibleHistory, capsules, searchStatus };
+    // A chunk address identifies the evidence in the ledger. Only a promoted literal result
+    // includes its address on the wire, so the ordinary response keeps its historical shape.
+    const wireHistory = history.status.promoted ? visibleHistory : visibleHistory.map(({ uri: _uri, ...hit }) => hit);
+    return { history: wireHistory, capsules, searchStatus };
   }
 
   /** @param {Map<string, { until: number, count: number }>} windows @param {string} key @param {number} span @param {number} limit */
@@ -1033,10 +1036,12 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // MCP profile reads always count and return the complete source.
       const startupProfile = !ctx.shared && uri === `${ctx.userRoot}/memories/profile.md` && ctx.query.get('model_use') !== 'true';
       if (!startupProfile) await noteUsed(ctx, [absolute(uri, ctx.userRoot)]);
-      const delivered = startupProfile ? openingProfileRead(config.memorySourceEnvelopeEnabled === true && ctx.origin !== 'agent-api' ? await ctx.recallText(uri, text) : text, `${ctx.userRoot}/memories`, config) : await ctx.recallText(uri, text);
+      const visible = !startupProfile || config.memorySourceEnvelopeEnabled === true && ctx.origin !== 'agent-api'
+        ? await ctx.recallText(uri, text) : text;
+      const delivered = startupProfile ? openingProfileRead(visible, `${ctx.userRoot}/memories`, config) : visible;
       ctx.stage(admitted.sessionId, startupProfile ? 'opening.profile' : (ctx.route === 'mcp' ? 'mcp.read' : 'rest.read'), null,
         [{ uri, text: delivered, source: uri === `${ctx.userRoot}/memories/profile.md` ? 'profile' : 'memory-file' }]);
-      return { status: 200, ...(ctx.origin === 'agent-api' && startupProfile ? { elided: openingProfileRead(text, `${ctx.userRoot}/memories`, config) !== text } : {}), json: { ...ok(delivered), readStatus: readStatus('searched') }, outcome: "forwarded" };
+      return { status: 200, ...(ctx.origin === 'agent-api' && startupProfile ? { elided: delivered !== text } : {}), json: { ...ok(delivered), readStatus: readStatus('searched') }, outcome: "forwarded" };
     },
     async list(ctx) {
       let uri = String(ctx.query.get("uri") ?? "");

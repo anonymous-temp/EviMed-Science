@@ -153,6 +153,7 @@ export function createAgentMemoryRoutes({
     // A key that resolves to the platform's publishing account is no key: nothing speaks for that account.
     if (!keyAccount || isPlatformAccount(keyAccount)) throw new HttpError(401, "agent_key_invalid", "The API key is not valid.");
 
+    const historyProof = req.headers['x-evimed-history-proof'] === '1';
     const action = url.pathname.slice(AGENT_MEMORY_PATH.length).replace(/^\//, "");
     const method = req.method ?? "GET";
     const operation = AGENT_MEMORY_ENDPOINTS.find(endpoint => {
@@ -419,13 +420,15 @@ export function createAgentMemoryRoutes({
           let timer;
           const history = user && project ? await Promise.race([
             historySearch({ user, project, query, accountScope: identity.projectId == null && input.projectId == null, limit: Math.min(20, Math.max(1, Math.trunc(Number(input.limit)) || 5)) }),
-            new Promise(resolve => { timer = setTimeout(() => resolve([]), Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4000)); }),
+            /** @type {Promise<any[]>} */ (new Promise(resolve => { timer = setTimeout(() => resolve([]), Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4000)); })),
           ]).finally(() => clearTimeout(timer)) : [];
-          await reply(200, { data: { ...result, history, historyAccess: {
+          // Only the explicit diagnostic asks for the registered chunk and permission proof.
+          const data = historyProof ? { ...result, history, historyAccess: {
             ownerHash: user ? createHash('sha256').update(user.id).digest('hex') : null,
             projectId: project?.id ?? null, scope: identity.projectId == null && input.projectId == null ? 'account' : 'project',
             requiredScopes: ['memory.read', 'memory.history.read'],
-          } } });
+          } } : { ...result, history: history.map(({ uri: _uri, ...hit }) => hit) };
+          await reply(200, { data });
         } else await reply(200, { data: result });
         return true;
       }
@@ -644,7 +647,7 @@ export function createAgentMemoryRoutes({
         // What this key can do, from the key. An integrator's first call.
         await reply(200, { data: {
           version: 1,
-          accountHash: createHash('sha256').update(keyAccount.id).digest('hex'),
+          ...(historyProof ? { accountHash: createHash('sha256').update(keyAccount.id).digest('hex') } : {}),
           scopes: identity.scopes,
           capabilities: {
             rawConversationRecall: {

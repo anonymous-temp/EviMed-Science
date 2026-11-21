@@ -46,15 +46,15 @@ function fixture() {
         sourceDeletion: { version: async () => state.changedDuringRead ? state.versionReads++ : 0 } }, input);
     },
   });
-  async function recall(body = {}) {
-    const req = { url: '/api/agent-memory/v1/recall', method: 'POST', headers: { authorization: 'Bearer valid' },
+  async function recall(body = {}, headers = {}) {
+    const req = { url: '/api/agent-memory/v1/recall', method: 'POST', headers: { authorization: 'Bearer valid', ...headers },
       async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ query: 'A17', methods: 'none', ...body })); } };
     const res = { data: null, writeHead() {}, end(value) { this.data = JSON.parse(value).data; } };
     await routes(req, res); return res.data;
   }
-  async function status() {
+  async function status(headers = {}) {
     const res = { data: null, writeHead() {}, end(value) { this.data = JSON.parse(value).data; } };
-    await routes({ url: '/api/agent-memory/v1', method: 'GET', headers: { authorization: 'Bearer valid' } }, res);
+    await routes({ url: '/api/agent-memory/v1', method: 'GET', headers: { authorization: 'Bearer valid', ...headers } }, res);
     return res.data;
   }
   return { state, recall, history, user, project, status, config };
@@ -128,4 +128,22 @@ test('history capability reflects the actual scope and switch, and an unavailabl
   for (const include of ['history', ['history', 'history'], ['all'], [null]]) {
     await assert.rejects(recall({ include }), error => error.code === 'agent_memory_payload_invalid');
   }
+});
+
+test('the diagnostic verifies the authenticated project-scoped recall and leaves ordinary recall unchanged', async () => {
+  const { probeKnownQuote } = await import('../../../scripts/ops/memory-history-diagnostic.mjs');
+  const { user, project, status, recall } = fixture();
+  const request = async (_url, options) => ({ ok: true, json: async () => ({
+    data: options.method === 'GET' ? await status(options.headers) : await recall(JSON.parse(options.body), options.headers),
+  }) });
+  const input = { base: 'https://example.test', key: 'valid', owner: user.id, projectId: project.id,
+    sessionId: 's1', quote: 'I use A17 sensors.' };
+  assert.equal((await status()).accountHash, undefined);
+  const ordinary = await recall({ include: ['history'] });
+  assert.equal(ordinary.historyAccess, undefined);
+  assert.equal(ordinary.history[0].uri, undefined);
+  const proof = await probeKnownQuote(input, request);
+  assert.equal(proof.matched, true);
+  assert.equal(proof.historyAccess.scope, 'project');
+  assert.equal((await probeKnownQuote({ ...input, sessionId: 'unrelated' }, request)).matched, false);
 });

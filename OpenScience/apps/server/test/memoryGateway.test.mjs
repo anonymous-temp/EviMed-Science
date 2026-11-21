@@ -1934,3 +1934,37 @@ test('history rescue promotes a verified literal excerpt and preserves a withdra
     assert.deepEqual(calls.splice(0), [undefined]);
   }
 });
+
+for (const sourceBound of [false, true]) {
+  test(`recall receipts hash the delivered text and preserve the search and opening responses with sources=${sourceBound}`, async t => {
+    const { recallDigest } = await import('../src/memoryRecallReceipt.mjs');
+    const receipts = [];
+    const history = { conversationTitle: 'Layout', conversationUrl: '/s', messages: [{ sourceRole: 'user', text: 'Use A17.' }] };
+    const capsule = { id: 'f', content: 'Keep tables together.', origin: 'manual', factKind: 'preference' };
+    const options = { config: { memoryHistorySearchEnabled: true, memorySourceEnvelopeEnabled: sourceBound },
+      admission: fixedAdmission({ sessionId: 's' }), historySearch: async () => [{ ...history, uri: 'history:chunk' }],
+      capsuleSearch: async () => [capsule] };
+    const request = async f => {
+      const uri = f.stub.seedMemory(OV_USER, 'profile.md', 'Use metric units.');
+      const opening = await f.call('GET', '/api/v1/content/read?uri=' + encodeURIComponent(uri));
+      const search = await f.call('POST', '/api/v1/search/search', { query: 'Layout' });
+      const tool = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search', arguments: { query: 'Layout' } } });
+      assert.deepEqual([opening.status, search.status, tool.status], [200, 200, 200]);
+      return { opening: opening.json.result, search: search.json.result, blocks: tool.messages[0].result.content };
+    };
+    const without = await request(await fixture(t, options));
+    const withReceipts = await request(await fixture(t, { ...options, recordDelivery: async row => { receipts.push(row.operation); } }));
+    assert.deepEqual(withReceipts, without);
+    assert.deepEqual(withReceipts.search.history, [history]);
+    assert.equal(Boolean(withReceipts.search.capsules[0].sourceEnvelope), sourceBound);
+    assert.equal(sourceBound ? JSON.parse(withReceipts.opening).text : withReceipts.opening, 'Use metric units.');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(receipts.map(op => op.entry), ['opening.profile', 'rest.search', 'mcp.search']);
+    assert.equal(receipts[0].references[0].contentHash, recallDigest(withReceipts.opening));
+    const ref = receipts[1].references.find(row => row.source === 'history');
+    assert.deepEqual([ref.uri, ref.contentHash], ['history:chunk', recallDigest(JSON.stringify(history.messages))]);
+    const capsuleBlock = withReceipts.blocks.find(block => block.text.includes(capsule.content)).text;
+    assert.equal(receipts[2].references.find(row => row.source === 'capsule').contentHash,
+      recallDigest(capsuleBlock.slice(capsuleBlock.indexOf('\n') + 1)));
+  });
+}

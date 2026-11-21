@@ -51,7 +51,7 @@ export async function probeKnownQuote({ base, key, owner, projectId, sessionId, 
   const url = new URL(base);
   if (url.username || url.password || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost','127.0.0.1','[::1]'].includes(url.hostname)))) throw Error('provide an HTTPS origin or loopback');
   const root = new URL('/api/agent-memory/v1', url.origin).href;
-  const headers = { authorization: 'Bearer ' + key, 'content-type': 'application/json' };
+  const headers = { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'x-evimed-history-proof': '1' };
   const read = async (href, body) => {
     const response = await request(href, { method: body ? 'POST' : 'GET', headers, redirect:'error', signal: AbortSignal.timeout(15000),
       ...(body ? {body: JSON.stringify(body)} : {}) });
