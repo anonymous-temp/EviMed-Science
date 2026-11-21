@@ -1,3 +1,5 @@
+import { METHOD_RELEVANT_MOUNT_REASONS } from "@evimed/domain";
+
 // The run ledger keeps every card, observed body read and terminal result. Only
 // task-level results with an attributable exposure enter the priority decision.
 const taskFailures = new Set(["deliverable_rejected", "specialist_required_output_missing", "specialist_required_output_stale"]);
@@ -13,7 +15,7 @@ export function methodTaskOutcomes(run, observed, methods) {
     const card = loaded.find(entry => entry.name === method.name && entry.digest === method.digest);
     if (!card) return [];
     const opened = observed.methodsInvoked.some(entry => entry.name === method.name && entry.digest === method.digest);
-    if (!opened && loaded.length !== 1) return [];
+    if (!opened && (loaded.length !== 1 || !METHOD_RELEVANT_MOUNT_REASONS.includes(card.reason))) return [];
     return [{ methodId: method.id, digest: method.contentDigest, sample: { runId: run.id,
       at: run.finishedAt, startedAt: run.startedAt ?? run.createdAt, opened, failed } }];
   });

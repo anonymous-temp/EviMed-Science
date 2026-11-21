@@ -1561,14 +1561,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // of the traffic — leaves none the control plane can scope to its turn (`readRunStateProjection`), and used to be counted for
     // nothing: not carried, not read. What the control plane gave the conversation when its first prompt arrived is its receipt then.
     const read = await agentRuns.runWorkflowProjection(project, run);
-    const learnedGiven = run.sessionId ? runtimeManager.methodsGivenTo(project, String(run.sessionId)) : [];
-    // The platform's official methods the conversation was offered are carried like any other card (`officialGivenTo`).
-    const officialOffered = run.sessionId ? runtimeManager.officialGivenTo(project, String(run.sessionId)).offered : [];
-    const given = [...learnedGiven, ...officialOffered.map((method) => ({ ...method, reason: "similarity" }))];
-    if (!read && !given.length) return;
-    const projection = { ...(read ?? {}),
-      mountedMethods: Array.isArray(read?.mountedMethods) && read.mountedMethods.length ? read.mountedMethods
-        : given.map(({ name, digest, reason }) => ({ name, digest, reason })) };
+    const recorded = config.methodTaskOutcomesEnabled ? run.methodsLoaded ?? (run.nativeTurn
+      ? runtimeManager.methodReceiptFor(project, run.sessionId, run.startedAt) ?? [] : null) : null;
+    const projection = { ...(read ?? {}), mountedMethods: Array.isArray(read?.mountedMethods) && read.mountedMethods.length ? read.mountedMethods : recorded };
+    if (!projection.mountedMethods) {
+      const learnedGiven = run.sessionId ? runtimeManager.methodsGivenTo(project, String(run.sessionId)) : [];
+      const officialOffered = run.sessionId ? runtimeManager.officialGivenTo(project, String(run.sessionId)).offered : [];
+      const given = [...learnedGiven, ...officialOffered.map((method) => ({ ...method, reason: "similarity" }))];
+      if (!read && !given.length) return;
+      projection.mountedMethods = given.map(({ name, digest, reason }) => ({ name, digest, reason }));
+    }
     // The whole library: a researcher's methods follow them across projects
     // (`selectLearnedMethods`), so a use is attributed wherever it happens —
     // of the kind of work this run's runtime carried (L-G7), so a research
@@ -4338,6 +4340,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // The independent reviewer's findings, first in a finished run's notices.
     ...(review ? { reviewNotices: (project, runId) => review.service.reviewNoticesForRun(project.userId, project.id, runId) } : {}),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
+    runtimeMethodReceipt: config.learningEnabled && config.methodTaskOutcomesEnabled ? async (project, sessionId, startedAt = null) => {
+      const offered = runtimeManager.methodReceiptFor(project, sessionId, startedAt);
+      if (!offered?.length) return null;
+      const state = await memoryPausedFor(memorySettings, project.userId, project.id, sessionId).catch(() => null);
+      return state && !state.trial ? offered : null;
+    } : null,
     runtimePersonalSkills: (project, observation = {}) => {
       if (observation.nativeTurn) {
         const runtime = runtimeManager.runtimes.get(runtimeManager.key(project));

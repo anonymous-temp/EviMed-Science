@@ -6,10 +6,13 @@ import { selectLearnedMethods } from "../src/learnedMethodMount.mjs";
 const method = { id: "m", name: "mine", digest: "mounted", contentDigest: "body" };
 const run = { id: "r", startedAt: "2026-11-01T00:00Z", finishedAt: "2026-11-01T01:00Z",
   status: "failed", errorCode: "specialist_required_output_missing" };
-const observed = { answered: true, methodsLoaded: [method], methodsInvoked: [] };
+const observed = { answered: true, methodsLoaded: [{ ...method, reason: "similarity" }], methodsInvoked: [] };
 
 test("sole card exposure can matter without a body read, ambiguous exposures remain in the run ledger only", () => {
   assert.equal(methodTaskOutcomes(run, observed, [method])[0].sample.opened, false);
+  for (const reason of ["explore", "recent", undefined]) {
+    assert.deepEqual(methodTaskOutcomes(run, { ...observed, methodsLoaded: [{ ...method, reason }] }, [method]), []);
+  }
   const several = { ...observed, methodsLoaded: [method, { name: "other" }] };
   assert.deepEqual(methodTaskOutcomes(run, several, [method]), []);
   assert.equal(methodTaskOutcomes(run, { ...several, methodsInvoked: [method] }, [method])[0].sample.opened, true);

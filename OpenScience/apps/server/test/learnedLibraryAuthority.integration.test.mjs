@@ -75,3 +75,26 @@ test('a caller already holding rows refuses an inverse library wait and releases
   }));
   assert.match((await writer).payload.body, /Independent writer/);
 });
+
+test('concurrent task results from distinct connections demote and retire one method revision only once', options, async t => {
+  const f = await fixture(t);
+  const method = await f.make('trace-outcomes');
+  const start = new Date(method.payload.createdAt);
+  const record = (service, n) => service.recordTaskOutcome(f.userId, method.id, method.payload.contentDigest, {
+    runId: 'task-' + n, at: new Date(start.getTime() + n * 1000).toISOString(), startedAt: start.toISOString(), opened: true, failed: true,
+  }, 3);
+  await Promise.all([record(f.learning, 1), record(f.other, 2), record(f.learning, 2), record(f.other, 3)]);
+  const demoted = await f.other.getMethod(f.userId, method.id);
+  assert.equal(demoted.payload.status, 'approved');
+  assert.equal(demoted.payload.taskOutcomes.demoted, true);
+  assert.deepEqual(demoted.payload.taskOutcomes.samples.map(row => row.runId), ['task-3', 'task-2', 'task-1']);
+  await Promise.all([record(f.other, 4), record(f.learning, 6), record(f.other, 5)]);
+  const retired = await f.learning.getMethod(f.userId, method.id);
+  assert.equal(retired.payload.status, 'retired');
+  assert.equal(retired.payload.taskOutcomes.samples.length, 6);
+  await record(f.other, 5);
+  assert.equal((await f.other.getMethod(f.userId, method.id)).revision, retired.revision);
+  const restored = await f.other.rollback(f.userId, method.id, { expectedRevision: retired.revision, targetRevision: method.revision });
+  assert.equal(restored.payload.status, 'approved');
+  assert.equal(restored.payload.taskOutcomes, undefined);
+});

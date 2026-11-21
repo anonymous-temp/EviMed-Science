@@ -1195,7 +1195,7 @@ export class LearningService {
         if (window.retire) {
           next.status = "retired";
           next.statusChangedAt = this.now().toISOString();
-          next.statusReason = `带有这条做法的连续 ${window.samples.length} 次任务未完成交付，已停用。可以从版本历史恢复。`;
+          next.statusReason = `带有这条做法的连续 ${window.samples.length} 次任务交付失败或收到针对该做法的纠正，已停用。可以从版本历史恢复。`;
           next.correctionRecoveryStopped = true;
         }
         try {
