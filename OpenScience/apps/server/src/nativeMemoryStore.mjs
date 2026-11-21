@@ -17,6 +17,7 @@ import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
 import { forgetRequestStatus } from './memoryForgetStatus.mjs';
+import { nativeExportTitle } from './nativeMemoryAccountExport.mjs';
 import { memoryHistoryLine, carriesPlatformContext, identifierShapesIn, maskIdentifiers, platformIdentifiersIn, projectContextLine, sourcePrivacyOf, MEMORY_SAFETY_NOTES_ANCHOR } from "@evimed/domain";
 import { actOf, duplicatesOf, withoutJudged } from "./nativeMemoryForgetEverywhere.mjs";
 import { recordForgetDuplicates, recordMapReplaced, recordPastedInstructionCheck } from "./nativeMemoryMetrics.mjs";
@@ -2778,6 +2779,8 @@ export class NativeMemoryStore {
         const current = {};
         /** @type {{path:string,type:string,sha256:string}[]} */
         const files = [];
+        /** @type {{path:string,title:string|null}[]} */
+        const titles = [];
         let contentBytes = 0;
         for (const file of await this.files(userId, {context:this.memoryContexts ? context : null})) {
           if (!file.uri.startsWith(`${context.userRoot}/memories/`)) continue;
@@ -2790,8 +2793,10 @@ export class NativeMemoryStore {
           if (bytes + contentBytes > MAX_NATIVE_PACK_BYTES) throw new HttpError(413, 'memory_export_too_large', 'The native memory export exceeds the account archive limit.');
           current[path] = data;
           files.push({path,type:file.type,sha256:contentHash(body)});
+          titles.push({ path, title: nativeExportTitle(body) });
         }
-        current['manifest.json'] = Buffer.from(JSON.stringify({schemaVersion:1,files,
+        current['titles.json'] = Buffer.from(JSON.stringify({ schemaVersion: 1, files: titles }, null, 2));
+        current['manifest.json'] = Buffer.from(JSON.stringify({schemaVersion:1,files,titles:'titles.json',
           note:'仅包含当前可用的记忆；已撤回的内容和临时副本不在导出中。'}));
         pack = Buffer.from(zipSync(current));
       } else pack = await this.#engine(() => context.sessions.exportPack(userId));

@@ -78,6 +78,7 @@ export function accountExportDocumentKinds() { return [...customerKinds]; }
 
 // These stores contain personal input alongside runtime authority. Select only the fields the projections need.
 const nativeQueries = [
+  // The native projection serializes versioned execution receipts and aggregate scope, never the plan's matching authority.
   ["nativeCommits", `SELECT created_at AS "createdAt",updated_at AS "updatedAt",extraction->'forgetRequests' AS "forgetRequests",
     extraction->'sourceVerification' AS "sourceVerification"
     FROM evimed_memory.native_commits WHERE user_id=$1 AND (extraction ? 'forgetRequests' OR extraction ? 'sourceVerification')
