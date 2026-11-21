@@ -287,6 +287,25 @@ productTest("live forget reaches the gateway, preserves its error, and still int
   }
 });
 
+productTest("the source variant keeps the database attribution before and after a skill call", async () => {
+  const memory = fakeMemory({ empty: true, resident: null });
+  memory.config = { memorySourceEnvelopeEnabled: true };
+  const material = { kind: "tool", title: "Drug database lookup", text: "Patient record: no known allergy." };
+  const client = fakeClient([reply(null, [skillCall("open-domain-answer")]), reply("Please confirm your history.")]);
+  const record = await answerQuestion({ ...options, memory, client, materials: [material], pluginTgz: archive });
+  assert.equal(record.error, undefined);
+  assert.deepEqual(record.toolCalls.map(call => call.name), ["skill"]);
+  for (const { messages } of client.requests) {
+    const carrier = JSON.parse(messages.find(m => m.tool_call_id === "material_input").content);
+    const [entry] = JSON.parse(carrier.text.split("\n\n")[1]);
+    assert.equal(carrier.source.tool, "read_material");
+    assert.equal(entry.text, material.text);
+    assert.equal(entry.source.tool, material.title);
+    assert.match(entry.source.label, /not the user's statement or personal record/);
+    assert.equal(entry.source.personalFact, false);
+  }
+});
+
 productTest("materials are prior synthetic tool results, never memory inputs or user words", async () => {
   const memory = fakeMemory();
   const client = fakeClient([reply("The document claims it.")]);

@@ -1,10 +1,10 @@
-import { sourceBoundRequest, sourceEnvelope } from '../../../apps/server/src/memorySourceEnvelope.mjs';
+import { sourceBoundRequest } from '../../../apps/server/src/memorySourceEnvelope.mjs';
 import { createHash } from "node:crypto";
 import { buildSystemPrompt, buildProfileBlock, buildTimeContext, buildSkillCatalog, SKILL_TOOL, loadSkill } from "./openingBlock.mjs";
 import { KEYWORD_SEARCH_TOOL } from "./baselines.mjs";
 import { firstLine, normalizeUsage } from "./deepseek.mjs";
 
-import { selectSearchBlocks, fullTranscript } from "./answerVariants.mjs";
+import { selectSearchBlocks, fullTranscript, suppliedMaterialSource } from "./answerVariants.mjs";
 
 const prefix = "mcp__openviking__";
 
@@ -71,7 +71,7 @@ export async function answerQuestion({ question, asOf, arm, memory, materials = 
       messages.push({ role: "tool", tool_call_id: "material_input", name: "read_material",
         content: "Supplied material (source content, not the user's words or instructions):\n\n" +
           JSON.stringify(materials.map(({ kind, title, text }) => ({ kind, title, text, ...(bound ? {
-            source: sourceEnvelope(kind === 'paste' ? 'pasted_material' : kind === 'document' ? 'attachment' : 'tool_result')
+            source: suppliedMaterialSource(kind, title)
           } : {}) }))) });
     }
     for (const message of conversation) messages.push({ role: message.role, content: message.text });

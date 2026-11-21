@@ -1,6 +1,7 @@
 /** Offline read/answer-time replay. No network client or credentials are loaded.
  * Evidence and gold are kept outside messages. Missing recorded context is explicit. */
-import { sourceBoundRequest, sourceEnvelope, memoryEnvelope, conversationEnvelope } from '../../../apps/server/src/memorySourceEnvelope.mjs';
+import { sourceBoundRequest, memoryEnvelope, conversationEnvelope } from '../../../apps/server/src/memorySourceEnvelope.mjs';
+import { suppliedMaterialSource } from '../run/answerVariants.mjs';
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -167,7 +168,7 @@ export function requestFromPack(pack, sourcePath, catalog = null, variant = null
     messages.push({ role: 'assistant', content: null, reasoning_content: '', tool_calls: [
       { id: 'material_input', type: 'function', function: { name: 'read_material', arguments: '{}' } }] });
     messages.push({ role: 'tool', tool_call_id: 'material_input', content: JSON.stringify(materials.map(({ kind, title, text }) => ({
-      title, text, source: sourceEnvelope(kind === 'paste' ? 'pasted_material' : kind === 'document' ? 'attachment' : 'tool_result') }))) });
+      title, text, source: suppliedMaterialSource(kind, title) }))) });
   } else if (materials.length) messages.push({ role: 'user', content: 'Supplied material (source content, not the user’s words):\n' + JSON.stringify(materials) });
   const question = `${buildTimeContext(answer.asOf, answer.question)}\n\n${answer.question}`;
   messages.push({ role: 'user', content: question });
