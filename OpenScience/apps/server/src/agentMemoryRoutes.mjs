@@ -578,6 +578,10 @@ export function createAgentMemoryRoutes({
           const existing = await /** @type {any} */ (native).getRecord(user.id, record.id);
           if (privateByDefault(existing)) throw new HttpError(404, "memory_not_found", "No such memory.");
           if (existing.scope !== "project" || existing.scopeId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This memory belongs to a different scope.");
+          // The native store follows copies and grouped undo across projects in the owned namespace.
+          if (act === 'forget' || act === 'undo') {
+            throw new HttpError(403, 'agent_key_project_denied', 'Withdrawal and undo require an account-scoped key.');
+          }
         }
         const outcome = await recordAction({ nativeMemory: native }, user, record.id, act, body);
         await trail(outcome.event, user, { target: record.id });
