@@ -241,3 +241,42 @@ test('commit judge requires every retained clause to cite verbatim user evidence
     assert.equal(result.results.size, valid ? 1 : 0);
   }
 });
+
+test('stock verification cannot apply even a schema-valid wrong verdict, across 24 sourced rows', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { NativeMemoryVerification } = await import('../src/nativeMemoryVerification.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const rows = JSON.parse(await readFile(new URL('./fixtures/memory-verification-24.json', import.meta.url), 'utf8'));
+  const root = 'viking://user/synthetic/memories';
+  const files = new Map(), origins = new Map(), byText = new Map(), archives = new Map();
+  for (const [i, row] of rows.entries()) {
+    const uri = root + '/notes/' + i + '.md', archive = 'viking://user/synthetic/sessions/dsh-case' + i + '/history/archive_001';
+    files.set(uri, '- ' + row.text); byText.set(row.text, row);
+    origins.set(uri, new Map([[lineFingerprint(row.text), { archiveUri: archive }]]));
+    archives.set(archive, row.sources);
+  }
+  const before = [...files];
+  const sessions = { memoryRoot: () => root, tree: () => before.map(([uri]) => ({ uri })), read: (_u, uri) => files.get(uri),
+    replace: () => assert.fail('stock report must never write') };
+  const overlay = { files: () => new Map(), originsOf: () => origins,
+    memoryForgetBody: (_u, _uri, body) => byText.get(body.slice(2)).group === 'withdrawn' ? null : body };
+  const checked = new Set();
+  const reviewer = new NativeMemoryVerification({ sessions, overlay, config: { nativeMemoryConsolidationEnabled: true,
+    memoryEngineEnabled: true, nativeMemoryConsolidationMode: 'verify' }, judge: { judge: async ({ lines }) => ({
+      calls: 1, results: new Map(lines.map(({ index, text, sources }) => {
+        const row = byText.get(text);
+        assert.deepEqual(sources, row.sources);
+        checked.add(text);
+        // This swaps the meaning without introducing any hard token; the old writer accepted it.
+        return [index, { index, verdict: 'corrected', corrected: 'User declined.' }];
+      })),
+    }) } });
+  reviewer.readSources = async (_user, sources) => archives.get(sources[0].archiveUri);
+  const report = await reviewer.verifyExisting('synthetic');
+  assert.equal(rows.length, 24);
+  assert.equal(checked.size, 23);
+  assert.equal(report.suggested, 23);
+  assert.equal(report.corrected, 0);
+  assert.equal(report.calls, 3);
+  assert.deepEqual([...files], before);
+});

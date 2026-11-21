@@ -1,5 +1,5 @@
 import { removalLines, removalRefusals } from './nativeMemoryRejections.mjs';
-import { withMemorySummaryInvalidation } from './nativeMemorySummaries.mjs';
+import { fenceWithdrawnMemoryBody, withMemorySummaryInvalidation } from './nativeMemorySummaries.mjs';
 import { MEMORY_EXTRACTION_V2_REVIEW_TEXT, carriesPlatformContext, identifierShapesIn, platformIdentifiersIn } from '@evimed/domain';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { filterCapturedMessage } from './memoryGateway.mjs';
@@ -7,7 +7,7 @@ import { instructionSourceMessage } from './nativeMemoryInstructionOrigin.mjs';
 import { lineFingerprint, memoryLines, originalSources } from './nativeMemoryOverlay.mjs';
 export { originalSources } from './nativeMemoryOverlay.mjs';
 import { nativeMemoryFile, parseArchiveUri } from './openVikingSessions.mjs';
-import { recordVerificationJudge, recordVerificationLines } from './nativeMemoryMetrics.mjs';
+import { recordExistingVerification, recordVerificationJudge, recordVerificationLines } from './nativeMemoryMetrics.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { sourcesNamedIn } from './nativeMemoryStore.mjs';
 
@@ -238,7 +238,6 @@ export class NativeMemoryVerification {
     for (let start = 0; start < entries.length; start += batchSize) {
       const batch = entries.slice(start, start + batchSize);
       const ready = batch.filter(entry => entry.sources.length && JSON.stringify(entry).length <= 16000);
-      const deterministic = ready.map(entry => verifyLines({ lines: [entry], sources: entry.sources })[0]);
       let judged = { results: new Map(), calls: 0 };
       if (ready.length) {
         try { judged = await this.judge.judge({ userId, maxAttempts, commit: strictBatch, lines: ready.map((entry, index) => ({ index, text: entry.text, sources: entry.sources, ...(strictBatch ? { type: entry.type, heading: entry.heading } : {}) })) }); }
@@ -255,7 +254,7 @@ export class NativeMemoryVerification {
         // Revalidate injected judges too, so an adapter cannot apply an invented correction.
         const valid = verdict && parseVerificationJudgement(JSON.stringify({ results: [{ ...verdict, index: 0 }] }), [entry]);
         const row = valid?.get(0);
-        const status = row?.verdict ?? (!strictBatch && index >= 0 && deterministic[index].status === 'supported' ? 'supported' : 'unverifiable');
+        const status = row?.verdict ?? 'unverifiable';
         results.push({ ...entry, status, corrected: row?.corrected ?? null });
       }
     }
@@ -332,7 +331,7 @@ export class NativeMemoryVerification {
 
   /** @param {string} userId @param {{limit?:number,directories?:string[],mode?:string}} [options] */
   async verifyExisting(userId, { limit = 200, directories, mode = this.config.nativeMemoryConsolidationMode } = {}) {
-    const summary = { checked: 0, supported: 0, corrected: 0, unsupported: 0, unverifiable: 0, calls: 0 };
+    const summary = { checked: 0, supported: 0, corrected: 0, suggested: 0, unsupported: 0, unverifiable: 0, calls: 0 };
     if (this.config.nativeMemoryConsolidationEnabled !== true || mode !== 'verify' || this.config.memoryEngineEnabled !== true) return summary;
     return withNativeMemoryWrite(this.overlay.database, userId, async () => {
       if (this.overlay.sourceDeletion && (await this.overlay.sourceDeletion.ledger.recordsForOwner(userId, { pendingOnly: true })).length) return summary;
@@ -340,62 +339,39 @@ export class NativeMemoryVerification {
       const nodes = (await this.sessions.tree(userId, root, { levelLimit: 8 })).filter(node => !node.isDir && nativeMemoryFile(node.uri, root)
         && (!directories || node.uri === `${root}/profile.md` || directories.some(dir => node.uri.startsWith(`${root}/${dir}/`))));
       const held = await this.overlay.files(userId), origins = await this.overlay.originsOf(userId, nodes.map(node => node.uri));
-      const files = new Map(), entries = [], archiveCache = new Map();
+      const entries = [], archiveCache = new Map();
       const bound = Math.max(0, Math.min(2000, Math.trunc(Number(limit)) || 0));
       for (const node of nodes) {
-        const body = await this.sessions.read(userId, node.uri);
+        const body = await fenceWithdrawnMemoryBody(this.overlay, userId, node.uri, await this.sessions.read(userId, node.uri));
         if (body === null) continue;
         const file = { ...node, ...nativeMemoryFile(node.uri, root), body, projectId: held.get(node.uri)?.projectId ?? null };
-        files.set(node.uri, file);
         for (const text of memoryLines(body).filter(statement => !/^#|^>\s*来源变更：/.test(statement))) {
           if (entries.length >= bound) break;
           const fingerprint = lineFingerprint(text), origin = origins.get(node.uri)?.get(fingerprint);
-          let inheritedOrigins = originalSources(origin);
           let sources = await this.readSources(userId, originalSources(origin), null, archiveCache);
           if (!originalSources(origin).some(item => parseArchiveUri(item.archiveUri)) && this.history?.enabled && this.config.memoryHistorySearchEnabled !== false) {
             try {
               const hits = await this.history.search({ user: { id: userId }, project: { id: file.projectId ?? 'default', userId }, query: text, limit: 5 }, { includeOrigins: true });
               sources = hits.flatMap(hit => hit.messages.map(message => ({ role: message.sourceRole, text: message.text, created_at: message.date ?? null })));
-              inheritedOrigins = hits.flatMap(hit => hit.origin ? [hit.origin] : []);
             } catch { /* Unavailable history leaves the line alone. */ }
           }
-          entries.push({ text, uri: node.uri, fingerprint, sources, origin, inheritedOrigins });
+          entries.push({ text, uri: node.uri, fingerprint, sources });
         }
         if (entries.length >= bound) break;
       }
       const assessed = await this.assess(userId, entries);
       summary.calls = assessed.calls;
-      for (const [uri, file] of files) {
-        const rows = assessed.results.filter(row => row.uri === uri);
-        let next = file.body;
-        const inherited = new Map();
-        for (const row of rows) {
-          summary.checked++;
-          if (row.status === 'supported') { summary.supported++; continue; }
-          if (row.status === 'unverifiable') { summary.unverifiable++; continue; }
-          let replacement = row.corrected;
-          if (row.status === 'unsupported') {
-            summary.unsupported++;
-            // A planted one-line corruption often has its pre-image in the overlay. Never guess across several departed statements.
-            const prior = held.get(uri)?.body;
-            const present = new Set(memoryLines(file.body).map(lineFingerprint));
-            const departed = memoryLines(prior ?? '').filter(text => !present.has(lineFingerprint(text)));
-            const added = memoryLines(file.body).filter(text => !new Set(memoryLines(prior ?? '').map(lineFingerprint)).has(lineFingerprint(text)));
-            if (prior && departed.length === 1 && added.length === 1 && added[0] === row.text) replacement = departed[0];
-          }
-          if (!replacement) continue; // A finding without a pre-image is report-only, never a deletion.
-          const candidate = replaceStatement(next, row.fingerprint, replacement);
-          const sourceOrigins = originalSources(origins.get(uri)?.get(lineFingerprint(replacement)));
-          if (!sourceOrigins.length) sourceOrigins.push(...row.inheritedOrigins);
-          inherited.set(lineFingerprint(replacement), sourceOrigins);
-          const reason = row.status === 'unsupported' ? 'verification_unsupported' : 'verification_corrected';
-          if (await this.write(userId, { ...file, body: next }, candidate, reason, inherited)) {
-            next = candidate;
-            if (row.status !== 'unsupported') summary.corrected++;
-          } else if (row.status !== 'unsupported') summary.unverifiable++;
-        }
+      // A proposed edit can have every literal token in the source and still change
+      // the speaker, scope or time. The stock verification pass has no write authority.
+      for (const row of assessed.results) {
+        summary.checked++;
+        if (row.corrected) summary.suggested++;
+        else if (row.status === 'supported') summary.supported++;
+        else if (row.status === 'unsupported') summary.unsupported++;
+        else summary.unverifiable++;
       }
-      for (const key of ['supported', 'corrected', 'unsupported', 'unverifiable']) recordVerificationLines(key, summary[key]);
+      for (const key of ['supported', 'suggested', 'unsupported', 'unverifiable']) recordVerificationLines(key, summary[key]);
+      recordExistingVerification(summary);
       return summary;
     });
   }
