@@ -9,6 +9,8 @@ export { originalSources } from './nativeMemoryOverlay.mjs';
 import { nativeMemoryFile, parseArchiveUri } from './openVikingSessions.mjs';
 import { recordExistingVerification, recordVerificationJudge, recordVerificationLines } from './nativeMemoryMetrics.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
+import { presentationBinding } from './memoryPresentation.mjs';
+import { inputDigest } from './memoryHumanSegments.mjs';
 import { sourcesNamedIn } from './nativeMemoryStore.mjs';
 
 /** @typedef {{text:string, uri:string, fingerprint:string}} VerificationLine */
@@ -57,7 +59,7 @@ const COMMIT_INSTRUCTION = [RULES,
 
 /** Check quote identity and complete coverage before accepting a real commit verdict.
  * Semantic entailment and authorship inside a user message are the judge's responsibility. */
-function parseCommitEvidence(content, lines) {
+function parseCommitEvidence(content, lines, bindings) {
   let body;
   try { body = JSON.parse(content); } catch { return null; }
   if (!body || !Array.isArray(body.results)) return null;
@@ -77,6 +79,10 @@ function parseCommitEvidence(content, lines) {
       })) return null;
       const compact = text => text.replace(/\s+/gu, '');
       if (compact(evidence.map(part => part.clause).join('')) !== compact(claim)) return null;
+      if (['preferences', 'corrections'].includes(input.type) && evidence.every(part => part.source === evidence[0].source)) {
+        const binding = presentationBinding(input.sources, evidence[0].source);
+        if (binding) bindings.set(row.index, { ...binding, lineDigest: inputDigest(claim) });
+      }
     }
     delete row.evidence;
   }
@@ -135,9 +141,10 @@ export function createVerificationJudge({ config, usageLedger = null, fetchImpl 
         try {
           const body = await callModel({ config, usageLedger, fetchImpl }, { userId, projectId: 'default', runId: null,
             purpose: 'memory-extraction', signal: controller.signal, body: verificationJudgeRequest(model, lines, config, commit) });
-          const parse = commit ? parseCommitEvidence : parseVerificationJudgement;
-          const results = parse(body?.choices?.[0]?.message?.content, lines);
-          if (results) return { results, calls: made };
+          const content = body?.choices?.[0]?.message?.content;
+          const bindings = new Map();
+          const results = commit ? parseCommitEvidence(content, lines, bindings) : parseVerificationJudgement(content, lines);
+          if (results) return { results, calls: made, bindings };
           recordVerificationJudge('failed');
         } catch { recordVerificationJudge('failed'); break; }
         finally { clearTimeout(timer); }
@@ -239,6 +246,7 @@ export class NativeMemoryVerification {
     for (let start = 0; start < entries.length; start += batchSize) {
       const batch = entries.slice(start, start + batchSize);
       const ready = batch.filter(entry => entry.sources.length && JSON.stringify(entry).length <= 16000);
+      /** @type {{results: Map<number, any>, calls: number, bindings?: Map<number, any>}} */
       let judged = { results: new Map(), calls: 0 };
       if (ready.length) {
         try { judged = await this.judge.judge({ userId, maxAttempts, commit: strictBatch, lines: ready.map((entry, index) => ({ index, text: entry.text, sources: entry.sources, ...(strictBatch ? { type: entry.type, heading: entry.heading } : {}) })) }); }
@@ -247,7 +255,7 @@ export class NativeMemoryVerification {
       if (strictBatch) {
         const valid = judged?.results instanceof Map
           ? parseVerificationJudgement(JSON.stringify({ results: [...judged.results.values()] }), ready) : null;
-        judged = { results: valid ?? new Map(), calls: judged?.calls ?? 0 };
+        judged = { ...judged, results: valid ?? new Map(), calls: judged?.calls ?? 0 };
       }
       calls += judged.calls ?? 0;
       for (const entry of batch) {
@@ -256,7 +264,8 @@ export class NativeMemoryVerification {
         const valid = verdict && parseVerificationJudgement(JSON.stringify({ results: [{ ...verdict, index: 0 }] }), [entry]);
         const row = valid?.get(0);
         const status = row?.verdict ?? 'unverifiable';
-        results.push({ ...entry, status, corrected: row?.corrected ?? null });
+        const presentation = row && judged.bindings?.get(index);
+        results.push({ ...entry, status, corrected: row?.corrected ?? null, ...(presentation ? { presentation } : {}) });
       }
     }
     return { results, calls };

@@ -1734,7 +1734,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   configurePasswordKdfGate({ concurrency: config.capsuleKdfConcurrency, maxWaiting: config.capsuleKdfMaxWaiting, maxWaitMs: config.capsuleKdfMaxWaitMs });
   // The researcher's standing profile and the decision whether a dispatch hands it over (review M6, `residentProfile.mjs`).
   const accountProjections = createAccountProjections({ config, native: nativeMemory, overlay: nativeMemoryOverlay, methods: learningService,
-    provenance: contextProvenance, settings: memorySettings, contexts: nativeMemoryContexts,
+    verification: nativeMemoryWorker.verification, provenance: contextProvenance, settings: memorySettings, contexts: nativeMemoryContexts,
     projectFor: async (userId, projectId) => store.requireProject(await store.userById(userId), projectId),
     projectRuns: project => agentRuns.researcherRuns(project),
     deleted: (project, sessionId) => sourceDeletion?.ledger.get(project, sessionId),

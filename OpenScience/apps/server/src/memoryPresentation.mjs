@@ -1,3 +1,5 @@
+import { inputDigest } from './memoryHumanSegments.mjs';
+
 /** The copy boundary accepts a complete expression with closed slots. No free
  * label, number, entity or example can be interpolated into the output. The
  * match is the original statement, including its scope, never a paraphrase. */
@@ -13,6 +15,14 @@ export function presentationRule(text) {
   const quote = text.trim();
   const matched = zh.exec(quote) ?? en.exec(quote);
   return matched ? { quote, standing: Boolean(matched[1]) || /^(?:我的表达偏好是|我喜欢)/u.test(quote) } : null;
+}
+
+/** Store only a locator for the single complete request that supports the reviewed line. */
+export function presentationBinding(messages, index) {
+  const message = messages[index];
+  if (!Number.isSafeInteger(index) || message?.role !== 'user' || !presentationRule(message.text)?.standing
+    || message.parts?.some(part => part.spans?.length)) return null;
+  return { message: index, digest: inputDigest(message.text) };
 }
 
 /** Whole direct requests, including several independent presentation sentences.
