@@ -160,6 +160,16 @@ export class ConversationSourceDeletionLedger {
       WHERE d.user_id=$1`, [userId]);
     return JSON.stringify(result.rows[0]);
   }
+  /** Old aggregate receipts cannot prove which individual fact contributed to them. */
+  async recallCutoff(userId) {
+    await this.migrate();
+    const result = await this.database.query(`SELECT greatest(u.recall_withdrawn_at, (
+      SELECT max(d.created_at) FROM evimed_source_deletion.conversations d
+      WHERE d.user_id=u.id AND d.account_created_at=u.created_at)) AS cutoff
+      FROM evimed_control.users u WHERE u.id=$1`, [userId]);
+    if (!result.rows.length) throw new HttpError(404, 'account_not_found', 'Account not found.');
+    return result.rows[0].cutoff ? new Date(result.rows[0].cutoff).getTime() : -Infinity;
+  }
   async put(row) {
     await this.migrate();
     return this.database.transaction(async client=>{

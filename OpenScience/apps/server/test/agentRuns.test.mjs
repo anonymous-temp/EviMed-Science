@@ -9060,6 +9060,14 @@ test("a dispatch's recalled memories are on the run, as ids and kinds and never 
     assert.equal(folded.state, 'hit');
     assert.ok(!(await readFile(path.join(project.metaDir, 'runs.jsonl'), 'utf8')).includes('PRIVATE VALUE'));
 
+    // A different project's withdrawal takes every older aggregate receipt out of views and raw archive segments.
+    store.recallCutoff = async userId => { assert.equal(userId, project.userId); return Date.parse(run.startedAt); };
+    assert.equal((await store.list(project))[0].memoryRecall, undefined);
+    await store.recordLearning(project, run.id, { recallOperations: [operation] });
+    await store.scrubWithdrawnRecall(project);
+    assert.doesNotMatch(await readFile(path.join(project.metaDir, 'runs.jsonl'), 'utf8'), /memoryRecall|memory:a/);
+    assert.deepEqual((await store.list(project))[0].recalledMemories, appended.recalledMemories);
+
     // Whose conversation a gateway call is: the running runs, with their session.
     assert.deepEqual(await store.activeRuns(project), [{ id: run.id, sessionId: "ses_recall" }]);
   } finally {

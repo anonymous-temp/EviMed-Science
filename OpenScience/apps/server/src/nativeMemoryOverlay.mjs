@@ -1480,10 +1480,12 @@ export class NativeMemoryOverlay {
     for (const line of lines) { const print = lineFingerprint(line); if (!unique.has(print)) unique.set(print, normalisedStatement(line)); }
     const prints = [...unique.keys()];
     if (!prints.length) return 0;
-    await this.#query(`INSERT INTO evimed_memory.native_rejections (user_id, memory_type, fingerprint, uri, text, origin)
+    await this.#query(`WITH removed AS (INSERT INTO evimed_memory.native_rejections (user_id, memory_type, fingerprint, uri, text, origin)
       SELECT $1, $2, print, $3, text, $6 FROM unnest($4::text[], $5::text[]) AS rejected(print, text)
       ON CONFLICT (user_id, memory_type, fingerprint) DO UPDATE SET rejected_at=clock_timestamp(), text=COALESCE(EXCLUDED.text, evimed_memory.native_rejections.text),
-        origin=CASE WHEN EXCLUDED.origin = 'edit' AND evimed_memory.native_rejections.origin = 'edit' THEN 'edit' ELSE 'forget' END`,
+        origin=CASE WHEN EXCLUDED.origin = 'edit' AND evimed_memory.native_rejections.origin = 'edit' THEN 'edit' ELSE 'forget' END RETURNING origin)
+      UPDATE evimed_control.users SET recall_withdrawn_at=clock_timestamp()
+      WHERE id=$1 AND EXISTS (SELECT 1 FROM removed WHERE origin='forget')`,
     [owner(userId), String(memoryType), String(uri).slice(0, 600), prints, prints.map((print) => unique.get(print) ?? ""), origin === "edit" ? "edit" : "forget"]);
     return prints.length;
   }
@@ -1496,11 +1498,13 @@ export class NativeMemoryOverlay {
     const unique = new Map(lines.map(line => [lineFingerprint(line), line]));
     const prints = [...unique.keys()].sort();
     if (!prints.length) return [];
-    const result = await this.#query(`INSERT INTO evimed_memory.native_rejections (user_id,memory_type,fingerprint,uri,text,origin)
+    const result = await this.#query(`WITH removed AS (INSERT INTO evimed_memory.native_rejections (user_id,memory_type,fingerprint,uri,text,origin)
       SELECT $1,$2,print,$3,text,'forget' FROM unnest($4::text[],$5::text[]) AS rejected(print,text)
       ON CONFLICT (user_id,memory_type,fingerprint) DO UPDATE SET origin='forget', uri=EXCLUDED.uri,
         text=EXCLUDED.text, rejected_at=clock_timestamp()
-      WHERE evimed_memory.native_rejections.origin='edit' RETURNING fingerprint`,
+      WHERE evimed_memory.native_rejections.origin='edit' RETURNING fingerprint),
+      fence AS (UPDATE evimed_control.users SET recall_withdrawn_at=clock_timestamp()
+        WHERE id=$1 AND EXISTS (SELECT 1 FROM removed)) SELECT fingerprint FROM removed`,
     [owner(userId), String(memoryType), uri, prints, prints.map(print => normalisedStatement(unique.get(print)))]);
     const inserted = new Set(result.rows.map(row => row.fingerprint));
     return [...unique].filter(([print]) => inserted.has(print)).map(([, line]) => line);
@@ -1572,6 +1576,7 @@ export class NativeMemoryOverlay {
    */
   async purgeUser(userId) {
     const id = owner(userId);
+    await this.#query("UPDATE evimed_control.users SET recall_withdrawn_at=clock_timestamp() WHERE id=$1", [id]);
     const files = await this.#query("DELETE FROM evimed_memory.native_files WHERE user_id=$1", [id]);
     const revisions = await this.#query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1", [id]);
     const commits = await this.#query("DELETE FROM evimed_memory.native_commits WHERE user_id=$1", [id]);
