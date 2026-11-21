@@ -1,4 +1,14 @@
+// These existing tables carry capsule source bindings or per-key counters.
+const capsuleOwners = [
+  ['memory_native_accounts_user', 'evimed_memory', 'native_accounts'],
+  ['memory_native_admissions_user', 'evimed_memory', 'native_admissions'],
+  ['memory_native_files_user', 'evimed_memory', 'native_files'],
+  ['memory_native_line_origins_user', 'evimed_memory', 'native_line_origins'],
+  ['agent_api_keys_user', 'evimed_agent', 'api_keys'],
+];
+
 const orphanChecks = Object.freeze([
+  ...capsuleOwners.map(([name, schema, table]) => [name, `SELECT count(*)::integer AS count FROM ${schema}.${table} r LEFT JOIN evimed_control.users u ON u.id=r.user_id WHERE u.id IS NULL`]),
   ["memory_history_message_rejections_owner", "SELECT count(*)::integer AS count FROM evimed_memory.history_message_rejections h LEFT JOIN evimed_control.users u ON u.id=h.owner_id WHERE u.id IS NULL"],
   ["memory_history_write_messages_owner", "SELECT count(*)::integer AS count FROM evimed_memory.history_write_messages h LEFT JOIN evimed_control.users u ON u.id=h.owner_id WHERE u.id IS NULL"],
   ["memory_history_secret_salts_owner", "SELECT count(*)::integer AS count FROM evimed_memory.history_secret_salts h LEFT JOIN evimed_control.users u ON u.id=h.owner_id WHERE u.id IS NULL"],
@@ -24,6 +34,7 @@ const orphanChecks = Object.freeze([
 ]);
 
 const relationships = Object.freeze([
+  ...capsuleOwners.map(([name, schema, table]) => [name, schema, table, 'FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE']),
   ["memory_history_message_rejections_owner", "evimed_memory", "history_message_rejections", "FOREIGN KEY (owner_id) REFERENCES evimed_control.users(id)"],
   ["memory_history_write_messages_owner", "evimed_memory", "history_write_messages", "FOREIGN KEY (owner_id) REFERENCES evimed_control.users(id)"],
   ["memory_history_secret_salts_owner", "evimed_memory", "history_secret_salts", "FOREIGN KEY (owner_id) REFERENCES evimed_control.users(id)"],
@@ -44,7 +55,7 @@ const relationships = Object.freeze([
   ["usage_model_requests_project", "evimed_usage", "model_requests", "FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id)"],
 ]);
 
-const auditedSchemas = Object.freeze(["evimed_product", "evimed_inbox", "evimed_usage", "evimed_memory"]);
+const auditedSchemas = Object.freeze(["evimed_product", "evimed_inbox", "evimed_usage", "evimed_memory", "evimed_agent"]);
 
 function identifier(value) { return `"${String(value).replaceAll('"', '""')}"`; }
 

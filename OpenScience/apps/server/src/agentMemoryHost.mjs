@@ -3,6 +3,9 @@ import { privateByDefault } from '@evimed/domain';
 import { filterCapturedMessage } from './memoryGateway.mjs';
 import { readFollowUp, unsafeToKeep } from './learningEvidence.mjs';
 import { rememberAdmission } from './agentMemoryRemember.mjs';
+import { NATIVE_RECORD_ID } from './nativeMemoryStore.mjs';
+import { parseArchiveUri } from './openVikingSessions.mjs';
+import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { HttpError } from './security.mjs';
 
 export const hostDigest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -40,7 +43,59 @@ export async function ingestConversation({ native, admission }, { user, project,
   const row = await native.overlay.queueAdmission(user.id, { candidateId: `host:${id}`, revision: 1,
     engineSession: `dsh-external_${id}`, text, projectId: project.id, externalSource });
   const receipt = await native.processAdmission(user.id, row);
-  return { conversationId: id, state: receipt.state, recordIds: receipt.recordIds, ...(receipt.error ? { error: receipt.error } : {}) };
+  return { conversationId: id, sourceSessionId: `external_${id}`, projectId: project.id, state: receipt.state, recordIds: receipt.recordIds, ...(receipt.error ? { error: receipt.error } : {}) };
+}
+
+async function signalTarget({ native, learning }, userId, projectId, recordId, methodId) {
+  if (recordId) {
+    const record = await native.getRecord(userId, recordId);
+    if (record.status !== 'active' || privateByDefault(record) || record.sensitive || (record.scope !== 'user' && record.scopeId !== projectId)
+      || (await native.memoryContexts.forUri(userId, record.uri)).kind !== 'owned') throw new HttpError(404, 'memory_not_found', 'Memory unavailable.');
+    return { title:record.summary || record.value, digest:hostDigest(record.value), whenToUse:'' };
+  }
+  const method = await learning.getMethod(userId, methodId);
+  const scope = method.payload?.provenance?.sourceProjectId ?? method.projectId;
+  if (method.payload?.status !== 'approved' || (scope && scope !== projectId)
+    || (learning.contextProvenance && !await learning.contextProvenance.ordinaryDocument(userId, method))) throw new HttpError(404, 'method_not_found', 'Method unavailable.');
+  return { title:method.payload.frontmatter?.name ?? method.id, digest:method.payload.contentDigest, whenToUse:String(method.payload.frontmatter?.whenToUse ?? '') };
+}
+
+/** An external run has no platform transcript. Resolve its owned admission, exact human
+ * message and target version for feedback readers and account export, including older events. */
+export async function visibleWorkSignal({ native, learning }, userId, event) {
+  const { detail, projectId, runId } = event;
+  const id = /^external_([a-f0-9]{64})$/.exec(runId)?.[1];
+  if (!id || !projectId || detail.sessionId !== runId) return false;
+  const project = { id:projectId, userId };
+  const row = await native.overlay.admission(userId, 'host:' + id, 1);
+  const source = row?.externalSource;
+  if (row?.state !== 'completed' || row.engineSession !== 'dsh-' + runId || row.projectId !== projectId
+    || source?.operation !== 'ingest' || !source.messages?.includes(detail.inputDigest)) return false;
+  const context = await native.memoryContexts.forProject(project);
+  const archive = parseArchiveUri(row.archiveUri);
+  if (context.kind !== 'owned' || context.projectCreatedAt !== source.projectCreatedAt || archive?.session !== row.engineSession
+    || archive.userRoot !== context.userRoot || archive.rest || await native.sourceDeletion?.ledger.get(project, runId)) return false;
+  const raw = await context.sessions.read(userId, row.archiveUri + '/messages.jsonl');
+  if (!raw) return false;
+  const target = detail.externalTarget;
+  const isRecord = NATIVE_RECORD_ID.test(target.id);
+  try {
+    const current = await signalTarget({native, learning}, userId, projectId, isRecord ? target.id : null, isRecord ? null : target.id);
+    if (current.digest !== target.digest) return false;
+  } catch (error) {
+    if ([403, 404].includes(error?.status)) return false;
+    throw error;
+  }
+  for (const line of raw.split('\n').filter(Boolean)) {
+    const message = JSON.parse(line);
+    const at = Date.parse(message.created_at);
+    if (message.role !== 'user' || !Number.isFinite(at)) continue;
+    const text = message.parts?.map(part => part.text).join('') ?? message.content;
+    if (typeof text === 'string' && hostDigest(['user', text, new Date(at).toISOString()]) === detail.inputDigest) {
+      return !await native.history.ledger.rejected(context, [text, detail.quote, detail.rule].filter(Boolean), row.archiveUri);
+    }
+  }
+  return false;
 }
 
 /** Judge a host's signal against a previously admitted human turn and a current, visible account resource. */
@@ -63,26 +118,9 @@ export async function recordWorkSignal({ native, admission, learning, feedback, 
   if (!Number.isFinite(saidAt) || source.messages[input.messageIndex] !== hostDigest(['user', input.text, new Date(saidAt).toISOString()])) {
     throw new HttpError(400, 'agent_memory_payload_invalid', 'The signal must quote a complete captured human message and its UTC timestamp.');
   }
-  let target, digest, whenToUse = '';
-  async function verifyTarget() {
-    if (input.recordId) {
-      const record = await native.getRecord(user.id, input.recordId);
-      if (record.status !== 'active' || privateByDefault(record) || record.sensitive || (record.scope !== 'user' && record.scopeId !== project.id)
-        || (await native.memoryContexts.forUri(user.id, record.uri)).kind !== 'owned') throw new HttpError(404, 'memory_not_found', 'Memory unavailable.');
-      target = record.summary ?? record.value;
-      digest = hostDigest(record.value);
-    } else {
-      const method = await learning.getMethod(user.id, input.methodId);
-      const methodProject = method.payload?.provenance?.sourceProjectId ?? method.projectId;
-      if (method.payload?.status !== 'approved' || (methodProject && methodProject !== project.id)
-        || (learning.contextProvenance && !await learning.contextProvenance.ordinaryDocument(user.id, method))
-        || method.payload.contentDigest !== input.digest) throw new HttpError(404, 'method_not_found', 'Method version unavailable.');
-      target = method.payload.frontmatter?.name ?? method.id;
-      digest = method.payload.contentDigest;
-      whenToUse = String(method.payload.frontmatter?.whenToUse ?? '');
-    }
-  }
-  await verifyTarget();
+  const readTarget = () => signalTarget({native, learning}, user.id, project.id, input.recordId, input.methodId);
+  const { title:target, digest, whenToUse } = await readTarget();
+  if (input.methodId && digest !== input.digest) throw new HttpError(404, 'method_not_found', 'Method version unavailable.');
   const id = input.recordId || input.methodId;
   const runId = `external_${input.conversationId}`;
   const prior = (await feedback.learningEvidenceOf(user.id, runId)).find(event => event.detail?.inputDigest === source.messages[input.messageIndex]);
@@ -93,12 +131,15 @@ export async function recordWorkSignal({ native, admission, learning, feedback, 
   const verdict = await readFollowUp({ judge }, { message: input.text, previousRequest: target, methods: [{ id, digest, title: target, whenToUse }], adoptable: false },
     { userId: user.id, projectId: project.id, runId });
   if ('failure' in verdict) return { recorded: false, reason: verdict.failure };
-  await check();
-  const originalDigest = digest;
-  await verifyTarget();
-  if (digest !== originalDigest) throw new HttpError(409, 'memory_conflict', 'The memory changed during feedback review.');
-  const { event } = await feedback.recordLearningEvidence(user.id, { runId, projectId: project.id, key: String(input.messageIndex),
-    detail: { evidence: 'follow-up', ...verdict, externalTarget: { id, digest }, inputDigest: source.messages[input.messageIndex],
-      sessionId: runId, at: input.saidAt, scope: 'open-domain-answer' } });
-  return { recorded: true, eventId: event.id, verdict: event.detail.verdict };
+  return withNativeMemoryWrite(native.overlay.database, user.id, async () => {
+    await check();
+    if ((await readTarget()).digest !== digest) throw new HttpError(409, 'memory_conflict', 'The memory changed during feedback review.');
+    const { event } = await feedback.recordLearningEvidence(user.id, { runId, projectId: project.id, key: String(input.messageIndex),
+      detail: { evidence: 'follow-up', ...verdict, externalTarget: { id, digest }, inputDigest: source.messages[input.messageIndex],
+        sessionId: runId, at: input.saidAt, scope: 'open-domain-answer' } });
+    if (event.detail.externalTarget?.id !== id || event.detail.externalTarget.digest !== digest) {
+      throw new HttpError(409, 'memory_conflict', 'This feedback was already recorded for another target.');
+    }
+    return { recorded: true, eventId: event.id, verdict: event.detail.verdict };
+  });
 }

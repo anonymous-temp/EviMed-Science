@@ -293,3 +293,15 @@ test('a project key cannot list a shared namespace and an owner key cannot mutat
   assert.equal(forget.code,'memory_not_found');
   assert.equal(called(personal.calls,'native.update').length,0);
 });
+
+test('a project key may edit its record but cannot withdraw or restore copies across the account', async () => {
+  const record = nativeRecord({ scope:'project', scopeId:'p1' });
+  const { run, calls } = fixture({ projectId:'p1', native:{ getRecord:async () => record } });
+  const path = AGENT_MEMORY_PATH + '/records/' + record.id;
+  for (const action of ['forget','undo','restore']) {
+    await assert.rejects(run(path + '/' + action, { expectedVersion:77 }), { status:403, code:'agent_key_project_denied' });
+  }
+  assert.equal(called(calls,'native.update').length, 0);
+  assert.equal(called(calls,'native.undo').length, 0);
+  assert.equal((await run(path, { expectedVersion:77, value:'Updated format.' }, 'PATCH')).status, 200);
+});

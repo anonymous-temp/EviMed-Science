@@ -7,6 +7,7 @@ import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 import { migrateNotifications } from "../src/notificationPersistence.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { MemoryHistoryLedger } from "../src/memoryHistoryPersistence.mjs";
+import { migrateAgentApiKeys } from "../src/agentApiKeys.mjs";
 import { relationalIntegrity } from "../src/relationalIntegrity.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
@@ -21,6 +22,7 @@ before(async () => {
   isolated = await createGeoTestDatabase(databaseUrl, "integrity");
   database = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
   for (const migrate of [migrateUsageLedger, migrateProductStore, migrateNotifications, migrateMemorySettings]) await migrate(database);
+  await migrateAgentApiKeys(database);
   await new MemoryHistoryLedger({ database, overlay: null }).migrate();
   await relationalIntegrity(database, { validate: true });
 });
@@ -37,6 +39,8 @@ test("with every key validated the audit reads the catalogue only; a NOT VALID k
   const all = recorded();
   const clean = await relationalIntegrity(all.database);
   assert.equal(clean.ok, true, JSON.stringify(clean));
+  for (const name of ['memory_native_accounts_user', 'memory_native_admissions_user', 'memory_native_files_user',
+    'memory_native_line_origins_user', 'agent_api_keys_user']) assert.ok(clean.proven.includes(name), name);
   assert.deepEqual(clean.proven.sort(), Object.keys(clean.counts).sort());
   assert.equal(all.statements.filter((sql) => /count\(\*\)/.test(sql)).length, 0);
 

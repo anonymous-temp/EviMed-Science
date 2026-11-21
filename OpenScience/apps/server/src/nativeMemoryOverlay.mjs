@@ -272,7 +272,8 @@ export class NativeMemoryOverlay {
   async claimAdmission(userId, candidateId, revision) {
     const result = await this.#query(`UPDATE evimed_memory.native_admissions a SET lease_until=clock_timestamp()+interval '2 minutes',
       updated_at=clock_timestamp() FROM evimed_control.users u WHERE a.user_id=$1 AND a.candidate_id=$2 AND a.candidate_revision=$3
-      AND u.id=a.user_id AND u.created_at=a.account_created_at AND (a.lease_until IS NULL OR a.lease_until<clock_timestamp()) RETURNING a.*`,
+      AND u.id=a.user_id AND u.created_at=a.account_created_at AND a.state NOT IN ('completed','cancelled')
+      AND (a.lease_until IS NULL OR a.lease_until<clock_timestamp()) RETURNING a.*`,
     [owner(userId), candidateId, revision]);
     return result.rows[0] ? admissionRow(result.rows[0]) : null;
   }
@@ -1048,8 +1049,9 @@ export class NativeMemoryOverlay {
     // admission still names that one deterministic session for erasure.
     const segments = userRoot === userRootUri(userId) ? (await this.#query(`SELECT engine_session,project_id,
       external_source->>'projectCreatedAt' AS project_created_at FROM evimed_memory.native_admissions
-      WHERE user_id=$1 AND project_id=$2 AND external_source->>'operation'='clinical-segment'
-      AND external_source->>'sessionId'=ANY($3::text[])`, [owner(userId),projectId,sessionIds])).rows : [];
+      WHERE user_id=$1 AND project_id=$2 AND ((external_source->>'operation'='clinical-segment'
+      AND external_source->>'sessionId'=ANY($3::text[])) OR (external_source->>'operation'='ingest'
+      AND engine_session=ANY($4::text[])))`, [owner(userId),projectId,sessionIds,ids])).rows : [];
     const sessionIdsFound=[...new Set([...ids,...commits.rows.concat(segments).map(row=>String(row.engine_session))])];
     const registry=userRoot===userRootUri(userId)?(await this.#query('SELECT project_id,project_created_at FROM evimed_memory.native_sessions WHERE user_id=$1 AND engine_session=ANY($2::text[])',[owner(userId),sessionIdsFound])).rows:[];
     const origins=(await this.#query(`SELECT o.project_id,o.project_created_at FROM evimed_memory.native_line_origins o WHERE o.user_id=$1 AND left(o.uri,length($2)+1)=$2||'/' AND o.engine_session=ANY($3::text[])`,[owner(userId),userRoot,sessionIdsFound])).rows;
@@ -1076,10 +1078,10 @@ export class NativeMemoryOverlay {
         WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
     ) UPDATE evimed_memory.native_commits SET native_ingested_at=CASE WHEN state='completed' THEN COALESCE(native_ingested_at,ingested_at,clock_timestamp()) ELSE native_ingested_at END,state='abandoned',pending_text=NULL,error='source_conversation_deleted',updated_at=clock_timestamp()
       WHERE user_id=$1 AND archive_uri IN (SELECT archive_uri FROM sources) AND ($5::text[] IS NULL OR archive_uri=ANY($5::text[])) RETURNING engine_session`, [owner(userId), projectId, sessions, userRoot,proof?.archiveUris??null]);
-    if (userRoot === userRootUri(userId)) await this.#query(`UPDATE evimed_memory.native_admissions SET state='cancelled',pending_text=NULL,error='source_conversation_deleted',
+    const cancelled = userRoot === userRootUri(userId) ? await this.#query(`UPDATE evimed_memory.native_admissions SET state='cancelled',pending_text=NULL,error='source_conversation_deleted',
       updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND (engine_session=ANY($3::text[])
-        OR (external_source->>'operation'='clinical-segment' AND external_source->>'sessionId'=ANY($4::text[])))`, [owner(userId), projectId, sessions, sessionIds]);
-    return [...new Set(removed.rows.map(row => row.engine_session))];
+        OR (external_source->>'operation'='clinical-segment' AND external_source->>'sessionId'=ANY($4::text[]))) RETURNING engine_session`, [owner(userId), projectId, sessions, sessionIds]) : { rows: [] };
+    return [...new Set([...removed.rows, ...cancelled.rows].map(row => row.engine_session))];
   }
 
   /** Raw consolidation receipts are inspected before source scrubbing can remove their inputs. */
@@ -1494,10 +1496,12 @@ export class NativeMemoryOverlay {
     for (const line of lines) { const print = lineFingerprint(line); if (!unique.has(print)) unique.set(print, normalisedStatement(line)); }
     const prints = [...unique.keys()];
     if (!prints.length) return 0;
-    await this.#query(`INSERT INTO evimed_memory.native_rejections (user_id, memory_type, fingerprint, uri, text, origin)
+    await this.#query(`WITH removed AS (INSERT INTO evimed_memory.native_rejections (user_id, memory_type, fingerprint, uri, text, origin)
       SELECT $1, $2, print, $3, text, $6 FROM unnest($4::text[], $5::text[]) AS rejected(print, text)
       ON CONFLICT (user_id, memory_type, fingerprint) DO UPDATE SET rejected_at=clock_timestamp(), text=COALESCE(EXCLUDED.text, evimed_memory.native_rejections.text),
-        origin=CASE WHEN EXCLUDED.origin = 'edit' AND evimed_memory.native_rejections.origin = 'edit' THEN 'edit' ELSE 'forget' END`,
+        origin=CASE WHEN EXCLUDED.origin = 'edit' AND evimed_memory.native_rejections.origin = 'edit' THEN 'edit' ELSE 'forget' END RETURNING origin)
+      UPDATE evimed_control.users SET recall_withdrawn_at=greatest(recall_withdrawn_at,clock_timestamp())
+      WHERE id=$1 AND EXISTS (SELECT 1 FROM removed WHERE origin='forget')`,
     [owner(userId), String(memoryType), String(uri).slice(0, 600), prints, prints.map((print) => unique.get(print) ?? ""), origin === "edit" ? "edit" : "forget"]);
     return prints.length;
   }
@@ -1510,11 +1514,13 @@ export class NativeMemoryOverlay {
     const unique = new Map(lines.map(line => [lineFingerprint(line), line]));
     const prints = [...unique.keys()].sort();
     if (!prints.length) return [];
-    const result = await this.#query(`INSERT INTO evimed_memory.native_rejections (user_id,memory_type,fingerprint,uri,text,origin)
+    const result = await this.#query(`WITH removed AS (INSERT INTO evimed_memory.native_rejections (user_id,memory_type,fingerprint,uri,text,origin)
       SELECT $1,$2,print,$3,text,'forget' FROM unnest($4::text[],$5::text[]) AS rejected(print,text)
       ON CONFLICT (user_id,memory_type,fingerprint) DO UPDATE SET origin='forget', uri=EXCLUDED.uri,
         text=EXCLUDED.text, rejected_at=clock_timestamp()
-      WHERE evimed_memory.native_rejections.origin='edit' RETURNING fingerprint`,
+      WHERE evimed_memory.native_rejections.origin='edit' RETURNING fingerprint),
+      fence AS (UPDATE evimed_control.users SET recall_withdrawn_at=greatest(recall_withdrawn_at,clock_timestamp())
+        WHERE id=$1 AND EXISTS (SELECT 1 FROM removed)) SELECT fingerprint FROM removed`,
     [owner(userId), String(memoryType), uri, prints, prints.map(print => normalisedStatement(unique.get(print)))]);
     const inserted = new Set(result.rows.map(row => row.fingerprint));
     return [...unique].filter(([print]) => inserted.has(print)).map(([, line]) => line);
@@ -1586,6 +1592,7 @@ export class NativeMemoryOverlay {
    */
   async purgeUser(userId) {
     const id = owner(userId);
+    await this.#query("UPDATE evimed_control.users SET recall_withdrawn_at=greatest(recall_withdrawn_at,clock_timestamp()) WHERE id=$1", [id]);
     const files = await this.#query("DELETE FROM evimed_memory.native_files WHERE user_id=$1", [id]);
     const revisions = await this.#query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1", [id]);
     const commits = await this.#query("DELETE FROM evimed_memory.native_commits WHERE user_id=$1", [id]);

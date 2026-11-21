@@ -12,6 +12,12 @@ import { parseByteSize } from "../src/runtimeManager.mjs";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 for (const [key, property] of [
+  ["OPEN_SCIENCE_MEMORY_HISTORY_FUSION_ENABLED", "memoryHistoryFusionEnabled"],
+  ["OPEN_SCIENCE_MEMORY_HISTORY_DIVERSITY_ENABLED", "memoryHistoryDiversityEnabled"],
+  ["OPEN_SCIENCE_MEMORY_HISTORY_PARALLEL_ENABLED", "memoryHistoryParallelEnabled"],
+  ["OPEN_SCIENCE_MEMORY_HISTORY_COMPACT_ENABLED", "memoryHistoryCompactEnabled"],
+  ["OPEN_SCIENCE_MEMORY_HISTORY_WIDE_ENABLED", "memoryHistoryWideEnabled"],
+  ["OPEN_SCIENCE_MEMORY_HISTORY_DEADLINE_ENABLED", "memoryHistoryDeadlineEnabled"],
   ["OPEN_SCIENCE_METHOD_OFFICIAL_RELEVANCE_ENABLED", "methodOfficialRelevanceEnabled"],
   ["OPEN_SCIENCE_METHOD_INLINE_DETAIL_ENABLED", "methodInlineDetailEnabled"],
   ["OPEN_SCIENCE_METHOD_TASK_OUTCOMES_ENABLED", "methodTaskOutcomesEnabled"],
@@ -42,6 +48,18 @@ for (const [key, property] of [
     assert.equal(loadConfig({ rootDir: repoRoot })[property], true);
     assert.equal(loadConfig({ rootDir: repoRoot, [property]: false })[property], false);
   } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
+});
+
+for (const [name, property, value, fallback] of [
+  ['OPEN_SCIENCE_MEMORY_PREFERENCE_JUDGE_DAILY_CALLS', 'memoryPreferenceJudgeDailyCalls', 0, 20],
+  ['OPEN_SCIENCE_METHOD_FAILURE_STREAK', 'methodFailureStreak', 2, 3],
+]) test(`${name} reads the container setting and lets an explicit override win`, () => {
+  const saved = process.env[name];
+  try {
+    process.env[name] = String(value);
+    assert.equal(loadConfig({ rootDir: repoRoot })[property], value);
+    assert.equal(loadConfig({ rootDir: repoRoot, [property]: fallback })[property], fallback);
+  } finally { if (saved === undefined) delete process.env[name]; else process.env[name] = saved; }
 });
 
 test('preference reconciliation judge allowance defaults to twenty and accepts an explicit bound', () => {

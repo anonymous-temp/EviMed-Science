@@ -3,6 +3,7 @@ import test from 'node:test';
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
 import { AgentApiKeyStore } from '../src/agentApiKeys.mjs';
 import { createAgentMemoryRoutes } from '../src/agentMemoryRoutes.mjs';
+import { ConversationSourceDeletionLedger } from '../src/conversationSourceDeletionPersistence.mjs';
 import { FeedbackEvents } from '../src/feedbackEvents.mjs';
 import { MemoryHistoryLedger } from '../src/memoryHistoryPersistence.mjs';
 import { createMemoryAdmission } from '../src/memoryAdmission.mjs';
@@ -101,9 +102,13 @@ test('web and two public clients see one withdrawal, restore and concurrent nati
   assert.ok(records.some(record => record.id === page.id));
   await f.call(`/records/${page.id}/forget`, { expectedVersion: page.version }, codex.key);
   assert.ok(!(await f.store.records(f.userId)).some(record => record.id === page.id));
+  const privacy = new ConversationSourceDeletionLedger(f.database);
+  const cutoff = await privacy.recallCutoff(f.userId);
+  assert.ok(Number.isFinite(cutoff));
   const withdrawn = (await f.store.forgotten(f.userId)).find(record => record.id === page.id);
   await f.store.update(f.userId, withdrawn.id, { status: 'active', expectedVersion: withdrawn.version });
   assert.ok((await f.call('/records')).some(record => record.id === page.id));
+  assert.ok(await privacy.recallCutoff(f.userId) >= cutoff, 'undo cannot revive an old aggregate receipt');
   assert.equal((await f.database.query('SELECT count(*)::int AS n FROM evimed_memory.native_admissions WHERE user_id=$1',[f.userId])).rows[0].n, 1);
   await f.keys.revoke(f.userId, codex.id);
   await assert.rejects(f.call('/records', undefined, codex.key), { code: 'agent_key_invalid' });
@@ -150,4 +155,26 @@ test('two API keys cannot claim one another’s human feedback, and duplicate si
   const rows = await f.feedback.learningEvidenceOf(f.userId,'external_' + conversationId);
   assert.equal(rows.length,1); assert.equal(rows[0].detail.externalTarget.id,record.id);
   assert.deepEqual(rows[0].detail.concerns,[]);
+});
+
+test('host source removal cancels the admitted generation and cannot requeue its original transcript', options, async t => {
+  const f = await setup(t);
+  const host = await f.keys.create(f.userId, { name:'Host', scopes:['memory.ingest'] });
+  const uri = f.root + '/preferences/host.md';
+  f.stub.extract = () => ({ adds:[{uri, memory_type:'preferences', after:'- Use metric units.'}] });
+  const body = { sessionId:'external-source', attended:true, messages:[{role:'user', text:'Use metric units.', saidAt:input.source.saidAt}] };
+  const result = await f.call('/conversations', body, host.key);
+  await f.worker.processCommits({userId:f.userId});
+  await f.store.processAdmissions(f.userId);
+  const source = await f.overlay.admission(f.userId, 'host:' + result.conversationId, 1);
+  assert.equal(source.engineSession, 'dsh-' + result.sourceSessionId);
+  assert.ok((await f.store.records(f.userId)).some(record => record.evidence.some(item =>
+    item.externalSource?.operation === 'ingest' && item.projectId === 'default')));
+  await f.store.removeConversationSource(f.userId, 'default', [result.sourceSessionId], {
+    userRoot:f.sessions.userRoot(f.userId), projectCreatedAt:source.externalSource.projectCreatedAt,
+  });
+  assert.equal(await f.overlay.claimAdmission(f.userId, source.candidateId, 1), null);
+  assert.equal((await f.store.processAdmission(f.userId, {...source, state:'pending'})).state, 'cancelled');
+  assert.equal((await f.call('/conversations', body, host.key)).state, 'cancelled');
+  assert.equal(await f.sessions.read(f.userId, uri), null);
 });

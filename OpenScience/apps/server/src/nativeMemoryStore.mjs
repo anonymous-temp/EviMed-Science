@@ -294,7 +294,7 @@ function sessionEvidence({ engineSession, archiveUri, observedAt, fingerprint },
   if (session.startsWith('evimed-segment-')) return { sourceType:'segment',archiveUri,observedAt,fingerprint,projectId };
   const platform = PLATFORM_SESSION_SOURCES.find((entry) => session.startsWith(entry.prefix));
   if (!platform) return null;
-  return { sourceType: platform.sourceType, sourceRef: `${platform.sourceType === "external" ? "external" : platform.sourceType === "import" ? "imports" : "repetitions"}/${session}`, quote: "", observedAt: observedAt ?? null, weight: 1, fingerprint, label: platform.label, ...(platform.sourceType === 'external' ? { archiveUri } : {}) };
+  return { sourceType: platform.sourceType, sourceRef: `${platform.sourceType === "external" ? "external" : platform.sourceType === "import" ? "imports" : "repetitions"}/${session}`, quote: "", observedAt: observedAt ?? null, weight: 1, fingerprint, label: platform.label, ...(platform.sourceType === 'external' ? { archiveUri, ...(projectId ? {projectId} : {}) } : {}) };
 }
 
 function conversationEvidence(history, sessionProjects, { line = null } = {}) {
@@ -725,7 +725,7 @@ export class NativeMemoryStore {
         const ref = external.get(item.archiveUri);
         if (ref?.operation !== 'clinical-segment') return [];
         return [{sourceType:'conversation', sourceRef:`sessions/${ref.sessionId}/inputs/${ref.inputSeq}`, conversationId:ref.sessionId,
-          projectId:item.projectId,runId:ref.runId,inputSeq:ref.inputSeq,inputDigest:ref.inputDigest,quote:'',weight:1,
+          projectId:item.projectId,runId:ref.runId,inputSeq:ref.inputSeq,quote:'',weight:1,
           observedAt:ref.saidAt,fingerprint:item.fingerprint}];
       }
       if (item.sourceType !== 'external') return [item];

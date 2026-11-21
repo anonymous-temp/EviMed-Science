@@ -226,7 +226,8 @@ export async function memoryBoard({ memorySettings, nativeMemory = null, learnin
   const since = new Date(nowMs - BOARD_RECENT_DAYS * DAY_MS).toISOString();
   const recordChanges = (await nativeMemory.changes(user.id, { since, limit: 20 })).filter((/** @type {any} */ change) => !privateByDefault(change) && ((!nativeMemory.memoryContexts && !projectId) || all.some((record) => record.id === change.id))).map((/** @type {any} */ change) => ({
     type: "record", recordId: change.id, kind: change.kind, change: change.change, summary: change.summary, at: change.changedAt,
-    undo: { action: "undo", path: `records/${encodeURIComponent(change.id)}/undo`, expectedVersion: change.version },
+    undo: { action: "undo", path: `records/${encodeURIComponent(change.id)}/undo`, expectedVersion: change.version,
+      ...(projectId ? { requiresAccountKey: true } : {}) },
   }));
   const habitChanges = methods.flatMap((/** @type {any} */ document) => {
     const payload = document.payload ?? {};

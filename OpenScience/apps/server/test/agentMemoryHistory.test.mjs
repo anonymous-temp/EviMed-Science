@@ -70,6 +70,8 @@ test('history is opt-in, scope-gated and preserves conversation, role and date a
   state.scopes.push('memory.history.read');
   const result = await recall({ include: ['history'] });
   assert.equal(result.items[0].id, 'memory');
+  assert.equal(result.searchStatus.earlierConversations.state, 'searched');
+  assert.equal(result.searchStatus.earlierConversations.droppedByFence, null);
   assert.equal(result.history[0].sessionId, 's1'); assert.equal(result.history[0].conversationTitle, 'Sensors');
   assert.deepEqual(result.history[0].messages.map(m => m.sourceRole), ['user', 'assistant']);
   assert.equal(result.history[0].messages[0].date, '2026-01-02T00:00:00.000Z');
@@ -146,4 +148,14 @@ test('the diagnostic verifies the authenticated project-scoped recall and leaves
   assert.equal(proof.matched, true);
   assert.equal(proof.historyAccess.scope, 'project');
   assert.equal((await probeKnownQuote({ ...input, sessionId: 'unrelated' }, request)).matched, false);
+});
+
+test('a timed-out public history read reports unavailable and preserves other results', async () => {
+  const { recall, history, config } = fixture();
+  config.memoryGatewayTimeoutMs = 250;
+  history.search = () => new Promise(() => {});
+  const result = await recall({ include: ['history'] });
+  assert.deepEqual(result.history, []);
+  assert.equal(result.searchStatus.earlierConversations.reason, 'timeout');
+  assert.equal(result.items[0].id, 'memory');
 });

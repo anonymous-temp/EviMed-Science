@@ -9060,6 +9060,23 @@ test("a dispatch's recalled memories are on the run, as ids and kinds and never 
     assert.equal(folded.state, 'hit');
     assert.ok(!(await readFile(path.join(project.metaDir, 'runs.jsonl'), 'utf8')).includes('PRIVATE VALUE'));
 
+    // A different project's withdrawal takes every older aggregate receipt out of views and raw archive segments.
+    store.recallCutoff = async userId => { assert.equal(userId, project.userId); return Date.parse(run.startedAt); };
+    assert.equal((await store.list(project))[0].memoryRecall, undefined);
+    await store.recordLearning(project, run.id, { recallOperations: [operation] });
+    const archived = path.join(project.metaDir, 'runs.jsonl.1');
+    await writeFile(archived, await readFile(path.join(project.metaDir, 'runs.jsonl')));
+    await store.scrubWithdrawnRecall(project);
+    assert.doesNotMatch(await readFile(archived, 'utf8'), /memoryRecall|memory:a/);
+    assert.doesNotMatch(await readFile(path.join(project.metaDir, 'runs.jsonl'), 'utf8'), /memoryRecall|memory:a/);
+    assert.deepEqual((await store.list(project))[0].recalledMemories, appended.recalledMemories);
+
+    // Receipts for a run that starts after the cutoff remain usable.
+    store.recallCutoff = async () => Date.parse(run.startedAt) - 1;
+    const fresh = { ...operation, id:'fresh' };
+    await store.recordLearning(project, run.id, { recallOperations: [fresh] });
+    assert.deepEqual((await store.list(project))[0].memoryRecall.operations.map(op => op.id), ['fresh']);
+
     // Whose conversation a gateway call is: the running runs, with their session.
     assert.deepEqual(await store.activeRuns(project), [{ id: run.id, sessionId: "ses_recall" }]);
   } finally {

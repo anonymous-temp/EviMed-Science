@@ -50,6 +50,16 @@ describe("a memory kept as a file, opened from its row", () => {
     expect(screen.getByTestId('file-text').textContent).toContain('使用公制单位');
   });
 
+  it('offers one source removal for repeated evidence from the same admitted host transcript', () => {
+    const file = nativeFile('单位', '- 使用公制单位。');
+    const source = { sourceType: 'external', sourceRef: 'external/dsh-external_' + 'a'.repeat(64),
+      projectId: 'default', fingerprint: 'one', quote: '', observedAt: '2026-11-17T01:00:00Z', weight: 1,
+      externalSource: { operation: 'ingest' as const, client: 'Editor', sessionId: 'outside', saidAt: '2026-11-17T01:00:00Z' } };
+    file.evidence = [source, { ...source, fingerprint: 'two' }];
+    show(file);
+    expect(screen.getAllByRole('button', { name: '删除来源对话' })).toHaveLength(1);
+  });
+
   it("shows the file as it is written, edits all of it and sends the words with the version, never a summary", async () => {
     const file = nativeFile("回答结构", "- 先给结论，再给依据。\n- 表格不超过五列。");
     api.updateStructuredMemory.mockResolvedValue({ ...file, id: file.id });

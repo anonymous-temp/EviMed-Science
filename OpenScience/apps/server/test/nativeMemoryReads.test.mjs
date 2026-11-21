@@ -536,3 +536,16 @@ test('preference reconciliation keeps marked safety history and source-bound sup
   assert.ok(!files.get(profile).body.includes(line));
   assert.equal(files.get(pref).body, preferenceBody);
 });
+
+test('clinical formatting evidence exposes its source position without the full input fingerprint', async () => {
+  const {store, files} = engine({count:0});
+  const uri = ROOT + '/preferences/layout.md', archive = 'viking://user/u1/sessions/evimed-segment-one/history/archive_001';
+  files.set(uri, {body:'- Use a table.', modTime:'2026-11-21T00:00:00Z'});
+  store.overlay.revisionsOfMany = async () => new Map([[uri, [{id:'1', actor:'engine', change:'added',
+    engineSession:'evimed-segment-one', archiveUri:archive, projectId:'p', before:null, after:'- Use a table.'}]]]);
+  store.overlay.externalSources = async () => new Map([[archive, {operation:'clinical-segment', sessionId:'s',
+    runId:'r', inputSeq:3, inputDigest:'private-full-input-digest', saidAt:'2026-11-21T00:00:00Z'}]]);
+  const [record] = await store.records('u1');
+  assert.equal(record.evidence[0].sourceRef, 'sessions/s/inputs/3');
+  assert.doesNotMatch(JSON.stringify(record), /private-full-input-digest/);
+});

@@ -251,6 +251,11 @@ ALTER TABLE evimed_memory.native_rejections DROP CONSTRAINT IF EXISTS native_rej
 -- wrote it back and the platform took it out again (nothing may draw it anywhere). Null — a row older than this column: unknown, and read as
 -- 'forget', so a line that was forgotten is never shown again for want of a record of how it was removed.
 ALTER TABLE evimed_memory.native_rejections ADD COLUMN IF NOT EXISTS origin text CHECK (origin IS NULL OR origin IN ('edit', 'forget'));
+-- Preserve the receipt fence of accounts that already had removals at upgrade.
+UPDATE evimed_control.users u SET recall_withdrawn_at=r.cutoff FROM
+  (SELECT user_id,max(rejected_at) AS cutoff FROM evimed_memory.native_rejections
+   WHERE origin IS DISTINCT FROM 'edit' GROUP BY user_id) r
+  WHERE u.id=r.user_id AND (u.recall_withdrawn_at IS NULL OR u.recall_withdrawn_at<r.cutoff);
 -- When a memory search or read through the gateway last returned a file, and how many times (2026-10-25). No behaviour reads it.
 ALTER TABLE evimed_memory.native_files ADD COLUMN IF NOT EXISTS last_recalled_at timestamptz(3);
 ALTER TABLE evimed_memory.native_files ADD COLUMN IF NOT EXISTS recall_count integer NOT NULL DEFAULT 0 CHECK (recall_count >= 0);

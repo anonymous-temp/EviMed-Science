@@ -334,9 +334,9 @@ export async function recallForAgent({ capsules, memory = null, learning = null 
  * @returns {Promise<any[]>}
  */
 export async function recallHistoryForAgent({ config, history, admission, sourceDeletion = null }, input) {
-  if (!history || config.memoryHistorySearchEnabled !== true) return [];
+  if (!history || config.memoryHistorySearchEnabled !== true) return withReadStatus([], readStatus('skipped', 'disabled'));
   const admitted = await admission.admit({ user: input.user, project: input.project, allowRunningFallback: false });
-  if (!admitted.recall) return [];
+  if (!admitted.recall) return withReadStatus([], readStatus('skipped', 'paused'));
   const version = sourceDeletion ? await sourceDeletion.version(input.user.id) : null;
   const found = await history.search(input, { includeWithdrawn: true, readOnly: true, accountScope: input.accountScope === true });
   // Like the gateway, apply the account-wide secret filter to the completed
@@ -345,5 +345,8 @@ export async function recallHistoryForAgent({ config, history, admission, source
   if (sourceDeletion && await sourceDeletion.version(input.user.id) !== version) {
     throw new HttpError(503, 'memory_gateway_source_changed', 'The source privacy state changed during this request.');
   }
-  return safe;
+  // Secret filtering can rebuild the array. Keep only public coverage, never its private candidate counts.
+  const status = found.readStatus;
+  return withReadStatus(safe, readStatus(status?.state ?? (safe.length ? 'searched' : 'empty'),
+    status?.reason ? 'source_unavailable' : null));
 }

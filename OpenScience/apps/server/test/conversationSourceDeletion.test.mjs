@@ -156,3 +156,23 @@ test('source fence caches never reject a recreated owner or project incarnation 
     assert.equal(service.knownDeleted(current,'a'),false);await service.assertAvailable(current,'a');
   }
 });
+
+test('an admitted host source uses its owned project incarnation and completes only after native erasure', async () => {
+  const f = fixture();
+  const key = 'a'.repeat(64), sessionId = 'external_' + key;
+  const admission = { externalSource: { operation: 'ingest', projectCreatedAt: 'project-incarnation' },
+    projectId: 'p', engineSession: 'dsh-' + sessionId };
+  f.service.hostAdmission = async (owner, id) => owner === 'owner' && id === key ? admission : null;
+  for (const project of [{ ...f.project, userId:'other' }, { ...f.project, id:'other' }]) {
+    await assert.rejects(f.service.request(project, sessionId), {status:404});
+  }
+  await assert.rejects(f.service.request(f.project, 'external_' + 'b'.repeat(64)), {status:404});
+  assert.equal((await f.service.request(f.project, sessionId)).cleanup, 'pending');
+  f.service.removeDerived = async () => { throw new Error('engine offline'); };
+  await f.service.drain();
+  assert.equal((await f.service.status(f.project, sessionId)).sourceRemoved, false);
+  f.service.removeDerived = async () => f.calls.push('native');
+  await f.service.drain();
+  assert.equal((await f.service.status(f.project, sessionId)).cleanup, 'complete');
+  assert.ok(f.calls.includes('native') && !f.calls.includes('purge'));
+});

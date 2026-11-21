@@ -540,7 +540,7 @@ function normalizeArtifacts(value) {
 
 // The byte budget belongs to a segment, not to a project's lifetime. Sealed
 // prefixes remain ordinary JSONL; every reader folds the concatenated events.
-async function ledgerSegments(project) {
+async function ledgerSegments(project, { includeArchived = false } = {}) {
   await assertNoSymlinkPath(project.rootDir, project.metaDir, { allowMissingTail: true });
   let names;
   try { names = await readdir(project.metaDir); }
@@ -548,7 +548,10 @@ async function ledgerSegments(project) {
   const tails = names.filter(name => /^runs\.\d{6}\.jsonl$/.test(name)).sort();
   if (tails.some((name, index) => name !== `runs.${String(index + 1).padStart(6, "0")}.jsonl`)
     || (tails.length && !names.includes(ledgerFileName))) throw corrupt("Agent run ledger has missing segments.");
-  return [ledgerFile(project), ...tails.map(name => path.join(project.metaDir, name))];
+  // The archive also carries older numbered backups. They are never replayed by the run store.
+  const archived = includeArchived ? names.filter(name => /^runs\.jsonl\.[1-9]\d*$/.test(name))
+    .sort((a, b) => Number(b.split('.').at(-1)) - Number(a.split('.').at(-1))) : [];
+  return [...archived.map(name => path.join(project.metaDir, name)), ledgerFile(project), ...tails.map(name => path.join(project.metaDir, name))];
 }
 
 async function readLedgerSegment(project, file, maxBytes, allowMissing = false, metadata = null) {
@@ -4677,6 +4680,7 @@ export class AgentRunStore {
     this.model = String(options.model ?? "").trim();
     this.maxRuns = options.maxRuns ?? defaultMaxRuns;
     this.maxBytes = options.maxBytes ?? defaultMaxBytes;
+    this.recallCutoff = options.recallCutoff ?? null;
     this.ledgerRotationEnabled = options.ledgerRotationEnabled === true;
     this.onLedgerRotation = options.onLedgerRotation ?? null;
     this.ledgerPrefixes = new Map();
@@ -4862,6 +4866,31 @@ export class AgentRunStore {
    * Any uncertain metadata/order falls back to the original full reader, whose
    * missing-segment and corruption errors remain authoritative. */
   async readLedger(project) {
+    const snapshot = await this.sharedLedgerSnapshot(project);
+    if (!this.recallCutoff || !snapshot.events.some(event => event.memoryRecall)
+      && ![...(snapshot.prefix?.runs.values() ?? [])].some(run => run.memoryRecall)) return snapshot;
+    const cutoff = await this.recallCutoff(project.userId).catch(() => Infinity);
+    if (cutoff === -Infinity) return snapshot;
+    const starts = new Map();
+    /** @type {Map<string, any>} */
+    const runs = new Map(snapshot.prefix?.runs);
+    for (const [id, run] of runs) {
+      starts.set(id, run.startedAt);
+      if (run.memoryRecall && !(Date.parse(run.startedAt) > cutoff)) {
+        const { memoryRecall: _receipt, ...visible } = run;
+        runs.set(id, visible);
+      }
+    }
+    const events = snapshot.events.map(event => {
+      if (event.event === 'started') starts.set(event.id, event.startedAt);
+      if (!event.memoryRecall || Date.parse(starts.get(event.id)) > cutoff) return event;
+      const { memoryRecall: _receipt, ...visible } = event;
+      return visible;
+    });
+    return { events, prefix: snapshot.prefix ? { ...snapshot.prefix, runs } : undefined };
+  }
+
+  async sharedLedgerSnapshot(project) {
     if (!this.ledgerRotationEnabled) return this.readLedgerSnapshot(project);
     const key = `${project.rootDir}\0${project.metaDir}`;
     let flight = this.ledgerPrefixFlights.get(key);
@@ -5255,6 +5284,34 @@ export class AgentRunStore {
       }
       for (const notice of notices) await this.writeLedger(project, notice);
       return [...ids];
+    });
+  }
+
+  /** Archive exports take ledger segments verbatim. Remove withdrawn receipts from every segment first. */
+  async scrubWithdrawnRecall(project, knownCutoff = undefined) {
+    if (!this.recallCutoff) return;
+    const cutoff = knownCutoff ?? await this.recallCutoff(project.userId);
+    if (cutoff === -Infinity) return;
+    return withProjectStorageMutation(project, async () => {
+      const starts = new Map();
+      const files = await ledgerSegments(project, { includeArchived: true });
+      for (const file of files) {
+        const previous = await readLedgerSegment(project, file, this.maxBytes, file === ledgerFile(project));
+        const events = parseEvents(previous);
+        let changed = false;
+        for (const event of events) {
+          if (event.event === 'started') starts.set(event.id, event.startedAt);
+          if (event.memoryRecall && !(Date.parse(starts.get(event.id)) > cutoff)) {
+            delete event.memoryRecall;
+            changed = true;
+          }
+        }
+        if (changed) {
+          this.invalidateLedgerPrefix(project);
+          await writeFileAtomicNoFollow(project.rootDir, file, events.map(event => JSON.stringify(event)).join('\n') + '\n',
+            { encoding: 'utf8', mode: 0o600 });
+        }
+      }
     });
   }
 
@@ -5901,6 +5958,8 @@ export class AgentRunStore {
       const { events, prefix } = await this.readLedger(project);
       const current = foldEvents(events, prefix?.runs).get(runId);
       if (!current || current.deleted && (patch.recallOperations || patch.recallTurn)) return null;
+      const hasRecall = patch.recallOperations || patch.recallTurn || current.memoryRecall;
+      const keepRecall = hasRecall && (!this.recallCutoff || Date.parse(current.startedAt) > await this.recallCutoff(project.userId).catch(() => Infinity));
       const compaction = patch.appendCompaction
         ? [...(current.compaction ?? []), patch.appendCompaction]
         : patch.compaction;
@@ -5921,9 +5980,9 @@ export class AgentRunStore {
         at: this.now().toISOString(),
         ...(current.promptDispatchStartedAt ? { promptDispatchStartedAt: current.promptDispatchStartedAt } : {}),
         ...(patch.inputAttribution ? { inputAttribution: mergeInputAttribution(current.inputAttribution,patch.inputAttribution) } : current.inputAttribution ? { inputAttribution: current.inputAttribution } : {}),
-        ...(patch.recallOperations || patch.recallTurn
+        ...(keepRecall && (patch.recallOperations || patch.recallTurn)
           ? { memoryRecall: mergeRecallReceipt(current.memoryRecall, patch.recallOperations, patch.recallTurn) }
-          : current.memoryRecall ? { memoryRecall: current.memoryRecall } : {}),
+          : keepRecall && current.memoryRecall ? { memoryRecall: current.memoryRecall } : {}),
         ...(patch.transcript ? { transcript: patch.transcript } : current.transcript ? { transcript: current.transcript } : {}),
         ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
         ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),

@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS ${schema}.users (
   CHECK ((auth_type = 'local' AND password_hash IS NOT NULL) OR auth_type <> 'local')
 );
 
+ALTER TABLE ${schema}.users ADD COLUMN IF NOT EXISTS recall_withdrawn_at timestamptz;
+
 CREATE TABLE IF NOT EXISTS ${schema}.deleted_users (
   id text PRIMARY KEY,
   deleted_at timestamptz NOT NULL DEFAULT now()

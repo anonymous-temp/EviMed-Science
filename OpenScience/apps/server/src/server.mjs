@@ -232,9 +232,10 @@ import { DataAnalysisService, createDataAnalysisSession, assertNotDataAnalysisPr
 import { createDataAnalysisDispatchLock } from "./dataAnalysisAdmission.mjs";
 import { removeAnalysisSnapshots } from "./dataAnalysisArtifacts.mjs";
 import { createDataAnalysisRoutes } from "./dataAnalysisRoutes.mjs";
+import { visibleWorkSignal } from './agentMemoryHost.mjs';
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
 import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
-import { deleteSubjectAccounts } from "./agentApiKeys.mjs";
+import { deleteSubjectAccounts, migrateAgentApiKeys } from "./agentApiKeys.mjs";
 import { AgentObservations, HabitWriter } from "./agentMemoryObservations.mjs";
 import { createResearchHandoffRoutes } from "./researchHandoff.mjs";
 import {
@@ -5320,6 +5321,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           'SELECT created_at::text AS stamp FROM evimed_control.projects WHERE user_id=$1 AND id=$2', [userId, projectId])).rows[0]?.stamp : null;
         return { ...owned, projectId, projectCreatedAt: stamp ?? null };
       },
+      externalSignalVisible: (userId, event) => visibleWorkSignal({ native:nativeMemory, learning:learningService }, userId, event),
       hasWithdrawals: memoryContext => historyLedger.hasWithdrawals(memoryContext),
       rejected: (memoryContext, texts) => historyLedger.rejected(memoryContext, texts),
       sourcesRejected: (memoryContext, refs) => historyLedger.derivedSourcesRejected(memoryContext, refs),
@@ -5367,6 +5369,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   nativeMemoryWorker.verification.history = memoryHistory;
   const sourceDeletionLedger = productDatabase ? new ConversationSourceDeletionLedger(productDatabase) : null;
   const sourceDeletion = sourceDeletionLedger ? new ConversationSourceDeletionService({ ledger: sourceDeletionLedger, runtime: runtimeManager,
+    hostAdmission: (userId, id) => nativeMemoryOverlay.admission(userId, `host:${id}`, 1),
     recordIdForUri:nativeFileId,
     revisionSource:async(userId,revision)=>{
       const sessionId=await nativeMemoryOverlay.conversationOf(userId,revision.engineSession,revision.archiveUri);
@@ -5473,6 +5476,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds, { userRoot: nativeRoot,cleanedRevisionId:row.cleanedRevisionId,projectCreatedAt:row.projectCreatedAt });
         }
       },{exclusive:true});
+      if (row.frozen.kind === 'host-admission') {
+        await productDatabase.query(`DELETE FROM evimed_product.feedback_events WHERE user_id=$1 AND project_id=$2
+          AND run_id=$3 AND trigger_kind='learning-evidence' AND detail ? 'externalTarget'`, [project.userId, project.id, row.rootSessionId]);
+      }
+      const owner = await store.userById(project.userId);
+      for (const entry of await store.listProjects(owner)) await agentRuns.scrubWithdrawnRecall(await store.requireProject(owner, entry.id));
       const removedRuns = await agentRuns.removeConversationSource(project, row.sessionIds);
       for (const runId of removedRuns) preStopTranscripts.take(runId);
     },
@@ -5480,6 +5489,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   runtimeManager.sourceDeletion = sourceDeletion;
   researchSessions.sourceDeletion = sourceDeletion;
   agentRuns.sourceDeletion = sourceDeletion;
+  if (sourceDeletionLedger) agentRuns.recallCutoff = userId => sourceDeletionLedger.recallCutoff(userId);
   nativeMemory.sourceDeletion = sourceDeletion;
   nativeMemoryOverlay.sourceDeletion = sourceDeletion;
   const sourceDeletionRoutes = createConversationSourceDeletionRoutes({ store, service: sourceDeletion });
@@ -8296,6 +8306,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // copy of their memory, and a deployment without a store has none to
           // carry rather than an empty one to claim.
           const memory = memorySettings.configured ? await memorySettings.exportUserMemory(user.id) : null;
+          const recallCutoff = sourceDeletionLedger ? await sourceDeletionLedger.recallCutoff(user.id) : -Infinity;
+          if (recallCutoff > -Infinity) {
+            for (const entry of projects) await agentRuns.scrubWithdrawnRecall(await store.requireProject(user, entry.id), recallCutoff);
+          }
           let entries = appendMemoryArchiveEntry(await collectUserArchiveEntries(user, projects, config), memory, config);
           // An account on the native engine also carries the engine's own pack of its memory files (a ZIP with a hash per file).
           if (await nativeMemoryHeldBy(user.id)) {
@@ -8490,7 +8504,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const user = await store.ensureUser(req, res);
           const project = await store.requireProject(user, projectId);
           await audit({ config, user, project }, "project.export", "completed", { target: project.id });
-          const send=async()=>{const entries=await collectProjectArchiveEntries(project,config);await sendProjectArchive(res,project,entries);};
+          const send=async()=>{await agentRuns.scrubWithdrawnRecall(project);const entries=await collectProjectArchiveEntries(project,config);await sendProjectArchive(res,project,entries);};
           if(sourceDeletion)await sourceDeletion.withProjectExport(project,send);else await send();
           return;
         }
@@ -11437,6 +11451,7 @@ async function readinessRelationalIntegrity(config, database) {
   // that exists rather than a missing table it would have to be taught to
   // tolerate — a tolerance that then hides a genuinely dropped table.
   await migrateMemorySettings(database);
+  await migrateAgentApiKeys(database);
   await new MemoryHistoryLedger({ database, overlay: null }).migrate();
   const status = await relationalIntegrity(database);
   if (config.production && !status.ok) {

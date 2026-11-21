@@ -1,3 +1,4 @@
+import { readStatus, withReadStatus } from './memoryReadStatus.mjs';
 import { withMemoryPayer } from './agentMemoryBilling.mjs';
 import { ingestConversation, recordWorkSignal } from './agentMemoryHost.mjs';
 import { shareForAgent, sharingActions } from './agentMemorySharing.mjs';
@@ -420,8 +421,9 @@ export function createAgentMemoryRoutes({
           let timer;
           const history = user && project ? await Promise.race([
             historySearch({ user, project, query, accountScope: identity.projectId == null && input.projectId == null, limit: Math.min(20, Math.max(1, Math.trunc(Number(input.limit)) || 5)) }),
-            /** @type {Promise<any[]>} */ (new Promise(resolve => { timer = setTimeout(() => resolve([]), Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4000)); })),
-          ]).finally(() => clearTimeout(timer)) : [];
+            /** @type {Promise<any[]>} */ (new Promise(resolve => { timer = setTimeout(() => resolve(withReadStatus([], readStatus('unavailable', 'timeout'))), Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4000)); })),
+          ]).finally(() => clearTimeout(timer)) : withReadStatus([], readStatus('skipped', 'no_account'));
+          result.searchStatus.earlierConversations = /** @type {any} */ (history).readStatus ?? readStatus(history.length ? 'searched' : 'empty');
           // Only the explicit diagnostic asks for the registered chunk and permission proof.
           const data = historyProof ? { ...result, history, historyAccess: {
             ownerHash: user ? createHash('sha256').update(user.id).digest('hex') : null,
@@ -576,6 +578,10 @@ export function createAgentMemoryRoutes({
           const existing = await /** @type {any} */ (native).getRecord(user.id, record.id);
           if (privateByDefault(existing)) throw new HttpError(404, "memory_not_found", "No such memory.");
           if (existing.scope !== "project" || existing.scopeId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This memory belongs to a different scope.");
+          // The native store follows copies and grouped undo across projects in the owned namespace.
+          if (act === 'forget' || act === 'undo') {
+            throw new HttpError(403, 'agent_key_project_denied', 'Withdrawal and undo require an account-scoped key.');
+          }
         }
         const outcome = await recordAction({ nativeMemory: native }, user, record.id, act, body);
         await trail(outcome.event, user, { target: record.id });
