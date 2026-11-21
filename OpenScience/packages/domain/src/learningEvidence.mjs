@@ -161,7 +161,7 @@ export function cleanLearningEvidence(value) {
 /**
  * Whether an evidence event says the run was corrected: a result corrected in the page, or a steer or follow-up whose verdict is a
  * correction, a preference or a rejection (a steer nobody judged is a correction). Silence, a use, an acceptance, an adoption and a new
- * question are the run left alone.
+ * question carry no correction.
  * @param {{ evidence?: unknown, verdict?: unknown } | null | undefined} detail
  * @returns {boolean}
  */

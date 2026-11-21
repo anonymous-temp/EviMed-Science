@@ -5097,8 +5097,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // grading its own homework.
       internalAgent: async (agentId) => (await agentRegistry)?.get?.(agentId)?.visibility === "internal",
       audit: (event, detail) => securityAudit(config, event, "failed", detail),
-      // The routine's period is the transcript retention, so no peer is older than the transcript an induction reads. Its family is read from the
-      // feedback ledger (`learningEvidence.settle`), which holds only the runs of this researcher.
+      // The diagnostic period uses the retention duration. Routine settlement reads a rolling window from the owner's feedback ledger.
       routinePeriodDays: config.transcriptRetentionDays,
     });
     // What becomes of a published card goes back into learning (evidenceIncidents.mjs, flywheel F15): composed with its switch, the frontier whose change log it reads
@@ -8944,8 +8943,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * Enqueue one night's consolidation per project that has methods to consolidate.
    *
    * New methods without unresolved conflicts take effect during distillation (`LearningService`, `promotionVerdict`).
-   * This pass relates existing methods, rechecks promotion after revisions and proposes retirements; an empty library means
-   * no methods were produced upstream, not that methods are waiting for manual approval.
+   * This pass relates existing methods, rechecks promotion after revisions and proposes retirements.
    *
    * One pass per researcher per `learningConsolidationIntervalMs` (an hour),
    * plus the one distillation queues after every method it writes. It was

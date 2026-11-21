@@ -3406,8 +3406,8 @@ export function loadConfig(overrides = {}) {
     learningConsolidationIntervalMs: Number(overrides.learningConsolidationIntervalMs
       ?? process.env.OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS ?? 3_600_000),
     // Report-only: when on, the hourly pass also counts the method library's broken links
-    // (`methodLibraryLinkIssues`) and returns them as `linkIssues`. Off by default, and never a
-    // reason to block a pass or change a method.
+    // (`methodLibraryLinkIssues`) and returns them as `linkIssues`. Enabling the check adds
+    // an in-memory calculation over the existing graph and changes no method or model decision.
     linkCheckEnabled: overrides.linkCheckEnabled
       ?? boolEnv("OPEN_SCIENCE_LINK_CHECK_ENABLED", false),
     // How many answered runs may carry a learned method's card without one of them opening the method before it is stopped, with the

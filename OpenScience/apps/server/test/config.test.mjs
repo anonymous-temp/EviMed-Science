@@ -1286,3 +1286,17 @@ test('late follow-up learning defaults off and is selectable by environment and 
     assert.equal(loadConfig({ rootDir: repoRoot, learningLateFollowUpEnabled: false }).learningLateFollowUpEnabled, false);
   } finally { if (previous === undefined) delete process.env[key]; else process.env[key] = previous; }
 });
+
+test('method library link diagnostics default off and support the environment and override independently of GEO', () => {
+  const key = 'OPEN_SCIENCE_LINK_CHECK_ENABLED';
+  const previous = process.env[key];
+  try {
+    delete process.env[key];
+    assert.equal(loadConfig({ rootDir: repoRoot }).linkCheckEnabled, false);
+    process.env[key] = 'true';
+    const enabled = loadConfig({ rootDir: repoRoot, geoLinkCheckEnabled: false });
+    assert.equal(enabled.linkCheckEnabled, true);
+    assert.equal(enabled.geoLinkCheckEnabled, false);
+    assert.equal(loadConfig({ rootDir: repoRoot, linkCheckEnabled: false }).linkCheckEnabled, false);
+  } finally { if (previous === undefined) delete process.env[key]; else process.env[key] = previous; }
+});
