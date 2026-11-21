@@ -1704,7 +1704,7 @@ export class NativeMemoryStore {
     const removed = await this.#aliasRemovalLines(userId, file, before.filter(text=>!kept.has(lineFingerprint(text))));
     const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
     // Review and clean echoes while the original bytes can still be targeted on retry.
-    if (reason !== 'legacy safety source withdrawn') await this.#withdrawSafetyCopies(userId, file, next, actor === 'conversation');
+    if (reason !== 'legacy safety source withdrawn') await this.#withdrawSafetyCopies(userId, file, next, actor);
     if (actor === "user" || actor === "conversation" || reason === "source conversation deleted" || reason === "behavioural inference superseded") {
       // A deleted source already has its own history fence; recognizing its wording is not a second admission gate.
       const activate = async () => { await this.overlay.reject(userId, rejectionType, file.uri, removed, { origin }); };
@@ -1759,13 +1759,14 @@ export class NativeMemoryStore {
 
   /** Remove echoes before retiring the durable projection or changing the source. A failed
    * sibling write can then retry against the same binding and the same live source bytes. */
-  async #withdrawSafetyCopies(userId, file, next, targeted) {
+  async #withdrawSafetyCopies(userId, file, next, actor) {
+    const personalChange = actor === 'user' || actor === 'conversation';
     if (!['people', 'profile', 'safety_notes'].includes(file.type) || file.namespaceId || !this.overlay.safetyCopies) return;
     const withdrawals = [];
     const references = [];
     const rows = safetyStatements(file.body, file.uri);
     const retained = new Set(safetyStatements(next, file.uri).map(row => lineFingerprint(row.scoped)));
-    if (file.type === 'safety_notes' || targeted && this.sessions.memoryTypes?.includes('safety_notes')) references.push(...rows.filter(row => !retained.has(lineFingerprint(row.scoped))));
+    if (personalChange && file.type === 'safety_notes' || actor === 'conversation' && this.sessions.memoryTypes?.includes('safety_notes')) references.push(...rows.filter(row => !retained.has(lineFingerprint(row.scoped))));
     for (const { uri, binding } of await this.overlay.safetyCopies(userId, file.uri)) {
       const current = await this.sessions.read(userId, uri);
       const withdrawal = withdrawSafetyProjection(file.body, next, binding, current ?? '');
@@ -1788,7 +1789,9 @@ export class NativeMemoryStore {
         const bound = entries.filter(row => originalSources(origins.get(uri)?.get(lineFingerprint(row.text)))
           .some(origin => projections.has(origin.safetyProjectionUri)));
         const remaining = entries.filter(row => !bound.includes(row));
-        candidates.push(...remaining);
+        // Source-deletion maintenance can retract proven lineage only. An independent source
+        // saying the same thing is in scope only when the person withdrew the fact itself.
+        if (personalChange) candidates.push(...remaining);
         cards.push({ uri, current, bound, remaining });
       }
       const matches = await matchSafetyStatements(userId, candidates, references, this.rejectionJudge);
@@ -2307,7 +2310,7 @@ export class NativeMemoryStore {
     const names = [...new Set([titleOf(file.type, file.uri, file.body), ...memoryNameVariants(file.uri)])].filter(name => hardTokens(name).length);
     const removedLines = await this.#aliasRemovalLines(userId, file, [...new Set([...removalLines(file.body), ...names])]);
     const activate = async () => { await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, removedLines); };
-    if (reason !== 'legacy safety source withdrawn') await this.#withdrawSafetyCopies(userId, file, null, actor === 'conversation');
+    if (reason !== 'legacy safety source withdrawn') await this.#withdrawSafetyCopies(userId, file, null, actor);
     if (reject && this.history && actor !== "platform") await this.history.rejectRemoved(context,file,
       [...new Map([...statements(file.body).map(removalText), ...names].map(text => [lineFingerprint(text), text])).values()],this.rejectionJudge, { activate, memorySweep, allowDeferred: Boolean(memorySweep || actOf(reason) && this.overlay.deferredSummaryRebuildEnabled === true) });
     else if (reject) await activate();

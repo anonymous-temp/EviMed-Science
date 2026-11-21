@@ -230,7 +230,7 @@ export async function migrateSafetyNotes({ config, store, overlay, sessions, set
           } catch (error) {
             // Only a definitive refusal proves the write cannot arrive later.
             const status = /** @type {any} */ (error)?.upstreamStatus;
-            if (status >= 400 && status < 500) await overlay.removeSafetyOrphan(userId, uri);
+            if ([400, 403, 404, 409, 422].includes(status) && await sessions.read(userId, uri) === null) await overlay.removeSafetyOrphan(userId, uri);
             throw error;
           }
         }
