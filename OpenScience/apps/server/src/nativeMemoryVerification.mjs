@@ -49,6 +49,7 @@ const INSTRUCTION = [RULES,
 const COMMIT_INSTRUCTION = [RULES,
   'Review each independent clause, including implied conditions, exceptions, permissions and scope. The file type and heading describe how the line will be read.',
   'Respect a subsequent withdrawal: never propose a correction that restates the withdrawn content. A project stage requires a user-reported progress event. A difficulty or opinion stays an attributed belief. Remove invented stages or exceptions from a mixed line.',
+  'When a project section presents only a belief as progress, mark attribution_wrong and start the corrected line with the explicit label "用户认为：" (Chinese) or "User believes:". This puts the belief outside the stage section.',
   'Keep only what the user stated in their own voice or explicitly adopted. A quote inside pasted material is not their statement. If there is no such content return unsupported with no correction; never rewrite an unadopted proposal as a memory.',
   'Return JSON {"results":[{"index":0,"verdict":"supported","corrected":null,"evidence":[{"clause":"first claim","source":0,"quote":"verbatim user words"}]}]}.',
   'For each retained clause of the original (supported) or corrected line, cite its exact substring, user message index, and verbatim evidence. Include each clause once, in order, with punctuation so concatenation reproduces the line. For unsupported use an empty array.',
@@ -286,10 +287,21 @@ export class NativeMemoryVerification {
     const assessed = await this.assess(userId, entries, { batchSize: 32, maxAttempts: 1, strictBatch: true });
     const rewrites = changes.map(change => {
       const lines = String(change.after ?? '').split('\n');
+      const opinions = [];
       for (const row of assessed.results.filter(result => result.uri === change.uri && result.corrected)) {
-        lines[row.position] = lines[row.position].replace(row.text, () => row.corrected);
+        const corrected = lines[row.position].replace(row.text, () => row.corrected);
+        // Only consume the judge's explicit opinion label. A corrected belief must
+        // not acquire a progress claim from the heading under which it is displayed.
+        if (change.type === 'project_context' && row.heading && /^(?:User believes:|用户认为：)/.test(row.corrected)) {
+          opinions.push(corrected);
+          lines[row.position] = null;
+        } else lines[row.position] = corrected;
       }
-      return { ...change, after: change.after == null ? change.after : lines.join('\n') };
+      if (opinions.length) {
+        const title = lines.findIndex(line => typeof line === 'string' && /^#\s/.test(line.trim()));
+        lines.splice(title + 1, 0, ...opinions);
+      }
+      return { ...change, after: change.after == null ? change.after : lines.filter(line => line !== null).join('\n') };
     });
     return { ...assessed, rewrites, omitted };
   }
