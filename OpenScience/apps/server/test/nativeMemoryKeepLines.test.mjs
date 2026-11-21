@@ -172,3 +172,9 @@ test('stable headings isolate long sections even when another section contains a
   assert.ok(!south.includes('Withdraw specimen'));
   assert.equal(result.outcomes.filter(x => x === 'restored').length, 246);
 });
+
+test('a restored region keeps its facts without resurrecting a withdrawn heading', () => {
+  const original = '## Withdrawn project title\n- Retained detail.';
+  const result = classify({ before: original, after: null, rejected: new Set([lineFingerprint('Withdrawn project title')]) });
+  assert.equal(result.after, '- Retained detail.');
+});

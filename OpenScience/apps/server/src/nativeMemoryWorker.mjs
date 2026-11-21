@@ -964,8 +964,10 @@ export class NativeMemoryWorker {
       const uri = entry.operation.uri, settled = recorded.get(uri);
       let accepted = settled ? settled.after : entry.after;
       if (!settled) {
-        const beforeLines = memoryLines(entry.before);
-        const present = new Set(memoryLines(entry.after).map(lineFingerprint));
+        // The original layout may be restored along with a statement. Authorize its
+        // headings under the same undecorated fingerprints as the forget operation.
+        const beforeLines = removalLines(entry.before);
+        const present = new Set(removalLines(entry.after ?? '').map(lineFingerprint));
         const missing = beforeLines.filter(line => !present.has(lineFingerprint(line)));
         if (!missing.length) continue;
         const rejected = await removalRefusals({ userId, overlay: this.overlay, projectId: commit.projectId ?? null,

@@ -137,7 +137,13 @@ function keepRegion({ before, after, neverKept, rejected = new Set(), withdrawn 
   const fingerprint = raw => lineFingerprint(memoryLines(raw)[0] ?? '');
   if (after === null) {
     // Preserve the deleted file's layout only when at least one statement must survive.
-    return { after: original.filter(raw => !raw.trim() || /^\s*#{1,6}\s/.test(raw) || restore.has(fingerprint(raw))).join('\n'), outcomes };
+    const retained = original.filter(raw => {
+      const heading = raw.trim().match(/^#{1,6}\s+(.+)$/);
+      if (!heading) return !raw.trim() || restore.has(fingerprint(raw));
+      const print = lineFingerprint(heading[1]);
+      return !neverKept(heading[1]) && !rejected.has(print) && !withdrawn.has(print) && !withdrawn.has(fingerprint(raw));
+    });
+    return { after: retained.some(raw => raw.trim()) ? retained.join('\n') : null, outcomes };
   }
   const positions = new Map(result.map((raw, index) => [fingerprint(raw), index]));
   const nextAnchors = new Array(original.length);
