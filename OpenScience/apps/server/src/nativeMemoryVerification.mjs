@@ -100,7 +100,7 @@ export function parseVerificationJudgement(content, lines) {
       || row.index < 0 || row.index >= lines.length || result.has(row.index) || !VERDICTS.includes(row.verdict)) return null;
     const fixes = row.verdict === 'corrected' || row.verdict === 'attribution_wrong';
     if (fixes) {
-      if (typeof row.corrected !== 'string' || !row.corrected.trim() || row.corrected.length > 2000 || row.corrected.includes('\n')) return null;
+      if (typeof row.corrected !== 'string' || !row.corrected.trim() || row.corrected.length > 2000 || /[\r\n]/.test(row.corrected)) return null;
       if (carriesPlatformContext(row.corrected) || identifierShapesIn(row.corrected).length || platformIdentifiersIn(row.corrected).length) return null;
       if (hardTokens(row.corrected).some(token => !lines[row.index].sources.some(source => sourceHasToken(token, source)))) return null;
     } else if (row.corrected !== null) return null;
@@ -269,15 +269,15 @@ export class NativeMemoryVerification {
     const entries = [];
     let omitted = 0, characters = 0;
     for (const change of changes) {
-      const before = new Set(memoryLines(change.before ?? '').map(lineFingerprint));
-      let heading = '';
-      for (const raw of String(change.after ?? '').split('\n')) {
-        if (/^#{1,6}\s/.test(raw.trim())) { heading = raw.trim(); continue; }
-        const [text] = memoryLines(raw);
-        if (!text) continue;
-        const fingerprint = lineFingerprint(text);
-        if (before.has(fingerprint)) continue;
-        const entry = { text, fingerprint, uri: change.uri, type: change.type, heading, sources };
+      const remaining = new Map();
+      for (const { heading, text } of reviewStatements(change.before)) {
+        const key = JSON.stringify([heading, text]);
+        remaining.set(key, (remaining.get(key) ?? 0) + 1);
+      }
+      for (const { heading, text, position } of reviewStatements(change.after)) {
+        const key = JSON.stringify([heading, text]);
+        if (remaining.get(key) > 0) { remaining.set(key, remaining.get(key) - 1); continue; }
+        const entry = { text, fingerprint: lineFingerprint(text), position, uri: change.uri, type: change.type, heading, sources };
         const size = JSON.stringify(entry).length;
         if (entries.length >= 32 || size > 16000 || characters + size > 48000) { omitted++; continue; }
         entries.push(entry); characters += size;
@@ -285,11 +285,11 @@ export class NativeMemoryVerification {
     }
     const assessed = await this.assess(userId, entries, { batchSize: 32, maxAttempts: 1, strictBatch: true });
     const rewrites = changes.map(change => {
-      let after = change.after;
-      for (const row of assessed.results.filter(result => result.uri === change.uri)) {
-        if (['corrected', 'attribution_wrong'].includes(row.status) && row.corrected) after = replaceStatement(after, row.fingerprint, row.corrected);
+      const lines = String(change.after ?? '').split('\n');
+      for (const row of assessed.results.filter(result => result.uri === change.uri && result.corrected)) {
+        lines[row.position] = lines[row.position].replace(row.text, () => row.corrected);
       }
-      return { ...change, after };
+      return { ...change, after: change.after == null ? change.after : lines.join('\n') };
     });
     return { ...assessed, rewrites, omitted };
   }
@@ -374,6 +374,16 @@ export class NativeMemoryVerification {
       recordExistingVerification(summary);
       return summary;
     });
+  }
+}
+
+/** Include section context: identical words in an opinion and a stage have different meanings. */
+function* reviewStatements(body) {
+  let heading = '';
+  for (const [position, raw] of String(body ?? '').split('\n').entries()) {
+    if (/^#{1,6}\s/.test(raw.trim())) { heading = raw.trim(); continue; }
+    const [text] = memoryLines(raw);
+    if (text) yield { heading, text, position };
   }
 }
 

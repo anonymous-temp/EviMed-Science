@@ -280,3 +280,14 @@ test('stock verification cannot apply even a schema-valid wrong verdict, across 
   assert.equal(report.calls, 3);
   assert.deepEqual([...files], before);
 });
+
+test('a correction in the stage section cannot overwrite identical words in an untouched section', async () => {
+  const { NativeMemoryVerification } = await import('../src/nativeMemoryVerification.mjs');
+  const before = '## Opinion\n- Difficult.', added = '\n## Stage\n- Difficult.';
+  const reviewer = new NativeMemoryVerification({ config: {}, overlay: {}, sessions: {}, judge: { judge: async ({ lines }) => {
+    assert.deepEqual(lines.map(l => l.heading), ['## Stage']);
+    return { calls: 1, results: new Map([[0, { index: 0, verdict: 'corrected', corrected: 'User believes this is difficult.' }]]) };
+  } } });
+  const result = await reviewer.assessCommit('u', [{ uri: 'p', before, after: before + added }], [source('I believe this is difficult.')]);
+  assert.equal(result.rewrites[0].after, before + '\n## Stage\n- User believes this is difficult.');
+});
