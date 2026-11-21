@@ -80,7 +80,19 @@ test('AL9 real gateway and PostgreSQL: distinct, confirmation, merge, inherited-
   await store.undo(f.userId, nativeFileId(keep)); // Then undo the single merge revision.
   assert.equal(await f.sessions.read(f.userId, keep), keepBody); assert.equal(await f.sessions.read(f.userId, merge), otherBody);
   assert.equal((await f.overlay.personMerges(f.userId)).length, 0);
-  assert.ok((await call('merge_people', { keep, merge, confirmation: yes })).result);
+  const event = (type, data) => events.push({ type, seq: events.length, time: Date.now(), data });
+  event('turn/start', { turn: 1 });
+  say('请核实这两张人物卡。');
+  const hinted = await call('read', { uris: [keep] });
+  assert.match(hinted.result.content.at(-1).text, /People confirmation pairs: /);
+  event('tool/call', { turn: 1, name: 'mcp__openviking__read', callId: 'hint', arguments: { uris: [keep] } });
+  event('tool/result', { message: { toolCallId: 'hint', content: hinted.result.content } });
+  event('assistant/message', { turn: 1, message: { content: '「王阿姨」和「小王阿姨」是同一个人吗？回复是/不是' } });
+  event('turn/end', { turn: 1, reason: { kind: 'completed' } });
+  event('turn/start', { turn: 2 });
+  say('是');
+  assert.ok((await call('merge_people', { keep, merge, confirmation: '是' })).result);
+  assert.equal((await f.overlay.personMerges(f.userId)).length, 1);
   const later = '# 小王阿姨\n## 2026-11-14\n- Likes walking.';
   f.stub.extract = () => ({ adds: [{ uri: merge, memory_type: 'people', after: later }] });
   await f.commitConversation('person_later', [{ role: 'user', text: '小王阿姨喜欢散步。' }], { projectId: project.id });

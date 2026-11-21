@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { unzipSync } from 'fflate';
+import { preserveProfileName } from '@evimed/domain';
 import { NativeMemoryStore, nativeFileId } from "../src/nativeMemoryStore.mjs";
 import { NativeMemoryOverlay, contentHash, lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { reconcileMemoryNames } from '../src/nativeMemoryNames.mjs';
@@ -199,6 +200,32 @@ test('duplicate profile names are opt-in and ambiguous or structural titles keep
   }
 });
 
+test('an address preference has an independent profile record even when it equals the name', async () => {
+  const { store, files } = engine({ count: 0, delay: 0 }), uri = `${ROOT}/profile.md`;
+  store.profileNameDedupeEnabled = true;
+  files.set(uri, { body: '# 林舟\n- 姓名：林舟\n- 称呼：林舟\n- 希望被称呼为“小林” (as of 2026-11-21)', modTime: '1' });
+  const records = await store.records('u1');
+  assert.deepEqual(records.map(row => row.value), ['林舟', '称呼：林舟', '希望被称呼为“小林”']);
+  assert.equal(new Set(records.map(row => row.id)).size, 3);
+  await store.forgetLines('u1', (await store.files('u1'))[0], ['称呼：林舟']);
+  assert.equal(files.get(uri).body, '# 林舟\n- 姓名：林舟\n- 希望被称呼为“小林” (as of 2026-11-21)');
+});
+
+test('only an explicit address field matching the proposed title can preserve a known profile name', () => {
+  const before = '# 林舟\n- 在上海工作';
+  const overwritten = '# 小林\r\n- 在上海工作\r\n- 希望被称呼为“小林” (as of 2026-11-21)\r\n';
+  assert.equal(preserveProfileName(before, overwritten), overwritten.replace('# 小林', '# 林舟'));
+  const english = '# Jo\n- Preferred form of address: Jo (as of 2026-11-21)';
+  assert.equal(preserveProfileName('# Joanna Doe', english), english.replace('# Jo', '# Joanna Doe'));
+  for (const [prior, next] of [
+    ['# 用户\n- 在上海工作', overwritten],
+    [before, '# 林川\n- 希望被称呼为“小林”'],
+    [before, '# 小林\n- 真名：林川\n- 希望被称呼为“小林”'],
+    ['# 林舟\n# 林川', overwritten],
+    [before, '# 小林\n- 同事小林'],
+  ]) assert.equal(preserveProfileName(prior, next), next);
+});
+
 test('profile and preference values use the newer revision, read with an earlier label and reconcile without rejection', async () => {
   for (const newer of ['profile', 'preference']) {
     const { files, store } = engine({ count: 0, delay: 0 });
@@ -303,6 +330,28 @@ test('homophones can prompt confirmation while sensitive, withdrawn and other-pr
   store.sourceDeletion = { hiddenMemoryUris: async () => [`${ROOT}/people/林周.md`], redactRecords: async (_u, records) => records };
   const records = await store.records('u1');
   assert.deepEqual(records.find(row => row.summary === '林舟').possibleSamePerson.map(row => row.label), ['临洲']);
+  assert.equal(files.size, 5);
+});
+
+test('people cards with title or relationship wording can match using their declared names', async () => {
+  const { store, files } = engine({ count: 0, delay: 0 });
+  Object.assign(store, { personAliasHintEnabled: true, personMergeEnabled: true });
+  const pairs = [
+    ['小明', '# 小明\n- Likes tea.', '王小明医生', '# 王小明医生\n- 全名王小明，是用户科室的骨干'],
+    ['同事林舟', '# 同事林舟\n- 姓名：林舟', '邻居林洲', '# 邻居林洲\n- 又称：林洲'],
+  ];
+  for (const [first, firstBody, second, secondBody] of pairs) {
+    files.set(`${ROOT}/people/${first}.md`, { body: firstBody, modTime: '1' });
+    files.set(`${ROOT}/people/${second}.md`, { body: secondBody, modTime: '1' });
+  }
+  const prose = `${ROOT}/people/陈主任.md`;
+  files.set(prose, { body: '# 陈主任\n- 经常和王小明一起开会。', modTime: '1' });
+  const records = await store.records('u1');
+  for (const [a, , b] of pairs) {
+    assert.deepEqual(records.find(record => record.summary === a).possibleSamePerson.map(hint => hint.label), [b]);
+    assert.deepEqual(records.find(record => record.summary === b).possibleSamePerson.map(hint => hint.label), [a]);
+  }
+  assert.deepEqual(records.find(record => record.uri === prose).possibleSamePerson, []);
   assert.equal(files.size, 5);
 });
 

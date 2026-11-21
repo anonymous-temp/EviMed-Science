@@ -3,16 +3,16 @@ import { visibleStatementSources } from './memoryStatementSources.mjs';
 import { randomUUID } from 'node:crypto';
 import { recallOperation } from './memoryRecallReceipt.mjs';
 import { readStatus, searchStatusText, measuredRead, memorySourceLabel, containsAnchor, literalIndexMatch, literalRecallCheck, literalFileName, hasLiteralHistoryMatch } from './memoryReadStatus.mjs';
-import { aliasWithdrawn, PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId } from './nativeMemoryPeople.mjs';
+import { aliasWithdrawn, PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';
-import { closePersonNames, confirmedAliases, personLabel } from './nativeMemoryInduction.mjs';
+import { confirmedAliases, personHintNames, personLabel, personNamesSuggestPair } from './nativeMemoryInduction.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { historySearchText } from './memoryHistory.mjs';
 import { forgetToolStatus } from './memoryForgetStatus.mjs';
 import { openingProfileRead, selectOpeningEntries } from './memoryOpeningByUse.mjs';
 import { isMemorySummary, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
-import { ALL_ERROR_CODES, carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
+import { ALL_ERROR_CODES, OPENVIKING_MCP_TOOL_PREFIX, carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
 import { withoutResearchGoalGesture } from "./researchGoal.mjs";
 
 import {
@@ -381,17 +381,63 @@ export function filterCapturedMessage(body, { researchGoal = false, semanticSecr
   return { forward: { role: body.role, parts, ...(typeof body.created_at === "string" && body.created_at.length <= 40 ? { created_at: body.created_at } : {}) }, masked };
 }
 
+const PERSON_HINT_FOOTER = 'People confirmation pairs: ';
+
+/** Only the gateway's final line on a completed memory tool result can carry the hint pairs.
+ * @param {import('@evimed/domain').RunTranscript['messages'][number]} message @param {number} beforeSeq */
+function deliveredPersonHints(message, beforeSeq) {
+  return message.parts.flatMap(part => {
+    if (part.type !== 'tool' || part.status !== 'completed' || part.completedSeq === undefined || part.completedSeq >= beforeSeq
+      || !['read', 'search'].some(name => part.tool === `${OPENVIKING_MCP_TOOL_PREFIX}${name}`)) return [];
+    const lastLine = part.output.trimEnd().split('\n').at(-1);
+    if (!lastLine?.startsWith(PERSON_HINT_FOOTER) || lastLine.length > 5500) return [];
+    try {
+      const pairs = JSON.parse(lastLine.slice(PERSON_HINT_FOOTER.length));
+      return Array.isArray(pairs) ? pairs.filter(pair => typeof pair === 'string' && /^e_[a-f0-9]{24}$/u.test(pair)) : [];
+    } catch { return []; }
+  });
+}
+
 /** A fork's inherited messages and a platform-authored turn cannot authorize an identity decision.
  * Injected context is transparent to the human exchange. An unreadable live reply invalidates an earlier one.
- * @param {Pick<import('@evimed/domain').RunTranscript, 'messages'|'seedEndSeq'>} transcript */
+ * @param {Pick<import('@evimed/domain').RunTranscript, 'messages'|'seedEndSeq'|'turns'>} transcript */
 export function personDecisionMessages(transcript) {
-  return transcript.messages.filter(message => message.seq > (transcript.seedEndSeq ?? -1)
-    && (message.role === 'assistant' || message.role === 'user' && message.source !== 'plugin')).map(message => {
+  const live = transcript.messages.filter(message => message.seq > (transcript.seedEndSeq ?? -1));
+  const spoken = live.filter(message => message.role === 'assistant' || message.role === 'user' && message.source !== 'plugin');
+  /** @type {{role:string,text:string,hintedPersonPairs?:string[]}[]} */
+  const evidence = spoken.map(message => {
     const captured = filterCapturedMessage(message);
     const witnessed = message.role === 'assistant' || message.source === 'user';
     return { role: message.role, text: witnessed && 'forward' in captured && !captured.masked
       ? captured.forward.parts.map(part => part.text).join('\n') : '' };
   });
+  const latest = spoken.findLastIndex(message => message.role === 'user');
+  const answer = spoken[latest], question = spoken[latest - 1];
+  if (!answer || question?.role !== 'assistant' || question.turnStartSeq == null) return evidence;
+  const beforehand = evidence[latest - 1];
+  const priorTurn = question.turnStartSeq;
+  if (answer.turnStartSeq == null || priorTurn >= answer.turnStartSeq || question.interrupted) {
+    beforehand.text = '';
+    return evidence;
+  }
+  // One question across the entire assistant turn, including earlier visible steps.
+  const questions = [];
+  for (let index = latest - 1; index >= 0 && spoken[index].turnStartSeq === priorTurn; index--) {
+    const message = spoken[index];
+    if (message.role !== 'assistant') continue;
+    if (message.interrupted || !evidence[index].text && message.parts.some(part => part.type === 'text' && part.text.trim())) {
+      beforehand.text = '';
+      return evidence;
+    }
+    if (evidence[index].text) questions.push(evidence[index].text);
+  }
+  beforehand.text = questions.reverse().join('\n');
+  if (transcript.turns?.some(turn => turn.startSeq === priorTurn && turn.end?.kind === 'completed' && turn.end.seq < answer.seq)) {
+    const hints = live.filter(message => message.role === 'tool' && message.turnStartSeq === priorTurn && message.seq < question.seq)
+      .flatMap(message => deliveredPersonHints(message, question.seq));
+    if (hints.length) beforehand.hintedPersonPairs = [...new Set(hints)];
+  }
+  return evidence;
 }
 
 /** The JSON-RPC messages of a buffered `text/event-stream` body. @param {string} text */
@@ -462,7 +508,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   sourceReceipt?: ((request:any)=>Promise<void>) | null,
  *   sourceReceiptFailed?: ((request:any)=>Promise<void>) | null,
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
- *   personMessages?: ((project: Record<string, unknown>, sessionId: string) => Promise<{role:string,text:string}[]>) | null,
+ *   personMessages?: ((project: Record<string, unknown>, sessionId: string) => Promise<{role:string,text:string,hintedPersonPairs?:string[]}[]>) | null,
  *   memoryTool?: { preferenceRecallText?: import('./nativeMemoryStore.mjs').NativeMemoryStore['preferenceRecallText'], people?: import('./nativeMemoryStore.mjs').NativeMemoryStore['people'], forget: (user: any, project: any, uri: string | null, options?: any) => Promise<{ removed: boolean, removedLines?: number, fileRemoved?: boolean, historyRejected?: boolean, historyScanPending?: boolean, missingLines?: string[], availableLines?: string[] }> } | null,
  *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>) | null,
  *   historySecrets?: import("./memoryHistorySecrets.mjs").MemoryHistorySecrets | null,
@@ -1201,7 +1247,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           const left = name === 'merge_people' ? args.keep : args.a, right = name === 'merge_people' ? args.merge : args.b;
           const a = typeof left === 'string' ? absolute(left, ctx.userRoot) : '';
           const b = typeof right === 'string' ? absolute(right, ctx.userRoot) : '';
-          /** @type {{role:string,text:string}[]} */
+          /** @type {{role:string,text:string,hintedPersonPairs?:string[]}[]} */
           let evidenceMessages;
           try { evidenceMessages = await personMessages(ctx.project, admitted.sessionId); }
           catch { local.push(rpcError(message.id, -32602, 'The current conversation could not be read. No people files changed; retry when it is available.')); continue; }
@@ -1215,8 +1261,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           const latest = evidenceMessages.map(turn => turn.role).lastIndexOf('user');
           const previous = evidenceMessages[latest - 1];
           const question = previous?.role === 'assistant' ? previous.text : '';
+          const hinted = previous?.role === 'assistant' && previous.hintedPersonPairs?.includes(personPairId(a, b)) === true;
           let result;
-          try { result = await memoryTool.people(ctx.user, ctx.project, { a, b, distinct: name === 'distinct_people', confirmation: args.confirmation, question, engineSession: `dsh-${admitted.sessionId}` }); }
+          try { result = await memoryTool.people(ctx.user, ctx.project, { a, b, distinct: name === 'distinct_people', confirmation: args.confirmation, question, hinted, engineSession: `dsh-${admitted.sessionId}` }); }
           catch (error) {
             if (!(error instanceof HttpError) || !['memory_conflict', 'memory_scope_denied', 'memory_payload_invalid', 'memory_source_cleanup_busy', 'memory_map_edges_full'].includes(error.code)) throw error;
             local.push(rpcError(message.id, -32602, error.message)); continue;
@@ -1239,21 +1286,30 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             return isMemorySummary(full) || hiddenUris.some((/** @type {string} */ prefix) => full === prefix || full.startsWith(`${prefix}/`))
               || ctx.shared && !projectMemoryVisible(full, ctx.userRoot, ctx.sessions.memoryTypes, directory);
           };
+          const personHints = new Map();
+          const collectPeople = peopleEnabled && config.memoryPersonAliasHintEnabled === true && admitted.sessionId && ctx.origin === 'kernel';
+          const hintContext = collectPeople ? { ...ctx, recallText: (uri, text) => ctx.recallText(uri, text, personHints) } : ctx;
+          const hintFooter = (/** @type {string[]} */ deliveredUris) => PERSON_HINT_FOOTER
+            + JSON.stringify([...new Set(deliveredUris.flatMap(uri => personHints.get(uri) ?? []))]);
           if (name === "read") {
             const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && ctx.recallFile(absolute(uri, ctx.userRoot)) && !isHidden(uri)).slice(0, 10).map(uri => absolute(uri, ctx.userRoot));
             if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件；请求为空或在当前读取范围之外，不代表没有记录。")); continue; }
             const content = [];
             const statuses = [];
+            const deliveredUris = [];
             for (const uri of new Set(uris)) {
               try {
-                const read = await handlers.read({ ...ctx, query: new URLSearchParams({ uri, model_use: 'true' }) });
+                const read = await handlers.read({ ...hintContext, query: new URLSearchParams({ uri, model_use: 'true' }) });
                 const value = read.json && typeof read.json === 'object' && 'result' in read.json ? read.json.result : null;
                 if (read.status === 200 && typeof value === 'string') {
                   content.push(`${uri}\n${value}`); statuses.push(readStatus('searched'));
+                  deliveredUris.push(uri);
                 } else statuses.push(readStatus('skipped', 'missing_or_fenced'));
               } catch { statuses.push(readStatus('unavailable', 'source_failed')); }
             }
-            local.push(toolText(message.id, [...content, `Memory read status: ${JSON.stringify(statuses)}`].join('\n\n')));
+            const reply = toolText(message.id, [...content, `Memory read status: ${JSON.stringify(statuses)}`].join('\n\n'));
+            if (collectPeople) reply.result.content.push({ type: 'text', text: hintFooter(deliveredUris) });
+            local.push(reply);
           } else if (name === "list") {
             const uri = typeof args.uri === "string" && args.uri ? absolute(args.uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
             if (isHidden(uri, true)) { local.push(toolText(message.id, JSON.stringify({ items: [], readStatus: readStatus('skipped', 'scope_fence') }))); continue; }
@@ -1275,13 +1331,16 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
               const target = typeof args.target_uri === "string" && args.target_uri && !isHidden(args.target_uri, true) ? absolute(args.target_uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
               // The pinned REST list-mode shape is structured; its native MCP
               // prose has no safe URI boundary at which to remove a raced hit.
-              const answer = await handlers.search({ ...ctx, json: { query, limit, target_uri: target } });
-              local.push(toolText(message.id, JSON.stringify(/** @type {any} */ (answer.json).result)));
+              const answer = await handlers.search({ ...hintContext, json: { query, limit, target_uri: target } });
+              const result = /** @type {any} */ (answer.json).result;
+              const reply = toolText(message.id, JSON.stringify(result));
+              if (collectPeople) reply.result.content.push({ type: 'text', text: hintFooter((result?.memories ?? []).map(hit => hit.uri)) });
+              local.push(reply);
               continue;
             }
             // The engine's list mode is answered from its structured REST rows, filtered here (`scopedListSearch`).
-            const result = await scopedListSearch(ctx.sessions, ctx, args);
-            const extra = await supplementarySearch(ctx, args, result.result, admitted);
+            const result = await scopedListSearch(ctx.sessions, hintContext, args);
+            const extra = await supplementarySearch(hintContext, args, result.result, admitted);
             await noteRecalled(ctx, (/** @type {any} */ (result).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
             const content = [{ type: 'text', text: JSON.stringify(result.result) },
               { type: 'text', text: searchStatusText(extra.searchStatus) }];
@@ -1293,6 +1352,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
               if (extra.searchStatus.earlierConversations.promoted) content.unshift(block);
               else content.push(block);
             }
+            if (collectPeople) content.push({ type: 'text', text: hintFooter((/** @type {any} */ (result).result?.memories ?? []).map(hit => hit.uri)) });
             local.push({ jsonrpc: "2.0", id: message.id, result: { content } });
           }
           continue;
@@ -1442,7 +1502,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const admissions = new Map();
       /** @type {Promise<string[]> | null} */
       let hiddenList = null;
-      /** @type {Promise<{uri:string,label:string,aliases:string[]}[]> | null} */
+      /** @type {Promise<{uri:string,label:string,names:string[]}[]> | null} */
       let people = null;
       let sourceFiles = null;
       let aliasRemovals;
@@ -1509,7 +1569,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           }
           return text;
         },
-        recallText: async (/** @type {string} */ uri, /** @type {string} */ text) => {
+        recallText: async (/** @type {string} */ uri, /** @type {string} */ text, /** @type {Map<string,string[]> | undefined} */ personHints = undefined) => {
           sourceFiles ??= ctx.fileMetadata();
           const metadata = (await sourceFiles).get(uri);
           const original = text;
@@ -1539,15 +1599,20 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             for (const entry of candidates.slice(0, 200)) {
               if (entry.isDir || nativeMemoryFile(entry.uri, `${userRoot}/memories`)?.type !== 'people' || await ctx.hidden(entry.uri)) continue;
               const body = await ctx.readMemory(entry.uri).catch(() => null);
-              if (body !== null && await ctx.personIdentityVisible(entry.uri, body)) rows.push({ uri: entry.uri, label: personLabel(entry.uri, body), aliases: confirmedAliases(body) });
+              if (body !== null && await ctx.personIdentityVisible(entry.uri, body)) {
+                const label = personLabel(entry.uri, body);
+                rows.push({ uri: entry.uri, label, names: personHintNames(label, body) });
+              }
             }
             return rows;
           })();
-          const label = personLabel(uri, original), aliases = confirmedAliases(original);
+          const names = personHintNames(personLabel(uri, original), original);
+          const projectScope = personProjectScope(metadata?.projectId), files = await sourceFiles;
           const distinct = config.memoryPersonMergeEnabled === true ? await personEdges.dismissed(user.id) : new Set();
-          const siblings = (await people).filter(row => row.uri !== uri && !distinct.has(personPairId(uri, row.uri)) && (closePersonNames(label, row.label)
-            || aliases.includes(row.label) || row.aliases.includes(label))).slice(0, 8);
+          const siblings = (await people).filter(row => row.uri !== uri && !distinct.has(personPairId(uri, row.uri))
+            && personProjectScope(files.get(row.uri)?.projectId) === projectScope && personNamesSuggestPair(names, row.names)).slice(0, 8);
           if (!siblings.length) return text;
+          personHints?.set(uri, siblings.map(row => personPairId(uri, row.uri)));
           const hint = `Related people files (possibly the same person — not confirmed; ask the user or report separately; never mix their facts):\n`
             + siblings.map(row => `- ${row.label}: ${row.uri}`).join('\n');
           return sourceUnit ? JSON.stringify({ ...sourceUnit, relatedPeopleHint: hint }) : `${text}\n\n${hint}`;

@@ -9,12 +9,13 @@ import test from "node:test";
 import { EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, PLATFORM_CONTEXT_TAGS, carriesPlatformContext, evidenceProgrammeRouteReason } from "@evimed/domain";
 import { AUTOPILOT_VERIFICATION_ROUTE_REASON as VERIFICATION_ROUTE_REASON } from "@evimed/domain";
 import { createNativeCapsuleSearch } from "../src/capsuleGateway.mjs";
+import { normalizeTranscript } from '../src/dshRuntimeAdapter.mjs';
 import { createMemoryAdmission, isPlatformStartedRun } from "../src/memoryAdmission.mjs";
 import {
   MEMORY_GATEWAY_PATH, MEMORY_GATEWAY_TOOLS, PLUGIN_CONTEXT_TAG, capsuleSearchText, createMemoryGatewayHandler, filterCapturedMessage, personDecisionMessages, memoryGatewayRoutePattern, parseEventStream,
 } from "../src/memoryGateway.mjs";
 import { MapEdgeCorrections } from '../src/memoryMapEdges.mjs';
-import { personPairId } from '../src/nativeMemoryPeople.mjs';
+import { personConsentRefusal, personPairId } from '../src/nativeMemoryPeople.mjs';
 import { nativeMemoryCounters, resetNativeMemoryMetrics } from "../src/nativeMemoryMetrics.mjs";
 import { HttpError } from "../src/security.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
@@ -1652,6 +1653,64 @@ test('people tools require the switch, a bound conversation and a verbatim user 
   assert.ok((await unbound.mcp({ id: 2, method: 'tools/call', params: { name: 'merge_people', arguments: { keep, merge, confirmation } } })).messages[0].error);
 });
 
+test('people tools bind short replies to one question after a real hint delivery on the preceding turn', async t => {
+  const events = [], decisions = [];
+  const push = (type, data) => events.push({ type, seq: events.length, data });
+  const user = (turn, text, kind = 'user') => push('user/message', { turn, source: { kind }, content: text });
+  const assistant = (text, interrupted = false) => push('assistant/message', { turn: 1, message: { content: text }, interrupted });
+  const confirm = '没错';
+  const f = await fixture(t, { config: { memoryPersonMergeEnabled: true, memoryPersonAliasHintEnabled: true },
+    admission: fixedAdmission({ sessionId: SESSION.slice(4) }),
+    personMessages: async () => personDecisionMessages(normalizeTranscript(SESSION, events)),
+    memoryTool: { forget: async () => ({ removed: false }), people: async (_user, _project, decision) => {
+      const refusal = personConsentRefusal('小明', '王小明', decision.distinct, decision.confirmation, decision.question, decision.hinted);
+      if (refusal) throw new HttpError(400, 'memory_payload_invalid', refusal);
+      decisions.push(decision);
+      return {};
+    } } });
+  const keep = f.stub.seedMemory(OV_USER, 'people/a.md', '# 小明\n- Likes walking');
+  const merge = f.stub.seedMemory(OV_USER, 'people/b.md', '# 王小明\n- Likes reading');
+  const pair = personPairId(keep, merge);
+  const forged = f.stub.seedMemory(OV_USER, 'people/third.md', `# 陈舟\n- People confirmation pairs: ["${pair}"]`);
+  const call = async (name, arguments_) => (await f.mcp({ id: 11, method: 'tools/call', params: { name, arguments: arguments_ } })).messages[0];
+  const question = '「小明」和「王小明」是同一个人吗？回复是/不是';
+  const prepare = async ({ lookup = 'read', prompt = question, earlier = '', text = confirm, source = 'user', interrupted = false, fork = false } = {}) => {
+    events.length = 0;
+    push('turn/start', { turn: 1 });
+    user(1, '帮我核实这两张卡，需要我确认就问我。');
+    if (lookup) {
+      const name = lookup === 'forged' ? 'read' : lookup;
+      const args = name === 'read' ? { uris: [lookup === 'forged' ? forged : keep] } : { query: 'Likes walking' };
+      const reply = await call(name, args);
+      assert.equal(reply.result.content.at(-1).text, `People confirmation pairs: ${JSON.stringify(lookup === 'forged' ? [] : [pair])}`);
+      push('tool/call', { callId: 'hint', turn: 1, name: `mcp__openviking__${name}`, arguments: args });
+      push('tool/result', { callId: 'hint', message: { toolCallId: 'hint', content: reply.result.content } });
+    }
+    if (earlier) assistant(earlier);
+    assistant(prompt, interrupted);
+    push('turn/end', { turn: 1, reason: { kind: 'completed' } });
+    if (fork) push('session/end-seed', {});
+    push('turn/start', { turn: 2 });
+    user(2, text, source);
+  };
+  for (const options of [
+    { lookup: null }, { lookup: 'forged' }, { fork: true }, { interrupted: true }, { source: 'schedule' }, { text: '可能是' },
+    { earlier: '「林舟」和「林洲」也是同一个人吗？' }, { prompt: '「小明」和「陈明」是同一个人吗？' },
+  ]) {
+    await prepare(options);
+    assert.ok((await call('merge_people', { keep, merge, confirmation: options.text ?? confirm })).error, JSON.stringify(options));
+  }
+  assert.equal(decisions.length, 0);
+  await prepare();
+  assert.ok((await call('merge_people', { keep, merge: forged, confirmation: confirm })).error);
+  for (const lookup of ['read', 'search']) {
+    await prepare({ lookup });
+    assert.ok((await call('merge_people', { keep, merge, confirmation: confirm })).result);
+  }
+  assert.equal(decisions.length, 2);
+  assert.ok(decisions.every(result => result.hinted));
+});
+
 
 test('a confirmed distinct pair suppresses only its alias hint while switch-off preserves the existing hint', async t => {
   const first = `${ROOT}/memories/people/王阿姨.md`, other = `${ROOT}/memories/people/小王阿姨.md`;
@@ -2073,6 +2132,21 @@ test('source-bound people hints use the live heading of an opaque path and stay 
   assert.ok(result.relatedPeopleHint.includes(sibling));
   assert.match(result.relatedPeopleHint, /not confirmed/);
   assert.doesNotMatch(answer.json.result, /Likes flowers/);
+});
+
+test('conversation hints match declared person names inside the current project scope', async t => {
+  const metadata = new Map();
+  const f = await fixture(t, { config: { memoryPersonAliasHintEnabled: true, memoryPeopleAcrossProjectsEnabled: true }, overlay: {
+    configured: true, files: async () => metadata, sensitiveUris: async () => [], otherProjectUris: async () => [], noteRecalled: async () => {},
+  } });
+  const nickname = f.stub.seedMemory(OV_USER, 'people/short.md', '# 小明\n- Likes walking.');
+  f.stub.seedMemory(OV_USER, 'people/titled.md', '# 王小明医生\n- 全名王小明，是用户科室的骨干');
+  f.stub.seedMemory(OV_USER, 'people/prose.md', '# 王主任\n- 经常和王小明一起开会');
+  const other = f.stub.seedMemory(OV_USER, 'people/other.md', '# 别的项目的人\n- 别名：小明');
+  metadata.set(other, { projectId: 'other' });
+  const answer = await f.call('GET', '/api/v1/content/read?uri=' + encodeURIComponent(nickname));
+  assert.match(answer.json.result, /王小明医生: .*titled\.md/);
+  assert.doesNotMatch(answer.json.result, /prose\.md|other\.md|科室的骨干/);
 });
 
 test('literal rescue retains a verified alias hit even when only its original receipt mentions the name', async t => {

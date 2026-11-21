@@ -31,11 +31,58 @@ export function isNeutralProfileHeading(line) {
 
 const PROFILE_NAME_LABEL = /^(?:(?:姓名|名字|昵称|称呼)\s*(?:[:：]|是|为)?\s*|(?:name|nickname)\s*[:：]\s*)(.+?)\s*$/iu;
 const PROFILE_AS_OF = /\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/iu;
+const PROFILE_ADDRESS_LABEL = /^(?:希望被称呼为\s*[:：]?\s*|(?:称呼|Preferred form of address)\s*[:：]\s*)(.+)$/iu;
+const PROFILE_IDENTITY_LABEL = /^(?:姓名|名字|真实姓名|真名|全名|name|real name|full name)\s*[:：]\s*(.+)$/iu;
+
+/** @param {unknown} line */
+const profileField = line => String(line ?? '').trim().replace(/^(?:[-*+]|\d+[.)])\s+/u, '').replace(PROFILE_AS_OF, '');
+
+/** @param {string} value */
+const unquoteName = value => value.trim().replace(/^(?:“(.+)”|「(.+)」|"(.+)")$/u, (_whole, curly, corner, straight) => curly ?? corner ?? straight);
+
+/** The explicit address preference, separate from the user's name. @param {unknown} line */
+export function profileAddressFieldValue(line) {
+  const value = PROFILE_ADDRESS_LABEL.exec(profileField(line))?.[1];
+  return value ? unquoteName(value) : null;
+}
 
 /** The value of an explicit name field, without its bullet or as-of annotation. @param {unknown} line */
 export function profileNameFieldValue(line) {
-  const statement = String(line ?? '').trim().replace(/^(?:[-*+]|\d+[.)])\s+/u, '').replace(PROFILE_AS_OF, '');
-  return PROFILE_NAME_LABEL.exec(statement)?.[1] ?? null;
+  return PROFILE_NAME_LABEL.exec(profileField(line))?.[1] ?? null;
+}
+
+/** @param {string[]} lines */
+function namedHeading(lines) {
+  const headings = lines.flatMap((line, index) => {
+    const title = /^#\s+(.+?)\s*$/u.exec(line.trim())?.[1];
+    return title ? [{ index, title, line: line.trim() }] : [];
+  });
+  return headings.length === 1 && !isNeutralProfileHeading(headings[0].line) ? headings[0] : null;
+}
+
+/** @param {string[]} lines */
+const declaredNames = lines => lines.flatMap(line => {
+  const value = PROFILE_IDENTITY_LABEL.exec(profileField(line))?.[1];
+  return value ? [foldTitle(unquoteName(value))] : [];
+});
+
+/** @param {string[]} lines @param {string} title */
+const addressMatches = (lines, title) => lines.some(line => {
+  const address = profileAddressFieldValue(line);
+  return address !== null && foldTitle(address) === foldTitle(title);
+});
+
+/** The engine promoted its explicit address preference to H1. Preserve the known name only when
+ * the new body contains no declaration of a different actual name. @param {string} before @param {string} after */
+export function preserveProfileName(before, after) {
+  const previous = before.split(/\r?\n/u), lines = after.split(/\r?\n/u);
+  const prior = namedHeading(previous), next = namedHeading(lines);
+  if (!prior || !next || foldTitle(prior.title) === foldTitle(next.title) || !addressMatches(lines, next.title)) return after;
+  const name = foldTitle(prior.title);
+  if (declaredNames(lines).some(value => value !== name)
+    || (addressMatches(previous, prior.title) && declaredNames(previous).some(value => value !== name))) return after;
+  lines[next.index] = prior.line;
+  return lines.join(after.includes('\r\n') ? '\r\n' : '\n');
 }
 
 /** Exact duplicate name bullets of a genuinely named H1, never a neutral scaffold or a different value.
@@ -46,6 +93,7 @@ export function profileNameDuplicateLines(body) {
   const [title] = titles;
   if (titles.length !== 1 || title === undefined || isNeutralProfileHeading(`# ${title}`)) return [];
   return lines.map(line => line.trim()).filter(line => {
+    if (profileAddressFieldValue(line) !== null) return false;
     const name = profileNameFieldValue(line);
     return name !== null && foldTitle(name) === foldTitle(title);
   });

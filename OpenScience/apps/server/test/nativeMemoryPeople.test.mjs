@@ -43,3 +43,21 @@ test('short consent belongs to the named pair and polarity of the preceding ques
     assert.ok(personConsentRefusal('王阿姨', '小王阿姨', false, confirmation, prompt));
   }
 });
+
+test('a delivered hint permits single-pair questions and exact affirmative replies in several forms', () => {
+  const decide = (answer, question, hinted = true, distinct = false) => personConsentRefusal('小明', '王小明', distinct, answer, question, hinted);
+  const example = '「小明」和「王小明」是同一个人吗？回复是/不是';
+  for (const answer of ['是', '对。', '是的', '没错']) assert.equal(decide(answer, example), null);
+  assert.equal(decide('是', '请确认一下：『王小明』与『小明』指的是同一人吗？'), null);
+  assert.equal(decide('yes', 'Are "小明" and "王小明" the same person? Reply yes/no.'), null);
+  for (const answer of ['可能是', '应该对', '不是', '是吗？', '是，但我不确定', '「是」']) assert.ok(decide(answer, example));
+  for (const question of [
+    '「小明」和「王小明」是同一个人吗？「林舟」和「林洲」也是同一个人吗？',
+    '「小明」和「王小明」是同一个人吗？还有另一对也一起合并吗？',
+    '「小明」和「王小明」不是同一个人吗？',
+    '「小明」和「陈明」是同一个人吗？',
+    '> 「小明」和「王小明」是同一个人吗？',
+  ]) assert.ok(decide('是', question));
+  assert.ok(decide('是', example, false));
+  assert.ok(decide('是', example, true, true));
+});

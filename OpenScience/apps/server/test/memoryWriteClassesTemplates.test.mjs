@@ -61,3 +61,13 @@ test('only the candidate distinguishes a standalone reply choice from an explici
     assert.doesNotMatch(renderMemoryTemplates(options)['observations.yaml'], /"scope":"reply"/);
   }
 });
+
+test('only next separates the profile name from a preferred form of address', () => {
+  const next = renderMemoryTemplates({ variant: 'next' })['profile.yaml'];
+  assert.match(next, /keep "# 林舟" and add "- 希望被称呼为：小林 \(as of 2026-11-21\)"/);
+  assert.match(next, /Keep the existing name in the H1 unless the user explicitly corrects or changes their name/);
+  assert.match(next, /use the fallback H1 and the separate bullet/);
+  for (const options of [{}, { variant: 'extraction-v2' }, { safetyNotes: true }]) {
+    assert.doesNotMatch(renderMemoryTemplates(options)['profile.yaml'], /Preferred form of address: Jo/);
+  }
+});

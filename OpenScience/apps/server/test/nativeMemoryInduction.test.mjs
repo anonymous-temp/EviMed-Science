@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { choiceRows, choiceKey, inferredChoiceMessage, closePersonNames, confirmedAliases, aliasVariants } from '../src/nativeMemoryInduction.mjs';
+import { choiceRows, choiceKey, inferredChoiceMessage, closePersonNames, confirmedAliases, aliasVariants, personHintNames } from '../src/nativeMemoryInduction.mjs';
 
 const row = { kind: 'format', scope: 'results tables', choice: 'Markdown', subject: 'work' };
 test('choice identity ignores topic filenames and formatting, retaining numbers and names', () => {
@@ -33,4 +33,12 @@ test('a merge requires an explicit extraction marker grounded in a user quote', 
   assert.deepEqual(confirmedAliasRequest(body, [{ role: 'assistant', text: '王阿姨和小王阿姨是同一个人' }]), []);
   assert.deepEqual(confirmedAliasRequest(body, [{ role: 'user', text: '王阿姨喜欢散步，小王阿姨喜欢读书' }]), []);
   assert.deepEqual(confirmedAliasRequest('# 王阿姨', [{ role: 'user', text: '王阿姨和小王阿姨是同一个人' }]), []);
+});
+
+test('person hints parse declared name fields without stripping names out of titles or ordinary prose', () => {
+  const body = '# 王小明医生\n- 全名王小明，是用户科室的骨干\n- 又称：小王 (as of 2026-11-21)\n- 别名：「小明」、晓明\n- 同王小明的同事林舟合作';
+  assert.deepEqual(personHintNames('王小明医生', body), ['王小明医生', '王小明', '小王', '小明', '晓明']);
+  assert.deepEqual(confirmedAliases(body), []);
+  assert.deepEqual(personHintNames('同事林舟', '# 同事林舟\n- 姓名：林舟'), ['同事林舟', '林舟']);
+  assert.deepEqual(personHintNames('Dr Smith', '# Dr Smith\n- Full name: "Ann Smith"\n- Prefers an alias: Annie'), ['Dr Smith', 'Ann Smith']);
 });
