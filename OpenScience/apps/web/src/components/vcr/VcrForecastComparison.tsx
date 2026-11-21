@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/format";
 import { VcrForecastComparisonResult } from "./VcrForecastComparisonResult";
 import { useEffect, useState } from 'react';
 import { workStateLabel } from '@evimed/domain';
@@ -12,7 +13,7 @@ import { useStudyFrame } from './studyFrameContext';
 import { COMPARE_START_LABEL } from './vcrActionWords';
 
 const modes: Record<string, string> = { scenario: '治疗情景', input_sensitivity: '输入敏感性', model_version: '模型版本', update: '新增观测后的更新' };
-const date = (value?: string) => value ? new Date(value).toLocaleDateString('zh-CN') : '未记录';
+const date = (value?: string) => value ? formatDate(value) : '未记录';
 
 /**
  * Two predictions of one endpoint, compared by an engine job the reader starts (开始比较). A job past the study's compute budget is

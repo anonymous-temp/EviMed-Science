@@ -5,6 +5,7 @@
  * The document is derived on the server when read and writes nothing; the only calls here that change anything are the topic edits
  * and the request that asks for a regrouping.
  */
+import { DEFAULT_TIME_ZONE } from "./format";
 import { productRequest } from "./productClient";
 
 export type MapNodeType = "you" | "project" | "memory" | "document" | "reference" | "method" | "entity" | "page" | "cluster";
@@ -111,7 +112,7 @@ export interface MapQuery {
 export const MAP_INCLUDE_DASHBOARD = "summary,facets,nodes,edges,buckets,events";
 
 /** The whole document, as the dashboard reads it; a page may name fewer blocks. */
-export function fetchMemoryMap(query: MapQuery, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone, include = MAP_INCLUDE_DASHBOARD): Promise<MemoryMap> {
+export function fetchMemoryMap(query: MapQuery, timeZone = DEFAULT_TIME_ZONE, include = MAP_INCLUDE_DASHBOARD): Promise<MemoryMap> {
   const params = new URLSearchParams({ include, timeZone });
   if (query.projectId) params.set("projectId", query.projectId);
   if (query.range && query.range !== "all") params.set("range", query.range);

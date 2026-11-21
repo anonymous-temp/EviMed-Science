@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/format";
 import { Link, useSearchParams } from "react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Radar } from "lucide-react";
@@ -250,7 +251,7 @@ export function GeoHomePage() {
             {ordered.map((project) => {
               const label = labels.get(project.id) || project.name || "待命名项目";
               const product = [project.product?.brandName, project.product?.genericName].filter((value, index, values) => value && values.indexOf(value) === index).join(" · ");
-              const activity = Number.isNaN(Date.parse(project.updatedAt)) ? "最近活动时间未知" : `最近活动 ${new Date(project.updatedAt).toLocaleDateString("zh-CN")}`;
+              const activity = Number.isNaN(Date.parse(project.updatedAt)) ? "最近活动时间未知" : `最近活动 ${formatDate(project.updatedAt)}`;
               const journey = geoJourney(project);
               const progress = journey.stage === "queued" || journey.stage === "blocked" ? journey.title : progressLine(project);
               return <li key={project.id}><Link aria-label={label} aria-current={asked === project.id ? "true" : undefined} to={`/app/geo/${encodeURIComponent(project.id)}`} className={`flex h-full min-h-40 flex-col gap-3 rounded-lg border p-5 transition-colors hover:bg-surface-2 ${asked === project.id ? "border-accent" : "border-border"}`}>

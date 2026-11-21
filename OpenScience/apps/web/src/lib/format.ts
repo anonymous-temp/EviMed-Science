@@ -1,3 +1,5 @@
+import { DISPLAY_TIME_ZONE } from "@evimed/domain";
+
 /**
  * Shared display formatting. Page-local copies of these used to drift apart;
  * keep the single implementation here.
@@ -23,21 +25,21 @@ export function humanSize(n: number | null | undefined): string {
   return `${text} ${units[unit]}`;
 }
 
-export const DEFAULT_TIME_ZONE = "Asia/Shanghai";
+export const DEFAULT_TIME_ZONE = DISPLAY_TIME_ZONE;
 
 /** Hour and minute of a timestamp, `14:05`; empty for a value that is not a time. */
 export function formatClock(value: string | null | undefined): string {
   if (!value) return "";
-  const time = new Date(value);
-  if (Number.isNaN(time.getTime())) return "";
+  const time = toDate(value);
+  if (!time) return "";
   return time.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: DEFAULT_TIME_ZONE });
 }
 
 /** zh-CN locale date-time; pass Intl options to narrow the rendered fields. */
 export function formatDateTime(value: Date | number | string, options?: Intl.DateTimeFormatOptions): string {
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return formatDate(value);
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
+  const date = toDate(value);
+  if (!date) return "";
   return date.toLocaleString("zh-CN", { timeZone: DEFAULT_TIME_ZONE, ...options });
 }
 
@@ -102,8 +104,9 @@ export function formatDuration(ms: number | null | undefined): string {
 function toDate(value: Date | number | string | null | undefined): Date | null {
   if (value === null || value === undefined || value === "") return null;
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
-  const calendar = typeof value === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null;
-  const date = calendar ? new Date(Number(calendar[1]), Number(calendar[2]) - 1, Number(calendar[3])) : new Date(value);
+  // Server timestamps without an offset are UTC. Never let Date infer the browser zone.
+  const utc = typeof value === "string" && /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(value);
+  const date = new Date(utc ? value.replace(" ", "T") + "Z" : value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 

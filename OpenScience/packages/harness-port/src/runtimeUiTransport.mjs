@@ -455,7 +455,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
  * @param {any} target Browser global, injectable for the contract test.
  * @param {string} [timeZone] Display zone shared with the hosted pages.
  */
-export function installRuntimeUiPolyfills(target = globalThis, timeZone = 'Asia/Shanghai') {
+export function installRuntimeUiPolyfills(target = globalThis, timeZone) {
   const polyfill = 'if(typeof Math.sumPrecise!=="function"){Object.defineProperty(Math,"sumPrecise",{configurable:true,writable:true,value:function(values){let sum=0,c=0;for(const x of values){const y=Number(x)-c,t=sum+y;c=(t-sum)-y;sum=t}return sum}})}';
   if (typeof target.Math?.sumPrecise !== 'function') {
     Object.defineProperty(target.Math, 'sumPrecise', { configurable: true, writable: true, value: function sumPrecise(/** @type {Iterable<any>} */ values) {
@@ -470,7 +470,9 @@ export function installRuntimeUiPolyfills(target = globalThis, timeZone = 'Asia/
       const native = NativeDate.prototype[method];
       if (typeof native !== 'function' || native.__evimedTimeZone) continue;
       const localized = /** @this {Date} @param {any} locales @param {any} options */ function (locales, options) {
-        const zoned = options?.timeZone === undefined ? { ...options, timeZone } : options;
+        const zoned = options !== null && options?.timeZone === undefined
+          ? Object.create(options === undefined ? null : Object(options), { timeZone: { value: timeZone } })
+          : options;
         return native.call(this, locales, zoned);
       };
       Object.defineProperty(localized, '__evimedTimeZone', { value: true });
