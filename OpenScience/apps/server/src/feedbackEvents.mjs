@@ -437,12 +437,15 @@ export class FeedbackEvents {
       ORDER BY e.subject_id, e.occurred_at, e.id`,
     [productId(userId, "user"), scope, from.toISOString(), to.toISOString(), [...LEARNING_CORRECTION_VERDICTS], [...LEARNING_ACCEPT_VERDICTS],
       projectId !== undefined, projectId ?? null, toolchainEnabled, requireShape, runIds]);
-    return this.visible(userId, result.rows
+    const family = result.rows
       .map((/** @type {any} */ row) => ({ runId: String(row.subject_id), projectId: row.project_id ?? null, at: new Date(row.occurred_at).toISOString(),
         endedAt: Number.isFinite(Date.parse(String(row.ended_at ?? ""))) ? new Date(row.ended_at).toISOString() : null, shape: Array.isArray(row.shape) ? row.shape : [],
         ...(toolchainEnabled && row.toolchain ? { toolchain: row.toolchain } : {}) }))
       .sort((left, right) => left.at.localeCompare(right.at) || left.runId.localeCompare(right.runId))
-      .slice(-limit));
+      .slice(-limit);
+    // Reservations recheck only already authorized candidates. The visibility reader
+    // can open another connection, which must stay outside the reservation lock.
+    return transactionClient ? family : this.visible(userId, family);
   }
 
   /**
@@ -473,9 +476,9 @@ export class FeedbackEvents {
       const used = new Set(rows.map(row => row.run_id));
       if (used.has(runId)) return null;
       const current = await this.cleanSettledRuns(user, { ...window, requireShape: false, runIds: candidates, limit: candidates.length, transactionClient: client });
-      const visible = new Set(current.map(member => member.runId));
-      if (!visible.has(runId)) return null;
-      return enqueue(matching.filter(peer => visible.has(peer.runId) && !used.has(peer.runId)), client);
+      const clean = new Set(current.map(member => member.runId));
+      if (!clean.has(runId)) return null;
+      return enqueue(matching.filter(peer => clean.has(peer.runId) && !used.has(peer.runId)), client);
     });
   }
 

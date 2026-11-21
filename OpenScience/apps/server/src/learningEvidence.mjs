@@ -975,13 +975,13 @@ export class LearningEvidence {
     if (outcome !== "clean") { this.#funnel(project, run, "unknown", { shape, clean: false }); return { settled, routine: false, outcome }; }
     // A run the researcher kept may have run a program it has run before: counted toward a script lesson. Never a failure of the settling.
     // A shared GEO project's runs feed no script lesson: the recurrence a code skill is counted over is the account's, across projects.
-    if ((await this.contextProvenance?.policyFor(project))?.kind !== 'geo-project') await this.scripts?.afterSettle(project, run).catch(() => null);
+    const policy = await this.contextProvenance?.policyFor(project);
+    if (policy?.kind !== 'geo-project') await this.scripts?.afterSettle(project, run).catch(() => null);
     if (!shape.length && !toolchain) { this.#funnel(project, run, "no_shape", { clean: true }); return { settled, routine: false, outcome }; }
     const ended = Date.parse(String(run.finishedAt ?? run.startedAt ?? ""));
     const through = this.now().getTime();
     if (!Number.isFinite(ended) || ended < through - this.periodMs || ended > through) { this.#funnel(project, run, "outside_window", { shape }); return { settled, routine: false, outcome }; }
     const resetAt = await this.#triggers.resetInstantOf?.(project.userId);
-    const policy = await this.contextProvenance?.policyFor(project);
     // Anchor the rolling horizon to settlement time, so a late receipt for an older run may pair with newer runs
     // that are still within retention.
     const window = { scope, completedWithin: true, toolchainEnabled: this.toolchainEnabled,
@@ -1009,9 +1009,10 @@ export class LearningEvidence {
       this.#funnel(project, run, "fewer_than_three_clean", { shape });
       return { settled, routine: false, outcome };
     }
-    const enqueue = (available, client = null) => {
+    const context = this.#triggers.routineContext ? await this.#triggers.routineContext(project, run, policy) : {};
+    const enqueue = async (available, client = null) => {
       const lesson = routineLessonFor({ ...input, family: available });
-      return lesson ? this.#triggers.queue(project, run, lesson, client) : null;
+      return lesson && context ? this.#triggers.queue(project, run, lesson, client ? { client, context } : null) : null;
     };
     const queued = this.feedback.reserveRoutine
       ? await this.feedback.reserveRoutine(project.userId, window, run.id, group.matching, enqueue)

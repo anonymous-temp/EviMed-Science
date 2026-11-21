@@ -555,18 +555,27 @@ export class LearningTriggers {
     return (await this.contextProvenance.policyFor(project).catch(() => null))?.kind === "geo-project";
   }
 
+  /** Prepare shared run authority before the routine reservation locks the account. @param {any} project @param {any} run @param {any} policy */
+  async routineContext(project, run, policy) {
+    if (policy?.kind !== "geo-project") return {};
+    const source = await this.contextProvenance.resolveSourceRun(project.userId, project.id, run.id);
+    if (!source || automatedRun(source)) return null;
+    const observation = await this.contextProvenance.observeRun(project, source);
+    return { sourceProjectId: project.id, contextPolicy: contextPolicyIdentity(policy),
+      inputReceiptRefs: observation.inputReceiptRefs, sourceRunIds: [run.id] };
+  }
+
   /**
    * Queue one lesson. Best effort: a lesson that could not be queued must not be the reason a run reports failure, and must not be
    * silent either.
    * @param {any} project @param {any} run @param {{ trigger: string, idempotencyKey: string, payload: Record<string, any> }} lesson
-   * @param {any} [transactionClient]
+   * @param {{ client: any, context: Record<string, any> }} [reservation]
    * @returns {Promise<boolean>}
    */
-  async queue(project, run, lesson, transactionClient = null) {
+  async queue(project, run, lesson, reservation = null) {
     try {
-      const policy = await this.contextProvenance?.policyFor(project);
-      let payload = lesson.payload;
-      if (transactionClient && lesson.trigger === "routine") payload = { ...payload, rollingEvidence: true };
+      const policy = reservation ? null : await this.contextProvenance?.policyFor(project);
+      let payload = reservation ? { ...lesson.payload, ...reservation.context, rollingEvidence: true } : lesson.payload;
       if (policy?.kind === 'geo-project') {
         const sourceRunIds = [...new Set([run.id,...(payload.sourceRunIds??[]),...(payload.feedback??[]).flatMap(event=>event.detail?.sourceRunIds??[])])];
         const observations = [];
@@ -580,17 +589,17 @@ export class LearningTriggers {
           inputReceiptRefs: [...new Set(observations.flatMap(source=>source.inputReceiptRefs))], sourceRunIds };
       }
       await this.jobs.enqueue(project.userId, "distill", payload, { idempotencyKey: lesson.idempotencyKey, projectId: project.id,
-        ...(transactionClient ? { transactionClient } : {}) });
+        ...(reservation ? { transactionClient: reservation.client } : {}) });
       return true;
     } catch (error) {
       this.#diagnose(project, run, "enqueue_failed");
       this.#refused("enqueue_failed");
+      if (reservation) throw error;
       await this.audit("learning.distill.enqueue", {
         userId: project.userId, projectId: project.id, runId: run.id,
         code: typeof error?.code === "string" ? error.code : "learning_enqueue_failed",
         detail: lesson.trigger,
       }).catch(() => {});
-      if (transactionClient) throw error;
       return false;
     }
   }

@@ -4,7 +4,7 @@ import { FollowUpJudge, readLateFollowUp } from '../../apps/server/src/learningE
 import { LATE_CASE_IDS } from './replay-late.mjs';
 
 const dryRun = process.argv.includes('--dry-run');
-const key = process.env.DEEPSEEK_API_KEY;
+const key = dryRun ? '' : process.env.DEEPSEEK_API_KEY;
 if (!dryRun && !key) throw new Error('Set DEEPSEEK_API_KEY in the lab environment.');
 const model = process.env.FOLLOW_UP_JUDGE_MODEL || 'deepseek-flash';
 const judge = new FollowUpJudge({ deepseekProviderEnabled: true, deepseekApiKey: key,
