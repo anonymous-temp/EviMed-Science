@@ -34,6 +34,9 @@ export function createAccountProjections({ config, native, overlay, methods, pro
       && !run.deleted && !run.forkedFrom && !isPlatformStartedRun(run) && run.memoryInput?.digest === digest && run.kernelRequestIds?.length);
     if (matches.length !== 1) return null;
     const run = matches[0], reset = await settings.resetInstant(userId);
+    // A receipt for a whole pasted assertion proves who sent it, not who said it.
+    // A separately admitted clinical excerpt has already been checked against its exact range.
+    if ((!segment || run.memoryInput.digest === inputDigest(quote)) && run.memoryInput.suppliedRanges?.length) return null;
     if (!methodSourceAllowsLearning(run) || reset && !(Date.parse(run.memoryInput.at) >= Date.parse(reset))) return null;
     if (!await visible(userId, projectId, run.sessionId, epoch) || !segment && await clinical(userId, projectId, [{sessionId:run.sessionId,runId:run.id}])) return null;
     return run;
@@ -58,6 +61,9 @@ export function createAccountProjections({ config, native, overlay, methods, pro
       for (const line of lines) {
         const quote = words(line);
         if (!classify(quote)) continue;
+        const statement = record.statementSources?.find(row => row.text === line)?.source;
+        if (statement && (!['user_statement', 'user_opinion', 'user_edit'].includes(statement.kind)
+          || statement.speaker !== 'user' || statement.subject === 'other' || statement.conditions === 'missing')) continue;
         const ref = origins.get(file.uri)?.get(lineFingerprint(line));
         // A manual page edit of a standalone assertion is first-party evidence.
         const manual = record.origin === 'manual' && lines.length === 1 && !ref?.engineSession;
@@ -71,7 +77,7 @@ export function createAccountProjections({ config, native, overlay, methods, pro
         if (!manual && !(sessionId && ref?.archiveUri && ref.projectCreatedAt && (!ref.sources?.length || segment)
           && await checkedRun(userId, ref.projectId, quote, { sessionId, runId:segment?.runId, epoch:ref.projectCreatedAt, segment }))) continue;
         const source = {id:record.id,contentDigest:record.contentHash,sourcePrivacy:record.sourcePrivacy,attribution:record.attribution};
-        results.push({ quote, source, projectId:ref?.projectId ?? file.projectId, updatedAt:record.updatedAt, origin:record.origin });
+        results.push({ quote, source, statement, projectId:ref?.projectId ?? file.projectId, updatedAt:record.updatedAt, origin:record.origin });
       }
     }
     return results;
@@ -105,7 +111,8 @@ export function createAccountProjections({ config, native, overlay, methods, pro
       if (!manage && (disabled || chars + line.quote.length > 400)) continue;
       chars += line.quote.length;
       memos.push({id, memoryType:'native_standing_preference',kind:'preference',scope:'user',applicationScope:'account-presentation',
-        origin:line.origin,content:line.quote,updatedAt:line.updatedAt,originalSources:[line.source],sourcePrivacy:line.source.sourcePrivacy,
+        origin:line.origin,content:line.quote,updatedAt:line.updatedAt,
+        ...(line.statement ? { statementSources:[{ text:line.quote, source:line.statement }] } : {}),originalSources:[line.source],sourcePrivacy:line.source.sourcePrivacy,
         attribution:line.source.attribution,...(manage ? {disabled} : {})});
     }
     return memos;

@@ -9,6 +9,7 @@ export function createPasteRangeIndex() {
   return {
     record(project, request, ranges) {
       if (!request?.sessionId || !Array.isArray(ranges) || ranges.length > 64) return;
+      let firstPart = null;
       for (const entry of ranges) {
         const text = request.content?.[entry?.part]?.text;
         if (typeof text !== 'string' || !Array.isArray(entry.spans) || !entry.spans.length || entry.spans.length > 64) continue;
@@ -20,9 +21,12 @@ export function createPasteRangeIndex() {
         })) continue;
         const id = key(project.userId, project.id, request.sessionId, text);
         held.delete(id);
-        held.set(id, { until: Date.now() + 86_400_000, spans: entry.spans.map(([start,end]) => ({ start, end, kind: 'paste' })) });
+        const spans = entry.spans.map(([start,end]) => ({ start, end, kind: 'paste' }));
+        held.set(id, { until: Date.now() + 86_400_000, spans });
+        if (entry.part === 0) firstPart = { text, spans };
         if (held.size > 4096) held.delete(held.keys().next().value);
       }
+      return firstPart;
     },
     lookup(owner, project, session, text) {
       if (!session || !held.size) return [];

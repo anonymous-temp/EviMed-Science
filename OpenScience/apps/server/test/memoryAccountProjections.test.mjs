@@ -101,3 +101,31 @@ test('the account route changes only projections owned by the authenticated read
   assert.ok(!(await f.projection.presentation('u','other','s')).some(memo=>memo.id===id));
   await assert.rejects(request('PUT',url,{enabled:'false'}),{code:'memory_settings_invalid'});
 });
+
+test('account projections retain the statement source and exclude material and incomplete conditions', async () => {
+  const f = fixture();
+  f.source.payload.status = 'archived';
+  const accepted = { kind:'user_edit', speaker:'user', subject:'self', conditions:'preserved' };
+  f.records[0].statementSources = [{ text:f.file.body, source:accepted }];
+  const read = () => f.projection.presentation('u','report','s');
+  const presentation = await read();
+  assert.deepEqual(presentation[0].statementSources, f.records[0].statementSources);
+  const config = { memorySourceEnvelopeEnabled:true, memorySafetyNotesEnabled:true, memoryStandingInstructionsEnabled:true };
+  const nativeFiles = [{ uri:'viking://user/u/memories/preferences/self/layout.md', body:'Keep units with their values.' }];
+  const safetyFiles = [{ uri:'viking://user/u/memories/safety_notes/history.md', type:'safety_notes', body:'A past reaction.' }];
+  const baseline = renderResidentProfile({ config, nativeFiles, safetyFiles, maxTokens:0 });
+  assert.match(baseline.standing, /Keep units/);
+  assert.match(baseline.safety, /A past reaction/);
+  assert.deepEqual(renderResidentProfile({ presentation, config, nativeFiles, safetyFiles, maxTokens:0 }), baseline);
+  const full = renderResidentProfile({ presentation, config, nativeFiles, safetyFiles });
+  assert.match(full.standing, /<statement-source.*user_edit/);
+  assert.equal(full.safety, baseline.safety);
+  for (const patch of [{ kind:'pasted_material' }, { speaker:'assistant' }, { subject:'other' }, { conditions:'missing' }]) {
+    f.records[0].statementSources[0].source = { ...accepted, ...patch };
+    assert.deepEqual(await read(), []);
+  }
+  f.records.length = 0;
+  f.source.payload.status = 'approved';
+  f.run.memoryInput = humanInputReceipt(quote, Date.now(), [{ start:0, end:quote.length }]);
+  assert.deepEqual(await read(), []);
+});

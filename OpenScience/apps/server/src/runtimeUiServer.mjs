@@ -277,7 +277,7 @@ function assertNativeModelSelection(config, payload) {
 /**
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
- * @param {{ config: Record<string, any>, pasteRangeIndex?: any, store: any, runtimeManager: any, onGoalBarAction?: ((project: any, sessionId: string, op: "pause" | "start") => Promise<void>) | null, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, recordPromptAttendance?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindVcrReference?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareSelections?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ * @param {{ config: Record<string, any>, pasteRangeIndex?: any, store: any, runtimeManager: any, onGoalBarAction?: ((project: any, sessionId: string, op: "pause" | "start") => Promise<void>) | null, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, recordPromptAttendance?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindVcrReference?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareSelections?:((user:any,project:any,request:any,pasted?:{text:string,spans:any[]})=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   recordUploadSuccess?: ((project:any,upload:any)=>Promise<any>)|null,
  *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, sourceDeletion?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
  *   resolveDelegatedFrame?:((user:any,delegation:any,options?:{recheck?:any})=>Promise<{project:any,principal:any}>)|null,
@@ -289,6 +289,8 @@ function assertNativeModelSelection(config, payload) {
  */
 export function createRuntimeUiServer({ config, pasteRangeIndex = null, store, runtimeManager, onGoalBarAction = null, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, bindResultRevision = null, bindVcrReference = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
   agentRuns = null, managedBrowser = null, sourceDeletion = null, authorizeOpenSession = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
+  const capturePasteRanges = config.memorySourceEnvelopeEnabled === true || config.memoryClinicalSegmentsEnabled === true
+    || config.memoryAccountPresentationEnabled === true || config.frontierSourcedInterestsEnabled === true;
   // The original bytes of a native upload are kept for the study's data intake beside the kernel's own copy. A failed
   // copy (the project's capacity, the ledger) is that copy's failure: the upload the kernel already stored stands.
   /** @param {any} project @param {any} upload */
@@ -429,12 +431,13 @@ export function createRuntimeUiServer({ config, pasteRangeIndex = null, store, r
   // that silently loses the user's target. Strip our envelope before DSH.
   async function prepareNativePlan(user, project, payload) {
     const request = payload?.args?.request;
+    let pasted;
     if (request?.evimedPasteRanges !== undefined) {
-      if (config.memorySourceEnvelopeEnabled === true && user.id === project.userId) pasteRangeIndex?.record(project, request, request.evimedPasteRanges);
+      if (capturePasteRanges && user.id === project.userId) pasted = pasteRangeIndex?.record(project, request, request.evimedPasteRanges);
       delete request.evimedPasteRanges;
     }
     if (request?.geoPlanContext !== undefined && prepareGeoPlan) await prepareGeoPlan(user, project, request);
-    if (request && prepareSelections) await prepareSelections(user, project, request);
+    if (request && prepareSelections) await prepareSelections(user, project, request, pasted);
   }
   async function bindNativeResult(user, project, payload) {
     const request = payload?.args?.request;
@@ -929,7 +932,7 @@ export function createRuntimeUiServer({ config, pasteRangeIndex = null, store, r
       // same id allowlist the operations page reads. `off` names the frame
       // bodies this deployment switched off.
       const source = runtimeUiBootstrapSource({
-        ...(config.memorySourceEnvelopeEnabled === true ? { sourceEnvelope: true } : {}),
+        ...(capturePasteRanges ? { sourceEnvelope: true } : {}),
         version: 1, frameId: frame.frameId, projectId: project.id, prefix: frame.prefix,
         ...(scoped ? { access: scoped.access() } : { assets: SHARED_UI_ASSET_PREFIX }),
         shellOrigin: runtimeUiOrigins(config).shellOrigin, cwd: runtimeManager.runtimeWorkspaceRoot(project),

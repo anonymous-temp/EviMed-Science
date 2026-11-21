@@ -5,8 +5,10 @@ export const inputDigest = text => createHash('sha256').update(text).digest('hex
 
 /** Minted only by the authenticated owner prompt paths, before adding context.
  * The run ledger keeps a digest, never an extra copy of the submitted words. */
-export function humanInputReceipt(text, now = Date.now()) {
-  return typeof text === 'string' && text.trim() ? { digest: inputDigest(text), at: new Date(now).toISOString() } : null;
+export function humanInputReceipt(text, now = Date.now(), suppliedRanges = []) {
+  if (typeof text !== 'string' || !text.trim()) return null;
+  return { digest: inputDigest(text), at: new Date(now).toISOString(),
+    ...(suppliedRanges.length ? { suppliedRanges: suppliedRanges.map(({ start, end }) => ({ start, end })) } : {}) };
 }
 
 export function plainInput(message) {

@@ -11,7 +11,7 @@ export function clinicalSegmentDigest(userId, projectId, ref, quote) {
 
 export function clinicalStatements(input, firstRead) {
   if (!input || !Number.isFinite(firstRead)) return [];
-  if (input.time >= firstRead || Date.parse(input.run.memoryInput.at) >= firstRead) return presentationStatements(input.text);
+  if (input.time >= firstRead || Date.parse(input.run.memoryInput.at) >= firstRead) return presentationStatements(input.text, input.run.memoryInput.suppliedRanges);
   const captured = filterCapturedMessage({ role: 'user', content: input.text });
   return 'forward' in captured && !captured.masked ? [captured.forward.parts[0].text] : [];
 }

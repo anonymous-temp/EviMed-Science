@@ -8932,10 +8932,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     resolveDelegatedFrame: (user, delegation, options) => resolveGeoFrame(user, { kind: "geo", geoProjectId: delegation.geoProjectId, sessionId: delegation.rootSessionId }, delegation, options),
     createDelegatedPolicy: async ({ user, project, claims }) => new GeoNativeFramePolicy({ authority: geoNativeAuthority,
       runtimeManager, config, user, project, claims, acceptInput: null, nativeInputs: geoNativeInputs }),
-    prepareSelections: async (user, project, request) => {
+    prepareSelections: async (user, project, request, pasted) => {
       if ((config.memoryHumanSegmentsEnabled || config.memoryClinicalSegmentsEnabled || config.memoryAccountPresentationEnabled || config.frontierSourcedInterestsEnabled)
-        && user.id === project.userId && request?.content?.length === 1 && request.content[0]?.type === 'text') {
-        const receipt = humanInputReceipt(request.content[0].text);
+        && user.id === project.userId && request?.content?.length === 1 && request.content[0]?.type === 'text' && typeof request.content[0].text === 'string') {
+        const text = request.content[0].text;
+        const receipt = humanInputReceipt(text, Date.now(), pasted?.text === text ? pasted.spans : []);
         if (receipt) nativeInputRoute.originalInputs.set(request, receipt);
       }
       if (!geoNativeSelections) return;

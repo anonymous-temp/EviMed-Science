@@ -18,12 +18,18 @@ export function presentationRule(text) {
 /** Whole direct requests, including several independent presentation sentences.
  * A quoted instruction or an unclassified surrounding condition cannot lend
  * its substring account scope. */
-export function presentationStatements(text) {
+export function presentationStatements(text, suppliedRanges = []) {
   // A block quotation at the start is material supplied by the author. Only
   // after a blank paragraph ends it can the person's separate request begin.
   const direct = text.replace(/^(?:>[^\n]*\n)+\n+/u, '');
-  const parts = direct.match(/[^。！？!?.\n]+[。！？!?.]?/gu) ?? [];
+  const matches = [...direct.matchAll(/[^。！？!?.\n]+[。！？!?.]?/gu)];
+  const parts = matches.map(match => match[0]);
   const rules = parts.map(presentationRule);
   if (!parts.length || parts.join('').trim() !== direct.replace(/\n/g, '').trim() || rules.some(rule => !rule)) return [];
-  return rules.map(rule => rule.quote);
+  const offset = text.length - direct.length;
+  return rules.flatMap((rule, i) => {
+    const start = offset + matches[i].index + parts[i].indexOf(rule.quote);
+    const end = start + rule.quote.length;
+    return suppliedRanges.some(range => range.start < end && range.end > start) ? [] : [rule.quote];
+  });
 }

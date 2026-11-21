@@ -88,3 +88,19 @@ test('form-only table details, ordering, tone and language stay verbatim; data-d
   }
   for(const words of ['以后报告先病例结论后依据。','以后表格保留病例的两位数字。','报告的引文写着：以后表格保留两位小数。']) assert.deepEqual(presentationStatements(words),[]);
 });
+
+test('a clinical input receipt keeps pasted requests out of extraction after the first read', async () => {
+  const { clinicalStatements } = await import('../src/memoryClinicalSegments.mjs');
+  const { createPasteRangeIndex } = await import('../src/memoryPasteRanges.mjs');
+  const pastedQuote = '以后用英文回答。', typed = '说简短点。';
+  const text = '> CASE_XQ9\n\n' + pastedQuote + typed;
+  const request = { sessionId:'s', content:[{ type:'text', text }] };
+  const start = text.indexOf(pastedQuote);
+  const index = createPasteRangeIndex();
+  const pasted = index.record({ userId:'u', id:'p' }, request, [{ part:0, spans:[[start, start + pastedQuote.length]] }]);
+  const receipt = humanInputReceipt(text, 100, pasted.spans);
+  assert.doesNotMatch(JSON.stringify(receipt), /CASE_XQ9|英文|简短/);
+  const input = { text, run:{ memoryInput:receipt }, time:100 };
+  assert.deepEqual(clinicalStatements(input, 100), [typed]);
+  assert.deepEqual(clinicalStatements({ ...input, run:{ memoryInput:humanInputReceipt(text, 101) }, time:101 }, 100), [pastedQuote, typed]);
+});

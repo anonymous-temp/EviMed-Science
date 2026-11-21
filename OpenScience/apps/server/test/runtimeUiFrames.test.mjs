@@ -31,9 +31,9 @@ test('delegated frame tickets preserve actor, owner, session and membership inca
   }
 });
 
-async function frameApi(t) {
+async function frameApi(t, overrides = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-frame-api-"));
-  const app = createWebApiApp({ ...config, dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true });
+  const app = createWebApiApp({ ...config, dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true, ...overrides });
   const address = await app.listen(0, "127.0.0.1");
   t.after(async () => { await app.close(); await rm(dataDir, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${address.port}`;
@@ -166,6 +166,18 @@ test("the authenticated external bootstrap installs the real browser hook withou
   assert.equal(requests[0][0], `${uiOrigin}${prefix}api/session/page?cursor=a%2Fb`);
   assert.equal(requests[0][1].body, "native");
   assert.equal(starts, 0);
+});
+
+test('the clinical boundary alone enables paste-range capture in an authenticated native frame', async t => {
+  const f = await frameApi(t, { memoryClinicalSegmentsEnabled:true, memorySourceEnvelopeEnabled:false });
+  const response = await fetch(`${f.base}/api/runtime-ui/frames`, { method:'POST',
+    headers:{ cookie:f.cookie, 'content-type':'application/json', 'x-open-science-csrf':f.csrfToken }, body:JSON.stringify({ projectId:'default' }) });
+  assert.equal(response.status, 201);
+  const { frameUrl } = (await response.json()).data;
+  const cookie = `${f.cookie}; ${response.headers.get('set-cookie').split(';')[0]}`;
+  const script = await fetch(`http://127.0.0.1:${f.app.runtimeUi.address().port}${new URL(frameUrl).pathname}__evimed_bootstrap.js`, { headers:{ cookie } });
+  assert.equal(script.status, 200);
+  assert.match(await script.text(), /"sourceEnvelope":true/);
 });
 
 test("frame release requires login and CSRF, and clears only the named frame cookie path", async (t) => {

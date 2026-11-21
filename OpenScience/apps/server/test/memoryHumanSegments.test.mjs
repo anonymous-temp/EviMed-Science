@@ -35,13 +35,20 @@ test('both indexed windows and a previously mixed cached window rebuild their ti
   const {inputDigest}=await import('../src/memoryHumanSegments.mjs');
   const root='viking://user/u', project={id:'default',userId:'u'}, context={userRoot:root,ownerId:'u',ownerCreatedAt:stamp(0),kind:'owned',namespaceId:'u'};
   const archive=root+'/sessions/dsh-session/history/archive_001', config={memoryHumanSegmentsEnabled:true,memoryHistorySearchEnabled:true};
+  const preference = '以后报告用表格。';
+  const after = { ...spoken, content:'> SEALED_CASE\n\n' + preference, created_at:stamp(10) };
+  const afterRun = { ...run, id:'after', startedAt:stamp(9), finishedAt:stamp(11), memoryInput:humanInputReceipt(after.content, Date.parse(stamp(9))) };
+  const runs = [{...machine,title:'AUTOMATIC_ONLY'},run];
   const messages=[spoken,{...spoken,role:'assistant',content:'PRIVATE_RESPONSE'}, {...spoken,content:'AUTOMATIC_ONLY',created_at:stamp(6)}];
-  const raw=messages.map(JSON.stringify).join('\n'), files=new Map();
+  let raw=messages.map(JSON.stringify).join('\n');
+  const files=new Map();
   context.sessions={read:async()=>raw};
   const sources=createMemoryHistorySources({config,store:{userById:async()=>({id:'u'}),requireProject:async()=>project},
     productDatabase:{query:async()=>({rows:[{stamp:stamp(0)}]})},nativeMemoryContexts:{assertLive:async()=>{}},
-    nativeMemoryOverlay:{projectOfSession:async()=>'default'},agentRuns:{conversationRuns:async()=>[{...machine,title:'AUTOMATIC_ONLY'},run]},
-    memorySettings:{sessionState:async()=>({})},agentRegistry:new Map(),memoryAdmission:{admit:async()=>({learn:true})}});
+    nativeMemoryOverlay:{projectOfSession:async()=>'default'},agentRuns:{conversationRuns:async()=>runs},
+    vcrPrivacyStore:{firstClinicalRead:async()=>Date.parse(stamp(8)),hasClinicalContext:async()=>config.memoryClinicalSegmentsEnabled === true},
+    memorySettings:{sessionState:async()=>({})},agentRegistry:new Map(),memoryAdmission:{admit:async()=>({learn:!config.memoryClinicalSegmentsEnabled}),
+      admitSegment:async caller=>({learn:runs.some(row=>row.id===caller.runId)})}});
   const resources={writeHistory:async(_u,uri,body)=>files.set(uri,body),readHistory:async(_u,uri)=>files.get(uri),
     searchHistory:async()=>[...files.keys()].map(uri=>({uri}))};
   const history=new MemoryHistory({config,...sources,contexts:{forProject:async()=>context},resourcesFor:()=>resources,
@@ -56,4 +63,38 @@ test('both indexed windows and a previously mixed cached window rebuild their ti
   files.set(uri,JSON.stringify({messages:historyChunks(messages)[0].messages}));
   const [legacy]=await search('decisions');assert.equal(legacy.conversationTitle,text);assert.doesNotMatch(JSON.stringify(legacy),/PRIVATE|AUTOMATIC/);
   assert.deepEqual([...(await search('AUTOMATIC_ONLY'))],[]);
+
+  config.memoryClinicalSegmentsEnabled = true;
+  runs.push(afterRun);
+  messages.push(after);
+  raw = messages.map(JSON.stringify).join('\n');
+  files.clear();
+  assert.equal((await history.indexArchive({ userId:'u', projectId:'default', engineSession:'dsh-session', archiveUri:archive }, context, raw)).messages, 2);
+  for (const value of files.values()) assert.doesNotMatch(value, /SEALED_CASE|PRIVATE_RESPONSE|AUTOMATIC_ONLY/);
+  for (const flag of ['Fusion','Diversity','Parallel','Deadline','Compact','Wide']) config['memoryHistory' + flag + 'Enabled'] = true;
+  const request = { user:{ id:'u' }, project, query:'表格' };
+  const hits = await history.search(request, { sourceBound:true, readOnly:true, includeOrigins:true });
+  const returned = hits.flatMap(hit => hit.messages);
+  assert.ok(returned.some(message => message.text === preference && message.sourceEnvelope.speaker === 'user'));
+  assert.ok(hits.every(hit => files.has(hit.uri) && hit.origin.archiveUri === archive));
+  const removal = await history.search(request, { forRemoval:true, readOnly:true });
+  assert.ok(removal.some(hit => hit.originalMessages.some(message => message.text === preference)));
+  assert.doesNotMatch(JSON.stringify([hits,removal]), /SEALED_CASE|PRIVATE_RESPONSE|AUTOMATIC_ONLY/);
+});
+
+test('clinical segment admission leaves external host message digests and regular admission in force', async () => {
+  const { createHash } = await import('node:crypto');
+  const { createMemoryHistorySources } = await import('../src/memoryHistorySources.mjs');
+  let ordinary = 0;
+  const sources = createMemoryHistorySources({ config:{ memoryHumanSegmentsEnabled:true, memoryClinicalSegmentsEnabled:true },
+    memoryAdmission:{ admit:async () => { ordinary++; return { learn:true }; }, admitSegment:async () => assert.fail('external host segment') } });
+  const time = stamp(2), message = { role:'user', content:text, created_at:time };
+  const digest = createHash('sha256').update(JSON.stringify(['user', text, time])).digest('hex');
+  const source = { project:{ id:'default' }, sessionId:'external', external:{ messages:[digest] } };
+  const admit = msg => sources.admitMessage({ ownerId:'owner' }, source, msg);
+  assert.equal(await admit(message), true);
+  assert.equal(await admit({ ...message, content:'other' }), false);
+  assert.equal(await admit({ ...message, role:'assistant' }), false);
+  assert.equal(await admit({ ...message, created_at:stamp(3) }), false);
+  assert.equal(ordinary, 1);
 });
