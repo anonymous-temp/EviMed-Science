@@ -1776,6 +1776,7 @@ export class NativeMemoryStore {
     }
     if (references.length) {
       const projections = new Set(withdrawals.map(entry => entry.uri));
+      const sourceHashes = new Set(references.map(row => row.hash));
       const root = this.sessions.memoryRoot(userId);
       const files = (await this.sessions.tree(userId, root + '/safety_notes')).filter(node =>
         !node.isDir && nativeMemoryFile(node.uri, root)?.type === 'safety_notes' && node.uri !== file.uri && !projections.has(node.uri));
@@ -1787,7 +1788,9 @@ export class NativeMemoryStore {
         if (!current) continue;
         const entries = safetyStatements(current, uri);
         const bound = entries.filter(row => originalSources(origins.get(uri)?.get(lineFingerprint(row.text)))
-          .some(origin => projections.has(origin.safetyProjectionUri)));
+          .some(origin => projections.has(origin.safetyProjectionUri)
+            || origin.safetySourceUri === file.uri && sourceHashes.has(origin.safetyLineHash)
+            || origin.safetyProjectionUri === file.uri && sourceHashes.has(origin.safetyLineHash)));
         const remaining = entries.filter(row => !bound.includes(row));
         // Source-deletion maintenance can retract proven lineage only. An independent source
         // saying the same thing is in scope only when the person withdrew the fact itself.
