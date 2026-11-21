@@ -47,8 +47,11 @@ function jsonBody(schema, description = "") {
 export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
   const common = {
     401: errorResponse("The API key is missing, revoked, expired or unknown. One code for all four: the difference is an enumeration oracle and tells a legitimate holder nothing their own key list does not."),
+    402: errorResponse("Account balance or daily/weekly model budget exhausted."),
+    409: errorResponse("Revision, idempotency or resource conflict."),
+    413: errorResponse("Request exceeds 256 KiB or response exceeds 1 MiB. Request a smaller page."),
     403: errorResponse("The key does not carry the required scope, or is bound to a different project."),
-    429: errorResponse(`More than ${rateLimitPerMinute} operations in one minute for this key.`),
+    429: errorResponse(`More than ${rateLimitPerMinute} operations in one minute for this key or 360 across its account.`),
     503: errorResponse("The API is not enabled in this deployment, or memory storage is unavailable."),
   };
   /** @param {string} description */
@@ -431,7 +434,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
           summary: "Submit a conversation for extraction",
           description: [
             "The transcript endpoint. The turns are staged as a pending candidate; nothing is extracted before the account owner confirms it. Confirming (`POST /notes/{id}/confirm`) sends only the person's own statements — never the assistant's — through the platform's captured-message privacy filter into a durable admission, from which the memory engine's own extraction decides what is worth remembering.",
-            "This is the only way to add memory in bulk. There is no endpoint that writes a memory file directly, because a memory with no conversation behind it is what the engine's design refuses.",
+            "Trusted hosts with memory.ingest may also submit an attended transcript to /conversations. There is no endpoint that writes a memory file directly, because a memory with no conversation behind it is what the engine's design refuses.",
           ].join(" "),
           security: [{ agentApiKey: ["memory.write"] }],
           requestBody: jsonBody({ $ref: "#/components/schemas/EpisodeRequest" }),

@@ -15,7 +15,7 @@ async function fixture(t) {
   const server = createServer(async (req, res) => {
     let raw = '';
     for await (const chunk of req) raw += chunk;
-    calls.push({ path: req.url, auth: req.headers.authorization, body: raw ? JSON.parse(raw) : null });
+    calls.push({ method: req.method, path: req.url, auth: req.headers.authorization, body: raw ? JSON.parse(raw) : null });
     if (state.wait) return;
     if (state.redirect) { res.writeHead(302, { location: '/redirected' }); res.end(); return; }
     res.writeHead(state.status, { 'content-type': 'application/json' });
@@ -154,7 +154,8 @@ test('dispose aborts pending HTTP and unregisters Cordis tools and prompt sectio
     effect(effect) { disposers.push(effect()); },
   };
   apply(ctx, f.config);
-  assert.equal(definitions.size, 8);
+  assert.equal(definitions.size, 28);
+  assert.ok(definitions.has('capsule_conversations') && definitions.has('capsule_sharing'));
   assert.equal(section.interpolate, false);
   assert.equal(section.text, SYSTEM_PROMPT);
   for (const definition of definitions.values()) {
@@ -204,4 +205,16 @@ test('offered opening and remember forward only the public source contract', asy
   const input = { statement: 'Use metric units.', source: { client: 'Editor', sessionId: 'one', messageId: 'msg', saidAt: '2026-11-17T01:00:00Z' } };
   await f.client.call('capsule_remember', { ...input, used: true });
   assert.deepEqual(f.calls.at(-1).body, input);
+});
+
+test('host scopes gate conversation uploads and management tools preserve the verb and encoded resource id', async t => {
+  const f = await fixture(t);
+  const messages = [{role:'user',text:'Example',saidAt:'2026-11-17T01:00:00.000Z'}];
+  assert.equal((await f.client.call('capsule_conversations',{sessionId:'x',messages,attended:true})).code, 'capability_unavailable');
+  f.state.body = {capabilities:{conversationIngest:{available:true}}};
+  await f.client.call('capsule_conversations',{sessionId:'x',messages,attended:true,ownerId:'other'});
+  assert.deepEqual(f.calls.at(-1).body, {sessionId:'x',messages,attended:true});
+  await f.client.call('capsule_records_edit',{id:'r:a',value:'sample'});
+  assert.equal(f.calls.at(-1).method,'PATCH');
+  assert.match(f.calls.at(-1).path,/records\/r%3Aa$/);
 });

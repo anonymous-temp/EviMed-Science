@@ -26,13 +26,14 @@ alternative is an unauthenticated call that fails less clearly.
 
 import json
 import os
+from pathlib import Path
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 
 SERVER_NAME = "evimed-memory"
-SERVER_VERSION = "1.0.0"
+SERVER_VERSION = "1.1.0"
 PROTOCOL_VERSION = "2024-11-05"
 MAX_FRAME_BYTES = 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 20
@@ -80,6 +81,7 @@ TOOLS = [
             "properties": {
                 "query": {"type": "string", "minLength": 1, "maxLength": 2000},
                 "factKinds": {"type": "array", "maxItems": len(FACT_KINDS), "items": {"type": "string", "enum": list(FACT_KINDS)}},
+                "scope": {"enum": ["all", "capsule", "conversation"]},
                 "since": {"type": "string", "maxLength": 40},
                 "include": {"type": "array", "maxItems": 1, "items": {"type": "string", "enum": ["history"]}, "description": "Dated original conversations; requires rawConversationRecall in memory_status."},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50},
@@ -139,12 +141,27 @@ for _name, _description, _properties, _required in [
         "properties": {**_properties, "projectId": {"type": "string"}, "subject": SUBJECT_PROPERTY}}})
 
 
+with Path(__file__).with_name("operations.json").open(encoding="utf-8") as catalog:
+    OPERATIONS = {"memory_" + spec["name"]: spec for spec in json.load(catalog)}
+for name, spec in OPERATIONS.items():
+    TOOLS.append({"name": name, "description": spec["description"], "inputSchema": {
+        "type": "object", "additionalProperties": False, "required": spec["required"],
+        "properties": {**spec["properties"], "subject": SUBJECT_PROPERTY}}})
+
+
+class DirectEndpoint(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def _base_url():
     value = os.environ.get("EVIMED_MEMORY_API_URL", "").strip().rstrip("/")
     if not value:
         return None
     parsed = urllib.parse.urlsplit(value)
     if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.username or parsed.password:
+        return None
+    if parsed.query or parsed.fragment or (parsed.scheme == "http" and parsed.hostname not in ("localhost", "127.0.0.1", "::1")):
         return None
     return value
 
@@ -188,7 +205,7 @@ def _subject(arguments):
     return value or None
 
 
-def _call(action, body, opener=None, subject=None):
+def _call(action, body, opener=None, subject=None, method=None):
     base = _base_url()
     key = _api_key()
     if not base:
@@ -209,10 +226,10 @@ def _call(action, body, opener=None, subject=None):
             # Sent as given: the service decides whether this key may name a subject and whether the identifier is one.
             **({"x-subject": subject} if subject else {}),
         },
-        method="POST" if body is not None else "GET",
+        method=method or ("POST" if body is not None else "GET"),
     )
     try:
-        with (opener or urllib.request.urlopen)(request, timeout=_timeout()) as response:
+        with (opener or urllib.request.build_opener(DirectEndpoint()).open)(request, timeout=_timeout()) as response:
             payload = json.loads(response.read(4 * 1024 * 1024).decode("utf-8"))
     except urllib.error.HTTPError as error:
         # The control plane's own code, carried through rather than flattened:
@@ -239,9 +256,30 @@ def _call(action, body, opener=None, subject=None):
 
 
 def call_tool(name, arguments, opener=None):
+    if name in OPERATIONS:
+        spec = OPERATIONS[name]
+        subject = _subject(arguments)
+        if spec["capability"]:
+            status = _call("", None, opener, subject)
+            if not status["ok"]:
+                return status
+            if not status.get("data", {}).get("capabilities", {}).get(spec["capability"], {}).get("available"):
+                return _envelope(False, "capability_unavailable", data={"capability": spec["capability"]})
+        path = spec["path"].lstrip("/")
+        if "{id}" in path:
+            identifier = arguments.get("id")
+            if not isinstance(identifier, str) or not identifier or identifier in (".", "..") or len(identifier) > 200:
+                return _envelope(False, "invalid_request")
+            path = path.replace("{id}", urllib.parse.quote(identifier, safe=""))
+        query = {k: arguments[k] for k in spec["query"] if k in arguments}
+        if query:
+            path += "?" + urllib.parse.urlencode(query)
+        body = None if spec["method"] in ("GET", "DELETE") else {
+            k: arguments[k] for k in spec["properties"] if k != "id" and k not in query and k in arguments}
+        return _call(path, body, opener, subject, spec["method"])
     if name == "memory_recall":
         body = {"query": arguments["query"]}
-        for field in ("factKinds", "since", "limit", "capsuleIds", "methods", "include", "projectId"):
+        for field in ("factKinds", "since", "scope", "limit", "capsuleIds", "methods", "include", "projectId"):
             if arguments.get(field) is not None:
                 body[field] = arguments[field]
         return _call("recall", body, opener, _subject(arguments))

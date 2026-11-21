@@ -8,11 +8,9 @@ workspace dependencies or runtime npm dependencies. Cordis supplies `tools` and
 `systemPrompt` by injection; the module imports only Node's file API and uses
 Node's native fetch. It does not load the EviMed universal preset or socket.
 
-**Release candidate, not published.** `private: true` prevents accidental npm
-publication. TODO: the owner decides whether, where and when to publish; only
-then remove `private`, choose a release version, update the example index's
-actual publication time and source, and perform a clean-profile installation.
-No npm package or hosted index is claimed to exist today.
+Build locally with `npm pack --ignore-scripts`. The owner can publish the tested tarball with
+`npm publish ./evimed-dsh-memory-capsule-0.2.0.tgz --access public`, set the real publication
+timestamp in the example market index, validate it, and submit the index with their marketplace account.
 
 ## From zero to recall
 
@@ -30,7 +28,7 @@ No npm package or hosted index is claimed to exist today.
 4. After the owner publishes the package, install it into the profile you use:
 
    ```sh
-   dsh plugin --profile web add @evimed/dsh-memory-capsule@0.1.0
+   dsh plugin --profile web add @evimed/dsh-memory-capsule@0.2.0
    ```
 
    For a local review before publication, install the supplied package directory
@@ -80,10 +78,11 @@ catalog for a method read; it does not cache stale bodies or invent a body-by-
 digest HTTP route. Methods outside that current catalog/budget are unavailable.
 When both selectors are supplied, the digest selects the method.
 
-Raw conversation history is opt-in with `include: ["history"]` and both read scopes. There is no automatic transcript upload,
-external-work learning, method mounting, capsule selection/isolation or local
-memory engine here. Share and proposal confirmation stay on the web memory page (`/app/memory`). New tools check the server capability table before acting; they never probe unavailable endpoints. Memory and methods are
-context, not authority. General writing, documents, code and everyday work do
+Raw history requires `include: ["history"]` and both read scopes. After the host obtains the person's consent,
+`capsule_conversations` submits captured turns and `capsule_work_events` reports a verified human response.
+Use `capsule_sharing` for web-equivalent sharing. Each connector also offers the documented revision-based management operations.
+Set an integration key's fixed `subject` in the profile configuration. Memory is contextual background.
+General writing, documents, code and everyday work do
 not require a recall; unavailable memory never blocks them.
 
 Missing configuration points to the key page. Connection failures, 401, 403,

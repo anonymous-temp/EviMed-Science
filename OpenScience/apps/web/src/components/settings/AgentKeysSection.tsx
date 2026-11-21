@@ -33,6 +33,7 @@ export function AgentKeysSection() {
 
 function AgentKeysForm() {
   const [keys, setKeys] = useState<WebAgentKey[]>([]);
+  const [usage, setUsage] = useState<Record<string, { costCny: string; uncertainCalls: number }>>({});
   const [scopes, setScopes] = useState<WebAgentKeyScope[]>([]);
   const [selected, setSelected] = useState<WebAgentKeyScope[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "disabled" | "error">("loading");
@@ -58,6 +59,7 @@ function AgentKeysForm() {
       if (!active) return;
       const offered = result.scopes.filter(supportedScope);
       setKeys(result.keys); setScopes(offered);
+      setUsage(Object.fromEntries((result.usage ?? []).map(row => [row.keyId, row])));
       setSelected(offered.includes("memory.read") ? ["memory.read"] : []);
       setState("ready");
     }).catch(reason => {
@@ -107,9 +109,13 @@ function AgentKeysForm() {
       : state === "loading" ? <PanelRow label="正在读取 API 密钥" />
         : state === "error" ? <div className="p-4"><InlineAlert onRetry={() => setAttempt(value => value + 1)}>暂时无法读取 API 密钥。</InlineAlert></div>
           : <>
-            <PanelRow label="供你在其他智能体中使用" description="DSH 插件只需读取权限；要提出待确认的记忆，再勾选相应权限。" control={
+            <PanelRow label="供你在其他智能体中使用" description="创建时按需勾选权限。模型用量计入签发密钥的账号。" control={
               <Button variant="secondary" disabled={busy !== null || creating || secret !== null || scopes.length === 0} onClick={() => { setCreating(true); setError(null); setSelected(scopes.includes("memory.read") ? ["memory.read"] : []); }}>创建密钥</Button>
             }>
+              <nav aria-label="记忆接口文档" className="flex gap-4">
+                <a href="/static/agent-memory.html">接入指南</a>
+                <a href="/static/agent-memory.openapi.json">OpenAPI 规范</a>
+              </nav>
               {creating && <form aria-label="创建 API 密钥" className="grid gap-3" onSubmit={event => { event.preventDefault(); void create(); }}>
                 <Input ref={nameField} label="密钥名称" maxLength={120} autoComplete="off" value={name} disabled={busy !== null} onChange={event => setName(event.target.value)} placeholder="例如：本机 DSH" />
                 <fieldset disabled={busy !== null}>
@@ -134,6 +140,7 @@ function AgentKeysForm() {
             {keys.length === 0 && <PanelRow label="尚未创建 API 密钥" />}
             {keys.map(key => <PanelRow key={key.id} label={<span className="break-words">{key.name}</span>} description={<>
               <span className="block">{key.scopes.filter(supportedScope).map(scope => SCOPE_LABELS[scope]).join("、")}</span>
+              {usage[key.id] && <span className="block">已计用量 ¥{usage[key.id].costCny} · 待核实 {usage[key.id].uncertainCalls} 笔</span>}
               <span className="block">创建于 {formatDate(key.createdAt)} · {key.lastUsedAt ? `最近使用于 ${formatDate(key.lastUsedAt)}` : "尚未使用"}</span>
             </>} control={key.revokedAt ? "已撤销" : <Button variant="secondary" destructive aria-label={`撤销密钥“${key.name}”`} loading={busy === key.id} disabled={busy !== null} onClick={() => void revoke(key)}>撤销</Button>} />)}
           </>}

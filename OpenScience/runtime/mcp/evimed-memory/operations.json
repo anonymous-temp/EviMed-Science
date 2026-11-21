@@ -1,0 +1,673 @@
+[
+  {
+    "name": "records",
+    "method": "GET",
+    "path": "/records",
+    "capability": null,
+    "query": [
+      "scope",
+      "kind",
+      "status",
+      "scopeId",
+      "query",
+      "pageSize"
+    ],
+    "description": "List memory records",
+    "properties": {
+      "scope": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "status": {
+        "type": "string"
+      },
+      "scopeId": {
+        "type": "string"
+      },
+      "query": {
+        "type": "string"
+      },
+      "pageSize": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 200,
+        "default": 50
+      }
+    },
+    "required": []
+  },
+  {
+    "name": "episodes",
+    "method": "POST",
+    "path": "/episodes",
+    "capability": null,
+    "query": [],
+    "description": "Submit a conversation for extraction",
+    "properties": {
+      "projectId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sessionId": {
+        "type": "string",
+        "maxLength": 120
+      },
+      "messages": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 200,
+        "items": {
+          "type": "object",
+          "required": [
+            "role",
+            "text"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "role": {
+              "type": "string",
+              "enum": [
+                "user",
+                "assistant"
+              ],
+              "description": "Which turns were the user's decides what may be recorded as explicit, so getting this wrong is not cosmetic."
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 12000
+            }
+          }
+        }
+      }
+    },
+    "required": [
+      "messages"
+    ]
+  },
+  {
+    "name": "observations",
+    "method": "POST",
+    "path": "/observations",
+    "capability": null,
+    "query": [],
+    "description": "Observe one prescription edit",
+    "properties": {
+      "observationId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "description": "The integrator's id for this edit; the same id posted twice is one edit."
+      },
+      "syndrome": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "description": "The syndrome (证候) the formula was for. No digits."
+      },
+      "lineage": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "description": "The lineage (诊疗思路) chosen, when one was."
+      },
+      "stage": {
+        "type": "string",
+        "enum": [
+          "M04"
+        ],
+        "default": "M04"
+      },
+      "changes": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 30,
+        "items": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "type",
+                "from",
+                "to"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "const": "replace"
+                },
+                "from": {
+                  "type": "string",
+                  "pattern": "^[\\p{Script=Han}A-Za-z·（）()]{1,24}$",
+                  "description": "A herb's name: letters, no digits — a dose is never observed."
+                },
+                "to": {
+                  "type": "string",
+                  "pattern": "^[\\p{Script=Han}A-Za-z·（）()]{1,24}$",
+                  "description": "A herb's name: letters, no digits — a dose is never observed."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "type",
+                "herb"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "const": "add"
+                },
+                "herb": {
+                  "type": "string",
+                  "pattern": "^[\\p{Script=Han}A-Za-z·（）()]{1,24}$",
+                  "description": "A herb's name: letters, no digits — a dose is never observed."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "type",
+                "herb"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "const": "remove"
+                },
+                "herb": {
+                  "type": "string",
+                  "pattern": "^[\\p{Script=Han}A-Za-z·（）()]{1,24}$",
+                  "description": "A herb's name: letters, no digits — a dose is never observed."
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "required": [
+      "syndrome",
+      "changes"
+    ]
+  },
+  {
+    "name": "dashboard",
+    "method": "GET",
+    "path": "/dashboard",
+    "capability": null,
+    "query": [],
+    "description": "The memory dashboard",
+    "properties": {},
+    "required": []
+  },
+  {
+    "name": "settings",
+    "method": "PUT",
+    "path": "/settings",
+    "capability": null,
+    "query": [],
+    "description": "Turn learning or recall on or off",
+    "properties": {
+      "learningPaused": {
+        "type": "boolean",
+        "description": "Nothing new is learned: no episode, observation or run writes a memory."
+      },
+      "recallPaused": {
+        "type": "boolean",
+        "description": "Nothing is recalled into an answer."
+      }
+    },
+    "required": []
+  },
+  {
+    "name": "records_edit",
+    "method": "PATCH",
+    "path": "/records/{id}",
+    "capability": null,
+    "query": [],
+    "description": "Edit a memory",
+    "properties": {
+      "expectedVersion": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "summary": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+      },
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100000
+      },
+      "id": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "required": [
+      "expectedVersion",
+      "id"
+    ]
+  },
+  {
+    "name": "records_confirm",
+    "method": "POST",
+    "path": "/records/{id}/confirm",
+    "capability": null,
+    "query": [],
+    "description": "Confirm a proposal",
+    "properties": {
+      "expectedVersion": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "The record's `version` as read; a stale one is `409 memory_conflict`."
+      },
+      "id": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "required": [
+      "expectedVersion",
+      "id"
+    ]
+  },
+  {
+    "name": "records_forget",
+    "method": "POST",
+    "path": "/records/{id}/forget",
+    "capability": null,
+    "query": [],
+    "description": "Forget a memory",
+    "properties": {
+      "expectedVersion": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "The record's `version` as read; a stale one is `409 memory_conflict`."
+      },
+      "id": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "required": [
+      "expectedVersion",
+      "id"
+    ]
+  },
+  {
+    "name": "records_restore",
+    "method": "POST",
+    "path": "/records/{id}/restore",
+    "capability": null,
+    "query": [],
+    "description": "Restore a forgotten memory",
+    "properties": {
+      "expectedVersion": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "The record's `version` as read; a stale one is `409 memory_conflict`."
+      },
+      "id": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "required": [
+      "expectedVersion",
+      "id"
+    ]
+  },
+  {
+    "name": "records_undo",
+    "method": "POST",
+    "path": "/records/{id}/undo",
+    "capability": null,
+    "query": [],
+    "description": "Undo the last change to a memory",
+    "properties": {
+      "expectedVersion": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "The record's `version` as read; a stale one is `409 memory_conflict`."
+      },
+      "id": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "required": [
+      "expectedVersion",
+      "id"
+    ]
+  },
+  {
+    "name": "methods",
+    "method": "GET",
+    "path": "/methods/{id}",
+    "capability": null,
+    "query": [],
+    "description": "One habit and its versions",
+    "properties": {
+      "id": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "required": [
+      "id"
+    ]
+  },
+  {
+    "name": "methods_retire",
+    "method": "POST",
+    "path": "/methods/{id}/retire",
+    "capability": null,
+    "query": [],
+    "description": "Stop a habit (停用)",
+    "properties": {
+      "expectedRevision": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "The method's or note's `revision` as read."
+      },
+      "id": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "id"
+    ]
+  },
+  {
+    "name": "methods_restore",
+    "method": "POST",
+    "path": "/methods/{id}/restore",
+    "capability": null,
+    "query": [],
+    "description": "Take a stop back",
+    "properties": {
+      "expectedRevision": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "The method's or note's `revision` as read."
+      },
+      "id": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "id"
+    ]
+  },
+  {
+    "name": "methods_rollback",
+    "method": "POST",
+    "path": "/methods/{id}/rollback",
+    "capability": null,
+    "query": [],
+    "description": "Go back to an earlier version (回到上一版)",
+    "properties": {
+      "expectedRevision": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "targetRevision": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "A revision from `GET /methods/{id}`."
+      },
+      "id": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "targetRevision",
+      "id"
+    ]
+  },
+  {
+    "name": "notes_confirm",
+    "method": "POST",
+    "path": "/notes/{id}/confirm",
+    "capability": null,
+    "query": [],
+    "description": "Confirm a proposed note",
+    "properties": {
+      "expectedRevision": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "The method's or note's `revision` as read."
+      },
+      "id": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "id"
+    ]
+  },
+  {
+    "name": "notes_reject",
+    "method": "POST",
+    "path": "/notes/{id}/reject",
+    "capability": null,
+    "query": [],
+    "description": "Reject a proposed note",
+    "properties": {
+      "expectedRevision": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "The method's or note's `revision` as read."
+      },
+      "id": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "id"
+    ]
+  },
+  {
+    "name": "conversations",
+    "method": "POST",
+    "path": "/conversations",
+    "capability": "conversationIngest",
+    "query": [],
+    "description": "Submit one complete, attended external session for native extraction. Repost the identical batch to read its receipt. Only forward a real host-captured attended transcript. Never reconstruct human turns.",
+    "properties": {
+      "projectId": {
+        "type": "string"
+      },
+      "sessionId": {
+        "type": "string",
+        "maxLength": 120
+      },
+      "attended": {
+        "const": true
+      },
+      "messages": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 200,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "text",
+            "saidAt"
+          ],
+          "properties": {
+            "role": {
+              "enum": [
+                "user",
+                "assistant"
+              ]
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 12000
+            },
+            "saidAt": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      }
+    },
+    "required": [
+      "sessionId",
+      "attended",
+      "messages"
+    ]
+  },
+  {
+    "name": "work_events",
+    "method": "POST",
+    "path": "/work-events",
+    "capability": "workSignals",
+    "query": [],
+    "description": "Judge a human follow-up from a completed host transcript against a current method or memory.",
+    "properties": {
+      "projectId": {
+        "type": "string"
+      },
+      "conversationId": {
+        "type": "string"
+      },
+      "messageIndex": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "saidAt": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "text": {
+        "type": "string",
+        "maxLength": 2000
+      },
+      "recordId": {
+        "type": "string"
+      },
+      "methodId": {
+        "type": "string"
+      },
+      "digest": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "conversationId",
+      "messageIndex",
+      "saidAt",
+      "text"
+    ]
+  },
+  {
+    "name": "sharing",
+    "method": "POST",
+    "path": "/sharing",
+    "capability": "capsuleSharing",
+    "query": [],
+    "description": "Share a versioned capsule or receive an offered snapshot with the web sharing permissions.",
+    "properties": {
+      "action": {
+        "enum": [
+          "mine",
+          "received",
+          "pending",
+          "sent",
+          "links",
+          "deliver",
+          "createLink",
+          "revokeLink",
+          "previewLink",
+          "importLink",
+          "previewDelivery",
+          "importDelivery",
+          "decline",
+          "takeDown"
+        ]
+      },
+      "capsuleId": {
+        "type": "string"
+      },
+      "deliveryId": {
+        "type": "string"
+      },
+      "snapshotId": {
+        "type": "string"
+      },
+      "linkId": {
+        "type": "string"
+      },
+      "token": {
+        "type": "string"
+      },
+      "expectedDigest": {
+        "type": "string"
+      },
+      "recipients": {
+        "type": "array"
+      },
+      "scopes": {
+        "type": "array"
+      },
+      "card": {
+        "type": "object"
+      },
+      "title": {
+        "type": "string"
+      },
+      "ttlDays": {
+        "type": "integer"
+      },
+      "maxUses": {
+        "type": "integer"
+      },
+      "excludeEntryIds": {
+        "type": "array"
+      },
+      "includePrivateEntries": {
+        "type": "array"
+      },
+      "reason": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  {
+    "name": "subject_delete",
+    "method": "DELETE",
+    "path": "/subject",
+    "capability": null,
+    "query": [],
+    "description": "Forget one person entirely",
+    "properties": {},
+    "required": []
+  }
+]

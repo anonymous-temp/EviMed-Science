@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>记忆胶囊 API 接入指南</title>
+<style>html{color-scheme:light dark}body{max-width:48rem;margin:auto;padding:2rem 1.2rem 4rem;font:1rem/1.7 system-ui,sans-serif}h1,h2{line-height:1.3}table{width:100%;border-collapse:collapse}td,th{text-align:left;border-bottom:1px solid #8886;padding:.4rem}pre{padding:1rem;overflow:auto;background:#8882}code{overflow-wrap:anywhere}a{color:LinkText}</style>
+<main><a href="/app/account">返回账号设置</a><h1>把自己的智能体接到记忆胶囊</h1>
+<p>在账号设置的「外部智能体访问」为每个客户端分别创建密钥。网页、Claude Code 和 Codex 可使用同一账号的记忆，并分别核算用量。保存首次显示的完整密钥到只有本人可读的本地文件。撤销后新请求立即被拒绝。</p>
+<h2>第一次请求</h2><p>所有请求经 HTTPS 发到部署地址的 <code>/api/agent-memory/v1</code>。在本机设置 BASE 为该完整地址、KEY_FILE 为密钥文件绝对路径。下例将请求头从标准输入交给 curl。</p>
+<pre><code>auth() { printf 'Authorization: Bearer %s\n' "$(cat "$KEY_FILE")"; }
+auth | curl -sS -H @- "$BASE"
+auth | curl -sS -H @- -H 'Content-Type: application/json' \
+  -d '{"query":"我偏好怎样呈现分析结果？","limit":3}' "$BASE/recall"</code></pre>
+<p>首个请求返回密钥权限、项目绑定和 capabilities。项目密钥只能访问绑定项目。个人密钥的主体由签发账号决定。机构集成密钥由宿主把已登录人员的稳定标识放在 X-Subject 请求头中。</p>
+<h2>选择权限</h2><table><tr><th>权限</th><th>允许的操作</th></tr>
+<tr><td>memory.read</td><td>默认权限。检索记忆和做法，读取看板和开场背景。</td></tr>
+<tr><td>memory.history.read</td><td>与读取权限合用，并显式请求 include: ["history"]，读取授权范围内的对话片段。</td></tr>
+<tr><td>memory.write</td><td>提交待本人确认的笔记或对话候选。</td></tr>
+<tr><td>memory.remember</td><td>用 /remember 提交本人明确要求记住的原话、客户端、会话标识和时间。</td></tr>
+<tr><td>memory.ingest</td><td>受信宿主提交本人参与的真实会话。以固定 sessionId、attended: true 和带 role、text、saidAt 的 messages 数组调用 /conversations。相同内容重试返回同一回执。</td></tr>
+<tr><td>learning.signal</td><td>用 /work-events 提交已完成会话中一句人类反馈的序号、UTC 时间、原文和所用记忆或做法。服务端核对来源并裁决。</td></tr>
+<tr><td>memory.share</td><td>账号级分享、接收、导入和撤回。按网页的分享范围和接收身份执行。</td></tr>
+<tr><td>memory.manage</td><td>本人授权的确认、编辑、忘记、恢复、设置及机构主体删除。</td></tr>
+<tr><td>memory.observe</td><td>登记支持的处方编辑观察。</td></tr>
+<tr><td>analysis.read / analysis.write</td><td>数据分析 API 的独立权限。</td></tr></table>
+<h2>限额与计费</h2><p>每账号最多 20 把有效密钥，每分钟每密钥 120 次、账号合计 360 次。JSON 请求最多 256 KiB，分享请求最多 16 KiB，响应最多 1 MiB。结果过大时缩小查询或分页。</p>
+<p>抽取、模型判断和需要模型的检索按签发账号及密钥记录用量。余额和日、周额度在调用前检查。使用记录与钱包结算分别可查。缺少实测回执的检索标为待核实。撤销密钥保留既有用量。</p>
+<h2>处理返回值</h2><p>401 检查密钥及有效期。402 检查余额和用量额度。403 检查权限、项目或学习开关。404 检查目标。409 重新读取资源版本，检查同一会话标识的内容。413 缩小请求或结果。429 等到下一分钟。503 查看服务状态和部署开关。成功的异步提交仍需读取回执中的 state，只有 completed 表示抽取已结束。</p>
+<p>DSH 可从已打包的 tgz 安装 @evimed/dsh-memory-capsule，在配置中设置 baseUrl 和 apiKeyFile。MCP 可安装 evimed-memory-mcp 的 wheel，以同名命令启动 stdio，设置 EVIMED_MEMORY_API_URL 和 EVIMED_MEMORY_API_KEY_FILE。两种连接器均可先调用 status 检查权限。</p>
+<p><a href="agent-memory.openapi.json">下载完整 OpenAPI 3.1 规范与请求结构</a></p></main></html>

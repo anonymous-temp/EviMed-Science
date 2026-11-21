@@ -32,7 +32,8 @@ const ctx = {
   effect(effect) { disposers.push(effect()); },
 };
 plugin.apply(ctx, {});
-assert.deepEqual(registered.map(tool => tool.name), ['capsule_recall', 'capsule_propose', 'capsule_method', 'capsule_status']);
+const specs = JSON.parse(await readFile(new URL('../operations.json', import.meta.url), 'utf8'));
+assert.deepEqual(registered.map(tool => tool.name), ['capsule_recall','capsule_propose','capsule_method','capsule_status','capsule_context','capsule_remember','capsule_forget','capsule_forgotten', ...specs.map(spec => 'capsule_' + spec.name)]);
 assert.equal((await registered[3].execute({})).code, 'not_configured');
 for (const dispose of disposers.reverse()) dispose();
 assert.equal(registered.length, 0);

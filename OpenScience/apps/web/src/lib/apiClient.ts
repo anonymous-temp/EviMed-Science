@@ -2751,7 +2751,7 @@ export interface WebAgentKey {
   expiresAt: string | null;
   revokedAt: string | null;
 }
-export interface WebAgentKeyList { keys: WebAgentKey[]; scopes: string[] }
+export interface WebAgentKeyList { keys: WebAgentKey[]; scopes: string[]; usage?: { keyId: string; settledCalls: number; uncertainCalls: number; costCny: string }[] }
 export async function fetchWebAgentKeys(): Promise<WebAgentKeyList> {
   const res = await fetchWithWebAuth(apiUrl("/agent-keys"), { cache: "no-store" });
   return parseApiResponse<WebAgentKeyList>(res);
