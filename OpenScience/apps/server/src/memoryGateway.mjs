@@ -197,8 +197,8 @@ function insideNativeMemories(uri, userRoot) {
 /** Both sides of an old merge must belong to this project before using the relationship.
  * @param {import('./nativeMemoryPeople.mjs').PersonMerge} row @param {string} projectId */
 function visibleMergeSnapshot(row, projectId) {
-  return row.snapshot?.merge && [row.snapshot.merge, row.snapshot.keep].every(file =>
-    !file || !file.sensitive && (!file.projectId || file.projectId === 'default' || file.projectId === projectId));
+  return row.snapshot && [row.snapshot.merge, row.snapshot.keep].every(file =>
+    file && typeof file.body === 'string' && file.body.trim() && !file.sensitive && (!file.projectId || file.projectId === 'default' || file.projectId === projectId));
 }
 
 /** Native list search has no context-only exclusion fields; filter structured rows before returning any bytes.

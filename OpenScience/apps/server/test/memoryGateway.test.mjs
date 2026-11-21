@@ -1446,7 +1446,7 @@ test('a confirmed merge keeps alias retrieval after ordinary cleanup removes the
   const f = await fixture(t, { config: { memoryPersonMergeEnabled: true }, overlay: { configured: true,
     sensitiveUris: async () => [], otherProjectUris: async () => [], noteRecalled: async () => {},
     personMerges: async () => [{ state: 'applied', keepUri: keep, mergeUri: retired,
-      snapshot: { merge: { uri: retired, body: '# 小王阿姨\n- Likes tea.' } } }] } });
+      snapshot: { keep: { uri: keep, body: '# 长辈' }, merge: { uri: retired, body: '# 小王阿姨\n- Likes tea.' } } }] } });
   f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Likes walking.');
   for (const query of ['小王阿姨', '小王阿姨喜欢什么？']) {
     const found = await f.call('POST', '/api/v1/search/search', { query });
@@ -1481,6 +1481,10 @@ test('confirmed alias lookup honours explicit exclusions, withdrawal, scope and 
   assert.deepEqual(await search(), []);
   assert.equal((await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(retired)}`)).status, 404);
   withdrawn = [];
+  const formerKeeper = merge.snapshot.keep;
+  merge.snapshot.keep = null;
+  assert.deepEqual(await search(), [], 'a partial snapshot cannot authorize an alias');
+  merge.snapshot.keep = formerKeeper;
   merge.state = 'undone';
   assert.deepEqual(await search(), []);
 });
