@@ -725,7 +725,7 @@ export class NativeMemoryStore {
         const ref = external.get(item.archiveUri);
         if (ref?.operation !== 'clinical-segment') return [];
         return [{sourceType:'conversation', sourceRef:`sessions/${ref.sessionId}/inputs/${ref.inputSeq}`, conversationId:ref.sessionId,
-          projectId:item.projectId,runId:ref.runId,inputSeq:ref.inputSeq,inputDigest:ref.inputDigest,quote:'',weight:1,
+          projectId:item.projectId,runId:ref.runId,inputSeq:ref.inputSeq,quote:'',weight:1,
           observedAt:ref.saidAt,fingerprint:item.fingerprint}];
       }
       if (item.sourceType !== 'external') return [item];
