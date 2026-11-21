@@ -168,6 +168,8 @@ test('host source removal cancels the admitted generation and cannot requeue its
   await f.store.removeConversationSource(f.userId, 'default', [result.sourceSessionId], {
     userRoot:f.sessions.userRoot(f.userId), projectCreatedAt:source.externalSource.projectCreatedAt,
   });
+  assert.equal(await f.overlay.claimAdmission(f.userId, source.candidateId, 1), null);
+  assert.equal((await f.store.processAdmission(f.userId, {...source, state:'pending'})).state, 'cancelled');
   assert.equal((await f.call('/conversations', body, host.key)).state, 'cancelled');
   assert.equal(await f.sessions.read(f.userId, uri), null);
 });

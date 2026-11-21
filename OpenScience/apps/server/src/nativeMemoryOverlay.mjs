@@ -272,7 +272,8 @@ export class NativeMemoryOverlay {
   async claimAdmission(userId, candidateId, revision) {
     const result = await this.#query(`UPDATE evimed_memory.native_admissions a SET lease_until=clock_timestamp()+interval '2 minutes',
       updated_at=clock_timestamp() FROM evimed_control.users u WHERE a.user_id=$1 AND a.candidate_id=$2 AND a.candidate_revision=$3
-      AND u.id=a.user_id AND u.created_at=a.account_created_at AND (a.lease_until IS NULL OR a.lease_until<clock_timestamp()) RETURNING a.*`,
+      AND u.id=a.user_id AND u.created_at=a.account_created_at AND a.state NOT IN ('completed','cancelled')
+      AND (a.lease_until IS NULL OR a.lease_until<clock_timestamp()) RETURNING a.*`,
     [owner(userId), candidateId, revision]);
     return result.rows[0] ? admissionRow(result.rows[0]) : null;
   }
