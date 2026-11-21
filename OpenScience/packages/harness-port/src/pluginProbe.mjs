@@ -327,6 +327,7 @@ export async function registerPluginProbe(ctx, options = {}) {
       for (const initialize of initializers) initialize.call(this)
     }
     async status() { return { busy: await pluginRuntimeBusy(ctx) } }
+    async memoryRegistration() { return ctx.get('evimedMemoryBridge')?.registration?.() ?? null }
     async builtin() { return builtinProof(await builtinPluginState(ctx), options.disabledClientBundles) }
     async verify() { return this.probe(false) }
     async verifyExtensions() { return this.probe(true) }
@@ -366,7 +367,7 @@ export async function registerPluginProbe(ctx, options = {}) {
       } finally { await rm(workspace, { recursive: true, force: true }) }
     }
   }
-  for (const name of ['status', 'builtin', 'verify', 'verifyExtensions', 'extensionInvocationFacts']) Remote(PluginProbe.prototype[name], {
+  for (const name of ['status', 'memoryRegistration', 'builtin', 'verify', 'verifyExtensions', 'extensionInvocationFacts']) Remote(PluginProbe.prototype[name], {
     kind: 'method', name, static: false, private: false,
     addInitializer: (/** @type {(this:any)=>void} */ initialize) => initializers.push(initialize),
   })

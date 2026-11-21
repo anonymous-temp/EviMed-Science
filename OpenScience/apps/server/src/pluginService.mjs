@@ -589,9 +589,9 @@ export class PluginService {
    *  after a normal return or a response-projection 4xx. Legacy callers retain
    *  their previous response/error policy.
    * @param {any} project @param {() => Promise<any>} operation
-   * @param {{prompt?:boolean,promptDisposition?:(() => unknown)|null}} options */
+   * @param {{prompt?:boolean,promptDisposition?:(() => unknown)|null,waitForSummaries?:boolean,waitMs?:number,onWait?:(reason:"memory_source_cleanup_busy"|"plugin_apply_in_progress")=>void}} options */
   async withAdmission(project, operation, options = {}) {
-    const { prompt = false, promptDisposition } = options;
+    const { prompt = false, promptDisposition, waitForSummaries = false, onWait } = options;
     const explicitDisposition = Object.hasOwn(options, "promptDisposition");
     const previous = this.admission.getStore();
     if (previous && !previous.open && typeof this.database.withoutTransactionClient === "function") {
@@ -625,7 +625,7 @@ export class PluginService {
     };
     const nested = this.borrowAdmission(projectKey, accept);
     if (nested) return nested;
-    const deadline = Date.now() + this.admissionWaitMs;
+    const deadline = Date.now() + Math.min(this.admissionWaitMs, options.waitMs ?? this.admissionWaitMs);
     for (let asked = 0; ; asked++) {
       const borrowedClient = Boolean(this.database.transactionScope?.());
       if (!borrowedClient) await this.acquireAdmissionClient(null, Math.max(0, deadline - Date.now()));
@@ -638,6 +638,10 @@ export class PluginService {
         if ((await client.query("SELECT to_regclass('evimed_memory.native_writer_leases') IS NOT NULL AS present")).rows[0]?.present) {
           const cleaning = await client.query("SELECT 1 FROM evimed_memory.native_writer_leases WHERE user_id=$1 AND kind='exclusive' AND expires_at>clock_timestamp() LIMIT 1", [project.userId]);
           if (cleaning.rows.length) return { applying: true, cleaning: true };
+        }
+        if (waitForSummaries && (await client.query("SELECT to_regclass('evimed_memory.native_summary_invalidations') IS NOT NULL AS present")).rows[0]?.present) {
+          const pending = await client.query("SELECT 1 FROM evimed_memory.native_summary_invalidations WHERE user_id=$1 LIMIT 1", [project.userId]);
+          if (pending.rows.length) return { applying: true, cleaning: true };
         }
         await this.scope(project.userId, project, client);
         const store = { projectKey, client, open: true, borrowers: new Set() };
@@ -655,6 +659,7 @@ export class PluginService {
           ? this.database.withTransactionClient(client, admitted) : admitted();
       }).finally(() => { if (!borrowedClient) this.releaseAdmissionClient(); });
       if (outcome.applying) {
+        onWait?.(outcome.cleaning ? "memory_source_cleanup_busy" : "plugin_apply_in_progress");
         const remaining = deadline - Date.now();
         if (remaining <= 0) {
           // A summary rebuild after forgetting a memory file is maintenance too, without any conversation deletion.

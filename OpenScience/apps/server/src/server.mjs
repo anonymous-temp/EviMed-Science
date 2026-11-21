@@ -736,6 +736,7 @@ function routePattern(pathname) {
   if (pathname === "/api/connectors") return pathname;
   if (pathname.startsWith("/api/connectors/")) return "/api/connectors/:connector";
   if (pathname === "/api/ops/metrics") return pathname;
+  if (pathname === "/api/ops/native-memory/consolidation") return pathname;
   if (pathname === "/api/ops/evidence-flywheel") return pathname;
   if (pathname === "/api/ops/frontier-usage") return pathname;
   if (pathname === "/api/ops/frontier-reading") return pathname;
@@ -4281,6 +4282,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let researchGoals = null;
   agentRuns = new AgentRunStore(researchSessions, {
     ledgerRotationEnabled: config.agentRunLedgerRotationEnabled,
+    onLedgerRotation: (project, segments) => securityAudit(config, "run_ledger.rotate", "completed", {
+      userId: project.userId, detail: JSON.stringify({ projectId: project.id, ...segments }),
+    }),
     authorizeReservation: (project, input) => {
       if (!isDataAnalysisProject(project)) return;
       if (!dataAnalysisService) throw new HttpError(503, "product_state_unavailable", "Analysis admission is unavailable.");
@@ -4331,6 +4335,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // The independent reviewer's findings, first in a finished run's notices.
     ...(review ? { reviewNotices: (project, runId) => review.service.reviewNoticesForRun(project.userId, project.id, runId) } : {}),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
+    runtimeStartupId: (project, observation) => runtimeManager.runtimeStartupId(project, observation),
     runtimePersonalSkills: (project, observation = {}) => {
       if (observation.nativeTurn) {
         const runtime = runtimeManager.runtimes.get(runtimeManager.key(project));
@@ -7087,6 +7092,33 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
       // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): the north star, the five asset groups and the guardrails, from the tables that
       // already exist. Behind the scrape token like the usage report; off, the route answers by name once the token has been checked.
+      if (pathname === "/api/ops/native-memory/consolidation" && req.method === "GET") {
+        assertOperatorMetricsAccess(req, config);
+        if (!productDatabase) throw new HttpError(503, "product_state_unavailable", "Native memory state is unavailable.");
+        const query = new URL(req.url ?? "/", apiBaseFromRequest(req, config)).searchParams;
+        const after = query.has("after") ? safeId(query.get("after"), "account cursor") : "";
+        const { samples, more } = await productDatabase.transaction(async client => {
+          await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY");
+          const result = await client.query("SELECT id FROM evimed_control.users WHERE id > $1 ORDER BY id LIMIT 6", [after]);
+          const page = [];
+          for (const { id } of result.rows.slice(0, 5)) {
+            // No engine call while the read-only snapshot holds a pool connection.
+            page.push({ id, facts: await nativeMemoryWorker.consolidation.diagnosticFacts(client, id) });
+          }
+          return { samples: page, more: result.rows.length > page.length };
+        });
+        const rows = [];
+        for (const { id, facts } of samples) {
+          try { rows.push(await nativeMemoryWorker.consolidation.diagnose(id, facts)); }
+          catch (error) {
+            rows.push({ userId: id, eligible: null, blockers: ["unavailable"], code: safeLogId(error?.code) ?? "native_memory_diagnostic_failed" });
+          }
+        }
+        res.setHeader("Cache-Control", "no-store");
+        sendJson(res, 200, { data: { rows, nextAfter: more ? rows.at(-1)?.userId : null } });
+        return;
+      }
+
       if (pathname === "/api/ops/evidence-flywheel" && req.method === "GET") {
         assertOperatorMetricsAccess(req, config);
         if (!evidenceFlywheel) throw new HttpError(404, "evidence_flywheel_not_enabled", "The evidence flywheel's figures are not enabled.");
@@ -8169,8 +8201,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             entries = appendBinaryArchiveEntry(entries, "memory/native-memory.zip", pack, config);
           }
           if (snapshot) entries = appendAccountStateArchiveEntry(entries, snapshot.data, config);
-          await securityAudit(config, "account.export", "completed", { userId: user.id });
+          const receipt = { id: randomBytes(16).toString("hex"), files: entries.filter(entry => entry.type === "file").length };
+          entries = addAccountArchiveManifest(entries, receipt.id, config);
           await sendUserArchive(res, user, entries);
+          await securityAudit(config, "account.export", "completed", {
+            userId: user.id, detail: JSON.stringify({ ...receipt, bytes: archiveEntryBytes(entries) }),
+          });
         }, { skillArtifacts, memoryForgetReader: productDocuments?.memoryForgetReader, nativeMemory: { contexts: nativeMemoryContexts, sourceDeletion }, readResultReview: resultProvenance ? async (actor, row) => {
           if (!exportProjects.has(row.projectId)) exportProjects.set(row.projectId, resultProvenance.scope(actor.id, row.projectId));
           const project = await exportProjects.get(row.projectId);
@@ -8546,7 +8582,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // what replaced it — one shape whatever kernel is running.
       if (pathname === "/api/runtime/sessions" && req.method === "POST") {
         const ctx = await context(req, res);
-        const created = await runtimeManager.createRuntimeSession(ctx.project);
+        const created = await runtimeManager.createRuntimeSession(ctx.project, { waitForAdmission: true });
         if (!created.id) throw new HttpError(502, "runtime_session_create_failed", "The runtime returned no session id.");
         sendJson(res, 200, { data: created });
         return;
@@ -9711,6 +9747,15 @@ function appendMemoryArchiveEntry(entries, memory, config = null) {
   assertArchiveEntryLimit(entries.length + 1, config?.maxArchiveEntries, "account");
   assertArchiveByteLimit(archiveEntryBytes(entries) + entry.size, config?.maxArchiveBytes, "account");
   return [...entries, entry];
+}
+
+/** The manifest describes every other regular file in this exact archive plan. */
+function addAccountArchiveManifest(entries, id, config) {
+  const [account, ...rest] = entries;
+  const files = rest.filter(entry => entry.type === "file").map(entry => ({ path: entry.rel, bytes: entry.size }));
+  const data = Buffer.from(`${JSON.stringify({ ...JSON.parse(account.data.toString("utf8")), archive: { id, files } }, null, 2)}\n`);
+  assertArchiveByteLimit(data.length + archiveEntryBytes(rest), config.maxArchiveBytes, "account");
+  return [{ ...account, data, size: data.length }, ...rest];
 }
 
 /** One more file in an export archive, from bytes. */

@@ -202,7 +202,11 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         }
         activated = true; selectedSession = sessionId; previousSession = sessionId;
         request.ack = { requestId, ok: true, sessionId, ...(intent.restoreDraft === true ? { draftRestored: draftRestored === true } : {}) };
-      } catch { request.ack = { requestId, ok: false, error: 'NAVIGATION_FAILED' }; }
+      } catch (error) {
+        const code = /** @type {{code?:string}} */ (error)?.code;
+        const retryable = code === 'memory_source_cleanup_busy' || code === 'plugin_apply_in_progress';
+        request.ack = { requestId, ok: false, error: retryable ? code : 'NAVIGATION_FAILED' };
+      }
       request.queued = false;
       post('ack', request.ack); sessionChanged();
     });

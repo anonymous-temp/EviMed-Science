@@ -323,7 +323,14 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
         return cancel();
        }
       };
-      if (frame.type === 'open') await admit(frame.endpoint, async () => {
+      if (frame.type === 'open' && frame.endpoint === 'session/create') {
+        try { await admit(frame.endpoint, forward, frame.payload); }
+        catch (error) {
+          finishStream(streams.get(frame.streamId));
+          streams.delete(frame.streamId);
+          if (!closed) await rejectStream(frame.streamId, error);
+        }
+      } else if (frame.type === 'open') await admit(frame.endpoint, async () => {
         if (frame.endpoint === 'session/cancel') await stop();
         else await forward();
       }, frame.payload);

@@ -144,12 +144,16 @@ async function eventually(predicate, timeoutMs = 5_000) {
 const SECRET_FILES = [".credentials.yaml", "model-gateway.token", "evimed-workload.token", "control-plane-patch.yml", "bridge.secret", "kernel.env"];
 
 test("a controlled pilot's browser proxy receives hosted AgentBay permission and UI policy", async (t) => {
-  const { fake, project, managerFor } = await fixture(t, { config: { production: false, runtimeUiProxyEnabled: true } });
+  const { fake, project, managerFor } = await fixture(t, {
+    config: { production: false, runtimeUiProxyEnabled: true, memoryRuntimeLockIsolationEnabled: true },
+  });
   await managerFor().start(project);
   const patch = await readFile(fake.sessionFile("s-1", "/runtime/dsh-home/control-plane-patch.yml"), "utf8");
   assert.match(patch, /defaultPreset: 'evimed-hosted'/);
   assert.match(patch, /- id: ui-settings-models\n  disabled: true/);
   assert.doesNotMatch(patch, /\n      danger-full-access:/);
+  const kernelEnv = await readFile(fake.sessionFile("s-1", "/run/evimed/kernel.env"), "utf8");
+  assert.match(kernelEnv, /^EVIMED_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED='1'$/m);
 });
 
 test("a project's session: its labels, lifecycle and Contexts, credentials only through the file API, the kernel reached through its link", async (t) => {

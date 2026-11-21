@@ -139,6 +139,21 @@ test("a search states its threshold and its level, because the server's defaults
   assert.equal(JSON.parse(fetchImpl.calls[1].options.body).score_threshold, 0.4, "a caller that wants a floor may still set one");
 });
 
+test("MCP handshake POSTs use no writer lease while mixed, unknown and tool calls stay fenced", async () => {
+  const fetchImpl = recordingFetch(Array.from({ length: 5 }, () => ({ status: 200, body: {} })));
+  const client = new OpenVikingClient(config, { fetchImpl });
+  let leases = 0;
+  client.writeAdmission = async (_userId, operation) => { leases++; return operation(); };
+  const request = body => client.request({ path: "/mcp", method: "POST", userId: "usr_alice", body });
+  await request({ method: "initialize" });
+  await request([{ method: "notifications/initialized" }, { method: "tools/list" }]);
+  assert.equal(leases, 0);
+  await request([{ method: "tools/list" }, { method: "tools/call", params: { name: "forget" } }]);
+  await request({ method: "tools/call", params: { name: "remember" } });
+  await request({ method: "unknown" });
+  assert.equal(leases, 3);
+});
+
 test("a directory listing reads the bare list the server answers with", async () => {
   // The client used to read `result.entries`, a shape this server never sends,
   // so every listing came back empty and said nothing about it. Nothing called

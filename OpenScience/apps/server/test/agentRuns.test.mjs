@@ -7770,6 +7770,41 @@ async function rotationFixture(t, options = {}) {
   return { project, binding, createStore, file, fill };
 }
 
+test("tombstones replay across rotation without using the live run quota", async t => {
+  const receipts = [];
+  const { project, binding, createStore, file, fill } = await rotationFixture(t, {
+    maxRuns: 2, onLedgerRotation: (_project, receipt) => receipts.push(receipt),
+  });
+  const store = createStore();
+  const archived = await store.createRun(project, binding("archived"));
+  await store.finishInternal(project, archived.id, { status: "succeeded", artifacts: [] });
+  await store.recordRunLabels(project, archived.id, { archived: true });
+  const removed = await store.createRun(project, binding("removed"));
+  await store.cancelRun(project, removed.id, { by: "user" });
+  await fill(0, removed.id);
+  await store.recordRunLabels(project, removed.id, { deleted: true });
+  assert.deepEqual(receipts, [{
+    sealed: { name: "runs.jsonl", bytes: (await stat(file())).size },
+    opened: { name: "runs.000001.jsonl", bytes: (await stat(file(1))).size },
+  }]);
+  const restarted = createStore();
+  assert.equal((await restarted.list(project)).find(run => run.id === removed.id).deleted, true);
+  await restarted.createRun(project, binding("replacement"));
+  await restarted.recordRunLabels(project, archived.id, { archived: false });
+  assert.equal((await restarted.list(project)).find(run => run.id === archived.id).archived, false);
+  await assert.rejects(restarted.createRun(project, binding("over-quota")), { code: "agent_run_limit_reached" });
+  assert.equal((await restarted.list(project)).length, 3);
+});
+
+test("a run's startup receipt id survives replay without changing older ledger rows", async t => {
+  const { project, binding, createStore } = await rotationFixture(t);
+  const before = await createStore().createRun(project, binding("older"));
+  const recorded = await createStore({ runtimeStartupId: () => "startup_probe" }).createRun(project, binding("newer"));
+  const replayed = await createStore().list(project);
+  assert.equal(replayed.find(run => run.id === recorded.id).runtimeStartupId, "startup_probe");
+  assert.equal(Object.hasOwn(replayed.find(run => run.id === before.id), "runtimeStartupId"), false);
+});
+
 // Count actual file-body reads and JSONL parsing, independently of cache internals.
 function observeLedgerIO(t) {
   const reads = [], parsed = [];

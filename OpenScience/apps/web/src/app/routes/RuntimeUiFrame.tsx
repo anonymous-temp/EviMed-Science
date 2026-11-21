@@ -170,7 +170,7 @@ function startRefusal(error: unknown): "room" | "cleanup" | null {
 }
 
 /**
- * A start refused because the project's runtime settings are being applied.
+ * A start waiting for plugin settings or memory maintenance.
  *
  * The control plane waits for an apply itself before it refuses (20 s,
  * `PluginService.withAdmission`), so this is what is left when the wait ran
@@ -179,11 +179,23 @@ function startRefusal(error: unknown): "room" | "cleanup" | null {
  * said 「对话暂时打不开」 (2026-10-04). The shell says what is happening and
  * opens the conversation again by itself, a few times, before it calls it one.
  */
-// A conversation source being cleaned up keeps a project's prompts out for a few seconds the same way (`memory_source_cleanup_busy`).
-const PREPARING_CODES: ReadonlySet<string> = new Set(["plugin_apply_in_progress", "memory_source_cleanup_busy"]);
-const PREPARING_LINE = "正在准备运行环境";
+const PREPARING_LINES = {
+  plugin_apply_in_progress: "正在准备运行环境",
+  memory_source_cleanup_busy: "正在整理记忆",
+} as const;
+type PreparingCode = keyof typeof PREPARING_LINES;
+function isPreparingCode(code: unknown): code is PreparingCode {
+  return typeof code === "string" && Object.hasOwn(PREPARING_LINES, code);
+}
+function preparationFailure(code: PreparingCode): FrameFailure {
+  const text = code === "memory_source_cleanup_busy"
+    ? "整理记忆超时，请稍后重试。"
+    : "正在为这个项目准备运行环境，自动等待已结束。请重试。";
+  return { ...frameFailure(text), code };
+}
 const PREPARING_RETRY_MS = 2_000;
 const PREPARING_RETRY_LIMIT = 5;
+const PREPARING_WAIT_MS = 120_000;
 
 /**
  * A refusal the frame's own document announced.
@@ -467,10 +479,11 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
   const coverHanded = useRef<{ key: string; text: string } | null>(null);
   const coverFollowUp = useRef<{ requestId: string; owner: string; sessionId: string; opening: string } | null>(null);
   // The runtime's settings are being applied, so the opening is tried again by
-  // itself (`PREPARING_CODES`): said on the cover instead of an alert, until the
+  // itself: said on the cover instead of an alert, until the
   // conversation opens or the tries run out.
-  const [preparing, setPreparing] = useState(false);
+  const [preparing, setPreparing] = useState<PreparingCode | null>(null);
   const preparingRetries = useRef(0);
+  const preparingSince = useRef<number | null>(null);
   const preparingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // The opening is standing in line, and for what: every research environment is
   // taken (`runtime_capacity_full`) or the previous task's is still being cleaned up
@@ -542,15 +555,22 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     toast.error("上次尚未完成的对话请求未恢复。若有尚未交给对话的草稿，请重新输入。");
   }, [active, location.key, location.state, projectId]);
 
+  const endPreparation = useCallback((exhausted = false) => {
+    clearTimeout(preparingTimer.current);
+    preparingTimer.current = undefined;
+    preparingSince.current = null;
+    preparingRetries.current = exhausted ? PREPARING_RETRY_LIMIT : 0;
+    setPreparing(null);
+  }, []);
+
   // Another project is another opening: nothing of the last one's preparing carries over.
   useEffect(() => {
-    preparingRetries.current = 0;
-    setPreparing(false);
+    endPreparation();
     waitKind.current = null;
     waitAsks.current = 0;
     setWaiting(null);
     return () => { clearTimeout(preparingTimer.current); clearTimeout(roomTimer.current); roomTimer.current = undefined; };
-  }, [projectId]);
+  }, [projectId, endPreparation]);
 
   // The conversation is part of what the frame was asked for: on a task's page the address stays while the execution changes.
   const navigationKey = `${location.pathname}:${sessionId ?? ""}:${runtimeUiIntentFromState(location.state, projectId)?.requestId ?? ""}`;
@@ -562,8 +582,11 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     // navigation, so recreate its binding rather than leaving the prior error
     // sticky. Only for the frame on screen: a hidden one would rebuild itself
     // on every navigation the shell makes elsewhere.
-    if (changed && error && active) setAttempt(value => value + 1);
-  }, [navigationKey, error, active]);
+    if (changed && active) {
+      endPreparation();
+      if (error) setAttempt(value => value + 1);
+    }
+  }, [navigationKey, error, active, endPreparation]);
 
   // Standing in line (`runtime_capacity_full`, `CLEANUP_LINE`): one timer, whoever noticed first — this
   // opening's own start or the frame document's notice — and one more ask each
@@ -578,6 +601,23 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     waitAsks.current = 0;
     setWaiting(null);
   }, []);
+  const retryPreparation = useCallback((code: PreparingCode) => {
+    if (preparingTimer.current !== undefined) return;
+    const now = Date.now();
+    preparingSince.current ??= now;
+    if (preparingRetries.current >= PREPARING_RETRY_LIMIT || now - preparingSince.current >= PREPARING_WAIT_MS) {
+      endPreparation(true);
+      setError(preparationFailure(code));
+      return;
+    }
+    setPreparing(code);
+    preparingTimer.current = setTimeout(() => {
+      preparingTimer.current = undefined;
+      preparingRetries.current += 1;
+      setAttempt(value => value + 1);
+    }, PREPARING_RETRY_MS);
+  }, [endPreparation]);
+
   const waitToStart = useCallback((kind: "room" | "cleanup", retryAfterSeconds: number | null) => {
     if (waitKind.current !== kind) { waitKind.current = kind; waitAsks.current = 0; waitSince.current = Date.now(); }
     if (kind === "cleanup" && Date.now() - waitSince.current >= CLEANUP_WAIT_MS) {
@@ -602,18 +642,33 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         const refused = startRefusal(cause);
         if (refused === "room" || refused === "cleanup") { waitToStart(refused, cause instanceof WebApiError ? cause.retryAfterSeconds : null); return; }
         endWait();
+        if (cause instanceof WebApiError && isPreparingCode(cause.code)) { retryPreparation(cause.code); return; }
         setError(refusedStart(cause) ?? refusedFrame(cause));
       });
     };
     roomTimer.current = setTimeout(ask, delay);
-  }, [endWait, startCurrentRuntime]);
+  }, [endWait, retryPreparation, startCurrentRuntime]);
+
+  useEffect(() => {
+    if (!preparing || preparingSince.current === null) return;
+    const timer = setTimeout(() => {
+      endPreparation(true);
+      setError(preparationFailure(preparing));
+    }, Math.max(0, preparingSince.current + PREPARING_WAIT_MS - Date.now()));
+    return () => clearTimeout(timer);
+  }, [preparing, endPreparation]);
+
   // What a refused start of the opening is to the opening: a wait, or something to show.
   const meetStartRefusal = useCallback((cause: unknown) => {
+    if (cause instanceof WebApiError && isPreparingCode(cause.code)) {
+      if (!nativeReady.current) retryPreparation(cause.code);
+      return;
+    }
     const refused = startRefusal(cause);
     if (refused) { waitToStart(refused, cause instanceof WebApiError ? cause.retryAfterSeconds : null); return; }
     const refusal = refusedStart(cause);
     if (refusal) setError(refusal);
-  }, [waitToStart]);
+  }, [waitToStart, retryPreparation]);
 
   useEffect(() => {
     let live = true;
@@ -655,11 +710,12 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
       if (!live || owner !== sessionOwner()) return;
       // A binding refused for a cleanup that has not finished is the same wait as the start's.
       const wait = startRefusal(cause);
-      if (wait) waitToStart(wait, cause instanceof WebApiError ? cause.retryAfterSeconds : null);
+      if (cause instanceof WebApiError && isPreparingCode(cause.code)) retryPreparation(cause.code);
+      else if (wait) waitToStart(wait, cause instanceof WebApiError ? cause.retryAfterSeconds : null);
       else setError(refusedFrame(cause));
     });
     return () => { live = false; if (frameId) release(frameId); };
-  }, [projectId, origin, attempt, waitToStart, scope]);
+  }, [projectId, origin, attempt, waitToStart, retryPreparation, scope]);
 
   useEffect(() => {
     if (!frameId) return;
@@ -750,7 +806,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
   // Which moment the opening is in, for its deadline; opening the task (a
   // request in flight) is timed by its own deadline further down.
   const runtimeMoment = startStatus?.startStage ?? "environment";
-  const deadlineMoment: OpenMoment | null = navigated || pending || ready || waiting !== null ? null
+  const deadlineMoment: OpenMoment | null = navigated || pending || ready || waiting !== null || preparing ? null
     : runtimeUp && binding ? "interface" : runtimeMoment;
   useEffect(() => {
     if (error || deadlineMoment === null) return;
@@ -782,7 +838,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
   // The moment the start is in, asked while the runtime is not up yet. A
   // status read that fails changes nothing: the deadline stays in charge.
   useEffect(() => {
-    if (error || runtimeUp) return;
+    if (error || navigated || ready) return;
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = () => {
@@ -793,7 +849,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     };
     poll();
     return () => { live = false; clearTimeout(timer); };
-  }, [error, runtimeUp, attempt, projectId, scope]);
+  }, [error, navigated, ready, attempt, projectId, scope]);
 
   // 重新连接: the reader asking for this conversation back. Its runtime may
   // have yielded to a project opened in another tab, and the frame's own
@@ -825,12 +881,8 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
       // then blamed a slow cold start for a ceiling the server had already
       // named (2026-09-15 walk, A8).
       if (message?.type === "evimed.runtime-ui.notice" && message.version === 1 && typeof message.code === "string") {
-        if (typeof message.code === "string" && PREPARING_CODES.has(message.code) && preparingRetries.current < PREPARING_RETRY_LIMIT) {
-          // An apply under way: open the conversation again once it has had a moment.
-          preparingRetries.current += 1;
-          setPreparing(true);
-          clearTimeout(preparingTimer.current);
-          preparingTimer.current = setTimeout(() => setAttempt(value => value + 1), PREPARING_RETRY_MS);
+        if (isPreparingCode(message.code)) {
+          retryPreparation(message.code);
           return;
         }
         const wait = runtimeStartRecovery(message.code);
@@ -871,8 +923,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
       } else if (message.type === "evimed.runtime-ui.ready") {
         nativeReady.current = true;
         recoveryAttempted.current = false;
-        preparingRetries.current = 0;
-        setPreparing(false);
+        if (!intent) endPreparation();
         endWait();
         setNativeError(null);
         incoming.current = message.seq; lastSent.current = ""; setReady(true);
@@ -1092,7 +1143,14 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         // A superseded delivery may retire its history entry. It never owns the newer visible operation.
         const request = currentRequest.current;
         if (request?.requestId !== delivery.requestId || intent?.requestId !== delivery.requestId) return;
-        if (!message.ok) { setError({ ...frameFailure("这条对话暂时无法打开"), newTask: !scope && request.kind === "open" }); return; }
+        if (!message.ok) {
+          if (isPreparingCode(message.error)) {
+            setPending(false);
+            retryPreparation(message.error);
+          } else setError({ ...frameFailure("这条对话暂时无法打开"), newTask: !scope && request.kind === "open" });
+          return;
+        }
+        endPreparation();
         if (request.restoreDraft && message.draftRestored === false) toast.error("输入框已有内容或暂不能确认草稿状态，旧草稿仍已保留。可先查看当前输入，再返回恢复。");
         currentRequest.current = null; setPending(false); setNavigated(true);
         // What the cover holds now differs from what the composer was handed (nothing yet, or an earlier state of the box): the
@@ -1152,7 +1210,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [binding, origin, projectId, sessionId, frameTask, intent, location, navigate, navigated, attempt, postToFrame, waitToStart, endWait, mirrorAddress, scope, scopeOwner, readCurrentRuns]);
+  }, [binding, origin, projectId, sessionId, frameTask, intent, location, navigate, navigated, attempt, postToFrame, waitToStart, endWait, retryPreparation, endPreparation, mirrorAddress, scope, scopeOwner, readCurrentRuns]);
 
   useEffect(() => {
     if (!ready || error || !binding || !intent || !iframe.current?.contentWindow) return;
@@ -1323,10 +1381,10 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
   }, [error]);
 
   useEffect(() => {
-    if (!pending || error) return;
+    if (!pending || error || preparing) return;
     const timeout = setTimeout(() => setError(frameFailure("这条对话暂时无法打开")), 20_000);
     return () => clearTimeout(timeout);
-  }, [pending, error, attempt, intent?.requestId]);
+  }, [pending, error, preparing, attempt, intent?.requestId]);
 
   // The conversation is open: what the cover held is in the composer now, unless a follow-up draft is still on its way (its
   // acknowledgement clears the box). A failed opening keeps it for the retry.
@@ -1362,7 +1420,8 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
   // reports (`cleanupPending`) before the start that will be refused for it has even been asked.
   const cleaning = waiting === "cleanup" || (startStatus?.cleanupPending === true && !runtimeUp);
   const waitLine = waiting === "room" ? ROOM_FULL_LINE : cleaning ? CLEANUP_LINE : null;
-  const coverLine = waitLine ?? (preparing ? PREPARING_LINE : undefined);
+  const preparation = preparing ?? startStatus?.startWait;
+  const coverLine = waitLine ?? (preparation ? PREPARING_LINES[preparation] : undefined);
   const cover = navigated ? null : coverTakesText(intent, scope) && !sessionId
     ? <ConversationCover line={coverLine} draft={coverDraft} onDraft={setCoverDraft} />
     : <FrameSkeleton title={active ? conversationTitle(sessionId) : null} line={coverLine} />;
@@ -1372,7 +1431,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
   const connectionNotice = nativeError ?? leaseAlert;
   // 重试: another opening with a fresh allowance of waiting, on the same intent — a brief handed over by a
   // capability card or a hand-off lives in the address's state and is sent again with it.
-  const retry = () => { endWait(); setAttempt(value => value + 1); };
+  const retry = () => { endWait(); endPreparation(); setAttempt(value => value + 1); };
   // 查看已有成果: what the control plane holds of this conversation reads without a runtime — its delivered
   // report when the ledger has one, else the project's files. The conversation's own text lives in the kernel's
   // session store and is not faked from the ledger, which keeps no reply text.

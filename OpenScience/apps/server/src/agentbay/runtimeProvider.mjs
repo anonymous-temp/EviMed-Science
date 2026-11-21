@@ -618,6 +618,7 @@ export class AgentBayRuntimeProvider {
       OPEN_SCIENCE_RUNTIME_AUTHORITY: RUNTIME_AUTHORITY,
       // The same name the Docker launch passes: present, and empty when this deployment has no memory engine.
       [MEMORY_GATEWAY_URL_ENV]: String(plan.memoryGatewayUrl ?? ""),
+      EVIMED_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED: this.config.memoryRuntimeLockIsolationEnabled === true ? "1" : "0",
       ...runtimeEnvironment({
         presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
         capabilitiesDir: "/opt/evimed/capabilities",

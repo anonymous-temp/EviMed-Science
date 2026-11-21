@@ -790,6 +790,11 @@ Explicit content expansion may intentionally change the layout with a controlled
 respects reduced motion. Never hide or clip actionable information, errors or recovery controls to
 keep a footprint fixed.
 
+For a conversation opening, reuse the existing cover status slot during plugin
+application or memory maintenance. Keep the same conversation request and draft
+across bounded automatic retries. Show the existing retry action when the wait
+expires.
+
 **Motion**: three durations — `duration-fast` 120 ms for a state change, `duration-base` 200 ms
 for a container, `duration-slow` 320 ms for a page-sized change — one easing in
 (`ease-standard`) and one out (`ease-exit`, 2.1). A drawer travels 24 px, a toast 8, a menu 4

@@ -61,21 +61,36 @@ export const TASK_TIMEOUT_MS = 2 * 60 * 60_000;
 const LEASE_MS = 5 * 60_000;
 const DAY_MS = 24 * 60 * 60_000;
 
+/** @param {string|Date|null|undefined} timestamp @param {number} duration @param {Date} now */
+function remainingMs(timestamp, duration, now) {
+  const at = timestamp instanceof Date ? timestamp.getTime() : timestamp ? Date.parse(timestamp) : NaN;
+  return Number.isFinite(at) ? Math.max(0, at + duration - now.getTime()) : 0;
+}
+
 /**
  * The memory directories of an account that hold at least two files, sorted: the first path segment of each file the platform reads
  * (`nativeMemoryFile` leaves out `evimed/`, `observations/` and the scaffolding; `profile.md` has no directory).
  * @param {readonly { uri: string }[]} files @param {string} root
  */
 export function consolidationDirectories(files, root) {
-  /** @type {Map<string, number>} */
-  const counts = new Map();
+  return consolidationFileCounts(files, root).filter(({ types }) => types.some(type => type.files >= 2)).map(({ directory }) => directory);
+}
+
+/** @param {readonly { uri: string }[]} files @param {string} root */
+function consolidationFileCounts(files, root) {
+  /** @type {Map<string, Map<string, number>>} */
+  const directories = new Map();
   for (const file of files) {
-    const relPath = nativeMemoryFile(file.uri, root)?.relPath;
-    if (!relPath?.includes("/")) continue;
-    const segment = relPath.split("/")[0];
-    counts.set(segment, (counts.get(segment) ?? 0) + 1);
+    const memory = nativeMemoryFile(file.uri, root);
+    if (!memory?.relPath.includes("/")) continue;
+    const directory = memory.relPath.split("/")[0];
+    const types = directories.get(directory) ?? new Map();
+    types.set(memory.type, (types.get(memory.type) ?? 0) + 1);
+    directories.set(directory, types);
   }
-  return [...counts].filter(([, count]) => count >= 2).map(([segment]) => segment).sort();
+  return [...directories].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([directory, counts]) => ({
+    directory, types: [...counts].map(([type, count]) => ({ type, files: count })).sort((a, b) => a.type.localeCompare(b.type)),
+  }));
 }
 
 /** The soft hint the engine is given: what to keep, and what never to do. */
@@ -169,18 +184,14 @@ export class NativeMemoryConsolidation {
 
   /** @param {string} userId @param {Awaited<ReturnType<import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay["consolidationState"]>>} state */
   async #maybeSubmit(userId, state, force = false) {
-    const at = this.now().getTime();
-    if (!force && state.consolidatedAt && at - Date.parse(state.consolidatedAt) < this.intervalMs) return "not_due";
-    if (!force && state.checkedAt && at - Date.parse(state.checkedAt) < CHECK_EVERY_MS) return "not_due";
-    const settings = await this.memorySettings.settings(userId);
-    if (settings.learningPaused) return "held_back";
-    if(this.overlay.sourceDeletion&&(await this.overlay.sourceDeletion.ledger.recordsForOwner(userId,{pendingOnly:true})).length)return "held_back";
-    const open = await this.overlay.openCommits({ userId, limit: 1, now: this.now() });
-    const latest = (await this.overlay.commitsOf(userId, { limit: 1 }))[0];
-    if (open.length || (!force && latest && at - Date.parse(latest.createdAt ?? "") < QUIET_AFTER_COMMIT_MS)) return "held_back";
+    const now = this.now();
+    const timing = this.#timing(state, now);
+    if (!force && (timing.intervalRemainingMs || timing.recheckRemainingMs)) return "not_due";
+    const activity = await this.#activity(userId, now);
+    if (activity.learningPaused || activity.sourceCleanupPending || activity.summaryCleanupPending
+      || activity.extractionPending || (!force && activity.quietRemainingMs)) return "held_back";
     if (!await this.overlay.claimConsolidation(userId, LEASE_MS)) return "held_back";
-    const root = this.sessions.memoryRoot(userId);
-    const files = (await this.sessions.tree(userId, root, { levelLimit: 8 })).filter((node) => !node.isDir && nativeMemoryFile(node.uri, root));
+    const { root, files } = await this.#memoryFiles(userId);
     if (!force && files.length < MIN_FILES) { await this.overlay.noteConsolidationChecked(userId, this.now()); return "too_few"; }
     const fingerprint = filesFingerprint(files);
     if (!force && state.fingerprint === fingerprint) { await this.overlay.noteConsolidationChecked(userId, this.now()); return "unchanged"; }
@@ -191,6 +202,79 @@ export class NativeMemoryConsolidation {
     if (!first) { await this.overlay.noteConsolidationChecked(userId, this.now()); return "too_few"; }
     await this.#submitDirectory(userId, root, first, `${fingerprint.slice(0, 24)}-${hour}`);
     return "submitted";
+  }
+
+  #timing(state, now) {
+    return {
+      intervalRemainingMs: remainingMs(state.consolidatedAt, this.intervalMs, now),
+      recheckRemainingMs: remainingMs(state.checkedAt, CHECK_EVERY_MS, now),
+      leaseRemainingMs: remainingMs(state.leaseUntil, 0, now),
+    };
+  }
+
+  async #activity(userId, now) {
+    const settings = await this.memorySettings.settings(userId);
+    const sourceCleanupPending = Boolean((await this.overlay.sourceDeletion?.ledger.recordsForOwner(userId, { pendingOnly: true }))?.length);
+    const summaryCleanupPending = this.config.memoryDeferredSummaryRebuildEnabled === true
+      && (await this.overlay.pendingSummaryInvalidations(userId)).length > 0;
+    // A history-only retry can still be 'pending' after native ingestion. A
+    // failed extraction with future backoff, on the other hand, is still unproven.
+    const extractionPending = await this.overlay.hasUnprovenNativeWrites(userId);
+    const [latest] = await this.overlay.commitsOf(userId, { limit: 1 });
+    return { learningPaused: settings.learningPaused === true, sourceCleanupPending, summaryCleanupPending, extractionPending,
+      quietRemainingMs: remainingMs(latest?.createdAt, QUIET_AFTER_COMMIT_MS, now) };
+  }
+
+  async #memoryFiles(userId) {
+    const root = this.sessions.memoryRoot(userId);
+    const files = (await this.sessions.tree(userId, root, { levelLimit: 8 })).filter(node => !node.isDir && nativeMemoryFile(node.uri, root));
+    return { root, files };
+  }
+
+  /** Read metadata on the operator route's read-only client without entering lazy migrations.
+   * @param {{query:Function}} client @param {string} userId */
+  async diagnosticFacts(client, userId) {
+    if (!this.sessions?.configured || !this.overlay?.configured) return null;
+    const result = await client.query(`SELECT
+      a.consolidated_at, a.consolidation_checked_at, a.consolidation_lease_until, a.consolidation_task, a.consolidation_fingerprint,
+      s.learning_paused,
+      (SELECT max(created_at) FROM evimed_memory.native_commits WHERE user_id=u.id) AS latest_commit,
+      EXISTS (SELECT 1 FROM evimed_memory.native_commits WHERE user_id=u.id AND state IN ('pending','failed')
+        AND native_ingested_at IS NULL AND ingested_at IS NULL) AS extraction_pending,
+      ${this.config.memoryDeferredSummaryRebuildEnabled === true
+        ? "EXISTS (SELECT 1 FROM evimed_memory.native_summary_invalidations WHERE user_id=u.id)" : "false"} AS summary_pending,
+      ${this.overlay.sourceDeletion
+        ? "EXISTS (SELECT 1 FROM evimed_source_deletion.conversations WHERE user_id=u.id AND account_created_at=u.created_at AND cleanup='pending')" : "false"} AS source_pending
+      FROM evimed_control.users u LEFT JOIN evimed_memory.native_accounts a ON a.user_id=u.id
+      LEFT JOIN evimed_memory.settings s ON s.user_id=u.id WHERE u.id=$1`, [userId]);
+    return result.rows[0] ?? null;
+  }
+
+  /** Operator snapshot of eligibility. It never schedules, leases or reads file bodies. */
+  async diagnose(userId, facts) {
+    if (!this.sessions?.configured || !this.overlay?.configured) return { userId, eligible: false, blockers: ["unavailable"] };
+    const now = this.now();
+    if (!facts) return { userId, eligible: null, blockers: ["unavailable"] };
+    const state = { consolidatedAt: facts.consolidated_at, checkedAt: facts.consolidation_checked_at,
+      leaseUntil: facts.consolidation_lease_until, task: facts.consolidation_task, fingerprint: facts.consolidation_fingerprint };
+    const timing = this.#timing(state, now);
+    const activity = { learningPaused: facts.learning_paused === true, sourceCleanupPending: facts.source_pending === true,
+      summaryCleanupPending: facts.summary_pending === true, extractionPending: facts.extraction_pending === true,
+      quietRemainingMs: remainingMs(facts.latest_commit, QUIET_AFTER_COMMIT_MS, now) };
+    const { root, files } = await this.#memoryFiles(userId);
+    const directories = consolidationFileCounts(files, root);
+    const missingFiles = Math.max(0, MIN_FILES - files.length);
+    const missingSameTypeFiles = Math.max(0, 2 - Math.max(0, ...directories.flatMap(row => row.types.map(type => type.files))));
+    const unchanged = state.fingerprint === filesFingerprint(files);
+    const blockers = Object.entries({
+      off: !this.applicable, task_in_flight: Boolean(state.task), interval: timing.intervalRemainingMs,
+      hourly_check: timing.recheckRemainingMs, lease: timing.leaseRemainingMs, learning_paused: activity.learningPaused,
+      source_cleanup: activity.sourceCleanupPending, summary_cleanup: activity.summaryCleanupPending,
+      extraction_pending: activity.extractionPending, quiet_period: activity.quietRemainingMs,
+      too_few_files: missingFiles, too_few_same_type: missingSameTypeFiles, unchanged,
+    }).filter(([, blocked]) => blocked).map(([reason]) => reason);
+    return { userId, eligible: blockers.length === 0, blockers, files: files.length, missingFiles, missingSameTypeFiles,
+      directories, ...timing, ...activity, taskInFlight: Boolean(state.task), unchanged };
   }
 
   /** @param {string} userId @param {string} root @param {string} segment @param {string} salt */

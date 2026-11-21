@@ -74,6 +74,22 @@ test('plugin apply returns synchronously before loader readiness and navigates w
   f.ctx.dispose();
 });
 
+test('the shell receives the maintenance code only for a definitive native create refusal', async () => {
+  for (const code of ['memory_source_cleanup_busy', 'plugin_apply_in_progress', 'runtime_session_create_failed']) {
+    const f = fixture();
+    f.ctx.sessions.create = async () => { throw Object.assign(new Error('internal failure message'), { code }); };
+    apply(f.ctx, {}, f.target);
+    await settle();
+    f.navigate();
+    await settle();
+    const ack = f.sent.find(row => row.message.type === 'evimed.runtime-ui.ack')?.message;
+    assert.equal(ack?.ok, false);
+    assert.equal(ack?.error, code === 'runtime_session_create_failed' ? 'NAVIGATION_FAILED' : code);
+    assert.deepEqual(f.calls, []);
+    f.ctx.dispose();
+  }
+});
+
 test('the scheduled-task page is shown over the session once it is open, before the draft, and only that page may be asked for', async () => {
   const f = fixture(); apply(f.ctx, {}, f.target); await settle();
   f.navigate({ intent: { kind: 'create', sessionId: 'session-new', draft: 'Plan it', panel: 'schedules' } }); await settle();

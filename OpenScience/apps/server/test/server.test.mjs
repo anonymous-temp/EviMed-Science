@@ -3793,17 +3793,33 @@ test("LG6 account export after source erasure carries every scrubbed ledger segm
     const archive = gunzipSync(Buffer.from(await exported.arrayBuffer()));
     const entries = tarEntries(archive);
     const events = [];
+    const manifest = JSON.parse(entries.get("account.json").toString("utf8")).archive;
+    assert.match(manifest.id, /^[a-f0-9]{32}$/);
     for (const segment of segments) {
       const name = `projects/paper1/.openscience/${segment}`;
       const bytes = entries.get(name);
       assert.ok(bytes, `missing erased segment ${segment}`);
       assert.deepEqual(bytes, await readFile(path.join(project.metaDir, segment)), "export preserves scrubbed bytes");
+      assert.ok(manifest.files.some(file => file.path === name && file.bytes === bytes.length));
       events.push(...bytes.toString("utf8").split("\n").filter(Boolean).map(JSON.parse));
     }
     assert.doesNotMatch(archive.toString("utf8"), /Private export/);
     assert.equal(events.filter(event => event.deleted === true).length, 1);
     assert.deepEqual(events.find(event => event.event === "finished").artifacts, ["report.md"]);
     assert.equal(entries.get("projects/paper1/workspace/report.md")?.toString("utf8"), "Retained report");
+    const audit = path.join(app.config.dataDir, ".openscience", "security.jsonl");
+    let receipts;
+    for (let attempt = 0; attempt < 50; attempt++) {
+      receipts = (await readFile(audit, "utf8")).trim().split("\n").map(JSON.parse);
+      if (receipts.some(row => row.action === "account.export")) break;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    const rotations = receipts.filter(row => row.action === "run_ledger.rotate").map(row => JSON.parse(row.detail));
+    assert.equal(rotations.length, segments.length - 1);
+    assert.deepEqual(rotations.map(row => row.opened.name), segments.filter(name => name !== "runs.jsonl"));
+    const auditExport = receipts.find(row => row.action === "account.export");
+    assert.equal(auditExport?.status, "completed");
+    assert.equal(JSON.parse(auditExport.detail).id, manifest.id);
   });
 });
 

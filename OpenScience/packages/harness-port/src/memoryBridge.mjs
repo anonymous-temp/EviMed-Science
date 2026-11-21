@@ -25,6 +25,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import http from 'node:http'
 import { readFile } from 'node:fs/promises'
 import process from 'node:process'
+import { setTimeout as sleep } from 'node:timers/promises'
 
 /** Loopback only, and written as the address: `localhost` may resolve to `::1`, where nothing listens. */
 export const MEMORY_BRIDGE_HOST = '127.0.0.1'
@@ -137,8 +138,9 @@ function presentsLocalKey(presented, localKey) {
  * The random reference survives the plugin's stdio MCP hop and is consumed only by this bridge.
  * @param {{tools?:{get:(name:string)=>{name:string,execute:Function}|null},on?:(event:string,callback:()=>void)=>(()=>void)}} ctx
  * @param {Map<string,string>} bindings
+ * @param {() => void} [onRegistered]
  */
-export function decorateMemoryToolSource(ctx, bindings) {
+export function decorateMemoryToolSource(ctx, bindings, onRegistered) {
   /** @type {Map<{name:string,execute:Function},{original:Function,wrapped:Function}>} */
   const decorated = new Map()
   const refresh = () => {
@@ -162,6 +164,7 @@ export function decorateMemoryToolSource(ctx, bindings) {
       definition.execute = wrapped
       decorated.set(definition, { original, wrapped })
     }
+    if (onRegistered && REQUIRED_MEMORY_TOOLS.every(name => ctx.tools?.get(`mcp__openviking__${name}`))) onRegistered()
   }
   const unsubscribe = ctx.on?.('tools/change', refresh)
   refresh()
@@ -176,6 +179,38 @@ export function decorateMemoryToolSource(ctx, bindings) {
 const FORWARDED_REQUEST_HEADERS = Object.freeze(['content-type', 'accept', 'mcp-session-id', 'mcp-protocol-version', 'last-event-id', 'user-agent'])
 const FORWARDED_RESPONSE_HEADERS = Object.freeze(['content-type', 'mcp-session-id', 'retry-after'])
 const BRIDGE_METHODS = Object.freeze(['GET', 'POST', 'DELETE'])
+const REQUIRED_MEMORY_TOOLS = Object.freeze(['remember', 'forget', 'read', 'search', 'list'])
+const HANDSHAKE_RETRY_STATUS = new Set([429, 502, 503, 504])
+const REGISTRATION_RECEIPT_BYTES = 64 * 1024
+
+/** Only startup metadata is safe to replay after a lost response. */
+function registrationStage(method, pathname, body) {
+  if (method === 'GET' && pathname === '/health') return 'health'
+  if (method !== 'POST' || pathname !== '/mcp') return null
+  try {
+    const message = JSON.parse(body.toString('utf8'))
+    if (message?.method === 'initialize') return 'initialize'
+    if (message?.method === 'tools/list') return 'tools_list'
+  } catch { /* The gateway handles malformed MCP requests. */ }
+  return null
+}
+
+/** Translate only status/code fields from bounded metadata. Bodies never enter a receipt. */
+function registrationResponseCode(response, bytes) {
+  if (!response.ok) return `http_${response.status}`
+  if (!bytes.length) return null
+  const text = Buffer.concat(bytes).toString('utf8').trim()
+  const records = response.headers.get('content-type')?.includes('text/event-stream')
+    ? text.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5)) : [text]
+  for (const record of records) {
+    try {
+      const value = JSON.parse(record)
+      if (Number.isSafeInteger(value?.error?.code)) return `rpc_error_${value.error.code}`
+      if (value?.status === 'error') return 'gateway_reported_error'
+    } catch { /* Unparsed metadata can still be forwarded intact. */ }
+  }
+  return null
+}
 
 /**
  * Deadlines of one forward, by what is being asked. The gateway has its own, shorter ones towards OpenViking; these bound
@@ -203,8 +238,9 @@ export const MEMORY_BRIDGE_MAX_BODY_BYTES = 2 * 1024 * 1024
 
 /** @param {unknown} error @returns {string} */
 function reason(error) {
-  const cause = /** @type {any} */ (error)?.cause
-  return String(cause?.code ?? /** @type {any} */ (error)?.name ?? 'error').slice(0, 64)
+  const failure = /** @type {any} */ (error)
+  const code = String(failure?.cause?.code ?? failure?.code ?? failure?.name ?? 'error')
+  return /^[a-z0-9_.-]{1,64}$/i.test(code) ? code : 'error'
 }
 
 /**
@@ -234,6 +270,8 @@ function isToolCall(pathname, body) {
  * @property {{ healthMs?: number, requestMs?: number, toolCallMs?: number }} [deadlines]
  * @property {number} [cooldownMs]
  * @property {boolean} [retryHealthTimeout]
+ * @property {boolean} [retryRegistration]
+ * @property {(step: string, elapsedMs: number, code: string | null) => void} [onRegistrationStep]
  * @property {(event: 'unreachable' | 'restored', detail: string) => void} [onState] called on a change, never per request
  * @property {number} [outageMs] see {@link MEMORY_BRIDGE_OUTAGE_NOTICE_MS}
  * @property {(detail: string) => void} [onOutage] called once per outage, by the forward that fails after the service has not answered for `outageMs`
@@ -251,6 +289,10 @@ export function createMemoryBridge(options) {
   const port = Number.isInteger(options.port) ? Number(options.port) : MEMORY_BRIDGE_PORT
   const send = options.fetchImpl ?? globalThis.fetch
   const readToken = options.readToken ?? ((/** @type {string} */ file) => readFile(file, 'utf8'))
+  const currentToken = async () => {
+    try { return (await readToken(tokenFile)).trim() }
+    catch { return '' }
+  }
   const now = options.now ?? Date.now
   const deadlines = { ...MEMORY_BRIDGE_DEADLINES, ...options.deadlines }
   const cooldownMs = options.cooldownMs ?? MEMORY_BRIDGE_COOLDOWN_MS
@@ -313,6 +355,12 @@ export function createMemoryBridge(options) {
       chunks.push(chunk)
     }
     let body = Buffer.concat(chunks)
+    const stage = registrationStage(req.method, url.pathname, body)
+    const started = now()
+    const record = (/** @type {string|null} */ code, began = started) => {
+      if (stage) options.onRegistrationStep?.(stage, Math.max(0, now() - began), code)
+    }
+    const canRetry = Boolean(stage && options.retryRegistration)
     let sourceSession = ''
     if (url.pathname === '/mcp' && body.length) {
       try {
@@ -326,15 +374,20 @@ export function createMemoryBridge(options) {
         }
       } catch { /* The gateway owns invalid JSON responses. */ }
     }
-    if (!gateway) { unavailable(res, 'not configured'); return }
-    if (now() < closedUntil) { unavailable(res, 'unreachable'); return }
+    if (!gateway) { record('gateway_not_configured'); unavailable(res, 'not configured'); return }
+    if (now() < closedUntil) { record('gateway_cooldown'); unavailable(res, 'unreachable'); return }
 
     /** @type {string} */
     let token = ''
     if (tokenFile) {
-      try { token = (await readToken(tokenFile)).trim() } catch { token = '' }
+      token = await currentToken()
+      if (!token && canRetry) {
+        record('workload_token_missing')
+        await sleep(100)
+        token = await currentToken()
+      }
       // A runtime whose token file is still empty has not been admitted yet; the gateway would only say 401.
-      if (!token) { unavailable(res, 'no credential yet'); return }
+      if (!token) { record('workload_token_missing'); unavailable(res, 'no credential yet'); return }
     }
     const deadline = url.pathname === '/health' ? deadlines.healthMs : isToolCall(url.pathname, body) ? deadlines.toolCallMs : deadlines.requestMs
     const abort = new globalThis.AbortController()
@@ -347,7 +400,7 @@ export function createMemoryBridge(options) {
       abort.abort()
     })
     /** @param {string} bearer */
-    const forward = (bearer) => {
+    const forward = (bearer, signal = abort.signal) => {
       /** @type {Record<string, string>} */
       const headers = {}
       for (const name of FORWARDED_REQUEST_HEADERS) {
@@ -356,15 +409,30 @@ export function createMemoryBridge(options) {
       }
       if (sourceSession) headers['x-evimed-memory-session'] = sourceSession
       if (bearer) headers.authorization = `Bearer ${bearer}`
-      return send(`${gateway}${url.pathname}${url.search}`, { method: req.method, headers, ...(body.length ? { body } : {}), signal: abort.signal, redirect: 'error' })
+      return send(`${gateway}${url.pathname}${url.search}`, { method: req.method, headers, ...(body.length ? { body } : {}), signal, redirect: 'error' })
     }
     const attemptStarted = now()
     try {
-      let response = await forward(token)
+      let response
+      if (canRetry) {
+        const first = AbortSignal.any([abort.signal, AbortSignal.timeout(Math.max(1, Math.floor(deadline / 2)))])
+        try { response = await forward(token, first) }
+        catch (error) {
+          if (abort.signal.aborted) throw error
+          record(first.aborted ? 'gateway_timeout' : 'gateway_unreachable', attemptStarted)
+        }
+        if (response && HANDSHAKE_RETRY_STATUS.has(response.status)) {
+          record(`http_${response.status}`, attemptStarted)
+          await response.body?.cancel().catch(() => {})
+          response = undefined
+        }
+        if (!response) await sleep(Math.min(100, Math.max(1, Math.floor(deadline / 4))), undefined, { signal: abort.signal })
+      }
+      response ??= await forward(token)
       // The control plane accepts only the token its file holds now: a request that straddled a rewrite is asked once more
       // with what the file holds after it (the rule of `packages/socket/src/workloadRequest.mjs`, for the same reason).
       if (response.status === 401 && tokenFile) {
-        const fresh = await readToken(tokenFile).then((text) => text.trim(), () => '')
+        const fresh = await currentToken()
         if (fresh && fresh !== token) {
           await response.body?.cancel().catch(() => {})
           stats.tokenRetries += 1
@@ -378,8 +446,18 @@ export function createMemoryBridge(options) {
         if (value) out[name] = value
       }
       res.writeHead(response.status, out)
-      if (response.body) for await (const chunk of response.body) res.write(chunk)
+      /** @type {Buffer[]} */ const metadata = []
+      let metadataBytes = 0
+      if (response.body) for await (const chunk of response.body) {
+        if (stage && metadataBytes < REGISTRATION_RECEIPT_BYTES) {
+          const bytes = Buffer.from(chunk.subarray(0, REGISTRATION_RECEIPT_BYTES - metadataBytes))
+          metadataBytes += bytes.length
+          metadata.push(bytes)
+        }
+        res.write(chunk)
+      }
       res.end()
+      if (stage) record(registrationResponseCode(response, metadata), attemptStarted)
       stats.forwarded += 1
       failingSince = null
       outageTold = false
@@ -387,7 +465,7 @@ export function createMemoryBridge(options) {
       observe(true, `HTTP ${response.status}`)
     } catch (error) {
       // The caller hung up first: nothing was learned about the gateway, and there is nobody to answer.
-      if (callerLeft) return
+      if (callerLeft) { record('caller_closed', attemptStarted); return }
       const timedOut = abort.signal.aborted
       // A tool call that ran out of time says the tool was slow, not that the gateway is gone.
       // One slow liveness probe says nothing about reads and tools, so the first in a row leaves them available. A second in a row
@@ -398,6 +476,7 @@ export function createMemoryBridge(options) {
       if (healthTimedOut) slowHealthInRow += 1
       if (!(timedOut && deadline === deadlines.toolCallMs) && !slowHealth) closedUntil = now() + cooldownMs
       const detail = timedOut ? `no answer in ${deadline} ms` : reason(error)
+      record(timedOut ? 'gateway_timeout' : 'gateway_unreachable', attemptStarted)
       observe(false, detail)
       failingSince ??= attemptStarted
       if (!outageTold && now() - failingSince >= outageMs) {
@@ -438,18 +517,28 @@ export function createMemoryBridge(options) {
  * dialling a closed port — which costs nothing — and a notice where an operator looks.
  *
  * @param {any} ctx
- * @param {{ enabled?: boolean, gatewayUrl?: string, tokenFile?: string, port?: number, outageNoticeMs?: number, cooldownMs?: number, retryHealthTimeout?: boolean }} config
+ * @param {{ enabled?: boolean, gatewayUrl?: string, tokenFile?: string, port?: number, outageNoticeMs?: number, cooldownMs?: number, retryHealthTimeout?: boolean, retryRegistration?: boolean }} config
  */
 export async function registerMemoryBridge(ctx, config) {
   if (config.enabled !== true) return
   const diagnostics = () => ctx.get('evimedDiagnostics')
+  const started = Date.now()
+  /** @type {Record<string,{ attempts:number, elapsedMs:number, sinceBridgeMs:number, code:string|null, lastFailure:string|null }>} */
+  const steps = {}
+  /** @param {string} step @param {number} elapsedMs @param {string|null} code */
+  const recordStep = (step, elapsedMs, code) => {
+    if (steps.tools_registered) return
+    const row = { attempts: (steps[step]?.attempts ?? 0) + 1, elapsedMs, sinceBridgeMs: Date.now() - started,
+      code, lastFailure: code ?? steps[step]?.lastFailure ?? null }
+    steps[step] = row
+    ctx.logger?.info?.(`evimed memory registration: ${step} ${JSON.stringify(row)}`)
+  }
   const localKey = createLocalBridgeKey()
   pinOpenVikingPluginEnvironment(localKey)
   const gatewayUrl = String(config.gatewayUrl ?? '').trim()
   if (!gatewayUrl) diagnostics()?.degrade?.('memory bridge: no memory gateway is configured for this runtime')
   /** @type {Map<string,string>} */
   const toolSources = new Map()
-  ctx.effect(() => decorateMemoryToolSource(ctx, toolSources))
   const bridge = createMemoryBridge({
     toolSources,
     gatewayUrl,
@@ -458,6 +547,8 @@ export async function registerMemoryBridge(ctx, config) {
     port: config.port,
     cooldownMs: config.cooldownMs,
     retryHealthTimeout: config.retryHealthTimeout,
+    retryRegistration: config.retryRegistration,
+    onRegistrationStep: recordStep,
     outageMs: config.outageNoticeMs,
     // One line per state, not per failure: the set an operator reads holds each line once.
     onState: (event, detail) => ctx.logger?.warn?.(`evimed memory bridge: gateway ${event} (${detail})`),
@@ -483,9 +574,13 @@ export async function registerMemoryBridge(ctx, config) {
   try {
     await bridge.listen()
     listening = true
+    recordStep('listen', Date.now() - started, null)
   } catch (error) {
+    recordStep('listen', Date.now() - started, reason(error))
     diagnostics()?.degrade?.(`memory bridge: could not listen on ${MEMORY_BRIDGE_HOST}:${bridge.port} (${reason(error)})`)
   }
   ctx.effect(() => () => bridge.close())
-  ctx.provide(MEMORY_BRIDGE_SERVICE, { port: bridge.port, listening, stats: bridge.stats })
+  ctx.effect(() => decorateMemoryToolSource(ctx, toolSources, () => recordStep('tools_registered', Date.now() - started, null)))
+  ctx.provide(MEMORY_BRIDGE_SERVICE, { port: bridge.port, listening, stats: bridge.stats,
+    registration: () => ({ registered: Boolean(steps.tools_registered), steps: { ...steps } }) })
 }
