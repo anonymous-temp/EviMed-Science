@@ -184,7 +184,11 @@ for (const deferred of [false, true]) test('a targeted withdrawal retracts extra
   assert.ok(!(await f.store.safetyNotes(f.userId, 'second')).some(row => row.uri === engineUri));
   await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'people', sensitive: false });
   const unindexed = f.seed('safety_notes/unsettled.md', '# Owner\n- ' + statement, { type: 'safety_notes' });
-  const other = f.seed('safety_notes/other.md', '# Other person\n- My sister reported an iohexol reaction.', { type: 'safety_notes' });
+  const other = f.seed('safety_notes/other.md', '# Other person\n- ' + statement, { type: 'safety_notes' });
+  f.store.rejectionJudge = { same: async () => { throw new Error('temporary review failure'); } };
+  await assert.rejects(f.store.forget({ id: f.userId }, { id: 'first' }, uri, { lines: [statement] }), /temporary review failure/);
+  assert.equal((await f.overlay.removals(f.userId)).length, 0, 'the target is still addressable for retry');
+  f.store.rejectionJudge = judge;
   const result = await f.store.forget({ id: f.userId }, { id: 'first' }, uri, { lines: [statement] });
   assert.equal(result.removedLines, 1);
   const resident = createLabResidentProfiles({ config: f.config, memorySettings: f.memorySettings, nativeMemory: f.store });

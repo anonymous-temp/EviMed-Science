@@ -79,21 +79,27 @@ export function safetyStatements(body, uri) {
 export async function matchSafetyStatements(userId, candidates, references, judge) {
   const matches = new Map();
   if (!references.length) return matches;
-  const options = references.map(row => ({ fingerprint: lineFingerprint(row.scoped), text: row.scoped }));
+  const byScope = new Map(references.map(row => [row.scoped, row]));
+  const options = [...byScope].map(([text]) => ({ fingerprint: digest(text), text }));
+  const byDigest = new Map(options.map(option => [option.fingerprint, byScope.get(option.text)]));
   const unmatched = [];
   for (const row of candidates) {
-    const exact = references.find(ref => lineFingerprint(ref.scoped) === lineFingerprint(row.scoped));
+    const exact = byScope.get(row.scoped);
     if (exact) matches.set(row, exact);
     else unmatched.push(row);
   }
   if (judge) {
     for (let i = 0; i < unmatched.length; i += REJECTION_JUDGE_MAX_CANDIDATES) {
       const batch = unmatched.slice(i, i + REJECTION_JUDGE_MAX_CANDIDATES);
-      const result = await judge.same({ userId, requireAvailable: true, said: [],
-        candidates: batch.map(row => ({ text: row.scoped, removed: options })) });
-      for (const [index, fingerprint] of result.same) {
-        const ref = references.find(row => lineFingerprint(row.scoped) === fingerprint);
-        if (batch[index] && ref) matches.set(batch[index], ref);
+      for (let j = 0; j < options.length; j += REJECTION_JUDGE_MAX_CANDIDATES) {
+        const pending = batch.filter(row => !matches.has(row));
+        if (!pending.length) break;
+        const offered = options.slice(j, j + REJECTION_JUDGE_MAX_CANDIDATES);
+        const result = await judge.same({ userId, requireAvailable: true, said: [],
+          candidates: pending.map(row => ({ text: row.scoped, removed: offered })) });
+        for (const [index, fingerprint] of result.same) {
+          if (pending[index] && offered.some(option => option.fingerprint === fingerprint)) matches.set(pending[index], byDigest.get(fingerprint));
+        }
       }
     }
   }
