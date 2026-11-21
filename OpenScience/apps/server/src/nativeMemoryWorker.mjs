@@ -7,7 +7,7 @@ import { checkForgetRequests } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash } from "node:crypto";
-import { checkMemoryNoteLabels, carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn, profileMemoryStatements, profileNameFieldValue, withoutProfileNameDuplicates } from "@evimed/domain";
+import { checkMemoryNoteLabels, carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn, preserveProfileName, profileAddressFieldValue, profileMemoryStatements, profileNameFieldValue, withoutProfileNameDuplicates } from "@evimed/domain";
 import { filterCapturedMessage } from "./memoryGateway.mjs";
 import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
 import { HttpError } from './security.mjs';
@@ -890,12 +890,13 @@ export class NativeMemoryWorker {
         // The lines this commit brought are recorded as its own, beyond the revisions a file keeps (what the checks took out is not).
         if (body !== null) {
           // A later extraction may already have changed this shared file. Never attribute its unrelated lines to this diff.
-          const written=new Set(memoryLines(after).map(lineFingerprint));
+          const enumerate = !sourceDeleted && file.type === 'profile' && this.config.memoryProfileNameDedupeEnabled === true ? profileMemoryStatements : memoryLines;
+          const written=new Set(enumerate(after).map(lineFingerprint));
           const live=new Set(memoryLines(body).map(lineFingerprint)),prior=new Set(memoryLines(operation?.before??'').map(lineFingerprint));
           if(sourceDeleted&&[...written].some(print=>!prior.has(print)&&!live.has(print)))throw new HttpError(409,'memory_source_lineage_unverified','The completed native source text was rewritten without verifiable lineage.');
-          const otherLines=memoryLines(body).filter(line=>!written.has(lineFingerprint(line)));
-          const engineBefore = new Set(memoryLines(operation?.before ?? '').map(lineFingerprint));
-          const originBefore = sourceDeleted ? settledBefore : memoryLines(settledBefore).filter(line => engineBefore.has(lineFingerprint(line))).join('\n');
+          const otherLines=enumerate(body).filter(line=>!written.has(lineFingerprint(line)));
+          const engineBefore = new Set(enumerate(operation?.before ?? '').map(lineFingerprint));
+          const originBefore = sourceDeleted ? settledBefore : enumerate(settledBefore).filter(line => engineBefore.has(lineFingerprint(line))).join('\n');
           await this.overlay.syncOrigins(userId, uri, { after: body, before: [originBefore,...otherLines].join('\n'), statementSources: reviewed.get(uri),
             origin: { revisionId: recorded?.id ?? null, engineSession: commit.engineSession, archiveUri: commit.archiveUri, projectId: commit.projectId ?? projectId,projectCreatedAt:commit.projectCreatedAt??null, at: changedAt } });
         }
@@ -1209,6 +1210,11 @@ export class NativeMemoryWorker {
     }
     const indexed = await this.overlay.file(userId, uri);
     const priorBody = diffBefore ? indexed?.body ?? '' : '';
+    const namedProfile = type === 'profile' && this.config.memoryProfileNameDedupeEnabled === true;
+    // A legacy profile may not have been indexed yet. A different settled body, however,
+    // can reflect a later edit and cannot authorize restoration from this engine diff.
+    let preserveName = namedProfile && current === diffAfter && (!priorBody || priorBody === diffBefore || priorBody === current)
+      && preserveProfileName(diffBefore, current) !== current;
     const broughtLines = [...new Set([...removalLines(diffAfter, priorBody), ...removalLines(diffAfter, diffBefore)])];
     const origins = (await this.overlay.originsOf(userId, [uri])).get(uri) ?? new Map();
     const archive = archiveUri
@@ -1238,12 +1244,27 @@ export class NativeMemoryWorker {
     // A compacted profile may retain only its H1. A later labelled spelling of the same withdrawn short
     // name still checks the bare name against the original rejection and the candidate's own sources.
     const nameFields = [];
-    if (type === 'profile' && this.config.memoryProfileNameDedupeEnabled === true) {
+    if (namedProfile) {
       for (const candidate of [...candidates]) {
-        const name = profileNameFieldValue(candidate.text);
+        const name = profileAddressFieldValue(candidate.text) ?? profileNameFieldValue(candidate.text);
         if (!name) continue;
         nameFields.push({ name, line: candidate.text });
         candidates.push({ ...candidate, text: name });
+      }
+      const heading = preserveName && profileMemoryStatements(diffBefore).find(line => /^#\s/u.test(line));
+      if (heading) {
+        const deletion = this.overlay.sourceDeletion;
+        const hidden = deletion ? await deletion.hiddenMemoryUris(userId) : [];
+        const withdrawn = deletion ? (await deletion.historyFingerprints(userId)).get(uri) : null;
+        const text = removalText(heading);
+        if (hidden.some(prefix => uri === prefix || uri.startsWith(`${prefix}/`))
+          || withdrawn?.has(lineFingerprint(heading)) || withdrawn?.has(lineFingerprint(text)) || lineRefusal(text, new Set())) {
+          // The old body can still be in the overlay while deletion is settling.
+          preserveName = false;
+        } else {
+          const sources = await this.verification.readRemovalSources(userId, originalSources(origins.get(lineFingerprint(heading))), memoryContext, cache);
+          candidates.push({ text, sources });
+        }
       }
     }
     const matches = await removalRefusals({ userId, projectId, overlay: this.overlay,
@@ -1262,7 +1283,7 @@ export class NativeMemoryWorker {
     if (current === diffAfter) {
       for (const print of brought) if (!refused.has(print) && pastedInstructions.has(`${uri}\u0000${print}`)) refused.set(print, "pasted_instruction");
     } else if ([...brought].some(print => pastedInstructions.has(`${uri}\u0000${print}`))) recordPastedInstructionCheck("stale");
-    const cleaned = cleanBody(current, refused, type === 'profile' && this.config.memoryProfileNameDedupeEnabled === true);
+    const cleaned = cleanBody(current, refused, namedProfile);
     const reasons = [...new Set(cleaned.reasons)];
     let body = current;
     if (reasons.length) {
@@ -1295,12 +1316,20 @@ export class NativeMemoryWorker {
         return null;
       }
     }
-    if (this.config.memoryProfileNameDedupeEnabled === true && type === 'profile') {
-      const deduplicated = withoutProfileNameDuplicates(body);
+    if (namedProfile) {
+      const preserved = preserveName ? preserveProfileName(diffBefore, body) : body;
+      const heading = profileMemoryStatements(preserved).find(line => /^#\s/u.test(line));
+      const retained = heading && refused.has(lineFingerprint(removalText(heading))) ? body : preserved;
+      const deduplicated = withoutProfileNameDuplicates(retained);
       if (deduplicated !== body) {
-        await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.replace(userId, uri, deduplicated));
+        const applied = await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, async () => {
+          if (await sessions.read(userId, uri) !== body) return false;
+          await sessions.replace(userId, uri, deduplicated);
+          return true;
+        });
+        if (!applied) return null;
         await this.overlay.addRevision({ userId, uri, memoryType: type, change: 'updated', actor: 'platform',
-          reason: 'duplicate profile name', before: body, after: deduplicated, projectId });
+          reason: retained !== body ? 'preserved profile name' : 'duplicate profile name', before: body, after: deduplicated, projectId });
         body = deduplicated;
       }
     }

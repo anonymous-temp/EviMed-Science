@@ -2874,4 +2874,4 @@ export { privateByDefault, sourcePrivacyOf, sourceAllowsEgress } from "./src/mem
 
 export { checkMemoryNoteLabels, memoryHistoryLine, MEMORY_EXTRACTION_V2_REVIEW_TEXT } from './src/memoryExtractionFormat.mjs';
 
-export { MEMORY_PROFILE_NEUTRAL_TITLES, MEMORY_PROFILE_STRUCTURAL_TITLES, MEMORY_PROFILE_HEADING_RULE, isNeutralProfileHeading, profileMemoryStatements, profileNameFieldValue, profileNameDuplicateLines, withoutProfileNameDuplicates } from './src/memoryProfile.mjs';
+export { MEMORY_PROFILE_NEUTRAL_TITLES, MEMORY_PROFILE_STRUCTURAL_TITLES, MEMORY_PROFILE_HEADING_RULE, isNeutralProfileHeading, profileMemoryStatements, profileAddressFieldValue, profileNameFieldValue, profileNameDuplicateLines, preserveProfileName, withoutProfileNameDuplicates } from './src/memoryProfile.mjs';

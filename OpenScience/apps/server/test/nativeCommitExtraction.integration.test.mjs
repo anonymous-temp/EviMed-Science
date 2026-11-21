@@ -179,6 +179,42 @@ test('the worker removes an extracted name bullet that exactly repeats the real 
   assert.deepEqual((await store.records(userId)).map(row => row.value).sort(), ['林舟', '喜欢游泳'].sort());
 });
 
+test('an extracted address preference retains the profile name and both original sources', options, async t => {
+  const original = '# 林舟\n- 在上海工作';
+  const address = '希望被称呼为“小林” (as of 2026-11-21)';
+  const f = await fixture(t, { config: { memoryProfileNameDedupeEnabled: true },
+    extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/profile.md`, memory_type: 'profile', after: original }] }) });
+  const uri = `${f.root}/profile.md`;
+  const first = await f.commitConversation('original-profile-name', [{ role: 'user', text: '我叫林舟，在上海工作。' }]);
+  await f.worker.processCommits({ userId: f.userId });
+  f.stub.extract = () => ({ updates: [{ uri, memory_type: 'profile', before: original, after: `# 小林\n- 在上海工作\n- ${address}` }] });
+  const second = await f.commitConversation('profile-address', [{ role: 'user', text: '以后叫我小林。' }]);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), `${original}\n- ${address}`);
+  const origins = (await f.overlay.originsOf(f.userId, [uri])).get(uri);
+  assert.equal(origins.get(lineFingerprint('# 林舟')).archiveUri, first.archive_uri);
+  assert.equal(origins.get(lineFingerprint(address)).archiveUri, second.archive_uri);
+  assert.ok(!origins.has(lineFingerprint('# 小林')));
+  await f.store.forgetLines(f.userId, (await f.store.files(f.userId))[0], [address]);
+  assert.equal(await f.sessions.read(f.userId, uri), original);
+});
+
+test('an older unindexed profile keeps its name, while settlement leaves a later live edit alone', options, async t => {
+  const before = '# 林舟\n- 在上海工作', proposed = '# 小林\n- 在上海工作\n- 希望被称呼为“小林”';
+  const f = await fixture(t, { config: { memoryProfileNameDedupeEnabled: true },
+    extract: ({ user }) => ({ updates: [{ uri: `viking://user/${user}/memories/profile.md`, memory_type: 'profile', before, after: proposed }] }) });
+  const uri = f.seed('profile.md', before, { type: 'profile' });
+  assert.ok(!(await f.overlay.file(f.userId, uri))?.body);
+  await f.commitConversation('address-on-legacy-profile', [{ role: 'user', text: '以后叫我小林。' }]);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), proposed.replace('# 小林', '# 林舟'));
+  await f.commitConversation('stale-address-receipt', [{ role: 'user', text: '以后叫我小林。' }]);
+  const corrected = '# 林川\n- 在上海工作';
+  await f.sessions.replace(f.userId, uri, corrected);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), corrected);
+});
+
 test('a compacted and forgotten short profile name stays withdrawn on a later labelled write', options, async t => {
   const f = await fixture(t, { config: { memoryProfileNameDedupeEnabled: true } });
   const uri = f.seed('profile.md', '# 林舟\n- 喜欢游泳', { type: 'profile' });

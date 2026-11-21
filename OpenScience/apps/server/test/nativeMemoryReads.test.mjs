@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { unzipSync } from 'fflate';
+import { preserveProfileName } from '@evimed/domain';
 import { NativeMemoryStore, nativeFileId } from "../src/nativeMemoryStore.mjs";
 import { NativeMemoryOverlay, contentHash, lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { reconcileMemoryNames } from '../src/nativeMemoryNames.mjs';
@@ -197,6 +198,32 @@ test('duplicate profile names are opt-in and ambiguous or structural titles keep
     files.set(uri, { body: `${title}\n- 姓名林舟`, modTime: title });
     assert.ok((await store.records('u1')).some(row => row.value === '姓名林舟'));
   }
+});
+
+test('an address preference has an independent profile record even when it equals the name', async () => {
+  const { store, files } = engine({ count: 0, delay: 0 }), uri = `${ROOT}/profile.md`;
+  store.profileNameDedupeEnabled = true;
+  files.set(uri, { body: '# 林舟\n- 姓名：林舟\n- 称呼：林舟\n- 希望被称呼为“小林” (as of 2026-11-21)', modTime: '1' });
+  const records = await store.records('u1');
+  assert.deepEqual(records.map(row => row.value), ['林舟', '称呼：林舟', '希望被称呼为“小林”']);
+  assert.equal(new Set(records.map(row => row.id)).size, 3);
+  await store.forgetLines('u1', (await store.files('u1'))[0], ['称呼：林舟']);
+  assert.equal(files.get(uri).body, '# 林舟\n- 姓名：林舟\n- 希望被称呼为“小林” (as of 2026-11-21)');
+});
+
+test('only an explicit address field matching the proposed title can preserve a known profile name', () => {
+  const before = '# 林舟\n- 在上海工作';
+  const overwritten = '# 小林\r\n- 在上海工作\r\n- 希望被称呼为“小林” (as of 2026-11-21)\r\n';
+  assert.equal(preserveProfileName(before, overwritten), overwritten.replace('# 小林', '# 林舟'));
+  const english = '# Jo\n- Preferred form of address: Jo (as of 2026-11-21)';
+  assert.equal(preserveProfileName('# Joanna Doe', english), english.replace('# Jo', '# Joanna Doe'));
+  for (const [prior, next] of [
+    ['# 用户\n- 在上海工作', overwritten],
+    [before, '# 林川\n- 希望被称呼为“小林”'],
+    [before, '# 小林\n- 真名：林川\n- 希望被称呼为“小林”'],
+    ['# 林舟\n# 林川', overwritten],
+    [before, '# 小林\n- 同事小林'],
+  ]) assert.equal(preserveProfileName(prior, next), next);
 });
 
 test('profile and preference values use the newer revision, read with an earlier label and reconcile without rejection', async () => {

@@ -8,6 +8,11 @@ export const HISTORY_RULE = 'When a value changes, keep the current value plus o
 const HISTORY_TYPES = new Set(["decisions.yaml", "entities.yaml", "follow_ups.yaml", "notes.yaml", "people.yaml", "preferences.yaml", "profile.yaml", "project_context.yaml", "project_facts.yaml"]);
 const PASSING_TYPES = new Set(["notes.yaml", "people.yaml", "profile.yaml", "project_context.yaml"]);
 const HISTORY_FENCE = "  __HISTORY__\n\n  A forget request is not a new fact or event: do not add a note that restates the withdrawn\n  content or names it as deleted, including when the user refers to it only by a label.\n\n";
+const PROFILE_ADDRESS_RULE = `The H1 holds the user's stated name. A request about how to address them ("以后叫我小林", "Call me Jo")
+updates only the separate dated bullet "希望被称呼为：小林" or "Preferred form of address: Jo", in the user's language.
+Keep the existing name in the H1 unless the user explicitly corrects or changes their name.
+For example, keep "# 林舟" and add "- 希望被称呼为：小林 (as of 2026-11-21)". If only an address preference
+is known, use the fallback H1 and the separate bullet. Do not duplicate the name as a bullet.`;
 const PASSING_DETAIL = "  Keep a concrete number, model name, cost, household detail or project status the user states\n  about their own life or work even in passing: one concise dated line in the matching file.\n  Keep their corrections and explicit confirmation of a suggestion or document fact, with its\n  origin in the wording. An assistant suggestion or a document claim alone is not a first-person\n  fact, preference or project state; it remains in the source conversation. A user opinion stays\n  labelled \"User believes:\" in NOTES, never promoted to a rule or objective project stage.\n\n";
 
 // Check authorship during extraction; recording an evidence quote on each line could
@@ -41,7 +46,7 @@ const REPLACEMENTS = {
     ],
     [
       "  - One H1 heading with the name the user gave for themselves, or the word for \"user\" in {{ language }}\n    (用户 in Chinese) when they gave none, followed directly by bullet statements. No H2/H3 headings, tables, JSON or paragraphs.\n  - Every bullet ends with the date the user most recently stated or confirmed it, in the\n",
-      "  __PROFILE_HEADING__\n  - Every current bullet ends with the date the user most recently stated or confirmed it, in the\n"
+      "  __PROFILE_HEADING__\n  __PROFILE_ADDRESS__\n  - Every current bullet ends with the date the user most recently stated or confirmed it, in the\n"
     ],
     [
       "      # <name the user gave, or the word for \"user\" in {{ language }}>\n",
@@ -49,7 +54,7 @@ const REPLACEMENTS = {
     ],
     [
       "      No other headings, labels, tables or prose. Preserve untouched valid bullets and their\n      dates; replace a changed state with its latest confirmed value.\n",
-      "      No other headings, labels (except 曾为 / earlier), tables or prose. Preserve untouched valid bullets and their\n      dates; a changed state gets its latest confirmed value plus its earlier-value bullet.\n"
+      "      No other headings, tables or prose. Use the address label specified above for that preference and 曾为 / earlier\n      for earlier values. Preserve untouched valid bullets and their dates; a changed state gets its latest\n      confirmed value plus its earlier-value bullet.\n"
     ]
   ],
   "project_context.yaml": [
@@ -97,5 +102,6 @@ export function nextSource(name, source) {
   if (PASSING_TYPES.has(name)) text = text.replace('  __DECIDE__', () => `${PASSING_DETAIL}  __DECIDE__`);
   const indent = value => value.split('\n').join('\n  ');
   return text.replace('__HISTORY__', () => indent(HISTORY_RULE))
-    .replace('__PROFILE_HEADING__', () => indent(MEMORY_PROFILE_HEADING_RULE));
+    .replace('__PROFILE_HEADING__', () => indent(MEMORY_PROFILE_HEADING_RULE))
+    .replace('__PROFILE_ADDRESS__', () => indent(PROFILE_ADDRESS_RULE));
 }
