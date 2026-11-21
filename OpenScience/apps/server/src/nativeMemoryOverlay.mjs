@@ -995,7 +995,7 @@ export class NativeMemoryOverlay {
     scopedRoot(userRoot);
     const ids=sessionIds.map(id=>`dsh-${id}`);
     const commits=await this.#query(`WITH RECURSIVE source AS (
-      SELECT archive_uri,engine_session,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[]) AND left(archive_uri,length($4)+10)=$4||'/sessions/'
+      SELECT archive_uri,engine_session,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND (engine_session=ANY($3::text[]) OR source_session=ANY($3::text[])) AND left(archive_uri,length($4)+10)=$4||'/sessions/'
       UNION SELECT c.archive_uri,c.engine_session,c.replayed_as FROM evimed_memory.native_commits c JOIN source s ON (c.archive_uri=s.replayed_as OR EXISTS
         (SELECT 1 FROM evimed_memory.native_source_copies x WHERE x.user_id=c.user_id AND x.source_archive_uri=s.archive_uri AND x.copy_archive_uri=c.archive_uri)) WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
     ) SELECT c.* FROM evimed_memory.native_commits c WHERE c.user_id=$1 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
@@ -1019,7 +1019,7 @@ export class NativeMemoryOverlay {
     scopedRoot(userRoot);
     const sessions = sessionIds.map(id => `dsh-${id}`);
     const removed = await this.#query(`WITH RECURSIVE sources AS (
-      SELECT archive_uri,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])
+      SELECT archive_uri,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND (engine_session=ANY($3::text[]) OR source_session=ANY($3::text[]))
         AND left(archive_uri,length($4)+10)=$4||'/sessions/'
       UNION SELECT c.archive_uri,c.replayed_as FROM evimed_memory.native_commits c JOIN sources s ON (c.archive_uri=s.replayed_as OR EXISTS
         (SELECT 1 FROM evimed_memory.native_source_copies x WHERE x.user_id=c.user_id AND x.source_archive_uri=s.archive_uri AND x.copy_archive_uri=c.archive_uri))
@@ -1027,7 +1027,8 @@ export class NativeMemoryOverlay {
     ) UPDATE evimed_memory.native_commits SET native_ingested_at=CASE WHEN state='completed' THEN COALESCE(native_ingested_at,ingested_at,clock_timestamp()) ELSE native_ingested_at END,state='abandoned',pending_text=NULL,error='source_conversation_deleted',updated_at=clock_timestamp()
       WHERE user_id=$1 AND archive_uri IN (SELECT archive_uri FROM sources) AND ($5::text[] IS NULL OR archive_uri=ANY($5::text[])) RETURNING engine_session`, [owner(userId), projectId, sessions, userRoot,proof?.archiveUris??null]);
     if (userRoot === userRootUri(userId)) await this.#query(`UPDATE evimed_memory.native_admissions SET state='cancelled',pending_text=NULL,error='source_conversation_deleted',
-      updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])`, [owner(userId), projectId, sessions]);
+      updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND (engine_session=ANY($3::text[])
+        OR (external_source->>'operation'='clinical-segment' AND external_source->>'sessionId'=ANY($4::text[])))`, [owner(userId), projectId, sessions, sessionIds]);
     return [...new Set(removed.rows.map(row => row.engine_session))];
   }
 

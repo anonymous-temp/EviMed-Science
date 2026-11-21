@@ -1,6 +1,7 @@
 import { platformSessionOf } from './openVikingSessions.mjs';
 import { isPlatformStartedRun } from './memoryDispatch.mjs';
 import { isInternalProjectOf } from './internalProjects.mjs';
+import { clinicalStatements } from './memoryClinicalSegments.mjs';
 import { provenArchiveInput } from './memoryHumanSegments.mjs';
 import { historyTitle } from './memoryHistory.mjs';
 
@@ -37,9 +38,20 @@ export function createMemoryHistorySources({ config, store, productDatabase, nat
       const runs = await agentRuns.conversationRuns(project, sessionId);
       if (!runs.length || runs.every(run => run.deleted === true)) return null;
       const named = runs.find(run => typeof run.title === 'string' && run.title.trim());
-      const restricted = runs.some(isPlatformStartedRun);
-      return { ...base, sessionId, runs, ...(restricted && config.memoryHumanSegmentsEnabled && memoryContext.kind === 'owned'
-        ? { projectMessage: message => provenArchiveInput(runs, message) ? message : null } : {}), conversationTitle: restricted ? 'Conversation' : historyTitle(named?.title ?? runs.at(-1)?.question), projectTitle: historyTitle(project.name,'Project'),
+      const automated = runs.some(isPlatformStartedRun);
+      const contexts = runs.map(run => ({ sessionId, runId: run.id }));
+      const clinical = config.memoryClinicalSegmentsEnabled === true && memoryContext.kind === 'owned' && vcrPrivacyStore
+        ? await vcrPrivacyStore.firstClinicalRead(memoryContext.ownerId, projectId, contexts) : null;
+      const restricted = (automated || clinical !== null) && memoryContext.kind === 'owned'
+        && (!automated || config.memoryHumanSegmentsEnabled === true);
+      const projectMessage = message => {
+        const input = provenArchiveInput(runs, message);
+        if (!input) return null;
+        const text = clinical === null ? input.text : clinicalStatements(input, clinical).join('\n');
+        return text ? { role: 'user', content: text, created_at: message.created_at, segmentRunId: input.run.id } : null;
+      };
+      return { ...base, sessionId, runs, clinical, ...(restricted ? { projectMessage } : {}),
+        conversationTitle: restricted ? 'Conversation' : historyTitle(named?.title ?? runs.at(-1)?.question), projectTitle: historyTitle(project.name,'Project'),
         conversationUrl: `/app/chat/${encodeURIComponent(sessionId)}` };
     },
     eligible: async (memoryContext, source) => {
@@ -51,11 +63,12 @@ export function createMemoryHistorySources({ config, store, productDatabase, nat
       for (const run of source.runs) {
         if (run.deleted || (isPlatformStartedRun(run) && !source.projectMessage) || (await agentRegistry)?.get?.(run.effectiveAgentId ?? run.agentId)?.visibility === 'internal') return false;
       }
-      if (vcrPrivacyStore && await vcrPrivacyStore.hasClinicalContext(memoryContext.ownerId, source.projectId,
+      if (!(source.projectMessage && Number.isFinite(source.clinical)) && vcrPrivacyStore && await vcrPrivacyStore.hasClinicalContext(memoryContext.ownerId, source.projectId,
         source.runs.map(run => ({ sessionId: source.sessionId, runId: run.id })))) return false;
       return true;
     },
-    admitMessage: async (memoryContext, source, message) => (await memoryAdmission.admit({ user: { id: memoryContext.ownerId }, project: source.project,
+    admitMessage: async (memoryContext, source, message) => (await (source.projectMessage && Number.isFinite(source.clinical)
+      ? memoryAdmission.admitSegment : memoryAdmission.admit)({ user: { id: memoryContext.ownerId }, project: source.project, runId: message.segmentRunId,
       engineSessionId: `dsh-${source.sessionId}`, at: Number.isFinite(Date.parse(message.created_at ?? '')) ? Date.parse(message.created_at) : null })).learn,
   };
 }

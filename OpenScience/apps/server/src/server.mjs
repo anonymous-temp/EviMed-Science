@@ -490,6 +490,7 @@ import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget
 import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler, createNativeCapsuleSearch } from "./capsuleGateway.mjs";
 import { MEMORY_GATEWAY_PATH, filterCapturedMessage, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
+import { createClinicalSegments } from './memoryClinicalSegments.mjs';
 import { humanInputReceipt } from './memoryHumanSegments.mjs';
 import { createMemoryAdmission } from "./memoryAdmission.mjs";
 import { isPlatformStartedRun } from "./memoryDispatch.mjs";
@@ -4450,6 +4451,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // conversation reaches extraction while the runtime lives. Arms a timer and is not waited for (it never throws, and
       // its one settings read is not a reason for the rest of this completion to wait).
       await step("memory.native_turn_commit", () => { void nativeTurnCommit.noteRunFinished(project, run); });
+      if (config.memoryClinicalSegmentsEnabled && config.memoryEngineEnabled && !isPlatformStartedRun(run)) {
+        await step("memory.clinical_segments", () => clinicalSegments.capture(project, run));
+      }
       try {
       const gapCode = evolutionLedger && !internalFor(project.userId, project.id) && run.status === "failed" ? evolutionRunGap(run) : null;
       if (gapCode) {
@@ -5243,7 +5247,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
   }
   if (feedbackEvents && productDocuments) feedbackEvents.memoryForgetReader = productDocuments.memoryForgetReader;
+  const clinicalSegments = createClinicalSegments({ config, contexts: nativeMemoryContexts, admission: memoryAdmission,
+    overlay: nativeMemoryOverlay, native: nativeMemory, store, runsOf: (project, sessionId) => agentRuns.conversationRuns(project, sessionId),
+    transcript: (project, sessionId) => runtimeManager.sessionTranscript(project, sessionId, { wake: false }),
+    firstRead: vcrPrivacyStore ? (...args) => vcrPrivacyStore.firstClinicalRead(...args) : null });
   nativeMemoryOverlay.externalAdmissionPolicy = async (userId, row) => {
+    if (row.externalSource?.operation === 'clinical-segment') {
+      const allowed = await clinicalSegments.authorize(userId, row);
+      return { allowed, state: allowed ? null : 'suspended', reason: allowed ? null : 'segment_unavailable' };
+    }
     if (row.externalSource?.operation !== 'remember') return { allowed: false, state: 'cancelled', reason: 'external_operation_unknown' };
     try {
       const user = await store.userById(userId);

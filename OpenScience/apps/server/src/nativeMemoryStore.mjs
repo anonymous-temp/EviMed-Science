@@ -2291,6 +2291,8 @@ export class NativeMemoryStore {
     const receipt = (/** @type {any} */ row) => ({ candidateId: row.candidateId, revision: row.revision, state: row.state,
       engineSession: row.engineSession, archiveUri: row.archiveUri ?? null, taskId: row.taskId ?? null,
       recordIds: row.recordIds ?? [], ...(row.error ? { error: row.error } : {}) });
+    const segment = admission.externalSource?.operation === 'clinical-segment';
+    const segmentSource = segment ? { sourceSession: `dsh-${admission.externalSource.sessionId}` } : {};
     if (["completed", "cancelled"].includes(admission.state)) return receipt(admission);
     let row = typeof this.overlay.claimAdmission === "function"
       ? await this.overlay.claimAdmission(userId, admission.candidateId, admission.revision) : admission;
@@ -2323,7 +2325,7 @@ export class NativeMemoryStore {
         await this.sessions.register(userId);
         if (!await authorized()) return receipt(row);
         await this.sessions.createSession(userId, row.engineSession);
-        await this.overlay.noteSession(userId, row.engineSession, row.projectId);
+        await this.overlay.noteSession(userId, row.engineSession, row.projectId, row.externalSource?.projectCreatedAt);
         const status = (await this.sessions.readSession(userId, row.engineSession))?.result;
         // A timed-out commit can already have archived the batch. Discover it before considering another write.
         if (Number(status?.commit_count) > 0) {
@@ -2331,7 +2333,7 @@ export class NativeMemoryStore {
           const archive = nodes.map((node) => parseArchiveUri(node.uri)).find(parsed => parsed && (!row.externalSource
             || !parsed.rest && parsed.userRoot === this.sessions.userRoot(userId) && parsed.session === row.engineSession))?.archiveUri;
           if (!archive) { await save({ state: "uncertain", error: "commit_archive_not_visible", release: true }); return receipt(row); }
-          const commit = await this.overlay.recordCommit({ userId, archiveUri: archive, engineSession: row.engineSession, projectId: row.projectId, origin: row.externalSource ? "page" : "tool",
+          const commit = await this.overlay.recordCommit({ userId, archiveUri: archive, engineSession: row.engineSession, projectId: row.projectId, ...segmentSource, origin: segment ? "gateway" : row.externalSource ? "page" : "tool",
             ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt, pendingText: row.text } : {}) });
           await save({ archiveUri: archive, taskId: commit.taskId, state: "pending" });
         } else {
@@ -2358,7 +2360,7 @@ export class NativeMemoryStore {
             await save({ state: 'submitting', phase: 'message_submitting', error: '' });
             if (!await authorized(priorPhase)) return receipt(row);
             await this.sessions.addMessage(userId, row.engineSession, { role: 'user', created_at: row.externalSource?.saidAt ?? row.createdAt,
-              parts: [{ type: 'text', text: row.externalSource ? `请记住：${row.text}` : maskIdentifiers(row.text) }] });
+              parts: [{ type: 'text', text: row.externalSource && !segment ? `请记住：${row.text}` : maskIdentifiers(row.text) }] });
           } else if (messageCount !== expectedCount) {
             await save({ state: 'uncertain', error: 'unexpected_session_messages', release: true }); return receipt(row);
           }
@@ -2372,7 +2374,7 @@ export class NativeMemoryStore {
             throw new HttpError(403, 'memory_scope_denied', 'The archive does not belong to the submitted statement.');
           }
           const commit = await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: row.engineSession,
-            projectId: row.projectId, ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt } : {}), origin: row.externalSource ? "page" : "tool", pendingText: row.externalSource ? row.text : null, taskId: result.task_id ?? null });
+            projectId: row.projectId, ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt } : {}), ...segmentSource, origin: segment ? "gateway" : row.externalSource ? "page" : "tool", pendingText: row.externalSource ? row.text : null, taskId: result.task_id ?? null });
           await save({ state: "pending", archiveUri: commit.archiveUri, taskId: commit.taskId, error: "" });
           this.#touch(userId);
         }
