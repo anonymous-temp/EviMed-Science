@@ -224,3 +224,70 @@ test('a malformed partial injected commit verdict cannot rewrite even its appare
   const after = '- Dose 21 mg.\n- Prefers concise replies.';
   assert.equal((await verification.assessCommit('u', [{ uri: 'profile', after }], [source('Dose 12 mg. Prefers concise replies.')])).rewrites[0].after, after);
 });
+
+test('commit judge requires every retained clause to cite verbatim user evidence from its own indexed source', async () => {
+  const sources = [source('I use WPS.'), source('Ask before expanding.', 'assistant')];
+  const text = 'I use WPS. Ask before expanding.';
+  const first = { clause: 'I use WPS.', source: 0, quote: 'I use WPS.' };
+  const second = { clause: 'Ask before expanding.', source: 1, quote: 'Ask before expanding.' };
+  for (const [corrected, evidence, valid] of [[text, [first], false], [text, [first, second], false],
+    [first.clause, [{ ...first, quote: 'Invented' }], false], [first.clause, [first], true]]) {
+    const judge = createVerificationJudge({ config: { deepseekApiKey: 'fake', deepseekModel: 'test' },
+      callModel: async (_deps, request) => {
+        assert.match(request.body.messages[0].content, /project stage requires a user-reported progress event/);
+        return response([{ index: 0, verdict: 'corrected', corrected, evidence }]);
+      } });
+    const result = await judge.judge({ userId: 'u', commit: true, maxAttempts: 1, lines: [{ text, sources }] });
+    assert.equal(result.results.size, valid ? 1 : 0);
+  }
+});
+
+test('stock verification cannot apply even a schema-valid wrong verdict, across 24 sourced rows', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { NativeMemoryVerification } = await import('../src/nativeMemoryVerification.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const rows = JSON.parse(await readFile(new URL('./fixtures/memory-verification-24.json', import.meta.url), 'utf8'));
+  const root = 'viking://user/synthetic/memories';
+  const files = new Map(), origins = new Map(), byText = new Map(), archives = new Map();
+  for (const [i, row] of rows.entries()) {
+    const uri = root + '/notes/' + i + '.md', archive = 'viking://user/synthetic/sessions/dsh-case' + i + '/history/archive_001';
+    files.set(uri, '- ' + row.text); byText.set(row.text, row);
+    origins.set(uri, new Map([[lineFingerprint(row.text), { archiveUri: archive }]]));
+    archives.set(archive, row.sources);
+  }
+  const before = [...files];
+  const sessions = { memoryRoot: () => root, tree: () => before.map(([uri]) => ({ uri })), read: (_u, uri) => files.get(uri),
+    replace: () => assert.fail('stock report must never write') };
+  const overlay = { files: () => new Map(), originsOf: () => origins,
+    memoryForgetBody: (_u, _uri, body) => byText.get(body.slice(2)).group === 'withdrawn' ? null : body };
+  const checked = new Set();
+  const reviewer = new NativeMemoryVerification({ sessions, overlay, config: { nativeMemoryConsolidationEnabled: true,
+    memoryEngineEnabled: true, nativeMemoryConsolidationMode: 'verify' }, judge: { judge: async ({ lines }) => ({
+      calls: 1, results: new Map(lines.map(({ index, text, sources }) => {
+        const row = byText.get(text);
+        assert.deepEqual(sources, row.sources);
+        checked.add(text);
+        // This swaps the meaning without introducing any hard token; the old writer accepted it.
+        return [index, { index, verdict: 'corrected', corrected: 'User declined.' }];
+      })),
+    }) } });
+  reviewer.readSources = async (_user, sources) => archives.get(sources[0].archiveUri);
+  const report = await reviewer.verifyExisting('synthetic');
+  assert.equal(rows.length, 24);
+  assert.equal(checked.size, 23);
+  assert.equal(report.suggested, 23);
+  assert.equal(report.corrected, 0);
+  assert.equal(report.calls, 3);
+  assert.deepEqual([...files], before);
+});
+
+test('a correction in the stage section cannot overwrite identical words in an untouched section', async () => {
+  const { NativeMemoryVerification } = await import('../src/nativeMemoryVerification.mjs');
+  const before = '## Opinion\n- Difficult.', added = '\n## Stage\n- Difficult.';
+  const reviewer = new NativeMemoryVerification({ config: {}, overlay: {}, sessions: {}, judge: { judge: async ({ lines }) => {
+    assert.deepEqual(lines.map(l => l.heading), ['## Stage']);
+    return { calls: 1, results: new Map([[0, { index: 0, verdict: 'corrected', corrected: 'User believes: this is difficult.' }]]) };
+  } } });
+  const result = await reviewer.assessCommit('u', [{ uri: 'p', type: 'project_context', before, after: before + added }], [source('I believe this is difficult.')]);
+  assert.equal(result.rewrites[0].after, '- User believes: this is difficult.\n' + before + '\n## Stage');
+});

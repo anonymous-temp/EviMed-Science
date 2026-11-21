@@ -157,3 +157,45 @@ for (const change of ['add', 'update']) test(`FT13b: related ${change} in anothe
   assert.equal(revisions[0].after, prior);
   assert.equal(nativeMemoryCounters().unexplainedDeletions.restored, 1);
 });
+
+test('250-line extraction to a two-section summary restores concrete rows, their order and origins', options, async t => {
+  const f = await fixture(t, { config: { memoryKeepUnexplainedLinesEnabled: true } });
+  const uri = f.root + '/projects/archive.md';
+  const sections = ['Northern', 'Southern'].map((name, index) => [
+    '## ' + name, ...Array.from({ length: 124 }, (_, i) => '- Archive specimen ' + (index * 124 + i) + ' was counted.'),
+  ]);
+  const before = sections.flat().join('\n');
+  assert.equal(before.split('\n').length, 250);
+  f.stub.extract = () => ({ adds: [{ uri, after: before }] });
+  await f.commitConversation('details', [{ role: 'user', text: before }]);
+  await f.worker.processCommits({ userId: f.userId });
+  const origins = (await f.overlay.originsOf(f.userId, [uri])).get(uri);
+  const after = sections.flatMap(section => [section[0], '- Count summarized.']).join('\n');
+  f.stub.extract = () => ({ updates: [{ uri, before, after }] });
+  const commit = await f.commitConversation('summary', [{ role: 'user', text: 'Summarize the archive.' }]);
+  await f.worker.processCommits({ userId: f.userId });
+  const expected = sections.flatMap(([heading, ...points]) => [heading, '- Count summarized.', ...points]).join('\n');
+  assert.equal(await f.sessions.read(f.userId, uri), expected);
+  assert.equal((await f.overlay.file(f.userId, uri)).body, expected);
+  assert.equal((await f.overlay.admissionRevisions(f.userId, commit.archive_uri))[0].after, expected);
+  assert.equal(nativeMemoryCounters().unexplainedDeletions.restored, 248);
+  const retained = (await f.overlay.originsOf(f.userId, [uri])).get(uri);
+  for (const [key, source] of origins) assert.deepEqual(retained.get(key), source);
+});
+
+test('a byte-only change while queuing summary invalidation wins the final whole-file check', options, async t => {
+  const f = await fixture(t, { config: { memoryKeepUnexplainedLinesEnabled: true } });
+  const uri = f.seed('profile.md', forgotten);
+  f.stub.extract = () => ({ updates: [{ uri, before: forgotten, after: lost }] });
+  await f.commitConversation('late', [{ role: 'user', text: 'Summarize.' }]);
+  const queue = f.overlay.queueSummaryInvalidation.bind(f.overlay);
+  let changed = false;
+  f.overlay.queueSummaryInvalidation = async (...args) => {
+    const tickets = await queue(...args);
+    if (!changed) { changed = true; f.stub.files.set(uri, lost + '\n'); }
+    return tickets;
+  };
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(changed, true);
+  assert.equal(await f.sessions.read(f.userId, uri), lost + '\n');
+});

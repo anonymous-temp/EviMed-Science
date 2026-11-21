@@ -53,20 +53,64 @@ function lineChanges(prior, current) {
   return hunks;
 }
 
-/** Pure acceptance decision; callers supply existing privacy/removal authority, never a model.
- * `elsewhere` is the actual post-commit state of other files; additions come only from this file's diff.
- * @param {{enabled:boolean,before:string,after:string|null,neverKept:(text:string)=>boolean,
+/** @typedef {{enabled:boolean,before:string,after:string|null,neverKept:(text:string)=>boolean,
  * rejected?:ReadonlySet<string>,withdrawn?:ReadonlySet<string>,elsewhere?:ReadonlySet<string>,
- * messages?:readonly {role:string,text:string}[]}} input
- * @returns {{after:string|null,outcomes:KeepLineOutcome[]}} */
-export function keepUnexplainedLines({ enabled, before, after, neverKept, rejected = new Set(), withdrawn = new Set(), elsewhere = new Set() }) {
-  if (!enabled) return { after, outcomes: [] };
+ * messages?:readonly {role:string,text:string}[]}} KeepInput */
+
+/** Unique Markdown headings that survive in the same order separate independent diff
+ * regions. Without a stable heading the ordinary unique-line anchors still apply.
+ * @param {string[]} before @param {string[]} after */
+function sectionAnchors(before, after) {
+  const unique = lines => {
+    const byHeading = new Map();
+    lines.forEach((line, i) => {
+      const heading = line.trim();
+      if (/^#{1,6}\s/.test(heading)) byHeading.set(heading, byHeading.has(heading) ? -1 : i);
+    });
+    return byHeading;
+  };
+  const positions = unique(after), anchors = [];
+  let last = -1;
+  for (const [heading, left] of unique(before)) {
+    const right = positions.get(heading);
+    if (left >= 0 && right > last) { anchors.push([left, right]); last = right; }
+  }
+  return anchors;
+}
+
+/** @param {KeepInput} input @returns {{after:string|null,outcomes:KeepLineOutcome[]}} */
+export function keepUnexplainedLines(input) {
+  if (!input.enabled) return { after: input.after, outcomes: [] };
+  const before = input.before.split('\n');
+  if (before.length <= 200 || input.after === null) return keepRegion(input);
+  const after = input.after.split('\n'), anchors = sectionAnchors(before, after);
+  if (!anchors.length) return keepRegion(input);
+  const elsewhere = new Set([...(input.elsewhere ?? []), ...memoryLines(input.after).map(lineFingerprint)]);
+  const history = memoryLines(input.after).filter(line => /(?:earlier:|曾为：)/i.test(line));
+  const result = [], outcomes = [];
+  let start = 0, at = 0;
+  for (const [end, until] of [...anchors, [before.length, after.length]]) {
+    const region = after.slice(at, until);
+    if (end > start || region.length) {
+      const kept = keepRegion({ ...input, elsewhere, before: before.slice(start, end).join('\n'),
+        after: region.length ? region.join('\n') : null }, history);
+      if (kept.after !== null) result.push(kept.after);
+      outcomes.push(...kept.outcomes);
+    }
+    if (until < after.length) result.push(after[until]);
+    at = until + 1; start = end + 1;
+  }
+  return { after: result.join('\n'), outcomes };
+}
+
+/** @param {KeepInput} input @param {readonly string[]} earlier */
+function keepRegion({ before, after, neverKept, rejected = new Set(), withdrawn = new Set(), elsewhere = new Set() }, earlier = []) {
   const prior = memoryLines(before);
   const current = memoryLines(after);
   const present = new Set(current.map(lineFingerprint));
   const hunks = lineChanges(prior, current);
   const priorPrints = new Set(prior.map(lineFingerprint));
-  const added = current.filter(line => !priorPrints.has(lineFingerprint(line)));
+  const addedHistory = [...earlier, ...current.filter(line => !priorPrints.has(lineFingerprint(line)) && /(?:earlier:|曾为：)/i.test(line))];
   /** @type {KeepLineOutcome[]} */
   const outcomes = [];
   /** @type {Set<string>} */
@@ -79,7 +123,7 @@ export function keepUnexplainedLines({ enabled, before, after, neverKept, reject
     else if (rejected.has(print) || withdrawn.has(print)) outcome = /** @type {const} */ ('kept_deleted_rejected');
     else if (elsewhere.has(print)) outcome = /** @type {const} */ ('kept_deleted_moved');
     else if ((hunks.get(print) ?? []).some(value => preservesStatement(line, value))
-      || added.some(value => /(?:earlier:|曾为：)/i.test(value) && preservesStatement(line, value))) outcome = /** @type {const} */ ('kept_deleted_replaced');
+      || addedHistory.some(value => preservesStatement(line, value))) outcome = /** @type {const} */ ('kept_deleted_replaced');
     // Only the existing withdrawal/rejection authority can explain a deletion. Mentioning
     // coffee or a project in this turn cannot authorize erasing its earlier details.
     else { outcome = /** @type {const} */ ('restored'); restore.add(print); }
@@ -93,7 +137,13 @@ export function keepUnexplainedLines({ enabled, before, after, neverKept, reject
   const fingerprint = raw => lineFingerprint(memoryLines(raw)[0] ?? '');
   if (after === null) {
     // Preserve the deleted file's layout only when at least one statement must survive.
-    return { after: original.filter(raw => !raw.trim() || /^\s*#{1,6}\s/.test(raw) || restore.has(fingerprint(raw))).join('\n'), outcomes };
+    const retained = original.filter(raw => {
+      const heading = raw.trim().match(/^#{1,6}\s+(.+)$/);
+      if (!heading) return !raw.trim() || restore.has(fingerprint(raw));
+      const print = lineFingerprint(heading[1]);
+      return !neverKept(heading[1]) && !rejected.has(print) && !withdrawn.has(print) && !withdrawn.has(fingerprint(raw));
+    });
+    return { after: retained.some(raw => raw.trim()) ? retained.join('\n') : null, outcomes };
   }
   const positions = new Map(result.map((raw, index) => [fingerprint(raw), index]));
   const nextAnchors = new Array(original.length);

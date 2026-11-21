@@ -19,7 +19,7 @@ import { NativeMemoryObservations } from "./nativeMemoryObservations.mjs";
 import { INSTRUCTION_ORIGIN_POLICY_HASH, instructionSourceMessage, pendingInstructionResult } from './nativeMemoryInstructionOrigin.mjs';
 import { neutralMemoryUri, removalLines, removalRefusals, removalText } from "./nativeMemoryRejections.mjs";
 import { memoryNameVariants } from './nativeMemoryHardTokens.mjs';
-import { NativeMemoryVerification, originalSources, replaceStatement } from './nativeMemoryVerification.mjs';
+import { NativeMemoryVerification, originalSources } from './nativeMemoryVerification.mjs';
 import { SOURCE_LABEL_PREFIX, sourcesNamedIn } from "./nativeMemoryStore.mjs";
 import { OPENVIKING_MEMORY_TYPES } from "./openVikingLayout.mjs";
 import { PROJECT_MEMORY_TYPES, nativeMemoryFile, observationFile, parseArchiveUri, platformSessionOf } from "./openVikingSessions.mjs";
@@ -994,8 +994,10 @@ export class NativeMemoryWorker {
       const uri = entry.operation.uri, settled = recorded.get(uri);
       let accepted = settled ? settled.after : entry.after;
       if (!settled) {
-        const beforeLines = memoryLines(entry.before);
-        const present = new Set(memoryLines(entry.after).map(lineFingerprint));
+        // The original layout may be restored along with a statement. Authorize its
+        // headings under the same undecorated fingerprints as the forget operation.
+        const beforeLines = removalLines(entry.before);
+        const present = new Set(removalLines(entry.after ?? '').map(lineFingerprint));
         const missing = beforeLines.filter(line => !present.has(lineFingerprint(line)));
         if (!missing.length) continue;
         const rejected = await removalRefusals({ userId, overlay: this.overlay, projectId: commit.projectId ?? null,
@@ -1012,7 +1014,18 @@ export class NativeMemoryWorker {
         accepted = result.after;
         if (accepted !== entry.after && accepted !== null && current !== accepted) {
           const acceptedBody = accepted;
-          await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.replace(userId, uri, acceptedBody));
+          // Invalidation may wait on database I/O. Recheck the entire after-image
+          // inside the mutation callback; a remote atomic precondition is unavailable on v0.5.3.
+          const digest = body => body === null ? null : createHash('sha256').update(body).digest('hex');
+          const expected = digest(entry.after);
+          const applied = await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, async () => {
+            const latest = await sessions.read(userId, uri);
+            if (latest === acceptedBody) return true;
+            if (digest(latest) !== expected) return false;
+            await sessions.replace(userId, uri, acceptedBody);
+            return true;
+          });
+          if (!applied) continue;
         }
         for (const outcome of result.outcomes) recordUnexplainedDeletions(outcome);
       }
@@ -1144,53 +1157,9 @@ export class NativeMemoryWorker {
     }
     if (verify && candidates.length) {
       const assessed = await this.verification.assess(userId, candidates);
-      for (const row of assessed.results) recordVerificationLines(row.corrected ? 'corrected' : row.status);
-      let restoreDeleted = false;
-      for (const entry of written) {
-        const rows = assessed.results.filter(row => row.uri === entry.uri);
-        const current = await sessions.read(userId, entry.uri);
-        if (current === null || current !== entry.after) continue;
-        let next = current;
-        const unsupported = rows.some(row => row.status === 'unsupported');
-        const inherited = new Map();
-        if (unsupported && !entry.before) {
-          // A new file has no pre-merge text. Undo its addition, retaining its full body in the deletion revision.
-          await this.overlay.addRevision({ userId, uri: entry.uri, memoryType: entry.type, projectId: entry.projectId,
-            actor: 'platform', change: 'deleted', reason: 'consolidation_unverified', before: current, after: null });
-          await withMemorySummaryInvalidation(sessions, this.overlay, userId, entry.uri, () => sessions.remove(userId, entry.uri));
-          await this.overlay.removeFile(userId, entry.uri);
-          restoreDeleted = true;
-          continue;
-        }
-        if (unsupported && entry.before) {
-          next = entry.before;
-          restoreDeleted = true;
-          for (const [print, origin] of origins.get(entry.uri) ?? []) inherited.set(print, originalSources(origin));
-        } else {
-          if (unsupported) restoreDeleted = true;
-          for (const row of rows) if (row.corrected) {
-            next = replaceStatement(next, row.fingerprint, row.corrected);
-            inherited.set(lineFingerprint(row.corrected), row.origins);
-          }
-        }
-        await this.verification.write(userId, { ...entry, body: current }, next,
-          unsupported ? 'consolidation_unverified' : 'consolidation_corrected', inherited, context);
-      }
-      // If a rejected merge consumed another file, restore that pre-image too. Its deletion revision remains undoable.
-      if (restoreDeleted) for (const file of removed) {
-        if (await sessions.read(userId, file.uri) !== null) continue;
-        const operations = { adds: [{ uri: file.uri, after: file.body }] };
-        const review = this.robustInstructions ? await this.#instructionOrigins({ userId }, operations, context, mergeOrigins) : null;
-        await withMemorySummaryInvalidation(sessions, this.overlay, userId, file.uri, () => sessions.replace(userId, file.uri, file.body),
-          review ? () => this.#holdInstructionLines(userId, operations, context, review, file.projectId) : null);
-        const restored = review ? await sessions.read(userId, file.uri) : file.body;
-        if (restored === null) continue;
-        await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId,
-          actor: 'platform', change: 'added', reason: 'consolidation_unverified', before: null, after: restored });
-        await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId, body: restored });
-        await this.overlay.inheritOrigins(userId, file.uri, new Map([...(origins.get(file.uri) ?? [])].map(([print, origin]) => [print, originalSources(origin)])));
-        await this.#afterWrite(userId, file.uri, file.type, { projectId: file.projectId, diffAfter: restored, diffBefore: '', fresh: true, archiveUri: null, memoryContext: context, extraOrigins: mergeOrigins });
-      }
+      // A verdict describes a possible defect; it cannot authorize a file rollback,
+      // a deletion, or restoration of a pre-merge file that may since have been withdrawn.
+      for (const row of assessed.results) recordVerificationLines(row.corrected ? 'suggested' : row.status);
     }
     return counts;
   }

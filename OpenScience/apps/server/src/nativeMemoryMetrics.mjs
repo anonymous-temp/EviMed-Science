@@ -130,7 +130,13 @@ const imports = table(NATIVE_IMPORT_OUTCOMES);
 const mapReplaced = table(NATIVE_MAP_REPLACED_OUTCOMES);
 const verificationJudge = table(['asked', 'failed', 'over_budget', 'unavailable']);
 const noteLabels = table(['checked', 'labelled', 'malformed']);
-const verificationLines = table(['supported', 'corrected', 'unsupported', 'unverifiable']);
+const verificationLines = table(['supported', 'corrected', 'suggested', 'unsupported', 'unverifiable']);
+const existingVerification = table(['empty', 'checked_without_call', 'called']);
+
+/** @param {{calls:number,checked:number}} summary */
+export function recordExistingVerification(summary) {
+  bump(existingVerification, summary.calls ? 'called' : summary.checked ? 'checked_without_call' : 'empty');
+}
 
 /** @param {string} outcome */
 export function recordVerificationJudge(outcome) { bump(verificationJudge, outcome); }
@@ -227,7 +233,7 @@ export function recordMapReplaced(outcome) { bump(mapReplaced, outcome); }
 
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [unexplainedDeletions, maintenance, requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, pastedInstructionChecks, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports, mapReplaced, verificationJudge, verificationLines, noteLabels]) {
+  for (const map of [unexplainedDeletions, maintenance, requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, pastedInstructionChecks, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports, mapReplaced, verificationJudge, verificationLines, existingVerification, noteLabels]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -265,8 +271,10 @@ export function nativeMemoryMetricFamilies() {
       help: 'Extraction-v2 NOTES statement checks per fresh write: checked, labelled (a recognised source label; an unlabelled statement is not an error), malformed label/outcome/date; no content rewrite.' },
     { name: 'open_science_native_memory_verification_judge_total', type: 'counter', series: series(verificationJudge, 'outcome'),
       help: 'Source verification judge calls, including failed and unavailable calls and the daily cap.' },
+    { name: 'open_science_native_memory_existing_verification_passes_total', type: 'counter', series: series(existingVerification, 'outcome'),
+      help: 'Completed report-only existing-file verification passes since startup; called includes failed judge attempts.' },
     { name: 'open_science_native_memory_verification_lines_total', type: 'counter', series: series(verificationLines, 'outcome'),
-      help: 'Memory lines checked against original conversation excerpts; unsupported without a pre-image remains report-only.' },
+      help: 'Memory lines checked against original conversation excerpts; suggested counts report-only proposed changes.' },
     { name: "open_science_memory_gateway_requests_total", type: "counter",
       series: [...requests].map(([key, value]) => { const [route, outcome] = key.split("\u0000"); return { value, labels: { route, outcome } }; }),
       help: "Requests the memory gateway answered, by route and by what became of them: forwarded to the engine, answered locally, withheld (answered as nothing because the caller is not read or learned from), refused by name, or failed upstream." },

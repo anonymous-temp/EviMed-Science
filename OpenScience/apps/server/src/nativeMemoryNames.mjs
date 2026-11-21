@@ -1,6 +1,5 @@
-import { lineFingerprint, memoryLines, originalSources } from './nativeMemoryOverlay.mjs';
+import { memoryLines, originalSources } from './nativeMemoryOverlay.mjs';
 import { nativeMemoryFile } from './openVikingSessions.mjs';
-import { keepUnexplainedLines } from './nativeMemoryKeepLines.mjs';
 import { fenceWithdrawnMemoryBody, withMemorySummaryInvalidation } from './nativeMemorySummaries.mjs';
 import { removalRefusals } from './nativeMemoryRejections.mjs';
 import { memoryNameVariants } from './nativeMemoryHardTokens.mjs';
@@ -26,10 +25,10 @@ export function memoryNameKey(uri, root) {
  * No semantic deduplication: dates and conflicting values remain inspectable.
  * @param {string} current @param {string} earlier */
 export function mergeNormalizedMemoryText(current, earlier) {
-  const guarded = keepUnexplainedLines({ enabled: true, before: earlier, after: current, neverKept: () => false });
-  const present = new Set(memoryLines(current).map(lineFingerprint));
-  const missing = [...new Map([...memoryLines(earlier), ...memoryLines(guarded.after)]
-    .filter(line => !present.has(lineFingerprint(line))).map(line => [lineFingerprint(line), line])).values()];
+  // A privacy fingerprint deliberately strips "as of" dates. For copying historical
+  // statements, two differently dated observations must both survive.
+  const present = new Set(memoryLines(current));
+  const missing = [...new Set(memoryLines(earlier))].filter(line => !present.has(line));
   if (!missing.length) return current;
   const dated = line => [...line.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)].map(match => match[0]).sort().at(-1) ?? '';
   missing.sort((left, right) => dated(right).localeCompare(dated(left)));
@@ -88,7 +87,7 @@ export async function reconcileMemoryNames({ userId, context, overlay }) {
         await overlay.inheritOrigins(userId, keep.uri, origins);
         if (keep.projectId) await sessions.setTags(userId, keep.uri, [`project=${keep.projectId}`]);
       });
-      if (await sessions.read(userId, sibling.uri) !== incoming) continue;
+      if (await sessions.read(userId, keep.uri) !== after || await sessions.read(userId, sibling.uri) !== incoming) continue;
       await overlay.addRevision({ userId, uri: sibling.uri, memoryType: type, projectId: sibling.projectId ?? null,
         change: 'deleted', actor: 'platform', reason: 'normalized memory name', before: incoming, after: null });
       await withMemorySummaryInvalidation(sessions, overlay, userId, sibling.uri, () => sessions.remove(userId, sibling.uri));

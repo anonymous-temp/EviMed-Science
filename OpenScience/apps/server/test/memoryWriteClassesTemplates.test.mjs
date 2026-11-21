@@ -41,3 +41,11 @@ test('production defaults do not contain the unapproved next rules', () => {
     }
   }
 });
+
+test('every next type requires first-person evidence per clause, including the fallback type', () => {
+  for (const text of Object.values(renderMemoryTemplates({ variant: 'next' }))) {
+    assert.match(text, /exact words in a user message that support each clause/);
+    assert.match(text, /source conversation only, including for NOTES/);
+    assert.doesNotMatch(text, /Worthwhile unconfirmed advice is written|may be retained separately in NOTES|may be retained with explicit attribution/);
+  }
+});
