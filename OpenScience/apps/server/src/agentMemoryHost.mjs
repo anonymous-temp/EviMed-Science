@@ -40,7 +40,7 @@ export async function ingestConversation({ native, admission }, { user, project,
   const row = await native.overlay.queueAdmission(user.id, { candidateId: `host:${id}`, revision: 1,
     engineSession: `dsh-external_${id}`, text, projectId: project.id, externalSource });
   const receipt = await native.processAdmission(user.id, row);
-  return { conversationId: id, state: receipt.state, recordIds: receipt.recordIds, ...(receipt.error ? { error: receipt.error } : {}) };
+  return { conversationId: id, sourceSessionId: `external_${id}`, projectId: project.id, state: receipt.state, recordIds: receipt.recordIds, ...(receipt.error ? { error: receipt.error } : {}) };
 }
 
 /** Judge a host's signal against a previously admitted human turn and a current, visible account resource. */

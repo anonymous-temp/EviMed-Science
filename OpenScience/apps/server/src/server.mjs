@@ -5367,6 +5367,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   nativeMemoryWorker.verification.history = memoryHistory;
   const sourceDeletionLedger = productDatabase ? new ConversationSourceDeletionLedger(productDatabase) : null;
   const sourceDeletion = sourceDeletionLedger ? new ConversationSourceDeletionService({ ledger: sourceDeletionLedger, runtime: runtimeManager,
+    hostAdmission: (userId, id) => nativeMemoryOverlay.admission(userId, `host:${id}`, 1),
     recordIdForUri:nativeFileId,
     revisionSource:async(userId,revision)=>{
       const sessionId=await nativeMemoryOverlay.conversationOf(userId,revision.engineSession,revision.archiveUri);

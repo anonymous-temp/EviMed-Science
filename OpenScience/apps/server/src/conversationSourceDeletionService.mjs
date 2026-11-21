@@ -37,7 +37,8 @@ export function filterDeletedConversationValue(value, deleted) {
 
 /** Durable intent precedes source cleanup. Physical removal is an idle-only maintenance operation, never a kernel RPC. */
 export class ConversationSourceDeletionService {
-  constructor({ ledger, runtime, resolveProject, removeHistory, removeDerived, memoryRootFor = async (_project) => null, prepareFence = async(_project,_sessionIds)=>null, contributionsFor=async(_row)=>[], nativeRootsFor=async(_project,_frozen,_identity)=>null, recordIdForUri=null, revisionSource=async(_userId,_row)=>null }) {
+  constructor({ ledger, runtime, resolveProject, removeHistory, removeDerived, memoryRootFor = async (_project) => null, prepareFence = async(_project,_sessionIds)=>null, contributionsFor=async(_row)=>[], nativeRootsFor=async(_project,_frozen,_identity)=>null, recordIdForUri=null, hostAdmission = async (_userId, _id) => null, revisionSource=async(_userId,_row)=>null }) {
+    this.hostAdmission = hostAdmission;
     this.contributionsFor=contributionsFor; this.nativeRootsFor=nativeRootsFor; this.recordIdForUri=recordIdForUri; this.revisionSource=revisionSource;
     this.memoryRootFor = memoryRootFor; this.prepareFence=prepareFence; this.knownFences=new Map();this.epochComparisons=new Map();
     this.ledger = ledger; this.runtime = runtime; this.resolveProject = resolveProject;
@@ -117,6 +118,7 @@ export class ConversationSourceDeletionService {
     if (this.refreshing.has(key)) return this.refreshing.get(key);
     const task=(async()=>{
       for (const row of rows) {
+        if (row.frozen.kind === 'host-admission') continue; // A submitted host transcript has no managed children.
         const current=await this.runtime.captureConversationSource({...project,sourceOwnerCreatedAt:row.accountCreatedAt,sourceProjectCreatedAt:row.projectCreatedAt},row.rootSessionId);
         const identity=value=>JSON.stringify([value?.id,value?.createdAt,value?.cwd,value?.isSeeded,value?.absent===true]);
         if (identity(current.root)!==identity(row.frozen.root)) throw new HttpError(503,'source_deletion_identity_changed','The deleted source identity cannot be verified.');
@@ -164,11 +166,21 @@ export class ConversationSourceDeletionService {
     return { forward: filtered !== null, value: filtered };
   }
   async request(project, rawSessionId) {
-    const sessionId = safeId(rawSessionId, 'conversation id');
+    const host = typeof rawSessionId === 'string' && /^external_([a-f0-9]{64})$/.exec(rawSessionId);
+    const sessionId = host ? rawSessionId : safeId(rawSessionId, 'conversation id');
     const existing = await this.ledger.get(project, sessionId);
     if (existing) return this.publicStatus(existing);
     const identity = await this.ledger.scope(project);
-    const frozen = await this.runtime.captureConversationSource({ ...project, sourceProjectCreatedAt: identity.projectCreatedAt, sourceOwnerCreatedAt: identity.accountCreatedAt }, sessionId);
+    let frozen;
+    if (host) {
+      const admission = await this.hostAdmission(project.userId, host[1]);
+      if (admission?.externalSource?.operation !== 'ingest' || admission.projectId !== project.id
+        || admission.engineSession !== `dsh-${sessionId}` || admission.externalSource.projectCreatedAt !== identity.projectCreatedAt) throw unavailable();
+      const root = { id: sessionId };
+      frozen = { kind: 'host-admission', root, sessions: [root], copies: [{ contextReference: null }] };
+    } else {
+      frozen = await this.runtime.captureConversationSource({ ...project, sourceProjectCreatedAt: identity.projectCreatedAt, sourceOwnerCreatedAt: identity.accountCreatedAt }, sessionId);
+    }
     if (!frozen?.root || frozen.root.id !== sessionId || !Array.isArray(frozen.sessions) || !frozen.sessions.some(row => row.id === sessionId)) throw unavailable();
     const currentRoot=await this.memoryRootFor(project);
     const nativeRoots=await this.nativeRootsFor(project,frozen,identity)??(currentRoot?[currentRoot]:[]);
@@ -198,6 +210,13 @@ export class ConversationSourceDeletionService {
         await this.ledger.exclusive(project, async () => {
           const guard = () => this.ledger.assertIdentity(row);
           await guard(); await this.removeHistory(project, row);
+          // The host's original bytes live in the native session. The derived cleanup
+          // verifies and removes them under the account lease, including unfinished admissions.
+          if (row.frozen.kind === 'host-admission') {
+            await this.removeDerived(project, row);
+            await this.ledger.update(row, { sourceRemoved: true, cleanup: 'complete', reason: null });
+            return;
+          }
           const result = row.sourceRemoved === true ? { sourceRemoved: true } : await this.runtime.purgeConversationSource(project, row.frozen, guard);
           if (result?.sourceRemoved !== true) { await this.ledger.update(row, { cleanup: 'pending', reason: result?.reason ?? 'runtime_busy', backoff: true }); return; }
           if (Array.isArray(result.removedSessionIds) && this.ledger.extendSessions) {

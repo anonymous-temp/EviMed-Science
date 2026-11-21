@@ -1040,8 +1040,9 @@ export class NativeMemoryOverlay {
     // admission still names that one deterministic session for erasure.
     const segments = userRoot === userRootUri(userId) ? (await this.#query(`SELECT engine_session,project_id,
       external_source->>'projectCreatedAt' AS project_created_at FROM evimed_memory.native_admissions
-      WHERE user_id=$1 AND project_id=$2 AND external_source->>'operation'='clinical-segment'
-      AND external_source->>'sessionId'=ANY($3::text[])`, [owner(userId),projectId,sessionIds])).rows : [];
+      WHERE user_id=$1 AND project_id=$2 AND ((external_source->>'operation'='clinical-segment'
+      AND external_source->>'sessionId'=ANY($3::text[])) OR (external_source->>'operation'='ingest'
+      AND engine_session=ANY($4::text[])))`, [owner(userId),projectId,sessionIds,ids])).rows : [];
     const sessionIdsFound=[...new Set([...ids,...commits.rows.concat(segments).map(row=>String(row.engine_session))])];
     const registry=userRoot===userRootUri(userId)?(await this.#query('SELECT project_id,project_created_at FROM evimed_memory.native_sessions WHERE user_id=$1 AND engine_session=ANY($2::text[])',[owner(userId),sessionIdsFound])).rows:[];
     const origins=(await this.#query(`SELECT o.project_id,o.project_created_at FROM evimed_memory.native_line_origins o WHERE o.user_id=$1 AND left(o.uri,length($2)+1)=$2||'/' AND o.engine_session=ANY($3::text[])`,[owner(userId),userRoot,sessionIdsFound])).rows;
@@ -1068,10 +1069,10 @@ export class NativeMemoryOverlay {
         WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
     ) UPDATE evimed_memory.native_commits SET native_ingested_at=CASE WHEN state='completed' THEN COALESCE(native_ingested_at,ingested_at,clock_timestamp()) ELSE native_ingested_at END,state='abandoned',pending_text=NULL,error='source_conversation_deleted',updated_at=clock_timestamp()
       WHERE user_id=$1 AND archive_uri IN (SELECT archive_uri FROM sources) AND ($5::text[] IS NULL OR archive_uri=ANY($5::text[])) RETURNING engine_session`, [owner(userId), projectId, sessions, userRoot,proof?.archiveUris??null]);
-    if (userRoot === userRootUri(userId)) await this.#query(`UPDATE evimed_memory.native_admissions SET state='cancelled',pending_text=NULL,error='source_conversation_deleted',
+    const cancelled = userRoot === userRootUri(userId) ? await this.#query(`UPDATE evimed_memory.native_admissions SET state='cancelled',pending_text=NULL,error='source_conversation_deleted',
       updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND (engine_session=ANY($3::text[])
-        OR (external_source->>'operation'='clinical-segment' AND external_source->>'sessionId'=ANY($4::text[])))`, [owner(userId), projectId, sessions, sessionIds]);
-    return [...new Set(removed.rows.map(row => row.engine_session))];
+        OR (external_source->>'operation'='clinical-segment' AND external_source->>'sessionId'=ANY($4::text[]))) RETURNING engine_session`, [owner(userId), projectId, sessions, sessionIds]) : { rows: [] };
+    return [...new Set([...removed.rows, ...cancelled.rows].map(row => row.engine_session))];
   }
 
   /** Raw consolidation receipts are inspected before source scrubbing can remove their inputs. */

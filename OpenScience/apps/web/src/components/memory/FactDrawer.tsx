@@ -251,6 +251,11 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
   // When it was last used, and for one long unused that it is still kept: the map draws such a memory dim, and a dim mark is not a forgotten one.
   const used = record?.lastRecalledAt ? `最近用到：${formatDay(record.lastRecalledAt)}` : record && (record.freshness ?? 1) < 0.33 ? "很久没用到，仍然记着" : "";
   const source = record ? memorySource(record) : null;
+  const hostSources = new Map<string, string>();
+  for (const item of record?.evidence ?? []) {
+    const id = /^external\/dsh-(external_[a-f0-9]{64})$/.exec(item.sourceRef ?? '')?.[1];
+    if (id && item.projectId && item.externalSource?.operation === 'ingest') hostSources.set(id, item.projectId);
+  }
   const revisions = record ? [...record.revisions].reverse().slice(0, 5) : [];
   const undoable = record ? record.revisions.length > 0 : (entry?.revision ?? 1) > 1;
 
@@ -365,6 +370,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
               {source && (record.scope === "project" ? record.scopeId : source.projectId) && (
                 <SourceConversationDelete projectId={(record.scope === "project" ? record.scopeId : source.projectId)!} sessionId={source.sessionId} onChanged={onChanged} />
               )}
+              {Array.from(hostSources, ([id, projectId]) => <SourceConversationDelete key={id} projectId={projectId} sessionId={id} onChanged={onChanged} />)}
               {materials.map((material) => (
                 <Link key={material.id} to={readerPath(material.id, { scope: null, kind: null, q: "" })} className="block max-w-measure rounded text-left text-ui text-accent underline underline-offset-4 hover:decoration-2">
                   {`依据的资料：《${memoryExcerpt(material.title, 60)}》`}

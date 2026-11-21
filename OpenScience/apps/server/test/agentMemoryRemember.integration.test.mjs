@@ -151,3 +151,23 @@ test('two API keys cannot claim one another’s human feedback, and duplicate si
   assert.equal(rows.length,1); assert.equal(rows[0].detail.externalTarget.id,record.id);
   assert.deepEqual(rows[0].detail.concerns,[]);
 });
+
+test('host source removal cancels the admitted generation and cannot requeue its original transcript', options, async t => {
+  const f = await setup(t);
+  const host = await f.keys.create(f.userId, { name:'Host', scopes:['memory.ingest'] });
+  const uri = f.root + '/preferences/host.md';
+  f.stub.extract = () => ({ adds:[{uri, memory_type:'preferences', after:'- Use metric units.'}] });
+  const body = { sessionId:'external-source', attended:true, messages:[{role:'user', text:'Use metric units.', saidAt:input.source.saidAt}] };
+  const result = await f.call('/conversations', body, host.key);
+  await f.worker.processCommits({userId:f.userId});
+  await f.store.processAdmissions(f.userId);
+  const source = await f.overlay.admission(f.userId, 'host:' + result.conversationId, 1);
+  assert.equal(source.engineSession, 'dsh-' + result.sourceSessionId);
+  assert.ok((await f.store.records(f.userId)).some(record => record.evidence.some(item =>
+    item.externalSource?.operation === 'ingest' && item.projectId === 'default')));
+  await f.store.removeConversationSource(f.userId, 'default', [result.sourceSessionId], {
+    userRoot:f.sessions.userRoot(f.userId), projectCreatedAt:source.externalSource.projectCreatedAt,
+  });
+  assert.equal((await f.call('/conversations', body, host.key)).state, 'cancelled');
+  assert.equal(await f.sessions.read(f.userId, uri), null);
+});
