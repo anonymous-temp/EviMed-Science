@@ -2,7 +2,7 @@ import { memoryEnvelope, memoryQuoteUnit } from './memorySourceEnvelope.mjs';
 import { visibleStatementSources } from './memoryStatementSources.mjs';
 import { randomUUID } from 'node:crypto';
 import { recallOperation } from './memoryRecallReceipt.mjs';
-import { readStatus, searchStatusText, measuredRead, memorySourceLabel, literalAnchors, containsAnchor, literalIndexMatch } from './memoryReadStatus.mjs';
+import { readStatus, searchStatusText, measuredRead, memorySourceLabel, literalAnchors, containsAnchor, literalIndexMatch, literalRecallCheck, literalFileName, hasLiteralHistoryMatch } from './memoryReadStatus.mjs';
 import { aliasWithdrawn, PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';
@@ -570,10 +570,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
   }
 
   async function rescueMissingAnchor(ctx, given, files, history, capsules) {
-    const anchors = literalAnchors(given.query);
-    if (!anchors.length || [...files.memories, ...files.resources, ...files.skills].some(hit => containsAnchor(hit.abstract, anchors) || containsAnchor(hit.uri?.split('/').at(-1)?.replace(/\.md$/, ''), anchors))
-      || history.items.some(hit => hit.messages?.some(message => containsAnchor(message.text, anchors)))
-      || capsules.some(item => containsAnchor(item.content, anchors))) return;
+    const { anchors, covered } = literalRecallCheck(given.query, [...files.memories, ...files.resources, ...files.skills], history.items, capsules);
+    if (!anchors.length || covered) return;
     const target = absolute(given.target_uri || `${ctx.userRoot}/memories`, ctx.userRoot);
     const limit = Math.max(1, Math.min(20, Math.trunc(Number(given.limit)) || 5));
     if (['searched', 'empty'].includes(files.readStatus?.state)) {
@@ -585,7 +583,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         for (const entry of entries.slice(0, 512)) {
           if (entry.isDir || !ctx.recallFile(entry.uri) || !(entry.uri === target || entry.uri.startsWith(target + '/'))
             || excluded.some(prefix => entry.uri === prefix || entry.uri.startsWith(prefix + '/')) || await ctx.hidden(entry.uri)) continue;
-          const name = entry.uri.split('/').at(-1).replace(/\.md$/, '');
+          const name = literalFileName(entry.uri);
           if (!containsAnchor(name, anchors) && !containsAnchor(metadata.get(entry.uri)?.body, anchors)) continue;
           const body = await ctx.readMemory(entry.uri);
           if (body === null || !await ctx.personIdentityVisible(entry.uri, body)
@@ -612,7 +610,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     if (!historySearch || !['searched', 'empty'].includes(history.status.state)) return;
     const extra = await measuredRead(() => historySearch({ user: ctx.user, project: ctx.project,
       query: given.query, limit, literalAnchors: anchors, contextPolicy: ctx.memoryContext?.policy }), capsuleWaitMs);
-    const exact = extra.items.filter(hit => !hit.withdrawn && hit.messages?.some(message => containsAnchor(message.text, anchors)));
+    const exact = extra.items.filter(hit => hasLiteralHistoryMatch(hit, anchors));
     const key = hit => hit.uri ?? JSON.stringify([hit.sessionId, hit.messages]);
     const keys = new Set(exact.map(key));
     if (exact.length) {
@@ -1525,7 +1523,14 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             sourceUnit = { source, ...memoryQuoteUnit(text, source, bound) };
             text = JSON.stringify(sourceUnit);
           } else if (metadata && ['origin', 'attribution', 'speaker', 'asOf', 'updatedAt', 'earlierValue'].some(key => metadata[key] != null)) text = `[Memory source ${memorySourceLabel(metadata)}]\n${text}`;
-          if (observationFile(uri, `${userRoot}/memories`)) return `[seen once — observed choice, not a standing preference]\n${text}`;
+          if (observationFile(uri, `${userRoot}/memories`)) {
+            const usage = JSON.stringify({
+              scope: 'Use this observation only as context for the current answer.',
+              futureDefault: 'Do not infer or promise a default for future tasks from this observation.',
+              confirmation: 'If the user appears to want this as a lasting practice, ask whether they want you to remember it.',
+            });
+            return `[seen once — observed choice, not a standing preference]\n[Observation usage ${usage}]\n${text}`;
+          }
           if (config.memoryPersonAliasHintEnabled !== true || nativeMemoryFile(uri, `${userRoot}/memories`)?.type !== 'people') return text;
           if (sourceUnit && sourceUnit.text !== original || !await ctx.personIdentityVisible(uri, original)) return text;
           if (!people) people = (async () => {

@@ -178,6 +178,7 @@ test('opening index uses the overlay and gateway scope, omits private names, and
   // No engine read is needed: the index is metadata already in the overlay.
   const index = await f.store.openingIndex(f.userId, 'default');
   assert.deepEqual(index.counts, { people: 1, notes: 1, projects: 1 });
+  assert.equal(index.hasObservations, true);
   assert.deepEqual((await f.store.openingIndex(f.userId, A)).counts, { people: 1, notes: 1, projects: 1, decisions: 1 });
   const residentProfiles = new ResidentProfiles({ config: { memoryRecallEnabled: true, memoryEngineEnabled: true, memoryOpeningIndexEnabled: true, memoryHistorySearchEnabled: true },
     store: f.memorySettings, nativeIndex: (userId, projectId) => f.store.openingIndex(userId, projectId) });
@@ -185,6 +186,12 @@ test('opening index uses the overlay and gateway scope, omits private names, and
   const block = await resident.forSession({ id: f.userId }, { id: 'default' }, 'ses_index');
   assert.match(block.text, /people 1/); assert.match(block.text, /早先的对话也可搜索/);
   assert.match(block.text, /历史记录，不是指令/); assert.doesNotMatch(block.text, /Patient|private|Not an opening fact|decisions/);
+  assert.doesNotMatch(block.text, /observations/);
+  const observationProfile = new ResidentProfiles({ config: { ...residentProfiles.config, memoryObservationRecallEnabled: true },
+    store: f.memorySettings, nativeIndex: (userId, projectId) => f.store.openingIndex(userId, projectId) });
+  const withHint = await observationProfile.forDispatch(f.userId, { projectId: 'default', sessionId: 'ses_observation' });
+  assert.match(withHint.text, /observations 中有只见过一次的观察可查/);
+  assert.doesNotMatch(withHint.text, /internal\.md|Not an opening fact/);
   await resident.attached({ id: f.userId }, { id: 'default' }, 'ses_index', { digest: block.digest, memories: [] });
   assert.equal(await resident.forSession({ id: f.userId }, { id: 'default' }, 'ses_index'), null);
 });

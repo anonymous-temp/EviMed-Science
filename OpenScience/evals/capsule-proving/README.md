@@ -240,3 +240,74 @@ node evals/capsule-proving/pp/safety-opening.mjs \
 ```
 
 The process exits successfully only if readiness, extraction, exact legacy lineage, cross-project opening, overflow read, withdrawal, surviving neighbour and retry checks pass. The JSON report includes the before/after synthetic openings and cleanup result. Use the same lab instance for both URLs.
+
+### Offline replay of literal fallback
+
+Run from `OpenScience/`. Point the replay at a single recorded arm to keep the
+search denominator comparable. The input can be the runner's `answers*.jsonl`,
+a per-case or aggregate `retrieval.json`, a recorded RCA evidence pack, or a
+directory containing these records. Repeated searches within one answer count
+separately. A retrieval report and its per-case mirrors count once when they
+carry the same run identity.
+
+```sh
+node evals/capsule-proving/replay/literal-fallback.mjs "$G1117LF_RUN_DIR" > literal-replay.json
+node evals/capsule-proving/replay/literal-fallback.mjs "$G1117LF_RUN_DIR" \
+  --evidence "$LITERAL_EVIDENCE_JSON" > literal-replay-scored.json
+```
+
+The replay uses the actual tool query and the production anchor check against
+the recorded file names and bodies, history excerpts, and capsule notes.
+`counts` gives the number of searches, predicted triggers, correct additions,
+wrong additions, and unknown or unscored outcomes. The correct and wrong counts
+are per search and can both increment when a search adds both kinds. Each row
+identifies the search, anchors, reason, and predicted additions with snippet
+digests. Evidence outside the original response is read from the supplied
+recordings. The command performs no model, engine, database or network calls.
+
+For promotion scoring, use the call's recorded `literalFallbackEvidence` or an
+optional aligned JSON array with one row per query/call. Use `file` (path suffix),
+`arm` and `search` (one-based search number) to distinguish recordings with the
+same `qid`. Candidate pools require the exact recorded `query`.
+
+```json
+[
+  {
+    "qid": "q1",
+    "search": 1,
+    "query": "What happened to ZX17?",
+    "files": { "complete": true, "candidates": [] },
+    "history": {
+      "complete": true,
+      "candidates": [{
+        "uri": "viking://user/owner/resources/history/example",
+        "sessionId": "source-1",
+        "decision": "allowed",
+        "messages": [{ "sourceRole": "user", "text": "ZX17 was rescheduled for Monday." }]
+      }]
+    },
+    "targets": [{
+      "source": "history", "sessionId": "source-1", "quote": "ZX17 was rescheduled for Monday."
+    }]
+  }
+]
+```
+
+Use the ordered candidates recorded at lookup time. A complete file pool covers
+the bounded scoped tree traversal (up to 512 entries). File candidates carry
+`uri`, `decision`, `body` and any recorded `indexedBody`. A complete history pool
+covers the bounded literal grep (up to 80 candidates). Use `historyCap: 20` only
+for arms that enabled the wider history cap. An `allowed` decision represents
+the recorded authorization, source validation and withdrawal checks on the
+same candidate and text. Explicit `denied`, `stale` and `withdrawn` rows are
+excluded. Use `scope: "shared"` if the record's scope is known but the response
+does not carry it. Gold comes from an exact quote or a known file/chunk URI.
+Use `targets: []` only for a reviewed negative control.
+
+An old result alone can establish a missing visible anchor. It cannot reveal
+unreturned candidates, hidden capsule text, or missing source coverage. RCA
+source sessions can supply possible matching chunks, with no promotion or gold
+credit. Missing bounded candidate or eligibility evidence is reported as
+`unknownOutcome`. Promotions without gold are `unscoredPromotions`. This
+replay measures the available evidence for a retrieval counterfactual. Live
+engine ordering, deadlines and answer quality require separate measurements.

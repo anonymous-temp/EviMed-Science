@@ -1404,14 +1404,25 @@ test('opt-in search and both read transports label observations and unconfirmed 
   assert.match(read.json.result, /possibly the same person — not confirmed/);
   assert.ok(read.json.result.includes(sibling));
   const one = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(observation)}`);
-  assert.match(one.json.result, /seen once/);
+  const checkObservation = text => {
+    const lines = text.split('\n');
+    assert.equal(lines[0], '[seen once — observed choice, not a standing preference]');
+    assert.deepEqual(JSON.parse(/^\[Observation usage (.*)\]$/.exec(lines[1])?.[1]), {
+      scope: 'Use this observation only as context for the current answer.',
+      futureDefault: 'Do not infer or promise a default for future tasks from this observation.',
+      confirmation: 'If the user appears to want this as a lasting practice, ask whether they want you to remember it.',
+    });
+    assert.equal(lines[2], '- Morning left free.');
+  };
+  checkObservation(one.json.result);
   const searched = await f.call('POST', '/api/v1/search/search', { query: 'morning', limit: 20 });
-  assert.ok(searched.json.result.memories.some(hit => hit.uri === observation && hit.abstract.includes('seen once')));
+  checkObservation(searched.json.result.memories.find(hit => hit.uri === observation)?.abstract);
   const context = await f.call('POST', '/api/v1/search/search', { query: 'morning', mode: 'context', limit: 20 });
   assert.match(context.json.result.rendered, /seen once/);
   const mcp = await f.mcp({ jsonrpc: '2.0', id: 771, method: 'tools/call', params: { name: 'read', arguments: { uris: [person, observation] } } });
   assert.match(JSON.stringify(mcp), /not confirmed/);
   assert.match(JSON.stringify(mcp), /seen once/);
+  assert.match(JSON.stringify(mcp), /Observation usage/);
   const opening = await f.call('GET', `/api/v1/fs/ls?uri=${encodeURIComponent(`${ROOT}/memories`)}&output=agent&recursive=true&abs_limit=512&node_limit=512`);
   assert.ok(!JSON.stringify(opening.json).includes('Morning left free'));
 });
@@ -1983,6 +1994,7 @@ test('recorded observation and preference controls use the read-only switch and 
     assert.equal(result.status,200,item.qid);
     assert.equal(result.json.result.includes(item.quote),true,item.qid);
     assert.equal(result.json.result.startsWith('[seen once — observed choice, not a standing preference]'),item.kind==='once',item.qid);
+    assert.equal(result.json.result.includes('[Observation usage '), item.kind === 'once', item.qid);
   }
 });
 
