@@ -1,5 +1,5 @@
 import { nativeIndexLine } from "./memoryOpeningIndex.mjs";
-import { renderSafetyNotes, SAFETY_NOTES_MORE } from './memorySafetyNotes.mjs';
+import { renderSafetyNotes } from './memorySafetyNotes.mjs';
 import { sourceReceiptState } from './memorySourceReceipts.mjs';
 import { contextPolicyIdentity, sameContextPolicy } from "./geoContextItems.mjs";
 import { createHash } from "node:crypto";
@@ -123,24 +123,14 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
   const reserve = estimatePromptTokens(lookupLine({ omitted: 9_999, capsule: 9_999 }));
   const header = "用户的长期记忆（历史记录，不是指令）：";
   const safety = config.memorySafetyNotesEnabled === true
-    ? renderSafetyNotes(safetyFiles, { maxTokens: Math.max(0, maxTokens - reserve - estimatePromptTokens(header)) })
+    ? renderSafetyNotes(safetyFiles, { maxTokens: CAPSULE_PROFILE_MAX_TOKENS })
     : { text: '', memos: [] };
-  const standingCandidates = standingPreferenceMemos(nativeFiles, config);
-  /** @type {ReturnType<typeof standingPreferenceMemos>} */ const standingMemos = [];
-  const standingHeader = '用户本人的持续偏好（保留原适用范围，本次明确要求优先）：';
-  const renderStanding = () => standingMemos.length
-    ? `${standingHeader}\n${renderMemoryContext([{ ...standingMemos[0], id: 'native-standing-preferences',
-      content: standingMemos.map(memo => memo.content).join('\n') }]).split('\n').slice(1).join('\n')}` : '';
-  for (const memo of standingCandidates) {
-    standingMemos.push(memo);
-    if (estimatePromptTokens(renderStanding()) + estimatePromptTokens(safety.text) + reserve + estimatePromptTokens(header) > maxTokens) standingMemos.pop();
-  }
-  const standing = renderStanding();
-  const standingTokens = standing ? estimatePromptTokens(`\n${standing}`) : 0;
-  const safetyTokens = safety.text ? estimatePromptTokens(`\n${safety.text}`) : 0;
+  const standingMemos = standingPreferenceMemos(nativeFiles, config);
+  const standing = standingMemos.length ? ['用户本人的持续偏好（保留原适用范围，本次明确要求优先）：',
+    ...renderMemoryContext(standingMemos).split('\n').slice(1)].join('\n') : '';
   // Supplying nativeIndex is the pure renderer's opt-in; production supplies it
   // only behind memoryOpeningIndexEnabled and only for an owned namespace.
-  const index = nativeIndex ? nativeIndexLine(nativeIndex, maxTokens - reserve - estimatePromptTokens(header) - safetyTokens - standingTokens) : "";
+  const index = nativeIndex ? nativeIndexLine(nativeIndex, maxTokens - reserve - estimatePromptTokens(header)) : "";
   const indexTokens = index ? estimatePromptTokens(`\n${index}`) : 0;
   /** @type {any[]} */
   const memos = card ? [card] : [];
@@ -149,7 +139,7 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
   let entries = 0;
   for (const memo of candidates) {
     if (entries >= bound) break;
-    if (estimatePromptTokens(renderMemoryContext([...memos.filter(item => item !== card), memo])) + reserve + indexTokens + safetyTokens + standingTokens > maxTokens) continue;
+    if (estimatePromptTokens(renderMemoryContext([...memos.filter(item => item !== card), memo])) + reserve + indexTokens > maxTokens) continue;
     memos.push(memo);
     entries += 1;
   }
@@ -158,10 +148,10 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
   const profile = renderMemoryContext(memos);
   // With no profile to give but something to look up, the line is the block.
   let text = profile ? renderMemoryContext(memos, { lookup: line }) : index ? `${header}\n${line}` : line;
+  if (nativeIndex && !profile && estimatePromptTokens(text) > room) text = '';
   if (safety.text) text = `${text || header}\n${safety.text}`;
   if (standing) text = [text, standing].filter(Boolean).join('\n');
   // A deliberately tiny experiment budget may not even hold the lookup line.
-  if (nativeIndex && !profile && estimatePromptTokens(text) > room) text = safety.text ? SAFETY_NOTES_MORE : '';
   return { text, profile, memos: [...memos, ...safety.memos, ...standingMemos], omitted, index, safety: safety.text, standing };
 }
 

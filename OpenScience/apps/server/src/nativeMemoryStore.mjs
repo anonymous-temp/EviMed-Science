@@ -1180,7 +1180,7 @@ export class NativeMemoryStore {
     const used = visible.filter(file => file.usedCount > 0)
       .sort((a, b) => b.usedCount - a.usedCount || String(b.lastUsedAt ?? '').localeCompare(String(a.lastUsedAt ?? '')) || a.uri.localeCompare(b.uri))
       .slice(0, Math.max(0, Math.min(100, limit)));
-    const preferences = this.standingInstructionsEnabled ? orderStandingPreferences(visible).slice(0, 100) : [];
+    const preferences = this.standingInstructionsEnabled ? orderStandingPreferences(visible) : [];
     const selected = [...new Map([...used, ...preferences].map(file => [file.uri, file])).values()];
     if (!selected.length) return [];
     const files = (await this.files(userId, { uris: selected.map(file => file.uri) }))

@@ -76,7 +76,7 @@ test('resident most-used slice has URI and first lines, top K, historical proven
   const rendered = renderResidentProfile({ nativeFiles: files, config: { ...enabled, memoryOpeningTopK: 1 } });
   assert.equal(rendered.memos.length, 1); assert.match(rendered.text, /历史记录，不是指令/);
   assert.match(rendered.text, /Most used/); assert.ok(rendered.text.includes(files[1].uri));
-  assert.match(rendered.text, /Third fact/); assert.doesNotMatch(rendered.text, /Fourth fact/);
+  assert.match(rendered.text, /Third fact\nFourth fact/);
   assert.equal(renderResidentProfile({ nativeFiles: files, config: enabled, maxTokens: 1 }).memos.length, 0);
 });
 
@@ -170,4 +170,23 @@ test('a hidden used file cannot change the opening bytes of otherwise unused vis
   f.seed('preferences/private.md', 'Hidden fact', 999);
   const path = `/api/v1/fs/ls?uri=${encodeURIComponent(`${ROOT}/preferences`)}&recursive=true&abs_limit=512&node_limit=512`;
   assert.deepEqual(await f.call(`${path}&output=agent`), await f.call(`${path}&output=original`));
+});
+
+test('24 opening fixture replays cover cold start, use, correction, budget, forget and ties', () => {
+  for (const group of ['preferences', 'entities']) for (const multilingual of [false, true]) {
+    const entries = ['a', 'b', 'c'].map(key => leaf(multilingual ? `${key}-写作` : key, group));
+    const [old, used, correction] = entries;
+    const files = new Map(entries.map(item => [item.uri, held(item)]));
+    const replay = (visible, config = enabled) => selectOpeningEntries({ preferences: group === 'preferences' ? visible : [],
+      entities: group === 'entities' ? visible : [], files, root: ROOT, config, now: Date.parse('2026-11-21') })[group];
+    assert.deepEqual(replay(entries), entries);
+    files.get(used.uri).usedCount = 9;
+    assert.deepEqual(replay(entries), [used, old, correction]);
+    files.get(correction.uri).createdAt = '2026-11-21';
+    assert.deepEqual(replay(entries), [used, correction, old]);
+    assert.deepEqual(replay(entries, { ...enabled, memoryOpeningMaxChars: 1 }), []);
+    assert.deepEqual(replay([old, correction]), [old, correction]);
+    files.get(correction.uri).usedCount = 9;
+    assert.deepEqual(replay(entries), [used, correction, old]);
+  }
 });

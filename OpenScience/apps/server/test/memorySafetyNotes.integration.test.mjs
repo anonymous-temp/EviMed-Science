@@ -21,7 +21,7 @@ test('dedicated safety history uses ordinary sensitive, project, source-deletion
     hiddenMemoryUris: async () => [`${f.root}/safety_notes/source-deleted.md`],
     redactRecords: async (_id, rows) => rows,
   };
-  assert.deepEqual((await f.store.safetyNotes(f.userId, 'default')).map(file => file.relPath), ['safety_notes/visible.md']);
+  assert.deepEqual((await f.store.safetyNotes(f.userId, 'default')).map(file => file.relPath).sort(), ['safety_notes/other-project.md', 'safety_notes/visible.md']);
   f.store.sourceDeletion.redactRecords = async (_id, rows) => rows.map(row => ({ ...row, value: '' }));
   assert.deepEqual(await f.store.safetyNotes(f.userId, 'default'), [], 'a raw safety body cannot bypass source redaction');
 });

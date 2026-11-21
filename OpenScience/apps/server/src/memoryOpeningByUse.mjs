@@ -162,7 +162,7 @@ export function mostUsedMemos(files, config) {
     .slice(0, limit).map(file => ({
       id: `native-used:${file.uri}`, memoryType: 'native_most_used', kind: 'note', scope: file.projectId ? 'project' : 'user',
       origin: 'unknown', updatedAt: file.updatedAt ?? null,
-      content: `Most used · ${file.uri}\n${String(file.body).split('\n').filter(bodyLine => bodyLine.trim()).slice(0, 3).join('\n').slice(0, 400)}`,
+      content: `Most used · ${file.uri}\n${[...file.body].length <= 400 ? file.body : openingPointer(file)}`,
       originalSources: file.originalSources ?? [], attribution: file.attribution, sourcePrivacy: file.sourcePrivacy,
     }));
 }
@@ -185,6 +185,12 @@ export function orderStandingPreferences(files) {
     || count(b) - count(a) || lastUse(b) - lastUse(a) || a.uri.localeCompare(b.uri));
 }
 
+/** @param {{uri:string,body?:string}} file */
+function openingPointer(file) {
+  const title = /^#\s+(.+)$/m.exec(file.body ?? '')?.[1] ?? file.uri.split('/').pop();
+  return `${title} · 可查全文 mcp__openviking__read ${file.uri}`;
+}
+
 /** Complete lines preserve scope and exceptions; never truncate a rule mid-condition.
  * Inputs have passed the owned store's deletion and receipt readers.
  * @param {StandingPreferenceFile[]} files @param {{ memoryStandingInstructionsEnabled?: boolean }} config */
@@ -193,17 +199,13 @@ export function standingPreferenceMemos(files, config) {
   let remaining = 400;
   const memos = [];
   for (const file of orderStandingPreferences(files)) {
-    /** @type {string[]} */ const kept = [];
-    const statements = String(file.body ?? '').replace(/<!--[\s\S]*?-->/g, '').split(/\n(?=\s*(?:[-*+]\s|\d+[.)]\s|#))/);
-    for (const raw of statements) {
-      const statement = raw.trim();
-      if (!statement || statement.startsWith('#') || statement.startsWith('<!--')) continue;
-      const size = [...statement].length + 1;
-      if (size > remaining) continue;
-      kept.push(statement); remaining -= size;
-    }
-    if (kept.length) memos.push({ id: `native-standing:${file.uri}`, memoryType: 'native_standing_preference',
-      kind: 'preference', scope: 'user', origin: 'engine', content: kept.join('\n'), updatedAt: file.updatedAt ?? null,
+    const body = String(file.body ?? '').replace(/<!--[\s\S]*?-->/g, '').trim();
+    if (!body) continue;
+    const size = [...body].length + 1;
+    const fits = size <= remaining;
+    if (fits) remaining -= size;
+    memos.push({ id: `native-standing:${file.uri}`, memoryType: 'native_standing_preference',
+      kind: 'preference', scope: 'user', origin: 'engine', content: fits ? body : openingPointer(file), updatedAt: file.updatedAt ?? null,
       originalSources: file.originalSources ?? [], attribution: file.attribution, sourcePrivacy: file.sourcePrivacy });
   }
   return memos;
