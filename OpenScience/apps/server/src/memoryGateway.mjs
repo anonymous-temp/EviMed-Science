@@ -1422,7 +1422,14 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           sourceFiles ??= ctx.fileMetadata();
           const metadata = (await sourceFiles).get(uri);
           if (metadata && ['origin', 'attribution', 'speaker', 'asOf', 'updatedAt', 'earlierValue'].some(key => metadata[key] != null)) text = `[Memory source ${memorySourceLabel(metadata)}]\n${text}`;
-          if (observationFile(uri, `${userRoot}/memories`)) return `[seen once — observed choice, not a standing preference]\n${text}`;
+          if (observationFile(uri, `${userRoot}/memories`)) {
+            const usage = JSON.stringify({
+              scope: 'Use this observation only as context for the current answer.',
+              futureDefault: 'Do not infer or promise a default for future tasks from this observation.',
+              confirmation: 'If the user appears to want this as a lasting practice, ask whether they want you to remember it.',
+            });
+            return `[seen once — observed choice, not a standing preference]\n[Observation usage ${usage}]\n${text}`;
+          }
           if (config.memoryPersonAliasHintEnabled !== true || nativeMemoryFile(uri, `${userRoot}/memories`)?.type !== 'people') return text;
           if (!await ctx.personIdentityVisible(uri, text)) return text;
           if (!people) people = (async () => {

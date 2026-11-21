@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { nativeMemoryIndex } from "../src/memoryOpeningIndex.mjs";
+import { nativeIndexLine, nativeMemoryIndex } from "../src/memoryOpeningIndex.mjs";
 import { renderResidentProfile } from "../src/residentProfile.mjs";
 import { estimatePromptTokens } from "../src/modelGateway.mjs";
 
@@ -29,4 +29,24 @@ test('opening index counts places without names or bodies and fits the resident 
     const bounded = renderResidentProfile({ nativeIndex, capsuleFacts: facts, maxTokens });
     assert.ok(estimatePromptTokens(bounded.text) <= maxTokens, `${maxTokens}: ${estimatePromptTokens(bounded.text)}`);
   }
+});
+
+test('opening advertises only the availability and directory of visible observations when recall is enabled', () => {
+  const memoryRoot = 'viking://user/owner/memories';
+  const file = (name, extra = {}) => ({ uri: `${memoryRoot}/observations/${name}`, body: 'Morning left free', ...extra });
+  const hidden = file('removed.md');
+  const excluded = [hidden, file('sensitive.md', { sensitive: true }), file('.overview.md'), file('sub/not-a-leaf.md'),
+    { uri: 'viking://user/another/memories/observations/other.md' }];
+  const scope = { memoryRoot, hiddenUris: [hidden.uri] };
+  const visible = nativeMemoryIndex([...excluded, file('Private trip plan.md')], scope);
+  const config = { memoryObservationRecallEnabled: true };
+  assert.equal(nativeMemoryIndex(excluded, scope).hasObservations, false);
+  assert.doesNotMatch(renderResidentProfile({ nativeIndex: nativeMemoryIndex(excluded, scope), config }).text, /只见过一次/);
+  assert.doesNotMatch(renderResidentProfile({ nativeIndex: visible }).text, /observations/);
+  const on = renderResidentProfile({ nativeIndex: visible, config, maxTokens: 300 });
+  assert.match(on.text, /observations 中有只见过一次的观察可查/);
+  assert.doesNotMatch(on.text, /private|trip|morning|removed|sensitive|overview|other|\.md/i);
+  assert.ok(estimatePromptTokens(on.text) <= 300);
+  const baseline = nativeIndexLine(visible, 300);
+  assert.equal(nativeIndexLine(visible, estimatePromptTokens(baseline), true), baseline);
 });

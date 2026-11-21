@@ -112,7 +112,7 @@ export function lookupLine({ omitted = 0, capsule = 0 }) {
  * later, shorter one may still fit; the rest is counted in the line beside the profile.
  *
  * @param {{ capsuleFacts?: readonly any[], card?: any | null, capsuleCount?: number, maxRecords?: number, maxTokens?: number,
- *   nativeFiles?: any[], safetyFiles?: any[], config?: any, nativeIndex?: { counts: Record<string, number>, historySearchEnabled?: boolean } | null }} input
+ *   nativeFiles?: any[], safetyFiles?: any[], config?: any, nativeIndex?: { counts: Record<string, number>, historySearchEnabled?: boolean, hasObservations?: boolean } | null }} input
  * @returns {{ text: string, profile: string, memos: any[], omitted: number, index: string, safety: string, standing: string }}
  *   `profile` is the memos alone; `index`, when opted in, also participates in the delivery digest.
  */
@@ -140,7 +140,8 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
   const safetyTokens = safety.text ? estimatePromptTokens(`\n${safety.text}`) : 0;
   // Supplying nativeIndex is the pure renderer's opt-in; production supplies it
   // only behind memoryOpeningIndexEnabled and only for an owned namespace.
-  const index = nativeIndex ? nativeIndexLine(nativeIndex, maxTokens - reserve - estimatePromptTokens(header) - safetyTokens - standingTokens) : "";
+  const index = nativeIndex ? nativeIndexLine(nativeIndex, maxTokens - reserve - estimatePromptTokens(header) - safetyTokens - standingTokens,
+    config.memoryObservationRecallEnabled === true) : "";
   const indexTokens = index ? estimatePromptTokens(`\n${index}`) : 0;
   /** @type {any[]} */
   const memos = card ? [card] : [];
@@ -221,7 +222,7 @@ export class ResidentProfiles {
    * @param {{ config: any, store: any, capsules?: { profileFacts: Function, lookupCount?: Function } | null,
    *   contextPolicies?: any, projectCard?: ((userId: string, projectId: string) => Promise<readonly any[]>) | null,
    *   nativeFiles?: ((userId: string, projectId: string, limit: number) => Promise<any[]>) | null,
-   *   nativeIndex?: ((userId: string, projectId: string) => Promise<{ counts: Record<string, number> }>) | null,
+   *   nativeIndex?: ((userId: string, projectId: string) => Promise<{ counts: Record<string, number>, hasObservations?: boolean }>) | null,
    *   safetyNotes?: ((userId: string, projectId: string) => Promise<any[]>) | null }} dependencies
    *   `store` is the memory settings store (the switches and the conversation's hand-over state); `capsules` the capsule service,
    *   whose absence leaves the profile to the card. `projectCard` reads the rows of a project's card (the rows the memory page's
