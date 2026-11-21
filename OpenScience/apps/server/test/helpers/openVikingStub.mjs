@@ -41,6 +41,8 @@ export class OpenVikingStub {
     this.apiKey = apiKey;
     /** @type {Map<string, string>} uri → text (files of every kind: memories, archives' own files) */
     this.files = new Map();
+    this.directories = new Set();
+    this.requireExistingBatchRoot = false;
     /** @type {Map<string, string[]>} uri → tags */
     this.tags = new Map();
     /** @type {Map<string, any>} `${user}/${session}` → { messages, archives, commitCount } */
@@ -140,6 +142,12 @@ export class OpenVikingStub {
     const own = `viking://user/${user}`;
     const within = (uri) => uri === own || uri.startsWith(`${own}/`) || uri === "viking://user" || uri.startsWith("viking://resources") || uri.startsWith("viking://agent");
 
+    if (path === '/api/v1/fs/mkdir' && req.method === 'POST') {
+      if (!within(body.uri)) return send(403, fail('PERMISSION_DENIED', 'Access denied'));
+      if (this.directories.has(body.uri)) return send(409, fail('ALREADY_EXISTS', 'Directory exists'));
+      this.directories.add(body.uri);
+      return send(200, ok({ uri: body.uri }));
+    }
     const privacy = /^\/api\/v1\/privacy-configs\/session\/([^/]+)$/.exec(path);
     if (privacy && req.method === "DELETE") {
       const key = `${user}/${decodeURIComponent(privacy[1])}`;
@@ -274,6 +282,9 @@ export class OpenVikingStub {
       const operations = body?.operations ?? [];
       if (root === `${own}/memories`) return send(400, fail('INVALID_ARGUMENT', 'batch-write root must be inside a memory type directory'));
       if (!within(root) || operations.some(op => !String(op.uri).startsWith(`${root}/`) || !within(op.uri))) return send(403, fail('PERMISSION_DENIED', 'Access denied'));
+      if (this.requireExistingBatchRoot && !this.directories.has(root) && ![...this.files.keys()].some(uri => uri.startsWith(root + '/'))) {
+        return send(404, fail('NOT_FOUND', 'Batch root does not exist'));
+      }
       const created = [], updated = [];
       for (const op of operations) {
         (this.files.has(op.uri) ? updated : created).push(op.uri);
@@ -325,7 +336,7 @@ export class OpenVikingStub {
 
   #dirExists(uri) {
     // An account's tree exists once it has a session or a file; the stub treats a known user's `memories` as present.
-    return [...this.sessions.keys()].some((key) => uri.startsWith(`viking://user/${key.split("/")[0]}`)) && /\/(?:memories|sessions)$/.test(uri);
+    return this.directories.has(uri) || [...this.sessions.keys()].some((key) => uri.startsWith(`viking://user/${key.split("/")[0]}`)) && /\/(?:memories|sessions)$/.test(uri);
   }
 
   /** Commit a session as the server does: archive now, extract "in the background" (here: at once). */

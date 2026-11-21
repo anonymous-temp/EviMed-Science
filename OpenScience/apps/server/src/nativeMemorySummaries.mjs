@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { containsRemoved, removalLines, removalText } from './nativeMemoryRejections.mjs';
 import { lineFingerprint } from './nativeMemoryOverlay.mjs';
 import { HttpError } from './security.mjs';
@@ -28,6 +29,24 @@ export function memorySummaryDirectories(uri, root) {
   return directories;
 }
 
+/** A single targeted forget can change the source, its projection and several safety cards.
+ * Each mutation still queues its own generation and removes stale sidecars immediately. Rebuild
+ * common ancestors only after the last change, under the same user lease. */
+const batches = new AsyncLocalStorage();
+
+export async function withMemorySummaryBatch(overlay, userId, operation) {
+  const parent = batches.getStore();
+  if (overlay.deferredSummaryRebuildEnabled === true || parent?.overlay === overlay && parent.userId === userId) return operation();
+  return withNativeMemoryWrite(overlay.database, userId, async () => {
+    const pending = new Map();
+    const result = await batches.run({ overlay, userId, pending }, operation);
+    const rows = [...pending.values()].sort((a, b) => b.ticket.directory.split('/').length - a.ticket.directory.split('/').length);
+    for (const { sessions, ticket } of rows) await sessions.rebuildMemoryDirectory(userId, ticket.directory);
+    if (rows.length) await overlay.completeSummaryInvalidation(userId, rows.map(row => row.ticket));
+    return result;
+  });
+}
+
 /** Delete all old sidecars before rebuilding any parent from its remaining children.
  * A semantic reindex is native v0.5.3 maintenance; ensure_directory_index preserves stale text.
  * @param {any} sessions @param {string} userId @param {readonly string[]} directories */
@@ -55,12 +74,15 @@ export async function withMemorySummaryInvalidation(sessions, overlay, userId, u
     const tickets = await overlay.queueSummaryInvalidation(userId, directories);
     const result = await operation();
     if (afterMutation) await afterMutation();
-    if (overlay.deferredSummaryRebuildEnabled === true) {
+    const batch = batches.getStore();
+    const grouped = batch?.overlay === overlay && batch.userId === userId;
+    if (overlay.deferredSummaryRebuildEnabled === true || grouped) {
       // Removal is durable; withdraw derived text now, keeping the existing
       // generation ticket for the exclusive worker's bottom-up rebuild.
       for (const directory of directories) {
         for (const name of MEMORY_SUMMARY_NAMES) await sessions.remove(userId, `${directory}/${name}`, { wait: true });
       }
+      if (grouped) for (const ticket of tickets) batch.pending.set(ticket.directory, { sessions, ticket });
       return result;
     }
     await rebuild(sessions, userId, directories);

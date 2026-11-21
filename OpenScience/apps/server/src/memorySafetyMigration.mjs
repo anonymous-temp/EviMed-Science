@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { MEMORY_NEVER_KEPT_TEXT } from '@evimed/domain';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { lineFingerprint, originalSources } from './nativeMemoryOverlay.mjs';
-import { removalRefusals, removalText } from './nativeMemoryRejections.mjs';
+import { REJECTION_JUDGE_MAX_CANDIDATES, removalRefusals, removalText } from './nativeMemoryRejections.mjs';
 import { nativeMemoryFile } from './openVikingSessions.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 
@@ -56,6 +56,80 @@ export function withdrawSafetyProjection(source, next, binding, copy) {
   return { words, body: remaining.some(line => line.trim() && !/^\s*#/.test(line)) ? remaining.join('\n') : '' };
 }
 
+/** Scope an individual statement to its card and section. A shared heading or a drug name alone
+ * never identifies a fact. Different wording is decided by the existing strict statement judge. */
+export function safetyStatements(body, uri) {
+  const headings = [];
+  const rows = [];
+  for (const [index, line] of (body ?? '').split(/\r?\n/).entries()) {
+    const heading = /^(#{1,6})\s+(.+)$/.exec(line.trim());
+    if (heading) {
+      headings.length = heading[1].length - 1;
+      headings.push(heading[2]);
+    } else if (line.trim()) {
+      const text = removalText(line);
+      rows.push({ line, hash: digest(line), index, text, scoped: [...(headings[0] ? headings : [uri.split('/').at(-1), ...headings]), text].filter(Boolean).join('\n') });
+    }
+  }
+  return rows;
+}
+
+/** Return only matches among the supplied statements. Batch all candidates, including earlier
+ * cards without provenance, so the judge's per-call limit cannot truncate a withdrawal. */
+export async function matchSafetyStatements(userId, candidates, references, judge) {
+  const matches = new Map();
+  if (!references.length) return matches;
+  const byScope = new Map(references.map(row => [row.scoped, row]));
+  const options = [...byScope].map(([text]) => ({ fingerprint: digest(text), text }));
+  const byDigest = new Map(options.map(option => [option.fingerprint, byScope.get(option.text)]));
+  const unmatched = [];
+  for (const row of candidates) {
+    const exact = byScope.get(row.scoped);
+    if (exact) matches.set(row, exact);
+    else unmatched.push(row);
+  }
+  if (judge) {
+    for (let i = 0; i < unmatched.length; i += REJECTION_JUDGE_MAX_CANDIDATES) {
+      const batch = unmatched.slice(i, i + REJECTION_JUDGE_MAX_CANDIDATES);
+      for (let j = 0; j < options.length; j += REJECTION_JUDGE_MAX_CANDIDATES) {
+        const pending = batch.filter(row => !matches.has(row));
+        if (!pending.length) break;
+        const offered = options.slice(j, j + REJECTION_JUDGE_MAX_CANDIDATES);
+        const result = await judge.same({ userId, requireAvailable: true, said: [],
+          candidates: pending.map(row => ({ text: row.scoped, removed: offered })) });
+        for (const [index, fingerprint] of result.same) {
+          if (pending[index] && offered.some(option => option.fingerprint === fingerprint)) matches.set(pending[index], byDigest.get(fingerprint));
+        }
+      }
+    }
+  }
+  return matches;
+}
+
+/** Install the original source before ordinary extraction attribution. The existing line-origin
+ * index keeps its first writer and prunes the entry when the line leaves the destination. */
+export async function inheritSafetyProjections(userId, uri, body, added, overlay, judge) {
+  const references = [];
+  for (const file of (await overlay.files(userId)).values()) {
+    if (!file.safetySource || file.uri === uri) continue;
+    for (const row of safetyStatements(file.body, file.uri)) {
+      if (file.safetySource.lineHashes.includes(digest(row.line))) references.push({ ...row, projection: file.uri, binding: file.safetySource });
+    }
+  }
+  const candidates = safetyStatements(body, uri).filter(row => added.has(lineFingerprint(row.text)));
+  const matches = await matchSafetyStatements(userId, candidates, references, judge);
+  if (!matches.size) return;
+  const origins = await overlay.originsOf(userId, [...new Set([...matches.values()].map(ref => ref.binding.uri))]);
+  const inherited = new Map();
+  for (const [row, ref] of matches) {
+    const prior = originalSources(origins.get(ref.binding.uri)?.get(lineFingerprint(ref.text)));
+    inherited.set(lineFingerprint(row.text), (prior.length ? prior : [{}]).map(source => ({
+      ...source, safetyProjectionUri: ref.projection, safetySourceUri: ref.binding.uri, safetyLineHash: digest(ref.line),
+    })));
+  }
+  await overlay.inheritOrigins(userId, uri, inherited);
+}
+
 /** One source per account per durable scheduling interval. Classify outside the writer fence.
  * The mutation rechecks visibility, bytes, permissions and withdrawal before creating a copy.
  * @param {any} dependencies @param {string} userId */
@@ -67,6 +141,14 @@ export async function migrateSafetyNotes({ config, store, overlay, sessions, set
   if (!scan) return;
   if (!(await sessions.settings(userId))?.memoryTypes.includes('safety_notes')) return;
   const root = sessions.memoryRoot(userId);
+  // Older failed batch writes left a binding and inherited origins without a file.
+  // Recheck under the writer lease: a timeout may also have committed engine bytes.
+  for (const file of (await overlay.files(userId)).values()) {
+    if (!file.safetySource || file.contentHash) continue;
+    await withNativeMemoryWrite(overlay.database, userId, async () => {
+      if (await sessions.read(userId, file.uri) === null) await overlay.removeSafetyOrphan(userId, file.uri);
+    }, { exclusive: true });
+  }
   const visibleSources = async () => {
     const inventory = await overlay.files(userId);
     const hidden = await overlay.sensitiveUris(userId);
@@ -127,6 +209,7 @@ export async function migrateSafetyNotes({ config, store, overlay, sessions, set
       if (!file.contentHash) await overlay.upsertFile({ userId, uri: file.uri, memoryType: source.type,
         projectId: source.projectId, body: source.raw });
       const origins = (await overlay.originsOf(userId, [file.uri])).get(file.uri);
+      if (ranges.length) await sessions.ensureTypeDirectory(userId, 'safety_notes');
       for (const selected of ranges) {
         const body = [title, ...selected.filter(line => line !== title)].join('\n');
         const words = [title, ...selected].map(removalText).filter(Boolean);
@@ -141,7 +224,16 @@ export async function migrateSafetyNotes({ config, store, overlay, sessions, set
           const fingerprint = lineFingerprint(word);
           return [fingerprint, originalSources(origins?.get(fingerprint))];
         })));
-        if (before === null) await sessions.replace(userId, uri, body);
+        if (before === null) {
+          try {
+            await sessions.replace(userId, uri, body);
+          } catch (error) {
+            // Only a definitive refusal proves the write cannot arrive later.
+            const status = /** @type {any} */ (error)?.upstreamStatus;
+            if ([400, 403, 404, 409, 422].includes(status) && await sessions.read(userId, uri) === null) await overlay.removeSafetyOrphan(userId, uri);
+            throw error;
+          }
+        }
         await overlay.upsertFile({ userId, uri, memoryType: 'safety_notes', body });
       }
       await overlay.recordInstructionCheck(userId, key, { safetyClassification: true });

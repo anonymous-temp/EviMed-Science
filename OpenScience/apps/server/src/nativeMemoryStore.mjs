@@ -1,4 +1,4 @@
-import { withdrawSafetyProjection } from './memorySafetyMigration.mjs';
+import { matchSafetyStatements, safetyStatements, withdrawSafetyProjection } from './memorySafetyMigration.mjs';
 import { statementSource, visibleStatementSources } from './memoryStatementSources.mjs';
 import { withMemoryPayer } from './agentMemoryBilling.mjs';
 import { filterCapturedMessage } from './memoryGateway.mjs';
@@ -11,7 +11,7 @@ import { orderStandingPreferences } from './memoryOpeningByUse.mjs';
 import { personalMemoryTravels } from './openVikingLayout.mjs';
 import { inferredChoiceMessage, choiceRows, choiceKey, normaliseChoice, aliasesFor, aliasVariants, personLabel, personNameReading, closePersonNames, confirmedAliases } from './nativeMemoryInduction.mjs';
 import { forgetRequestId } from './nativeMemoryForgetRequests.mjs';
-import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
+import { withMemorySummaryBatch, withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
@@ -557,9 +557,9 @@ export class NativeMemoryStore {
         return body === null ? null : { ...file, body, hash: contentHash(body) };
       })).filter(file => file !== null);
     }
-    if (files.some(file => file.safetySource)) {
-      const hidden = await this.overlay.sensitiveUris(userId);
-      files = files.filter(file => !file.safetySource || !hidden.some(uri => file.uri === uri || file.uri.startsWith(uri + '/')));
+    if (files.some(file => file.type === 'safety_notes')) {
+      const hidden = await this.overlay.sensitiveUris(userId, 10000, { derivedOnly: true });
+      files = files.filter(file => file.type !== 'safety_notes' || !hidden.some(uri => file.uri === uri || file.uri.startsWith(uri + '/')));
     }
     if (!this.sourceDeletion) return files;
     const hidden = new Set(await this.sourceDeletion.hiddenMemoryUris(userId));
@@ -1703,6 +1703,8 @@ export class NativeMemoryStore {
     const kept = new Set(after.map(lineFingerprint));
     const removed = await this.#aliasRemovalLines(userId, file, before.filter(text=>!kept.has(lineFingerprint(text))));
     const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
+    // Review and clean echoes while the original bytes can still be targeted on retry.
+    if (reason !== 'legacy safety source withdrawn') await this.#withdrawSafetyCopies(userId, file, next, actor);
     if (actor === "user" || actor === "conversation" || reason === "source conversation deleted" || reason === "behavioural inference superseded") {
       // A deleted source already has its own history fence; recognizing its wording is not a second admission gate.
       const activate = async () => { await this.overlay.reject(userId, rejectionType, file.uri, removed, { origin }); };
@@ -1710,7 +1712,6 @@ export class NativeMemoryStore {
         await this.history.rejectRemoved(context, file, removed, this.rejectionJudge, { activate, memorySweep, allowDeferred: Boolean(memorySweep || actOf(reason) && this.overlay.deferredSummaryRebuildEnabled === true) });
       } else await activate();
     }
-    await this.#withdrawSafetyCopies(userId, file, next);
     if (reason !== 'preference superseded across files') await this.history?.retireWriteSessions(context,oldOrigins,removed);
     const oldUri = file.uri, source = await this.#bodySource(userId,file);
     // A removed value in a filename is still returned by list/search. Keep the
@@ -1756,14 +1757,60 @@ export class NativeMemoryStore {
     this.#touch(userId);
   }
 
-  /** Withdraw exact source-bound copies before a source edit or forget can return.
-   * An already-removed engine file is a retryable partial cleanup. No duplicate discovery or model is needed. */
-  async #withdrawSafetyCopies(userId, file, next) {
-    if (!['people','profile'].includes(file.type) || file.namespaceId || !this.overlay.safetyCopies) return;
+  /** Remove echoes before retiring the durable projection or changing the source. A failed
+   * sibling write can then retry against the same binding and the same live source bytes. */
+  async #withdrawSafetyCopies(userId, file, next, actor) {
+    const personalChange = actor === 'user' || actor === 'conversation';
+    if (!['people', 'profile', 'safety_notes'].includes(file.type) || file.namespaceId || !this.overlay.safetyCopies) return;
+    const withdrawals = [];
+    const references = [];
+    const rows = safetyStatements(file.body, file.uri);
+    const retained = new Set(safetyStatements(next, file.uri).map(row => lineFingerprint(row.scoped)));
+    if (personalChange && file.type === 'safety_notes' || actor === 'conversation' && this.sessions.memoryTypes?.includes('safety_notes')) references.push(...rows.filter(row => !retained.has(lineFingerprint(row.scoped))));
     for (const { uri, binding } of await this.overlay.safetyCopies(userId, file.uri)) {
       const current = await this.sessions.read(userId, uri);
       const withdrawal = withdrawSafetyProjection(file.body, next, binding, current ?? '');
       if (!withdrawal) continue;
+      withdrawals.push({ uri, current, withdrawal });
+      references.push(...rows.filter(row => binding.lineHashes.includes(row.hash)));
+    }
+    if (references.length) {
+      const projections = new Set(withdrawals.map(entry => entry.uri));
+      const sourceHashes = new Set(references.map(row => row.hash));
+      const root = this.sessions.memoryRoot(userId);
+      const files = (await this.sessions.tree(userId, root + '/safety_notes')).filter(node =>
+        !node.isDir && nativeMemoryFile(node.uri, root)?.type === 'safety_notes' && node.uri !== file.uri && !projections.has(node.uri));
+      const origins = await this.overlay.originsOf(userId, files.map(node => node.uri));
+      const cards = [];
+      const candidates = [];
+      for (const { uri } of files) {
+        const current = await this.sessions.read(userId, uri);
+        if (!current) continue;
+        const entries = safetyStatements(current, uri);
+        const bound = entries.filter(row => originalSources(origins.get(uri)?.get(lineFingerprint(row.text)))
+          .some(origin => projections.has(origin.safetyProjectionUri)
+            || origin.safetySourceUri === file.uri && sourceHashes.has(origin.safetyLineHash)
+            || origin.safetyProjectionUri === file.uri && sourceHashes.has(origin.safetyLineHash)));
+        const remaining = entries.filter(row => !bound.includes(row));
+        // Source-deletion maintenance can retract proven lineage only. An independent source
+        // saying the same thing is in scope only when the person withdrew the fact itself.
+        if (personalChange) candidates.push(...remaining);
+        cards.push({ uri, current, bound, remaining });
+      }
+      const matches = await matchSafetyStatements(userId, candidates, references, this.rejectionJudge);
+      for (const { uri, current, bound, remaining } of cards) {
+        const removed = [...bound, ...remaining.filter(row => matches.has(row))];
+        if (!removed.length) continue;
+        const positions = new Set(removed.map(row => row.index));
+        const body = current.split('\n').filter((_line, index) => !positions.has(index)).join('\n');
+        const sibling = { uri, type: 'safety_notes', body: current, hash: contentHash(current) };
+        const reason = 'legacy safety source withdrawn';
+        if (safetyStatements(body, uri).length) await this.#write(userId, sibling, body, { actor: 'platform', reason });
+        else await this.forgetFile(userId, sibling, { actor: 'platform', reason, reject: false });
+        await this.overlay.scrubLines(userId, uri, removed.map(row => row.text));
+      }
+    }
+    for (const { uri, current, withdrawal } of withdrawals) {
       if (withdrawal.body) {
         if (current !== withdrawal.body) {
           await this.#write(userId, { uri, type: 'safety_notes', hash: contentHash(current), body: current },
@@ -1772,7 +1819,12 @@ export class NativeMemoryStore {
         await this.overlay.scrubLines(userId, uri, withdrawal.words);
         await this.overlay.clearSafetySource(userId, uri);
       } else {
-        await withMemorySummaryInvalidation(this.sessions, this.overlay, userId, uri, () => this.sessions.remove(userId, uri));
+        await withMemorySummaryInvalidation(this.sessions, this.overlay, userId, uri, async () => {
+          const latest = await this.sessions.read(userId, uri);
+          if (latest === null) return;
+          if (latest !== current) throw new HttpError(409, 'memory_source_body_changed', 'The safety projection changed during withdrawal.');
+          await this.sessions.remove(userId, uri);
+        });
         await this.overlay.forgetText(userId, uri);
         await this.overlay.removeFile(userId, uri);
       }
@@ -2001,12 +2053,17 @@ export class NativeMemoryStore {
     const sweeping = sweep && this.forgetTargetsEnabled && this.overlay.deferredSummaryRebuildEnabled === true && this.history;
     const aliasPlan = sweep && !sweeping && this.personAliasHintEnabled && file.type === 'people' ? await this.#duplicatesPlan(userId, removed, file) : new Map();
     if (!act && (aliasPlan.size || sweeping)) act = newAct();
-    const memorySweep = sweeping && act ? { act, removed: removed.map(lineFingerprint), files: await this.#sweepInventory(userId, file.namespaceId ?? null, removed) } : null;
+    // The safety pass compares statements with their subjects and sections. A later generic
+    // line-only sweep must not erase the same words about a different person.
+    const scopedSafety = !file.namespaceId && (file.type === 'safety_notes'
+      || ['people', 'profile'].includes(file.type) && this.sessions.memoryTypes?.includes('safety_notes'));
+    const memorySweep = sweeping && act ? { act, removed: removed.map(lineFingerprint),
+      files: await this.#sweepInventory(userId, file.namespaceId ?? null, removed, scopedSafety) } : null;
     const next = file.body.split('\n').filter(line => !prints.has(lineFingerprint(removalText(line)))).join('\n');
     if (!removalLines(next).length) await this.forgetFile(userId, file, { keepText: true, actor: 'conversation', reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, engineSession, memorySweep });
     else await this.#write(userId, file, next, { actor: 'conversation', reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, neutralizeRemovedPath: true, engineSession, memorySweep });
     if (aliasPlan.size) await this.#forgetDuplicates(userId, aliasPlan, { act, keepText: true, actor: 'conversation' });
-    if (memorySweep) await this.#exactSweep(userId, await this.#fileContext(userId, file.uri), removed, memorySweep.act);
+    if (memorySweep) await this.#exactSweep(userId, await this.#fileContext(userId, file.uri), removed, memorySweep.act, scopedSafety);
     return removed.length;
   }
 
@@ -2039,20 +2096,20 @@ export class NativeMemoryStore {
 
   /** Freeze addresses and hashes, never text, before the withdrawal. A delayed search cannot delete later writes.
    * @param {string} userId @param {string|null} namespaceId @param {string[]} removed */
-  async #sweepInventory(userId, namespaceId, removed) {
+  async #sweepInventory(userId, namespaceId, removed, skipSafety = false) {
     const prints = new Set(removed.map(removalStatement).filter(text => containsRemoved(text, text)).map(lineFingerprint));
-    return (await this.rawFiles(userId)).filter(file => (file.namespaceId ?? null) === namespaceId)
+    return (await this.rawFiles(userId)).filter(file => (file.namespaceId ?? null) === namespaceId && !(skipSafety && file.type === 'safety_notes'))
       .map(file => ({uri:file.uri,hash:file.hash,afterExactHash:contentHash(file.body.split('\n')
         .filter(line => !prints.has(lineFingerprint(removalStatement(line)))).join('\n'))}));
   }
 
   /** Literal equality only: a longer safety statement containing these words is not the same fact.
    * @param {string} userId @param {{namespaceId?:string,kind?:string}} context @param {string[]} removed @param {string} act */
-  async #exactSweep(userId, context, removed, act) {
+  async #exactSweep(userId, context, removed, act, skipSafety = false) {
     const prints = new Set(removed.map(removalStatement).filter(text => containsRemoved(text, text)).map(lineFingerprint));
     const namespace = context.kind === 'geo-project' ? context.namespaceId : null;
     for (const file of await this.rawFiles(userId)) {
-      if ((file.namespaceId ?? null) !== namespace) continue;
+      if ((file.namespaceId ?? null) !== namespace || skipSafety && file.type === 'safety_notes') continue;
       const lines = removalLines(file.body).filter(text => prints.has(lineFingerprint(removalStatement(text))));
       if (lines.length) await this.forgetLines(userId, file, lines, { act, sweep: false });
     }
@@ -2256,10 +2313,10 @@ export class NativeMemoryStore {
     const names = [...new Set([titleOf(file.type, file.uri, file.body), ...memoryNameVariants(file.uri)])].filter(name => hardTokens(name).length);
     const removedLines = await this.#aliasRemovalLines(userId, file, [...new Set([...removalLines(file.body), ...names])]);
     const activate = async () => { await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, removedLines); };
+    if (reason !== 'legacy safety source withdrawn') await this.#withdrawSafetyCopies(userId, file, null, actor);
     if (reject && this.history && actor !== "platform") await this.history.rejectRemoved(context,file,
       [...new Map([...statements(file.body).map(removalText), ...names].map(text => [lineFingerprint(text), text])).values()],this.rejectionJudge, { activate, memorySweep, allowDeferred: Boolean(memorySweep || actOf(reason) && this.overlay.deferredSummaryRebuildEnabled === true) });
     else if (reject) await activate();
-    await this.#withdrawSafetyCopies(userId, file, null);
     if (reject) await this.history?.retireWriteSessions(context,oldOrigins,statements(file.body));
     const removed = await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.remove(userId, file.uri)));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change: "deleted", actor: /** @type {any} */ (actor),
@@ -2306,7 +2363,7 @@ export class NativeMemoryStore {
         this.recordForgetIntent(String(user.id), actual, null, [removalText(statement).replace(/\s+/g, ' ')], { engineSession }));
       return { removed: false, historyRejected: true, ...(historyScanPending ? { historyScanPending: true } : {}) };
     }
-    const files = await this.files(String(user.id), { context: this.memoryContexts ? actual : null });
+    const files = await this.files(String(user.id), { context: this.memoryContexts ? actual : null, uris: [uri] });
     const file = files.find((candidate) => candidate.uri === uri);
     if (!file) return { removed: heldLines.length > 0, ...(heldLines.length ? { removedLines: heldLines.length } : {}), ...heldScan };
     if (lines?.length) {
@@ -2314,7 +2371,8 @@ export class NativeMemoryStore {
       const available = new Set([...availableLines, ...heldLines].map(lineFingerprint));
       const missingLines = lines.filter(line => !available.has(lineFingerprint(removalText(line))));
       if (missingLines.length) return { removed: false, missingLines, availableLines };
-      const liveRemoved = await this.forgetLines(String(user.id), file, lines, { engineSession });
+      const liveRemoved = await withMemorySummaryBatch(this.overlay, String(user.id), () =>
+        this.forgetLines(String(user.id), file, lines, { engineSession }));
       const removedLines = heldLines.length + liveRemoved;
       return { removed: removedLines > 0, removedLines, ...heldScan, ...(this.history && this.overlay.deferredSummaryRebuildEnabled === true ? {historyScanPending:true} : {}), fileRemoved: liveRemoved === availableLines.length };
     }

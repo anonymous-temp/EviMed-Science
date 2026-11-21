@@ -946,6 +946,14 @@ export class NativeMemoryOverlay {
       ON CONFLICT(user_id,uri) DO UPDATE SET safety_source=EXCLUDED.safety_source`, [owner(userId), uri, JSON.stringify(binding)]);
   }
 
+  async removeSafetyOrphan(userId, uri) {
+    await this.database.transaction(async client => {
+      const removed = await client.query(`DELETE FROM evimed_memory.native_files WHERE user_id=$1 AND uri=$2
+        AND safety_source IS NOT NULL AND content_hash IS NULL RETURNING uri`, [owner(userId), uri]);
+      if (removed.rowCount) await client.query('DELETE FROM evimed_memory.native_line_origins WHERE user_id=$1 AND uri=$2', [owner(userId), uri]);
+    });
+  }
+
   async clearSafetySource(userId, uri) {
     await this.#query('UPDATE evimed_memory.native_files SET safety_source=NULL WHERE user_id=$1 AND uri=$2', [owner(userId), uri]);
   }
@@ -1303,7 +1311,7 @@ export class NativeMemoryOverlay {
   }
 
   /** Complete bounded sensitive-file set. Overflow refuses recall rather than silently dropping exclusions. @param {string} userId */
-  async sensitiveUris(userId, limit = 10000) {
+  async sensitiveUris(userId, limit = 10000, { derivedOnly = false } = {}) {
     const bound = Math.max(1, Math.min(10000, Math.trunc(Number(limit)) || 10000));
     const result = await this.#query("SELECT uri FROM evimed_memory.native_files WHERE user_id=$1 AND sensitive ORDER BY uri LIMIT $2",
       [owner(userId), bound + 1]);
@@ -1312,13 +1320,21 @@ export class NativeMemoryOverlay {
     const hidden = [...result.rows.map(row => String(row.uri)), ...withdrawn];
     const copies = await this.#query(`SELECT derived.uri FROM evimed_memory.native_files derived LEFT JOIN evimed_memory.native_files src
       ON src.user_id=derived.user_id AND src.uri=(derived.safety_source->>'uri')
-      WHERE derived.user_id=$1 AND derived.safety_source IS NOT NULL AND (src.uri IS NULL OR src.sensitive
+      WHERE derived.user_id=$1 AND derived.safety_source IS NOT NULL AND (src.uri IS NULL OR src.sensitive OR derived.sensitive
         OR src.content_hash IS DISTINCT FROM (derived.safety_source->>'sourceHash')
         OR EXISTS (SELECT 1 FROM unnest($2::text[]) prefix WHERE src.uri=prefix OR starts_with(src.uri,prefix||'/'))) LIMIT $3`,
     [owner(userId),hidden,bound+1]);
     const uris = [...new Set([...hidden, ...copies.rows.map(row => String(row.uri))])];
-    if (uris.length > bound) throw new HttpError(503, "memory_index_listing_too_large", "The complete privacy set exceeds its safe recall bound.");
-    return uris;
+    const derived = new Set(copies.rows.map(row => String(row.uri)));
+    if (uris.length) {
+      const echoes = await this.#query(`SELECT DISTINCT uri FROM evimed_memory.native_line_origins o
+        WHERE user_id=$1 AND EXISTS (SELECT 1 FROM jsonb_array_elements(o.sources) source
+          WHERE source->>'safetyProjectionUri'=ANY($2::text[])) LIMIT $3`, [owner(userId), uris, bound + 1]);
+      for (const row of echoes.rows) derived.add(String(row.uri));
+    }
+    const complete = [...new Set([...uris, ...derived])];
+    if (complete.length > bound) throw new HttpError(503, "memory_index_listing_too_large", "The complete privacy set exceeds its safe recall bound.");
+    return derivedOnly ? [...derived] : complete;
   }
 
   /**
