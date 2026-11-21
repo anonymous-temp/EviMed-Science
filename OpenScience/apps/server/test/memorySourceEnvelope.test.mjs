@@ -127,3 +127,17 @@ test('reported labels and borrowed evidence can identify a speaker without certi
   assert.equal(statementSource('I TRIED the steps',{statementSource:pasted}),null);
   assert.equal(statementSource(candidates[0].text,{statementSource:pasted,sources:[{}]}),null);
 });
+
+test('the additive agent recall quote is complete or null and always retains the original response content', async () => {
+  const { nativeRecallSource } = await import('../src/agentMemoryRecall.mjs');
+  const source = {kind:'user_statement',speaker:'user',subject:'unknown',conditions:'preserved',personalFact:true};
+  const base = {id:'a',scope:'user',status:'active',value:'One step.',quoteUnit:'One step. (as of 2026-11-13)',sourceEnvelope:source};
+  const rows = [base,{...base,id:'b',value:'With help. '.repeat(400),quoteUnit:undefined}];
+  const native = {search:async () => ({items:rows})};
+  const old = await nativeRecallSource(native).recall('owner','step');
+  const bound = await nativeRecallSource(native,{sourceBound:true}).recall('owner','step');
+  assert.deepEqual(bound.map(row=>row.content),old.map(row=>row.content));
+  assert.equal(bound[0].quoteUnit,base.quoteUnit);
+  assert.equal(bound[0].sourceEnvelope.personalFact,false);
+  assert.equal(bound[1].quoteUnit,null);
+});

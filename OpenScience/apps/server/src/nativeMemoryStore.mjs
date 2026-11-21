@@ -1184,7 +1184,7 @@ export class NativeMemoryStore {
       const origins = [...new Set(sources.flatMap(record => record.attribution?.origins ?? ['unknown']))];
       return [{ ...file, body,
         ...(this.sourceEnvelopeEnabled ? { statementSources: sources.flatMap(record => record.sourceEnvelope
-          ? [{ text: record.value, source: record.sourceEnvelope }] : record.statementSources ?? []) } : {}), updatedAt: sources[0].updatedAt ?? file.modTime,
+          ? [{ text: record.quoteUnit ?? record.value, source: record.sourceEnvelope }] : record.statementSources ?? []) } : {}), updatedAt: sources[0].updatedAt ?? file.modTime,
         originalSources: receipt.originalSources, sourcePrivacy: receipt.sourcePrivacy,
         origin: origins.length === 1 ? origins[0] : 'mixed', attribution: { schemaVersion: 1, origins, confirmed: false } }];
     });
@@ -1221,8 +1221,8 @@ export class NativeMemoryStore {
       const origins = [...new Set(sources.flatMap(record => record.attribution?.origins ?? ['unknown']))];
       return [{ ...selected.find(row => row.uri === file.uri), ...file,
         ...(this.sourceEnvelopeEnabled ? { statementSources: sources.flatMap(record => record.sourceEnvelope
-          ? [{ text: record.value, source: record.sourceEnvelope }] : record.statementSources ?? []) } : {}),
-        body: sources.map(record => record.value).join('\n'),
+          ? [{ text: record.quoteUnit ?? record.value, source: record.sourceEnvelope }] : record.statementSources ?? []) } : {}),
+        body: sources.map(record => record.quoteUnit ?? record.value).join('\n'),
         originalSources: receipt.originalSources, sourcePrivacy: receipt.sourcePrivacy,
         attribution: { schemaVersion: 1, origins, confirmed: false } }];
     });

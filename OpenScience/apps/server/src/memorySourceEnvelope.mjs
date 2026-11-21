@@ -9,7 +9,7 @@ const speakers = { user_statement: 'user', user_edit: 'user', user_opinion: 'use
 
 export function sourceEnvelope(kind, { subject = 'unknown', adoption = 'unknown', date = null, speaker = null } = {}) {
   const timestamp = typeof date === 'string' && Number.isFinite(Date.parse(date)) ? date : null;
-  return { kind, speaker: speaker ?? speakers[kind] ?? 'unknown', subject, adoption, date: timestamp };
+  return { kind, speaker: speaker ?? speakers[kind] ?? 'unknown', subject, adoption, date: timestamp, personalFact: false };
 }
 
 // A receiver of a capsule never inherits its author's identity. Only the write-side
@@ -19,7 +19,8 @@ export function memoryEnvelope(item = {}) {
   if (!item) return sourceEnvelope('memory_record');
   if (item.mode && item.mode !== 'own' || item.origin === 'imported') return sourceEnvelope('imported_material');
   const source = item.sourceEnvelope;
-  if (source) return source;
+  if (source) return { ...source, personalFact: source.personalFact === true && source.kind === 'user_statement'
+    && source.speaker === 'user' && source.subject === 'self' && source.conditions === 'preserved' };
   const kind = item.source === 'evidence_zone' ? 'document_claim' : origins[item.origin] ?? 'memory_record';
   const speaker = ['user', 'assistant', 'tool'].includes(item.speaker) ? item.speaker : null;
   return { ...sourceEnvelope(kind, { speaker }), ...(item.asOf ? { asOf: item.asOf } : {}), ...(item.updatedAt ? { recordedAt: item.updatedAt } : {}) };
