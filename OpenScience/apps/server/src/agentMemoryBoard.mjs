@@ -181,11 +181,15 @@ export async function memoryBoard({ memorySettings, nativeMemory = null, learnin
   }
   const settings = await memorySettings.settings(user.id);
   if (!nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
-  const all = (await nativeMemory.listRecords(user.id, { statuses: ["active", "pending", "superseded", "archived"], pageSize: 100, allowRecord: (record) => !privateByDefault(record) }))
-    .filter((/** @type {any} */ record) => !privateByDefault(record) && record.kind !== "run_summary" && (!projectId || (record.scope === "project" && record.scopeId === projectId)));
+  const all = (await nativeMemory.listRecords(user.id, { ownedOnly: true, statuses: ["active", "pending", "superseded", "archived"], pageSize: 100, allowRecord: (record) => !privateByDefault(record) }))
+    .filter((/** @type {any} */ record) => !privateByDefault(record) && record.sensitive !== true && record.kind !== "run_summary" && (!projectId || (record.scope === "project" && record.scopeId === projectId)));
   const row = (/** @type {any} */ record) => recordRow(record);
-  const forgotten = (await nativeMemory.forgotten?.(user.id) ?? []).filter((record) => !privateByDefault(record)
-    && record.sensitive !== true && (!projectId || (record.scope === 'project' && record.scopeId === projectId)));
+  const forgotten = [];
+  for (const record of await nativeMemory.forgotten?.(user.id) ?? []) {
+    if (privateByDefault(record) || record.sensitive || (projectId && (record.scope !== 'project' || record.scopeId !== projectId))) continue;
+    if (nativeMemory.memoryContexts && (await nativeMemory.memoryContexts.forUri(user.id, record.uri)).kind !== 'owned') continue;
+    forgotten.push(record);
+  }
 
   // What waits for the person: the notes and episodes an outside agent proposed (`/note`, `/episodes`), which are capsule candidates.
   /** @type {any[]} */
@@ -194,6 +198,7 @@ export async function memoryBoard({ memorySettings, nativeMemory = null, learnin
     const notes = await capsules.documents.list(user.id, "fact", { limit: 50, filter: { status: "candidate" } });
     for (const note of notes.items ?? []) {
       if (privateByDefault(note) || note.payload?.transfer || (projectId && note.projectId !== projectId)) continue;
+      if (note.projectId && nativeMemory.memoryContexts && (await nativeMemory.memoryContexts.forProject({ id:note.projectId, userId:user.id })).kind !== 'owned') continue;
       const admission = await nativeMemory.overlay.admission(user.id, note.id, note.revision);
       if (admission?.state === "completed") continue;
       pending.push({ ...(admission ? { admission: { state: admission.state, taskId: admission.taskId, recordIds: admission.recordIds } } : {}), type: "note", id: note.id, capsuleId: note.payload.capsuleId, kind: note.payload.factKind, summary: note.payload.content,
@@ -206,14 +211,19 @@ export async function memoryBoard({ memorySettings, nativeMemory = null, learnin
   // without their counts rather than failing.
   const basis = observations ? await observations.basis(user.id).catch(() => new Map()) : new Map();
   const never = observations ? await observations.neverLearned(user.id).catch(() => []) : [];
-  const methods = learning ? ((await learning.listMethods(user.id, { limit: 50 })).items ?? []).filter((/** @type {any} */ method) => !projectId || method.projectId === projectId) : [];
+  const methods = [];
+  for (const item of learning ? (await learning.listMethods(user.id, { limit: 50, projectId })).items ?? [] : []) {
+    if (projectId && (item.payload?.provenance?.sourceProjectId ?? item.projectId) !== projectId) continue;
+    if (learning.contextProvenance && !await learning.contextProvenance.ordinaryDocument(user.id, item)) continue;
+    methods.push(item);
+  }
   const habits = methods.filter((/** @type {any} */ document) => document.payload?.status !== "candidate")
     .map((/** @type {any} */ document) => habitRow(document, nowMs, basis));
 
   // 「最近变化」: what changed by itself, newest first, each with the act that
   // takes it back.
   const since = new Date(nowMs - BOARD_RECENT_DAYS * DAY_MS).toISOString();
-  const recordChanges = (await nativeMemory.changes(user.id, { since, limit: 20 })).filter((/** @type {any} */ change) => !privateByDefault(change) && (!projectId || all.some((record) => record.id === change.id))).map((/** @type {any} */ change) => ({
+  const recordChanges = (await nativeMemory.changes(user.id, { since, limit: 20 })).filter((/** @type {any} */ change) => !privateByDefault(change) && ((!nativeMemory.memoryContexts && !projectId) || all.some((record) => record.id === change.id))).map((/** @type {any} */ change) => ({
     type: "record", recordId: change.id, kind: change.kind, change: change.change, summary: change.summary, at: change.changedAt,
     undo: { action: "undo", path: `records/${encodeURIComponent(change.id)}/undo`, expectedVersion: change.version },
   }));
@@ -379,6 +389,9 @@ export async function noteAction({ capsules, memorySettings = null, nativeMemory
   const input = bodyOf(body, ["expectedRevision"]);
   const note = await capsules.documents.get(user.id, "fact", noteId);
   if (!note || privateByDefault(note) || note.payload?.status !== "candidate" || note.payload?.transfer) throw new HttpError(404, "note_not_found", "No such proposed note.");
+  if (note.projectId && nativeMemory?.memoryContexts && (await nativeMemory.memoryContexts.forProject({ id:note.projectId, userId:user.id })).kind !== 'owned') {
+    throw new HttpError(404, "note_not_found", "No such proposed note.");
+  }
   if (!["confirm", "reject"].includes(action)) throw new HttpError(404, "not_found", "No such note action.");
   const revision = positive(input.expectedRevision, "expectedRevision");
   if (note.revision !== revision) throw new HttpError(409, "product_revision_conflict", "This candidate changed since it was read.");

@@ -1,6 +1,6 @@
 import { withMemoryPayer } from './agentMemoryBilling.mjs';
 import { ingestConversation, recordWorkSignal } from './agentMemoryHost.mjs';
-import { shareForAgent } from './agentMemorySharing.mjs';
+import { shareForAgent, sharingActions } from './agentMemorySharing.mjs';
 import { rememberSource, rememberAdmission } from './agentMemoryRemember.mjs';
 import { contextForAgent } from './agentMemoryContext.mjs';
 import { agentMemoryAvailable, agentMemoryDisabled } from './agentMemoryAvailability.mjs';
@@ -218,7 +218,10 @@ export function createAgentMemoryRoutes({
         throw new HttpError(403, "agent_key_project_denied", "This API key is bound to a different project.");
       }
       if (wanted == null) return null;
-      await store.requireProject(user, wanted);
+      const project = await store.requireProject(user, wanted);
+      if (nativeMemory?.memoryContexts && (await nativeMemory.memoryContexts.forProject(project)).kind !== 'owned') {
+        throw new HttpError(403, 'memory_scope_denied', 'Shared project memory is unavailable through this API.');
+      }
       return wanted;
     };
 
@@ -229,7 +232,7 @@ export function createAgentMemoryRoutes({
       const parts = template.slice(1).split("/");
       const actual = action.split("/");
       return verb === method && parts.length === actual.length && parts.every((part, i) => part === "{id}" || part === actual[i]);
-    }) ?? "GET /";
+    }) ?? (action === "" && method === "GET" ? "GET /" : "unknown");
     const reply = async (status, payload) => {
       const json = JSON.stringify(payload);
       if (Buffer.byteLength(json) > MAX_RESPONSE_BYTES) throw new HttpError(413, "agent_memory_response_too_large", "Request fewer records or a smaller result.");
@@ -240,422 +243,436 @@ export function createAgentMemoryRoutes({
     };
     const payer = { ownerId: keyAccount.id, generation: keyAccount.accountCreatedAt, chargeWallet: config.evimedCreditsEnabled === true, keyId: identity.keyId,
       projectId: identity.projectId ?? 'default', model: config.deepseekModel, operation };
-    return withMemoryPayer(meter ? { payer, meter } : null, serve);
+    try {
+      return await withMemoryPayer(meter ? { payer, meter } : null, serve);
+    } catch (error) {
+      await audit?.('agent-memory.request', 'refused', { keyId: identity.keyId, userId: keyAccount.id, operation, code: error.code });
+      throw error;
+    }
     async function serve() {
-    const body = ["POST", "PUT", "PATCH"].includes(method) ? await readJson(req, Math.min(config.maxJsonBytes ?? 1_048_576, 256 * 1024)) : null;
-    /** The dashboard's acts leave an audit line: which key, which account,
-     *  what. Never the subject's own identifier — the account id is its digest.
-     *  @param {string} event @param {any} user @param {Record<string, unknown>} [details] */
-    const trail = async (event, user, details = {}) => {
-      if (audit) await audit(`agent-memory.${event}`, "completed", { keyId: identity.keyId, userId: user?.id ?? null, ...details });
-    };
-    /** `records/<id>/<act>` and the like: the id and the act, or null. @param {string} prefix */
-    const target = (prefix) => {
-      const match = new RegExp(`^${prefix}/([^/]+)(?:/([a-z]+))?$`).exec(action);
-      if (!match) return null;
-      let id;
-      try { id = decodeURIComponent(match[1]); } catch { throw new HttpError(400, "agent_memory_payload_invalid", "Invalid identifier."); }
-      if (!id || id.length > 200 || [...id].some((character) => character.charCodeAt(0) < 32)) {
-        throw new HttpError(400, "agent_memory_payload_invalid", "Invalid identifier.");
-      }
-      return { id, act: match[2] ?? "" };
-    };
+      const body = ["POST", "PUT", "PATCH"].includes(method) ? await readJson(req, Math.min(config.maxJsonBytes ?? 1_048_576, 256 * 1024)) : null;
+      /** The dashboard's acts leave an audit line: which key, which account,
+       *  what. Never the subject's own identifier — the account id is its digest.
+       *  @param {string} event @param {any} user @param {Record<string, unknown>} [details] */
+      const trail = async (event, user, details = {}) => {
+        if (audit) await audit(`agent-memory.${event}`, "completed", { keyId: identity.keyId, userId: user?.id ?? null, ...details });
+      };
+      /** `records/<id>/<act>` and the like: the id and the act, or null. @param {string} prefix */
+      const target = (prefix) => {
+        const match = new RegExp(`^${prefix}/([^/]+)(?:/([a-z]+))?$`).exec(action);
+        if (!match) return null;
+        let id;
+        try { id = decodeURIComponent(match[1]); } catch { throw new HttpError(400, "agent_memory_payload_invalid", "Invalid identifier."); }
+        if (!id || id.length > 200 || [...id].some((character) => character.charCodeAt(0) < 32)) {
+          throw new HttpError(400, "agent_memory_payload_invalid", "Invalid identifier.");
+        }
+        return { id, act: match[2] ?? "" };
+      };
 
-    if (['conversations', 'work-events'].includes(action) && method === 'POST') {
-      const ingest = action === 'conversations';
-      requireScope(ingest ? 'memory.ingest' : 'learning.signal');
-      const input = fields(body, ingest ? ['projectId', 'sessionId', 'messages', 'attended'] :
-        ['projectId', 'conversationId', 'messageIndex', 'saidAt', 'text', 'methodId', 'recordId', 'digest']);
-      const user = await accountFor({ create: false });
-      if (!user) throw new HttpError(404, 'memory_not_found', 'No memory account.');
-      const project = await store.requireProject(user, (await projectOf(user, input.projectId)) ?? 'default');
-      const native = await nativeFor(user);
-      const evidence = workEvidence();
-      if (!native?.externalRememberEnabled || !admission || (!ingest && !evidence)) throw new HttpError(503, 'memory_engine_unavailable', 'External host service unavailable.');
-      await meter?.admit(payer);
-      const params = { user, project, identity, input, billing: payer };
-      const data = ingest ? await ingestConversation({ native, admission }, params)
-        : await recordWorkSignal({ native, admission, learning, ...evidence }, params);
-      await reply(ingest ? 202 : 200, { data });
-      return true;
-    }
+      if (['conversations', 'work-events'].includes(action) && method === 'POST') {
+        const ingest = action === 'conversations';
+        requireScope(ingest ? 'memory.ingest' : 'learning.signal');
+        const input = fields(body, ingest ? ['projectId', 'sessionId', 'messages', 'attended'] :
+          ['projectId', 'conversationId', 'messageIndex', 'saidAt', 'text', 'methodId', 'recordId', 'digest']);
+        const user = await accountFor({ create: false });
+        if (!user) throw new HttpError(404, 'memory_not_found', 'No memory account.');
+        const project = await store.requireProject(user, (await projectOf(user, input.projectId)) ?? 'default');
+        const native = await nativeFor(user);
+        const evidence = workEvidence();
+        if (!native?.externalRememberEnabled || !admission || (!ingest && !evidence)) throw new HttpError(503, 'memory_engine_unavailable', 'External host service unavailable.');
+        await meter?.admit(payer);
+        const params = { user, project, identity, input, billing: payer };
+        const data = ingest ? await ingestConversation({ native, admission }, params)
+          : await recordWorkSignal({ native, admission, learning, ...evidence }, params);
+        await reply(ingest ? 202 : 200, { data });
+        return true;
+      }
 
-    if (action === 'sharing' && method === 'POST') {
-      requireScope('memory.share');
-      if (identity.projectId || subject) throw new HttpError(403, 'agent_key_project_denied', 'Sharing requires the account owner.');
-      if (!shareServices) throw new HttpError(404, 'capsule_share_not_enabled', 'Capsule sharing is unavailable.');
-      if (['deliver', 'createLink', 'importLink', 'importDelivery'].includes(body?.action)) await meter?.admit(payer);
-      const result = await shareForAgent(shareServices, keyAccount, body);
-      await trail(`sharing.${body.action}`, keyAccount);
-      await reply(200, { data: result });
-      return true;
-    }
+      if (action === 'sharing' && method === 'POST') {
+        requireScope('memory.share');
+        if (identity.projectId || subject) throw new HttpError(403, 'agent_key_project_denied', 'Sharing requires the account owner.');
+        if (!shareServices) throw new HttpError(404, 'capsule_share_not_enabled', 'Capsule sharing is unavailable.');
+        if (['deliver', 'createLink', 'importLink', 'importDelivery', 'importFile', 'previewFile', 'exportFile'].includes(body?.action)) await meter?.admit(payer);
+        const result = await shareForAgent(shareServices, keyAccount, body);
+        await trail(`sharing.${body.action}`, keyAccount);
+        await reply(200, { data: result });
+        return true;
+      }
 
-    if (action === 'remember' && method === 'POST') {
-      requireScope('memory.remember');
-      const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.remember);
-      const source = rememberSource(input);
-      const user = await accountFor({ create: false });
-      if (!user) throw new HttpError(404, 'memory_not_found', 'No such memory account.');
-      const projectId = await projectOf(user, input.projectId);
-      const project = await store.requireProject(user, projectId ?? 'default');
-      const native = await nativeFor(user);
-      if (!native?.externalRememberEnabled) throw new HttpError(503, 'memory_engine_unavailable', 'External remember admission is unavailable.');
-      await rememberAdmission({ native, admission }, { user, project, at: Date.parse(source.saidAt) });
-      await meter?.admit(payer);
-      const result = await native.remember(user.id, { text: input.statement, projectId: project.id, projectName: project.name ?? null, externalSource: source });
-      await trail('remember', user);
-      await reply(200, { data: result });
-      return true;
-    }
+      if (action === 'remember' && method === 'POST') {
+        requireScope('memory.remember');
+        const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.remember);
+        const source = rememberSource(input);
+        const user = await accountFor({ create: false });
+        if (!user) throw new HttpError(404, 'memory_not_found', 'No such memory account.');
+        const projectId = await projectOf(user, input.projectId);
+        const project = await store.requireProject(user, projectId ?? 'default');
+        const native = await nativeFor(user);
+        if (!native?.externalRememberEnabled) throw new HttpError(503, 'memory_engine_unavailable', 'External remember admission is unavailable.');
+        await rememberAdmission({ native, admission }, { user, project, at: Date.parse(source.saidAt) });
+        await meter?.admit(payer);
+        const result = await native.remember(user.id, { text: input.statement, projectId: project.id, projectName: project.name ?? null, externalSource: source });
+        await trail('remember', user);
+        await reply(200, { data: result });
+        return true;
+      }
 
-    if (action === 'context' && method === 'GET') {
-      requireScope('memory.read');
-      const user = await accountFor({ create: false });
-      if (!user) throw new HttpError(404, 'memory_not_found', 'No such memory.');
-      const projectId = await projectOf(user, url.searchParams.get('projectId'));
-      const project = await store.requireProject(user, projectId ?? 'default');
-      const native = await nativeFor(user);
-      const result = await contextForAgent({ config, native, admission, ...openingContext }, { user, project });
-      await reply(200, { data: result });
-      return true;
-    }
+      if (action === 'context' && method === 'GET') {
+        requireScope('memory.read');
+        const user = await accountFor({ create: false });
+        if (!user) throw new HttpError(404, 'memory_not_found', 'No such memory.');
+        const projectId = await projectOf(user, url.searchParams.get('projectId'));
+        const project = await store.requireProject(user, projectId ?? 'default');
+        const native = await nativeFor(user);
+        const result = await contextForAgent({ config, native, admission, ...openingContext }, { user, project });
+        await reply(200, { data: result });
+        return true;
+      }
 
-    if (action === 'forget' && method === 'POST') {
-      requireScope('memory.manage');
-      const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.forget);
-      const user = await accountFor({ create: false });
-      if (!user) throw new HttpError(404, 'memory_not_found', 'No such memory.');
-      const projectId = await projectOf(user, input.projectId);
-      const project = await store.requireProject(user, projectId ?? 'default');
-      const native = await nativeFor(user);
-      const outcome = await forgetForAgent({ config, native, admission }, { user, project, boundProject: identity.projectId, input });
-      await trail('forget', user);
-      await reply(200, { data: outcome });
-      return true;
-    }
+      if (action === 'forget' && method === 'POST') {
+        requireScope('memory.manage');
+        const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.forget);
+        const user = await accountFor({ create: false });
+        if (!user) throw new HttpError(404, 'memory_not_found', 'No such memory.');
+        const projectId = await projectOf(user, input.projectId);
+        const project = await store.requireProject(user, projectId ?? 'default');
+        const native = await nativeFor(user);
+        const outcome = await forgetForAgent({ config, native, admission }, { user, project, boundProject: identity.projectId, input });
+        await trail('forget', user);
+        await reply(200, { data: outcome });
+        return true;
+      }
 
-    if (action === 'forgotten' && method === 'GET') {
-      requireScope('memory.read');
-      const user = await accountFor({ create: false });
-      const projectId = await projectOf(user, url.searchParams.get('projectId'));
-      const native = await nativeFor(user);
-      const items = user ? await forgottenForAgent(native, user, { projectId, canRestore: identity.scopes.includes('memory.manage') && !identity.projectId }) : [];
-      await reply(200, { data: { items } });
-      return true;
-    }
+      if (action === 'forgotten' && method === 'GET') {
+        requireScope('memory.read');
+        const user = await accountFor({ create: false });
+        const projectId = await projectOf(user, url.searchParams.get('projectId'));
+        const native = await nativeFor(user);
+        const items = user ? await forgottenForAgent(native, user, { projectId, canRestore: identity.scopes.includes('memory.manage') && !identity.projectId }) : [];
+        await reply(200, { data: { items } });
+        return true;
+      }
 
-    if (action === "recall" && method === "POST") {
-      requireScope("memory.read");
-      const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.recall);
-      if (input.include !== undefined && (!Array.isArray(input.include) || input.include.length > 1 || input.include.some(value => value !== 'history'))) {
-        throw new HttpError(400, 'agent_memory_payload_invalid', 'include may contain only history.');
+      if (action === "recall" && method === "POST") {
+        requireScope("memory.read");
+        const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.recall);
+        if (input.include !== undefined && (!Array.isArray(input.include) || input.include.length > 1 || input.include.some(value => value !== 'history'))) {
+          throw new HttpError(400, 'agent_memory_payload_invalid', 'include may contain only history.');
+        }
+        const withHistory = input.include?.includes('history') === true;
+        if (withHistory) {
+          requireScope('memory.history.read');
+          if (!historySearch || config.memoryHistorySearchEnabled !== true) throw new HttpError(503, 'memory_engine_unavailable', 'Conversation recall is unavailable.');
+        }
+        if (!capsules) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
+        if (input.factKinds !== undefined && (!Array.isArray(input.factKinds)
+          || input.factKinds.length > CAPSULE_FACT_KINDS.length
+          || input.factKinds.some((/** @type {any} */ kind) => !CAPSULE_FACT_KINDS.includes(kind)))) {
+          throw new HttpError(400, "agent_memory_payload_invalid", "Invalid memory kinds.");
+        }
+        if (input.since != null && (typeof input.since !== "string" || !Number.isFinite(Date.parse(input.since)))) {
+          throw new HttpError(400, "agent_memory_payload_invalid", "since must be an ISO date.");
+        }
+        if (input.scope !== undefined && !["all", "capsule", "conversation", "agenda"].includes(input.scope)) {
+          throw new HttpError(400, "agent_memory_payload_invalid", "Invalid memory scope.");
+        }
+        // The capsules to read instead of the ones in force: at most eight,
+        // each named once.
+        if (input.capsuleIds !== undefined && (!Array.isArray(input.capsuleIds) || input.capsuleIds.length < 1
+          || input.capsuleIds.length > AGENT_RECALL_MAX_CAPSULES || new Set(input.capsuleIds).size !== input.capsuleIds.length
+          || input.capsuleIds.some((/** @type {any} */ id) => typeof id !== "string" || !id.trim() || id.length > 200
+            || [...id].some((character) => character.charCodeAt(0) < 32)))) {
+          throw new HttpError(400, "agent_memory_payload_invalid", `capsuleIds must name 1–${AGENT_RECALL_MAX_CAPSULES} distinct capsules.`);
+        }
+        if (input.methods !== undefined && !AGENT_RECALL_METHOD_MODES.includes(input.methods)) {
+          throw new HttpError(400, "agent_memory_payload_invalid", `methods must be one of ${AGENT_RECALL_METHOD_MODES.join(", ")}.`);
+        }
+        const query = boundedString(input.query, "query", 2_000);
+        const user = await accountFor({ create: false });
+        // The memory half is the engine's own files, read as the memory page reads them.
+        const native = await nativeFor(user);
+        // A subject never seen has no memory and no methods of its own; it may
+        // still read its institution's named capsules.
+        const projectId = await projectOf(user, input.projectId);
+        await meter?.admit(payer);
+        const result = await recallForAgent({ capsules, memory: native ? nativeRecallSource(native, { recallEnabled: config.memoryRecallEnabled !== false }) : null, learning },
+          { user, institution: subject ? keyAccount : null }, {
+            query,
+            projectId,
+            limit: input.limit ?? 10,
+            factKinds: input.factKinds ?? [],
+            since: input.since ?? null,
+            scope: input.scope ?? "all",
+            ...(input.capsuleIds ? { capsuleIds: input.capsuleIds } : {}),
+            methods: input.methods ?? "all",
+          });
+        if (withHistory) {
+          // The same history reader used by the gateway owns archive review, source
+          // revalidation, withdrawals and shared-namespace refusal. No raw archive fallback.
+          const project = user ? await store.requireProject(user, projectId ?? 'default') : null;
+          let timer;
+          const history = user && project ? await Promise.race([
+            historySearch({ user, project, query, accountScope: identity.projectId == null && input.projectId == null, limit: Math.min(20, Math.max(1, Math.trunc(Number(input.limit)) || 5)) }),
+            new Promise(resolve => { timer = setTimeout(() => resolve([]), Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4000)); }),
+          ]).finally(() => clearTimeout(timer)) : [];
+          await reply(200, { data: { ...result, history } });
+        } else await reply(200, { data: result });
+        return true;
       }
-      const withHistory = input.include?.includes('history') === true;
-      if (withHistory) {
-        requireScope('memory.history.read');
-        if (!historySearch || config.memoryHistorySearchEnabled !== true) throw new HttpError(503, 'memory_engine_unavailable', 'Conversation recall is unavailable.');
-      }
-      if (!capsules) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
-      if (input.factKinds !== undefined && (!Array.isArray(input.factKinds)
-        || input.factKinds.length > CAPSULE_FACT_KINDS.length
-        || input.factKinds.some((/** @type {any} */ kind) => !CAPSULE_FACT_KINDS.includes(kind)))) {
-        throw new HttpError(400, "agent_memory_payload_invalid", "Invalid memory kinds.");
-      }
-      if (input.since != null && (typeof input.since !== "string" || !Number.isFinite(Date.parse(input.since)))) {
-        throw new HttpError(400, "agent_memory_payload_invalid", "since must be an ISO date.");
-      }
-      if (input.scope !== undefined && !["all", "capsule", "conversation", "agenda"].includes(input.scope)) {
-        throw new HttpError(400, "agent_memory_payload_invalid", "Invalid memory scope.");
-      }
-      // The capsules to read instead of the ones in force: at most eight,
-      // each named once.
-      if (input.capsuleIds !== undefined && (!Array.isArray(input.capsuleIds) || input.capsuleIds.length < 1
-        || input.capsuleIds.length > AGENT_RECALL_MAX_CAPSULES || new Set(input.capsuleIds).size !== input.capsuleIds.length
-        || input.capsuleIds.some((/** @type {any} */ id) => typeof id !== "string" || !id.trim() || id.length > 200
-          || [...id].some((character) => character.charCodeAt(0) < 32)))) {
-        throw new HttpError(400, "agent_memory_payload_invalid", `capsuleIds must name 1–${AGENT_RECALL_MAX_CAPSULES} distinct capsules.`);
-      }
-      if (input.methods !== undefined && !AGENT_RECALL_METHOD_MODES.includes(input.methods)) {
-        throw new HttpError(400, "agent_memory_payload_invalid", `methods must be one of ${AGENT_RECALL_METHOD_MODES.join(", ")}.`);
-      }
-      const query = boundedString(input.query, "query", 2_000);
-      const user = await accountFor({ create: false });
-      // The memory half is the engine's own files, read as the memory page reads them.
-      const native = await nativeFor(user);
-      // A subject never seen has no memory and no methods of its own; it may
-      // still read its institution's named capsules.
-      const projectId = await projectOf(user, input.projectId);
-      await meter?.admit(payer);
-      const result = await recallForAgent({ capsules, memory: native ? nativeRecallSource(native, { recallEnabled: config.memoryRecallEnabled !== false }) : null, learning },
-        { user, institution: subject ? keyAccount : null }, {
-          query,
-          projectId,
-          limit: input.limit ?? 10,
-          factKinds: input.factKinds ?? [],
-          since: input.since ?? null,
-          scope: input.scope ?? "all",
-          ...(input.capsuleIds ? { capsuleIds: input.capsuleIds } : {}),
-          methods: input.methods ?? "all",
+
+      if (action === "note" && method === "POST") {
+        requireScope("memory.write");
+        const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.note);
+        if (!capsules) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
+        const content = boundedString(input.content, "content", 8_000);
+        const user = /** @type {any} */ (await accountFor({ create: true }));
+        const entry = await capsules.note(user.id, (await projectOf(user, input.projectId)) ?? (subject ? await projectOf(user, "default") : null), {
+          factKind: input.factKind,
+          content,
+          // Not a parameter. See rule 1 in the module header.
+          origin: "inferred",
+          // Neither is this: a third party's note waits for the account owner,
+          // where the platform's own notes take effect (capsuleService.note).
+          review: true,
         });
-      if (withHistory) {
-        // The same history reader used by the gateway owns archive review, source
-        // revalidation, withdrawals and shared-namespace refusal. No raw archive fallback.
-        const project = user ? await store.requireProject(user, projectId ?? 'default') : null;
-        let timer;
-        const history = user && project ? await Promise.race([
-          historySearch({ user, project, query, accountScope: identity.projectId == null && input.projectId == null, limit: Math.min(20, Math.max(1, Math.trunc(Number(input.limit)) || 5)) }),
-          new Promise(resolve => { timer = setTimeout(() => resolve([]), Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4000)); }),
-        ]).finally(() => clearTimeout(timer)) : [];
-        await reply(200, { data: { ...result, history } });
-      } else await reply(200, { data: result });
-      return true;
-    }
-
-    if (action === "note" && method === "POST") {
-      requireScope("memory.write");
-      const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.note);
-      if (!capsules) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
-      const content = boundedString(input.content, "content", 8_000);
-      const user = /** @type {any} */ (await accountFor({ create: true }));
-      const entry = await capsules.note(user.id, (await projectOf(user, input.projectId)) ?? (subject ? await projectOf(user, "default") : null), {
-        factKind: input.factKind,
-        content,
-        // Not a parameter. See rule 1 in the module header.
-        origin: "inferred",
-        // Neither is this: a third party's note waits for the account owner,
-        // where the platform's own notes take effect (capsuleService.note).
-        review: true,
-      });
-      await reply(200, { data: { entry, reviewRequired: true, contextOnly: true } });
-      return true;
-    }
-
-    if (action === "records" && method === "GET") {
-      requireScope("memory.read");
-      const allowedScopes = new Set(["user", "project", "session", "organization"]);
-      const allowedKinds = new Set(["profile", "person", "note", "preference", "behavior", "project_fact", "analysis", "decision", "correction", "follow_up", "run_summary"]);
-      const allowedStatuses = new Set(["active", "pending", "superseded", "archived"]);
-      const filters = (/** @type {string} */ name, /** @type {Set<string>} */ allowed) => url.searchParams.getAll(name)
-        .flatMap((value) => value.split(","))
-        .map((value) => value.trim())
-        .filter((value) => allowed.has(value));
-      const user = await accountFor({ create: false });
-      const scopeId = (await projectOf(user, url.searchParams.get("scopeId"))) ?? "";
-      const native = await nativeFor(user);
-      // A subject with no account has no memory: an empty list.
-      if (!native) { await reply(200, { data: [] }); return true; }
-      // The engine's memories are all in force: a status that excludes `active` (a proposal, a replaced or forgotten one) finds none here.
-      const statuses = filters("status", allowedStatuses);
-      const found = statuses.length && !statuses.includes("active") ? [] : await native.listRecords(user.id, {
-        scopes: filters("scope", allowedScopes), kinds: filters("kind", allowedKinds), scopeId,
-        query: url.searchParams.get("query") ?? "",
-        allowRecord: (record) => !privateByDefault(record),
-        pageSize: Math.max(1, Math.min(200, Number(url.searchParams.get("pageSize") ?? 50))),
-      });
-      await reply(200, { data: found.filter((record) => !privateByDefault(record)).slice(0, Math.max(1, Math.min(200, Number(url.searchParams.get("pageSize") ?? 50)))) });
-      return true;
-    }
-
-    if (action === "episodes" && method === "POST") {
-      requireScope("memory.write");
-      const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.episodes);
-      if (!Array.isArray(input.messages) || input.messages.length === 0 || input.messages.length > 200) {
-        throw new HttpError(400, "agent_memory_payload_invalid", "messages must be a list of 1–200 turns.");
+        await reply(200, { data: { entry, reviewRequired: true, contextOnly: true } });
+        return true;
       }
-      const sessionId = boundedString(input.sessionId ?? `external-${identity.keyId}`, "sessionId", 120);
-      const messages = input.messages.map((/** @type {any} */ message, /** @type {number} */ index) => {
-        if (!message || typeof message !== "object" || Array.isArray(message)) {
-          throw new HttpError(400, "agent_memory_payload_invalid", `Turn ${index} is not an object.`);
+
+      if (action === "records" && method === "GET") {
+        requireScope("memory.read");
+        const allowedScopes = new Set(["user", "project", "session", "organization"]);
+        const allowedKinds = new Set(["profile", "person", "note", "preference", "behavior", "project_fact", "analysis", "decision", "correction", "follow_up", "run_summary"]);
+        const allowedStatuses = new Set(["active", "pending", "superseded", "archived"]);
+        const filters = (/** @type {string} */ name, /** @type {Set<string>} */ allowed) => url.searchParams.getAll(name)
+          .flatMap((value) => value.split(","))
+          .map((value) => value.trim())
+          .filter((value) => allowed.has(value));
+        const user = await accountFor({ create: false });
+        const scopeId = (await projectOf(user, url.searchParams.get("scopeId"))) ?? "";
+        const native = await nativeFor(user);
+        // A subject with no account has no memory: an empty list.
+        if (!native) { await reply(200, { data: [] }); return true; }
+        // The engine's memories are all in force: a status that excludes `active` (a proposal, a replaced or forgotten one) finds none here.
+        const statuses = filters("status", allowedStatuses);
+        const found = statuses.length && !statuses.includes("active") ? [] : await native.listRecords(user.id, {
+          ownedOnly: true, scopes: filters("scope", allowedScopes), kinds: filters("kind", allowedKinds), scopeId,
+          query: url.searchParams.get("query") ?? "",
+          allowRecord: (record) => !privateByDefault(record) && record.sensitive !== true,
+          pageSize: Math.max(1, Math.min(200, Number(url.searchParams.get("pageSize") ?? 50))),
+        });
+        await reply(200, { data: found.filter((record) => !privateByDefault(record) && record.sensitive !== true).slice(0, Math.max(1, Math.min(200, Number(url.searchParams.get("pageSize") ?? 50)))) });
+        return true;
+      }
+
+      if (action === "episodes" && method === "POST") {
+        requireScope("memory.write");
+        const input = fields(body, AGENT_MEMORY_REQUEST_FIELDS.episodes);
+        if (!Array.isArray(input.messages) || input.messages.length === 0 || input.messages.length > 200) {
+          throw new HttpError(400, "agent_memory_payload_invalid", "messages must be a list of 1–200 turns.");
         }
-        if (!["user", "assistant"].includes(message.role)) {
-          throw new HttpError(400, "agent_memory_payload_invalid", `Turn ${index} must have role user or assistant.`);
+        const sessionId = boundedString(input.sessionId ?? `external-${identity.keyId}`, "sessionId", 120);
+        const messages = input.messages.map((/** @type {any} */ message, /** @type {number} */ index) => {
+          if (!message || typeof message !== "object" || Array.isArray(message)) {
+            throw new HttpError(400, "agent_memory_payload_invalid", `Turn ${index} is not an object.`);
+          }
+          if (!["user", "assistant"].includes(message.role)) {
+            throw new HttpError(400, "agent_memory_payload_invalid", `Turn ${index} must have role user or assistant.`);
+          }
+          return {
+            id: `${sessionId}:${index}`,
+            role: message.role,
+            // The admission filter reads DSH's part shape, and an external caller has no
+            // reason to know it; the one thing it must not lose is which words
+            // were the user's, because only those are ever forwarded.
+            parts: [{ type: "text", text: boundedString(message.text, `messages[${index}].text`, 12_000) }],
+            sender: message.role === "user" ? "user" : "assistant",
+          };
+        });
+        const user = /** @type {any} */ (await accountFor({ create: true }));
+        // A subject's episode belongs to its one project whether or not it is named.
+        const projectId = (await projectOf(user, input.projectId)) ?? (subject ? await projectOf(user, "default") : null);
+        if (!projectId) throw new HttpError(400, "agent_memory_payload_invalid", "An episode belongs to a project; name one.");
+        await store.requireProject(user, projectId);
+        await nativeFor(user);
+        const entry = await capsules.note(user.id, projectId, {
+          factKind: "project_fact", content: `External session ${sessionId}: ${createHash("sha256").update(JSON.stringify(messages)).digest("hex")}\n${messages.map((message) => `${message.sender}: ${message.parts[0].text}`).join("\n").slice(0,16000)}`,
+          origin: "inferred", review: true, externalSession: { sessionId, messages },
+        });
+        await reply(202, { data: { episodeId: entry.id, candidateId: entry.id, proposed: 1, extracted: 0, activated: 0, pending: 1, rejected: 0,
+          state: "pending_confirmation", confirm: { path: `${AGENT_MEMORY_PATH}/notes/${encodeURIComponent(entry.id)}/confirm`, expectedRevision: entry.revision } } });
+        return true;
+      }
+
+      // The dashboard (agentMemoryBoard.mjs): one read, and the person's acts.
+      if (action === "dashboard" && method === "GET") {
+        requireScope("memory.read");
+        if (!memorySettings?.configured) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
+        const user = await accountFor({ create: false });
+        const native = await nativeFor(user);
+        if (identity.projectId) await projectOf(user, identity.projectId);
+        const board = await memoryBoard({ memorySettings, learning, capsules, observations, nativeMemory: native, projectId: identity.projectId }, user);
+        await reply(200, { data: board });
+        return true;
+      }
+
+      // One prescription edit, counted into habits (agentMemoryObservations.mjs).
+      if (action === "observations" && method === "POST") {
+        requireScope("memory.observe");
+        if (!observations) throw new HttpError(503, "product_state_unavailable", "Observations are unavailable.");
+        if (identity.projectId) throw new HttpError(403, "agent_key_project_denied", "Account observations require an account-scoped key.");
+        const observation = readObservation(body);
+        const user = /** @type {any} */ (await accountFor({ create: true }));
+        // The wording pass is metered to the account's one project.
+        await store.requireProject(user, "default");
+        await meter?.admit(payer);
+        const outcome = await observations.observe(user, observation);
+        if (outcome.habits.length) await trail("observation.habits", user, { changes: outcome.habits.map((/** @type {any} */ habit) => `${habit.change}:${habit.id}`).join(",") });
+        await reply(202, { data: outcome });
+        return true;
+      }
+
+      if (action === "settings" && method === "PUT") {
+        requireScope("memory.manage");
+        const input = fields(body, ["learningPaused", "recallPaused"]);
+        const user = /** @type {any} */ (await accountFor({ create: true }));
+        if (identity.projectId) throw new HttpError(403, "agent_key_project_denied", "Account settings require an account-scoped key.");
+        const settings = await memorySettings.updateSettings(user.id, input);
+        await trail("settings.update", user, { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused });
+        // The pause is the engine's own policy too (what the memory page's switch does); the gateway reads
+        // the setting on every request, so the switch has taken effect whether or not the engine could be told now.
+        if (typeof input.learningPaused === "boolean" && nativeMemory?.configured) {
+          await nativeMemory.setLearning(user.id, !settings.learningPaused)
+            .catch((/** @type {any} */ error) => trail("settings.engine", user, { code: String(error?.code ?? "memory_engine_unavailable") }));
         }
-        return {
-          id: `${sessionId}:${index}`,
-          role: message.role,
-          // The admission filter reads DSH's part shape, and an external caller has no
-          // reason to know it; the one thing it must not lose is which words
-          // were the user's, because only those are ever forwarded.
-          parts: [{ type: "text", text: boundedString(message.text, `messages[${index}].text`, 12_000) }],
-          sender: message.role === "user" ? "user" : "assistant",
-        };
-      });
-      const user = /** @type {any} */ (await accountFor({ create: true }));
-      // A subject's episode belongs to its one project whether or not it is named.
-      const projectId = (await projectOf(user, input.projectId)) ?? (subject ? await projectOf(user, "default") : null);
-      if (!projectId) throw new HttpError(400, "agent_memory_payload_invalid", "An episode belongs to a project; name one.");
-      await store.requireProject(user, projectId);
-      await nativeFor(user);
-      const entry = await capsules.note(user.id, projectId, {
-        factKind: "project_fact", content: `External session ${sessionId}: ${createHash("sha256").update(JSON.stringify(messages)).digest("hex")}\n${messages.map((message) => `${message.sender}: ${message.parts[0].text}`).join("\n").slice(0,16000)}`,
-        origin: "inferred", review: true, externalSession: { sessionId, messages },
-      });
-      await reply(202, { data: { episodeId: entry.id, candidateId: entry.id, proposed: 1, extracted: 0, activated: 0, pending: 1, rejected: 0,
-        state: "pending_confirmation", confirm: { path: `${AGENT_MEMORY_PATH}/notes/${encodeURIComponent(entry.id)}/confirm`, expectedRevision: entry.revision } } });
-      return true;
-    }
-
-    // The dashboard (agentMemoryBoard.mjs): one read, and the person's acts.
-    if (action === "dashboard" && method === "GET") {
-      requireScope("memory.read");
-      if (!memorySettings?.configured) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
-      const user = await accountFor({ create: false });
-      const native = await nativeFor(user);
-      const board = await memoryBoard({ memorySettings, learning, capsules, observations, nativeMemory: native, projectId: identity.projectId }, user);
-      await reply(200, { data: board });
-      return true;
-    }
-
-    // One prescription edit, counted into habits (agentMemoryObservations.mjs).
-    if (action === "observations" && method === "POST") {
-      requireScope("memory.observe");
-      if (!observations) throw new HttpError(503, "product_state_unavailable", "Observations are unavailable.");
-      if (identity.projectId) throw new HttpError(403, "agent_key_project_denied", "Account observations require an account-scoped key.");
-      const observation = readObservation(body);
-      const user = /** @type {any} */ (await accountFor({ create: true }));
-      // The wording pass is metered to the account's one project.
-      await store.requireProject(user, "default");
-      await meter?.admit(payer);
-      const outcome = await observations.observe(user, observation);
-      if (outcome.habits.length) await trail("observation.habits", user, { changes: outcome.habits.map((/** @type {any} */ habit) => `${habit.change}:${habit.id}`).join(",") });
-      await reply(202, { data: outcome });
-      return true;
-    }
-
-    if (action === "settings" && method === "PUT") {
-      requireScope("memory.manage");
-      const input = fields(body, ["learningPaused", "recallPaused"]);
-      const user = /** @type {any} */ (await accountFor({ create: true }));
-      if (identity.projectId) throw new HttpError(403, "agent_key_project_denied", "Account settings require an account-scoped key.");
-      const settings = await memorySettings.updateSettings(user.id, input);
-      await trail("settings.update", user, { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused });
-      // The pause is the engine's own policy too (what the memory page's switch does); the gateway reads
-      // the setting on every request, so the switch has taken effect whether or not the engine could be told now.
-      if (typeof input.learningPaused === "boolean" && nativeMemory?.configured) {
-        await nativeMemory.setLearning(user.id, !settings.learningPaused)
-          .catch((/** @type {any} */ error) => trail("settings.engine", user, { code: String(error?.code ?? "memory_engine_unavailable") }));
+        await reply(200, { data: { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused } });
+        return true;
       }
-      await reply(200, { data: { learningPaused: settings.learningPaused, recallPaused: settings.recallPaused } });
-      return true;
-    }
 
-    const record = target("records");
-    if (record && ((method === "POST" && ["confirm", "forget", "restore", "undo"].includes(record.act)) || (method === "PATCH" && !record.act))) {
-      requireScope("memory.manage");
-      const user = await accountFor({ create: false });
-      if (!user) throw new HttpError(404, "memory_not_found", "Memory not found.");
-      const act = record.act || "edit";
-      const native = await nativeFor(user);
-      if (identity.projectId && act === 'restore') {
-        throw new HttpError(403, 'agent_key_project_denied', 'Restoring a withdrawal requires an account-scoped key.');
+      const record = target("records");
+      if (record && ((method === "POST" && ["confirm", "forget", "restore", "undo"].includes(record.act)) || (method === "PATCH" && !record.act))) {
+        requireScope("memory.manage");
+        const user = await accountFor({ create: false });
+        if (!user) throw new HttpError(404, "memory_not_found", "Memory not found.");
+        const act = record.act || "edit";
+        const native = await nativeFor(user);
+        if (identity.projectId && act === 'restore') {
+          throw new HttpError(403, 'agent_key_project_denied', 'Restoring a withdrawal requires an account-scoped key.');
+        }
+        if (identity.projectId) {
+          const existing = await /** @type {any} */ (native).getRecord(user.id, record.id);
+          if (privateByDefault(existing)) throw new HttpError(404, "memory_not_found", "No such memory.");
+          if (existing.scope !== "project" || existing.scopeId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This memory belongs to a different scope.");
+        }
+        const outcome = await recordAction({ nativeMemory: native }, user, record.id, act, body);
+        await trail(outcome.event, user, { target: record.id });
+        await reply(200, { data: outcome.record });
+        return true;
       }
-      if (identity.projectId) {
-        const existing = await /** @type {any} */ (native).getRecord(user.id, record.id);
-        if (privateByDefault(existing)) throw new HttpError(404, "memory_not_found", "No such memory.");
-        if (existing.scope !== "project" || existing.scopeId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This memory belongs to a different scope.");
+
+      const habit = target("methods");
+      if (habit && identity.projectId) {
+        requireScope(method === "GET" ? "memory.read" : "memory.manage");
+        const current = await learning?.getMethod(keyAccount.id, habit.id);
+        if ((current?.payload?.provenance?.sourceProjectId ?? current?.projectId) !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This method belongs to a different scope.");
       }
-      const outcome = await recordAction({ nativeMemory: native }, user, record.id, act, body);
-      await trail(outcome.event, user, { target: record.id });
-      await reply(200, { data: outcome.record });
-      return true;
-    }
-
-    const habit = target("methods");
-    if (habit && identity.projectId) {
-      requireScope(method === "GET" ? "memory.read" : "memory.manage");
-      if ((await learning?.getMethod(keyAccount.id, habit.id))?.projectId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This method belongs to a different scope.");
-    }
-    if (habit && method === "GET" && !habit.act) {
-      requireScope("memory.read");
-      const user = await accountFor({ create: false });
-      if (!user) throw new HttpError(404, "method_not_found", "The method is unavailable.");
-      await reply(200, { data: await methodDetail({ learning }, user, habit.id) });
-      return true;
-    }
-    if (habit && method === "POST" && ["retire", "restore", "rollback"].includes(habit.act)) {
-      requireScope("memory.manage");
-      const user = await accountFor({ create: false });
-      if (!user) throw new HttpError(404, "method_not_found", "The method is unavailable.");
-      const changed = await methodAction({ learning }, user, habit.id, habit.act, body);
-      await trail(`method.${habit.act}`, user, { target: habit.id });
-      await reply(200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null, ...(changed.admission ? { admission: changed.admission } : {}) } });
-      return true;
-    }
-
-    const note = target("notes");
-    if (note && method === "POST" && ["confirm", "reject"].includes(note.act)) {
-      requireScope("memory.manage");
-      const user = await accountFor({ create: false });
-      if (!user) throw new HttpError(404, "note_not_found", "No such proposed note.");
-      if (identity.projectId) {
-        const existing = await capsules.documents.get(user.id, "fact", note.id);
-        if (privateByDefault(existing)) throw new HttpError(404, "note_not_found", "No such proposed note.");
-        if (!existing || existing.projectId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This note belongs to a different project.");
+      if (habit && learning?.contextProvenance) {
+        requireScope(method === "GET" ? "memory.read" : "memory.manage");
+        const user = await accountFor({ create: false });
+        if (!user || !await learning.contextProvenance.ordinaryDocument(user.id, await learning.getMethod(user.id, habit.id))) {
+          throw new HttpError(404, 'method_not_found', 'The method is unavailable.');
+        }
       }
-      if (note.act === 'confirm') await meter?.admit(payer);
-      const changed = await noteAction({ capsules, memorySettings, nativeMemory }, user, note.id, note.act, body);
-      await trail(`note.${note.act}`, user, { target: note.id });
-      await reply(200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null, ...(changed.admission ? { admission: changed.admission } : {}) } });
-      return true;
-    }
+      if (habit && method === "GET" && !habit.act) {
+        requireScope("memory.read");
+        const user = await accountFor({ create: false });
+        if (!user) throw new HttpError(404, "method_not_found", "The method is unavailable.");
+        await reply(200, { data: await methodDetail({ learning }, user, habit.id) });
+        return true;
+      }
+      if (habit && method === "POST" && ["retire", "restore", "rollback"].includes(habit.act)) {
+        requireScope("memory.manage");
+        const user = await accountFor({ create: false });
+        if (!user) throw new HttpError(404, "method_not_found", "The method is unavailable.");
+        const changed = await methodAction({ learning }, user, habit.id, habit.act, body);
+        await trail(`method.${habit.act}`, user, { target: habit.id });
+        await reply(200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null, ...(changed.admission ? { admission: changed.admission } : {}) } });
+        return true;
+      }
 
-    // Forget one person entirely: their account and everything in it, the way
-    // an account is deleted. Only for a subject, and only by its institution.
-    if (action === "subject" && method === "DELETE") {
-      requireScope("memory.manage");
-      if (!subject) throw new HttpError(400, "agent_subject_required", "Name the subject to forget in X-Subject.");
-      if (!deleteSubject) throw new HttpError(503, "product_state_unavailable", "Subject deletion is unavailable.");
-      const user = await accountFor({ create: false });
-      const deleted = user ? await deleteSubject(keyAccount.id, user.id) : 0;
-      await trail("subject.delete", user, { deleted });
-      await reply(200, { data: { deleted: deleted > 0 } });
-      return true;
-    }
+      const note = target("notes");
+      if (note && method === "POST" && ["confirm", "reject"].includes(note.act)) {
+        requireScope("memory.manage");
+        const user = await accountFor({ create: false });
+        if (!user) throw new HttpError(404, "note_not_found", "No such proposed note.");
+        if (identity.projectId) {
+          const existing = await capsules.documents.get(user.id, "fact", note.id);
+          if (privateByDefault(existing)) throw new HttpError(404, "note_not_found", "No such proposed note.");
+          if (!existing || existing.projectId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This note belongs to a different project.");
+        }
+        if (note.act === 'confirm') await meter?.admit(payer);
+        const changed = await noteAction({ capsules, memorySettings, nativeMemory }, user, note.id, note.act, body);
+        await trail(`note.${note.act}`, user, { target: note.id });
+        await reply(200, { data: { id: changed.id, revision: changed.revision, status: changed.payload?.status ?? null, ...(changed.admission ? { admission: changed.admission } : {}) } });
+        return true;
+      }
 
-    if (action === "" && method === "GET") {
-      // What this key can do, from the key. An integrator's first call.
-      await reply(200, { data: {
-        version: 1,
-        scopes: identity.scopes,
-        capabilities: {
-          rawConversationRecall: {
-            available: config.memoryHistorySearchEnabled === true && Boolean(historySearch) && nativeMemory?.configured === true
-              && ['memory.read', 'memory.history.read'].every(scope => identity.scopes.includes(scope)),
-            requiredScopes: ['memory.read', 'memory.history.read'],
+      // Forget one person entirely: their account and everything in it, the way
+      // an account is deleted. Only for a subject, and only by its institution.
+      if (action === "subject" && method === "DELETE") {
+        requireScope("memory.manage");
+        if (!subject) throw new HttpError(400, "agent_subject_required", "Name the subject to forget in X-Subject.");
+        if (!deleteSubject) throw new HttpError(503, "product_state_unavailable", "Subject deletion is unavailable.");
+        const user = await accountFor({ create: false });
+        const deleted = user ? await deleteSubject(keyAccount.id, user.id) : 0;
+        await trail("subject.delete", user, { deleted });
+        await reply(200, { data: { deleted: deleted > 0 } });
+        return true;
+      }
+
+      if (action === "" && method === "GET") {
+        // What this key can do, from the key. An integrator's first call.
+        await reply(200, { data: {
+          version: 1,
+          scopes: identity.scopes,
+          capabilities: {
+            rawConversationRecall: {
+              available: config.memoryHistorySearchEnabled === true && Boolean(historySearch) && nativeMemory?.configured === true
+                && ['memory.read', 'memory.history.read'].every(scope => identity.scopes.includes(scope)),
+              requiredScopes: ['memory.read', 'memory.history.read'],
+            },
+            // Availability follows the wired producers and the scopes this key actually holds.
+            openingContext: { available: Boolean(openingContext && admission && nativeMemory?.configured && nativeMemory?.memoryContexts) && identity.scopes.includes('memory.read'), requiredScopes: ['memory.read'], path: '/context' },
+            explicitRemember: { available: Boolean(nativeMemory?.externalRememberEnabled && admission) && identity.scopes.includes('memory.remember'), requiredScopes: ['memory.remember'], path: '/remember', storage: 'directly_stated' },
+            statementForget: { available: config.memoryForgetTargetsEnabled === true && nativeMemory?.configured === true && nativeMemory?.forgetTargetsEnabled === true && Boolean(nativeMemory?.memoryContexts) && Boolean(admission)
+              && !identity.projectId && identity.scopes.includes('memory.manage'), requiredScopes: ['memory.manage'], path: '/forget',
+              ...(identity.projectId ? { reason: 'withdrawal_requires_account_scope' } : {}) },
+            forgottenList: { available: nativeMemory?.configured === true && Boolean(nativeMemory?.memoryContexts) && typeof nativeMemory?.forgotten === 'function' && identity.scopes.includes('memory.read'), requiredScopes: ['memory.read'], path: '/forgotten' },
+            conversationIngest: { available: Boolean(nativeMemory?.externalRememberEnabled && admission && identity.scopes.includes('memory.ingest')),
+              requiredScopes: ['memory.ingest'], internalOnly: false, path: '/conversations' },
+            workSignals: { available: Boolean(workEvidence() && nativeMemory?.externalRememberEnabled && admission && identity.scopes.includes('learning.signal')),
+              requiredScopes: ['learning.signal'], internalOnly: false, path: '/work-events' },
+            capsuleSharing: { available: Boolean(shareServices && !identity.projectId && !subject && identity.scopes.includes('memory.share')), requiredScopes: ['memory.share'], actions: identity.scopes.includes('memory.share') && !subject && !identity.projectId ? sharingActions(shareServices) : [], path: '/sharing' },
+            selectedCapsuleOnly: { available: false },
           },
-          // Availability follows the wired producers and the scopes this key actually holds.
-          openingContext: { available: Boolean(openingContext && admission && nativeMemory?.configured && nativeMemory?.memoryContexts) && identity.scopes.includes('memory.read'), requiredScopes: ['memory.read'], path: '/context' },
-          explicitRemember: { available: Boolean(nativeMemory?.externalRememberEnabled && admission) && identity.scopes.includes('memory.remember'), requiredScopes: ['memory.remember'], path: '/remember', storage: 'directly_stated' },
-          statementForget: { available: config.memoryForgetTargetsEnabled === true && nativeMemory?.configured === true && nativeMemory?.forgetTargetsEnabled === true && Boolean(nativeMemory?.memoryContexts) && Boolean(admission)
-            && !identity.projectId && identity.scopes.includes('memory.manage'), requiredScopes: ['memory.manage'], path: '/forget',
-            ...(identity.projectId ? { reason: 'withdrawal_requires_account_scope' } : {}) },
-          forgottenList: { available: nativeMemory?.configured === true && Boolean(nativeMemory?.memoryContexts) && typeof nativeMemory?.forgotten === 'function' && identity.scopes.includes('memory.read'), requiredScopes: ['memory.read'], path: '/forgotten' },
-          conversationIngest: { available: Boolean(nativeMemory?.externalRememberEnabled && admission && identity.scopes.includes('memory.ingest')),
-            requiredScopes: ['memory.ingest'], internalOnly: false, path: '/conversations' },
-          workSignals: { available: Boolean(workEvidence() && nativeMemory?.externalRememberEnabled && admission && identity.scopes.includes('learning.signal')),
-            requiredScopes: ['learning.signal'], internalOnly: false, path: '/work-events' },
-          capsuleSharing: { available: Boolean(shareServices && !identity.projectId && !subject && identity.scopes.includes('memory.share')), requiredScopes: ['memory.share'], path: '/sharing' },
-          selectedCapsuleOnly: { available: false },
-        },
-        projectId: identity.projectId,
-        // An integration key, and whether this request named a subject.
-        subjects: identity.subjects === true,
-        speaksFor: subject ? "subject" : "account",
-        rateLimitPerMinute: RATE_LIMIT_PER_MINUTE,
-        accountRateLimitPerMinute: AGENT_ACCOUNT_REQUESTS_PER_MINUTE,
-        maxResponseBytes: MAX_RESPONSE_BYTES,
-        endpoints: AGENT_MEMORY_ENDPOINTS,
-        notes: [
-          "Every episode stays a pending candidate, and every note an unconfirmed one, until the account owner confirms it; an episode never changes a memory already in force.",
-          "A key bound to a project cannot read or write outside it.",
-          "An integration key may name the person a request is for in X-Subject; every read and write is then that person's alone.",
-        ],
-      } });
-      return true;
-    }
+          projectId: identity.projectId,
+          // An integration key, and whether this request named a subject.
+          subjects: identity.subjects === true,
+          speaksFor: subject ? "subject" : "account",
+          rateLimitPerMinute: RATE_LIMIT_PER_MINUTE,
+          accountRateLimitPerMinute: AGENT_ACCOUNT_REQUESTS_PER_MINUTE,
+          maxResponseBytes: MAX_RESPONSE_BYTES,
+          endpoints: AGENT_MEMORY_ENDPOINTS,
+          notes: [
+            "Every episode stays a pending candidate, and every note an unconfirmed one, until the account owner confirms it; an episode never changes a memory already in force.",
+            "A key bound to a project cannot read or write outside it.",
+            "An integration key may name the person a request is for in X-Subject; every read and write is then that person's alone.",
+          ],
+        } });
+        return true;
+      }
 
-    throw new HttpError(404, "not_found", "No such agent-memory operation.");
+      throw new HttpError(404, "not_found", "No such agent-memory operation.");
     }
   };
 }

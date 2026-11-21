@@ -77,7 +77,7 @@ export function nativeRecallSource(nativeMemory, { recallEnabled = true } = {}) 
     recallEnabled,
     /** @param {string} userId @param {string} query @param {{ projectId?: string | null }} [scope] */
     async recall(userId, query, { projectId = null } = {}) {
-      const found = await nativeMemory.search(userId, query);
+      const found = await nativeMemory.search(userId, query, { ownedOnly: true });
       const items = (found.items ?? [])
         .filter((record) => !privateByDefault(record) && record.sensitive !== true && record.status === "active"
           && (record.scope === "user" || (record.scope === "project" && projectId != null && record.scopeId === projectId)))

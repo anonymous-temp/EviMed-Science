@@ -21,7 +21,7 @@ auth | curl -sS -H @- -H 'Content-Type: application/json' \
 <tr><td>memory.manage</td><td>本人授权的确认、编辑、忘记、恢复、设置及机构主体删除。</td></tr>
 <tr><td>memory.observe</td><td>登记支持的处方编辑观察。</td></tr>
 <tr><td>analysis.read / analysis.write</td><td>数据分析 API 的独立权限。</td></tr></table>
-<h2>限额与计费</h2><p>每账号最多 20 把有效密钥，每分钟每密钥 120 次、账号合计 360 次。JSON 请求最多 256 KiB，分享请求最多 16 KiB，响应最多 1 MiB。结果过大时缩小查询或分页。</p>
+<h2>限额与计费</h2><p>每账号最多 20 把有效密钥，每分钟每密钥 120 次、账号合计 360 次。JSON 请求最多 256 KiB，分享指令最多 16 KiB，文件包预览和导入最多 256 KiB，响应最多 1 MiB。结果过大时缩小查询或分页。</p>
 <p>抽取、模型判断和需要模型的检索按签发账号及密钥记录用量。余额和日、周额度在调用前检查。使用记录与钱包结算分别可查。缺少实测回执的检索标为待核实。撤销密钥保留既有用量。</p>
 <h2>处理返回值</h2><p>401 检查密钥及有效期。402 检查余额和用量额度。403 检查权限、项目或学习开关。404 检查目标。409 重新读取资源版本，检查同一会话标识的内容。413 缩小请求或结果。429 等到下一分钟。503 查看服务状态和部署开关。成功的异步提交仍需读取回执中的 state，只有 completed 表示抽取已结束。</p>
 <p>DSH 可从已打包的 tgz 安装 @evimed/dsh-memory-capsule，在配置中设置 baseUrl 和 apiKeyFile。MCP 可安装 evimed-memory-mcp 的 wheel，以同名命令启动 stdio，设置 EVIMED_MEMORY_API_URL 和 EVIMED_MEMORY_API_KEY_FILE。两种连接器均可先调用 status 检查权限。</p>

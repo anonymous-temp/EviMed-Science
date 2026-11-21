@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
-import { isPeak, priceUsage, REFERENCE_PRICE_LIST } from '@evimed/domain';
+import { isPeak, priceListAt, priceUsage, REFERENCE_PRICE_LIST } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 
 // The bearer has already been resolved. This context never comes from the request body or the engine's model prompt.
@@ -23,32 +23,53 @@ export function createMemoryBilling({ config, ledger, wallet, store }) {
       if (allowed.reason) throw new HttpError(503, 'agent_memory_billing_unavailable', 'The account balance could not be verified.');
     }
   }
+  const nativeId = (payer, session) => (payer.chargeWallet ? 'amc_' : 'amu_') + hash([payer.ownerId, payer.generation, session, 'native']);
+  async function reserveExtraction(payer, admission) {
+    const id = nativeId(payer, admission.engineSession);
+    const existing = await ledger.memoryReservation(payer.ownerId, payer.keyId, id);
+    if (existing) return;
+    await admit(payer);
+    const at = new Date();
+    const tokens = Buffer.byteLength(admission.text ?? '');
+    const model = priceUsage({ resourceType: 'model', model: payer.model, cacheMiss: tokens,
+      output: config.modelGatewayReservationMaxOutputTokens ?? 65536, peak: true });
+    const embeddingEstimate = priceUsage({ resourceType: 'embedding', tokens, peak: true });
+    await ledger.reserveModel({ id, runId: id, userId: payer.ownerId, projectId: payer.projectId, model: payer.model,
+      priceVersion: REFERENCE_PRICE_LIST.version, currency: model.currency, requestFingerprint: hash([id, payer.keyId]),
+      estimatedCost: model.cost + embeddingEstimate.cost, dailyLimit: config.userDailySpendLimit, weeklyLimit: config.userWeeklySpendLimit,
+      module: 'agent-memory', taskId: payer.keyId, purpose: 'memory-extraction', operation: payer.operation, now: at });
+  }
   // Each extracting admission owns one engine session with exactly one commit. Its cumulative counters therefore
   // belong to that admission alone. For a replay, read the session that actually produced the completed archive.
-  async function extraction(payer, { userId, sessions, commit, createdAt }) {
+  async function extraction(payer, { userId, sessions, commit, createdAt, engineSession }) {
     const result = (await sessions.readSession(userId, commit.engineSession))?.result;
     if (Number(result?.commit_count) !== 1 || result.session_id !== commit.engineSession) throw new HttpError(503, 'agent_memory_usage_pending', 'Extraction usage is not available yet.');
     const llm = result.llm_token_usage;
-    const at = new Date(createdAt);
+    const id = nativeId(payer, engineSession ?? commit.engineSession);
+    const reserved = await ledger.memoryReservation?.(payer.ownerId, payer.keyId, id);
+    const at = new Date(reserved?.created_at ?? createdAt);
+    const prices = priceListAt(at) ?? REFERENCE_PRICE_LIST;
     if (![llm?.prompt_tokens, llm?.completion_tokens, llm?.cached_tokens, result.embedding_token_usage?.total_tokens]
       .every(n => Number.isSafeInteger(n) && n >= 0) || llm.cached_tokens > llm.prompt_tokens) {
       throw new HttpError(503, 'agent_memory_usage_pending', 'Incomplete extraction usage.');
     }
     const usage = {cacheHitTokens:llm.cached_tokens, cacheMissTokens:llm.prompt_tokens - llm.cached_tokens, completionTokens:llm.completion_tokens};
-    const actual = priceUsage({resourceType:'model',model:payer.model,cacheHit:usage.cacheHitTokens,cacheMiss:usage.cacheMissTokens,output:usage.completionTokens,peak:isPeak(at)});
-    await book(payer, commit.archiveUri, 'llm', payer.model, usage, actual, at);
-    await embedding(payer, commit.archiveUri, result.embedding_token_usage.total_tokens, at);
+    const actual = priceUsage({resourceType:'model',model:payer.model,cacheHit:usage.cacheHitTokens,cacheMiss:usage.cacheMissTokens,output:usage.completionTokens,peak:isPeak(at)}, prices);
+    if (reserved) {
+      await ledger.settleModel(payer.ownerId, id, { usage, actualCost: actual.cost, priced: actual.priced, providerRequestId: 'openviking-account-allocation' });
+    } else await book(payer, commit.archiveUri, 'llm', payer.model, usage, actual, at, prices);
+    await embedding(payer, commit.archiveUri, result.embedding_token_usage.total_tokens, at, prices);
   }
-  async function embedding(payer, receipt, tokens, at) {
+  async function embedding(payer, receipt, tokens, at, prices) {
     if (!Number.isSafeInteger(tokens) || tokens < 0) throw new HttpError(503, 'agent_memory_usage_pending', 'Embedding usage unavailable.');
     if (tokens === 0) return;
     await book(payer, receipt, 'embedding', 'openviking-embedding', {cacheHitTokens:0,cacheMissTokens:tokens,completionTokens:0},
-      priceUsage({resourceType:'embedding',tokens}), at);
+      priceUsage({resourceType:'embedding',tokens,peak:true}, prices), at, prices);
   }
-  async function book(payer, receipt, kind, model, usage, price, at) {
+  async function book(payer, receipt, kind, model, usage, price, at, prices) {
     const id = `${payer.chargeWallet ? 'amc' : 'amu'}_${hash([payer.ownerId, payer.generation, receipt, kind])}`;
     await ledger.recordSettled({id,runId:id,userId:payer.ownerId,projectId:payer.projectId,model,usage,actualCost:price.cost,
-      priceVersion:REFERENCE_PRICE_LIST.version,currency:price.currency,priced:price.priced,now:at,
+      priceVersion:prices.version,currency:price.currency,priced:price.priced,now:at,
       providerRequestId:kind === 'llm' ? 'openviking-account-allocation' : null, purpose:'memory-extraction', module:'agent-memory', operation:payer.operation, taskId:payer.keyId,requestFingerprint:hash([id,usage])});
   }
   // A find response without a measured count stays uncertain. It must never become a charge based on query length.
@@ -56,7 +77,7 @@ export function createMemoryBilling({ config, ledger, wallet, store }) {
     await admit(payer);
     const id = randomUUID(), at = new Date();
     const model = 'openviking-embedding';
-    const estimate = priceUsage({ resourceType:'embedding', tokens:Buffer.byteLength(query) });
+    const estimate = priceUsage({ resourceType:'embedding', tokens:Buffer.byteLength(query), peak:true });
     const { runId } = memoryModelAttribution(payer);
     await ledger.reserveModel({ id, userId:payer.ownerId, projectId:payer.projectId, runId, module:'agent-memory',
       operation:payer.operation, taskId:payer.keyId, purpose:'memory-extraction', model, priceVersion:REFERENCE_PRICE_LIST.version,
@@ -67,7 +88,7 @@ export function createMemoryBilling({ config, ledger, wallet, store }) {
       const tokens = response?.usage?.tokens?.embedding?.total ?? response?.telemetry?.summary?.tokens?.embedding?.total
         ?? response?.result?.telemetry?.summary?.tokens?.embedding?.total;
       if (Number.isSafeInteger(tokens) && tokens >= 0) {
-        const cost = priceUsage({resourceType:'embedding', tokens});
+        const cost = priceUsage({resourceType:'embedding', tokens, peak:true});
         await ledger.settleModel(payer.ownerId, id, {usage:{cacheHitTokens:0,cacheMissTokens:tokens,completionTokens:0},actualCost:cost.cost,priced:cost.priced});
         settled = true;
       }
@@ -76,7 +97,7 @@ export function createMemoryBilling({ config, ledger, wallet, store }) {
       if (!settled) await ledger.markUncertain(payer.ownerId, id, 'response_usage_missing', {estimatedCost:estimate.cost});
     }
   }
-  return { admit, extraction, search };
+  return { admit, reserveExtraction, extraction, search };
 }
 
 /** Each control-plane model reservation gets one settleable wallet identity. */

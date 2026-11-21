@@ -14,12 +14,12 @@ export function rememberSource(input) {
 }
 
 /** Used at HTTP admission and again by durable retries before each engine side effect. */
-export async function rememberAdmission({ native, admission }, { user, project, at }) {
+export async function rememberAdmission({ native, admission }, { user, project, at, engineSessionId = null }) {
   if (!native?.memoryContexts || !admission) throw new HttpError(503, 'memory_engine_unavailable', 'Memory admission is unavailable.');
   const context = await native.memoryContexts.forProject(project);
   if (context.kind !== 'owned') throw new HttpError(403, 'memory_scope_denied', 'Shared memory is unavailable through this operation.');
   await native.memoryContexts.assertLive(context);
-  const decision = await admission.admit({ user, project, at, allowRunningFallback: false });
+  const decision = await admission.admit({ user, project, at, ...(engineSessionId ? {engineSessionId} : {}), allowRunningFallback: false });
   if (!decision.learn) throw new HttpError(decision.learnReason === 'engine_unavailable' ? 503 : 403, 'memory_scope_denied',
     `Memory operation refused: ${decision.learnReason}.`, { reason: decision.learnReason });
   return context;

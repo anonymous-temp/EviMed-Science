@@ -3,6 +3,8 @@ import test from 'node:test';
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
 import { AgentApiKeyStore } from '../src/agentApiKeys.mjs';
 import { createAgentMemoryRoutes } from '../src/agentMemoryRoutes.mjs';
+import { FeedbackEvents } from '../src/feedbackEvents.mjs';
+import { MemoryHistoryLedger } from '../src/memoryHistoryPersistence.mjs';
 import { createMemoryAdmission } from '../src/memoryAdmission.mjs';
 import { rememberAdmission } from '../src/agentMemoryRemember.mjs';
 import { GeoNativeMemoryContext } from '../src/geoNativeMemoryContext.mjs';
@@ -23,14 +25,15 @@ async function setup(t) {
     return { allowed: true };
   };
   const keys = new AgentApiKeyStore(f.database), key = await keys.create(user.id, { name: 'Remember fixture', scopes: ['memory.remember', 'memory.read', 'memory.manage'] });
-  const routes = createAgentMemoryRoutes({ config, nativeMemory: f.store, apiKeys: keys, capsules: {}, memorySettings: f.memorySettings, admission,
+  const feedback = new FeedbackEvents({ database: f.database });
+  const routes = createAgentMemoryRoutes({ config, workEvidence: () => ({feedback,judge:{read:async () => '{"verdict":"accept"}'}}), nativeMemory: f.store, apiKeys: keys, capsules: {}, memorySettings: f.memorySettings, admission,
     store: { userById: async () => user, requireProject: async () => project } });
   const call = async (path, body, clientKey = key.key) => {
     const res = { data: null, writeHead() {}, end(text) { this.data = JSON.parse(text).data; } };
     await routes({ url: `/api/agent-memory/v1${path}`, method: body ? 'POST' : 'GET', headers: { authorization: `Bearer ${clientKey}` },
       async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify(body)); } }, res); return res.data;
   };
-  return { ...f, call, contexts, keys, key };
+  return { ...f, call, contexts, keys, key, feedback };
 }
 const input = { statement: 'Use metric units.', source: { client: 'Editor', sessionId: 'outside-one', messageId: 'msg-one', saidAt: '2026-11-17T01:00:00Z' } };
 
@@ -119,4 +122,32 @@ test('an external transcript reaches the same extraction worker exactly once wit
   const page = (await f.store.records(f.userId)).find(record => record.uri === uri);
   assert.ok(page.evidence.some(e => e.externalSource?.client === 'Codex' && e.label === '外部智能体 Codex'));
   await assert.rejects(f.call('/conversations',{...body,messages:body.messages.slice(0,1)},client.key),{code:'memory_conflict'});
+});
+
+test('two API keys cannot claim one another’s human feedback, and duplicate signals count once in the web evidence ledger', options, async t => {
+  const f = await setup(t);
+  const scopes = ['memory.ingest','learning.signal'];
+  const host = await f.keys.create(f.userId,{name:'Claude Code', scopes});
+  const other = await f.keys.create(f.userId,{name:'Codex', scopes});
+  const uri = f.root + '/preferences/report.md';
+  f.stub.extract = () => ({adds:[{uri,memory_type:'preferences',after:'- Use one column.'}]});
+  const messages = [
+    {role:'user',text:'Use one column.',saidAt:input.source.saidAt},
+    {role:'assistant',text:'I used one column.',saidAt:input.source.saidAt},
+    {role:'user',text:'I accept this layout.',saidAt:input.source.saidAt},
+  ];
+  const body = {sessionId:'report-layout',attended:true,messages};
+  const {conversationId} = await f.call('/conversations',body,host.key);
+  await f.worker.processCommits({userId:f.userId});
+  await f.store.processAdmissions(f.userId);
+  const record = (await f.store.records(f.userId)).find(r => r.uri === uri);
+  f.store.history = { ledger: new MemoryHistoryLedger({database:f.database,overlay:f.overlay,client:null}) };
+  const signal = {conversationId,recordId:record.id,messageIndex:2,text:messages[2].text,saidAt:messages[2].saidAt};
+  await assert.rejects(f.call('/work-events',signal,other.key),{status:404});
+  const first = await f.call('/work-events',signal,host.key);
+  const repeat = await f.call('/work-events',signal,host.key);
+  assert.equal(first.verdict,'accept'); assert.equal(repeat.eventId,first.eventId);
+  const rows = await f.feedback.learningEvidenceOf(f.userId,'external_' + conversationId);
+  assert.equal(rows.length,1); assert.equal(rows[0].detail.externalTarget.id,record.id);
+  assert.deepEqual(rows[0].detail.concerns,[]);
 });

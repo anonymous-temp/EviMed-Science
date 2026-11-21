@@ -599,6 +599,8 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
         security: [{ agentApiKey: ["memory.share"] }],
         requestBody: jsonBody({ type: 'object', required: ['action'], properties: { action: { enum: SHARE_ACTIONS },
           capsuleId: {type:'string'}, deliveryId: {type:'string'}, snapshotId: {type:'string'}, linkId:{type:'string'}, token:{type:'string'},
+          confirmed:{type:'boolean'}, archive:{type:'string'}, password:{type:'string',writeOnly:true}, expectedRevision:{type:'integer'},
+          cursor:{type:'string'}, supersedes:{type:'string'}, recipientNames:{type:'array',items:{type:'string'}},
           expectedDigest:{type:'string'}, recipients:{type:'array'}, scopes:{type:'array'}, card:{type:'object'}, title:{type:'string'},
           ttlDays:{type:'integer'}, maxUses:{type:'integer'}, excludeEntryIds:{type:'array'}, includePrivateEntries:{type:'array'}, reason:{type:'string'} } }),
         responses: { 200: { description: "The web sharing receipt for this action." }, ...common } } },

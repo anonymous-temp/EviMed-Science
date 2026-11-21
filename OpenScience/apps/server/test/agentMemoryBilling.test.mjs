@@ -42,3 +42,27 @@ test('two concurrent clients never inherit one another’s payer', async () => {
   })));
   assert.deepEqual(ids,['keyA','keyB']); assert.equal(memoryPayer(),null);
 });
+
+test('native extraction reserves once before dispatch and settles that reservation from the engine receipt', async () => {
+  const calls = [];
+  let reserved = null;
+  const ledger = {
+    assertWithinLimits:async()=>{},
+    memoryReservation:async()=>reserved,
+    reserveModel:async row=>{ calls.push(row); reserved = {created_at:row.now}; },
+    settleModel:async (...args)=>calls.push(args),
+    recordSettled:async row=>calls.push(row),
+  };
+  const meter = createMemoryBilling({config:{userDailySpendLimit:2}, ledger,
+    wallet:()=>({assertBalanceForStart:async()=>({allowed:true})}),
+    store:{userById:async()=>({id:'u',accountCreatedAt:'stamp'}),requireProject:async()=>({})}});
+  const admission = {engineSession:wire.response.result.session_id,text:'A captured transcript'};
+  await meter.reserveExtraction(payer,admission);
+  await meter.reserveExtraction(payer,admission);
+  assert.equal(calls.length,1); assert.equal(calls[0].dailyLimit,2);
+  assert.ok(calls[0].estimatedCost > 0); assert.doesNotMatch(JSON.stringify(calls),/captured transcript/);
+  await meter.extraction(payer,{userId:'u',sessions:{readSession:async()=>wire.response}, commit:{...admission,archiveUri:'archive'},createdAt:new Date(),engineSession:admission.engineSession});
+  assert.equal(calls[1][1],calls[0].id);
+  assert.equal(calls[1][2].usage.cacheHitTokens,768);
+  assert.equal(calls[2].taskId,payer.keyId);
+});

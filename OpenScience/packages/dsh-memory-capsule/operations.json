@@ -595,7 +595,15 @@
       "action": {
         "enum": [
           "mine",
+          "create",
           "received",
+          "exportPreview",
+          "exportFile",
+          "exportHistory",
+          "download",
+          "revokeSnapshot",
+          "previewFile",
+          "importFile",
           "pending",
           "sent",
           "links",
@@ -624,6 +632,31 @@
       },
       "token": {
         "type": "string"
+      },
+      "confirmed": {
+        "type": "boolean"
+      },
+      "archive": {
+        "type": "string"
+      },
+      "password": {
+        "type": "string",
+        "writeOnly": true
+      },
+      "expectedRevision": {
+        "type": "integer"
+      },
+      "cursor": {
+        "type": "string"
+      },
+      "supersedes": {
+        "type": "string"
+      },
+      "recipientNames": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
       },
       "expectedDigest": {
         "type": "string"

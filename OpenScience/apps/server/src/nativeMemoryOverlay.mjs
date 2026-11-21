@@ -293,7 +293,7 @@ export class NativeMemoryOverlay {
 
   /** @param {string} userId */
   async openAdmissions(userId) {
-    const result = await this.#query(`SELECT * FROM evimed_memory.native_admissions WHERE user_id=$1 AND state NOT IN ('completed','cancelled')
+    const result = await this.#query(`SELECT * FROM evimed_memory.native_admissions WHERE user_id=$1 AND state NOT IN ('completed','cancelled') AND error IS DISTINCT FROM 'billing_refused'
       ORDER BY created_at LIMIT 50`, [owner(userId)]);
     return result.rows.map(admissionRow);
   }

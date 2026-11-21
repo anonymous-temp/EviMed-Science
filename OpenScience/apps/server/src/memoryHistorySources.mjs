@@ -33,11 +33,11 @@ export function createMemoryHistorySources({ config, store, productDatabase, nat
       const external = /^external_([a-f0-9]{64})$/.exec(sessionId);
       if (external) {
         if (memoryContext.kind !== 'owned') return null;
-        const row = await nativeMemoryOverlay.admission(user.id, `host:${external[1]}`, 1);
-        if (!row || row.projectId !== projectId || row.engineSession !== commit.engineSession || row.state === 'cancelled'
-          || row.externalSource?.operation !== 'ingest' || row.externalSource.projectCreatedAt !== base.projectCreatedAt) return null;
-        return { ...base, sessionId, runs: [], external: row.externalSource,
-          conversationTitle: `外部智能体 ${row.externalSource.client}`, projectTitle: historyTitle(project.name, 'Project'), conversationUrl: '/app/memory' };
+        const admitted = await nativeMemoryOverlay.admission(user.id, `host:${external[1]}`, 1);
+        if (!admitted || admitted.projectId !== projectId || admitted.engineSession !== commit.engineSession || admitted.state === 'cancelled'
+          || admitted.externalSource?.operation !== 'ingest' || admitted.externalSource.projectCreatedAt !== base.projectCreatedAt) return null;
+        return { ...base, sessionId, runs: [], external: admitted.externalSource,
+          conversationTitle: `外部智能体 ${admitted.externalSource.client}`, projectTitle: historyTitle(project.name, 'Project'), conversationUrl: '/app/memory' };
       }
       if (memoryContext.kind === 'geo-project') {
         const bound = await nativeMemoryContexts.session(memoryContext, commit.engineSession);

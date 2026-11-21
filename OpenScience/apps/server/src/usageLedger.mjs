@@ -291,6 +291,14 @@ export class UsageLedger {
     return rows;
   }
 
+  /** Load the durable reservation for one external admission across restarts. */
+  async memoryReservation(userId, keyId, id) {
+    await migrateUsageLedger(this.database);
+    const { rows } = await this.database.query(`SELECT created_at, status FROM evimed_usage.model_requests
+      WHERE user_id=$1 AND task_id=$2 AND id=$3 AND module='agent-memory'`, [userId, keyId, id]);
+    return rows[0] ?? null;
+  }
+
   /** The credits worker retries the gap between recording measured spend and opening its wallet settlement. */
   async unsettledMemoryCharges(limit) {
     await migrateUsageLedger(this.database);
@@ -305,7 +313,7 @@ export class UsageLedger {
 
   async byOperation() {
     await migrateUsageLedger(this.database);
-    const result=await this.database.query(`SELECT operation,count(*)::int AS requests,coalesce(sum(actual_cost) FILTER(WHERE status='settled'),0)::float AS cost_cny FROM evimed_usage.model_requests WHERE operation IS NOT NULL GROUP BY operation`);
+    const result=await this.database.query(`SELECT operation,count(*)::int AS requests,coalesce(sum(actual_cost) FILTER(WHERE status='settled'),0)::float AS cost_cny FROM evimed_usage.model_requests WHERE operation IS NOT NULL AND provider_request_id IS DISTINCT FROM 'openviking-account-allocation' GROUP BY operation`);
     return result.rows.map(row=>({operation:row.operation,requests:Number(row.requests),costCny:Number(row.cost_cny)}));
   }
   async health() {

@@ -19,9 +19,9 @@ If a key route answers `503 agent_memory_disabled` while the page is open, the
 section clears its controls and shows a disabled notice. The existing browser session and CSRF protect key
 management; a secret is kept only in the open one-time display, never browser storage.
 
-## Internal access first
+## Public and internal access
 
-The public switch stays off. Internal access reuses the existing operator account
+To enable account self-service, set `OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED=true`. The code default remains false. The Chinese quick start and downloadable OpenAPI are linked from the key panel. For an internal-only deployment leave the public switch off. Internal access reuses the existing operator account
 IDs and an explicit list of additional account IDs; it creates no new role.
 
 ```bash
@@ -44,8 +44,7 @@ release. Sign in as the allowed account; `/api/me` offers
 Create a key with only the required scopes and save it to a local credential
 file. Read `GET /api/agent-memory/v1` capabilities before optional operations.
 
-Key creation, listing, revocation, every bearer operation and the feature flag
-use one audience decision. Removing the account from the list (and from operator
+Memory operations and the panel use the same audience decision. Key management remains accessible when either data analysis or memory is available. Removing the account from the list (and from operator
 eligibility, if applicable) disables existing keys on their next request.
 In internal-only mode, invalid, unknown, revoked, missing-owner and excluded-owner
 keys all receive `503 agent_memory_disabled`; no account/key existence is
@@ -53,9 +52,7 @@ disclosed. OpenAPI then also requires an eligible account's key. With the public
 switch on, OpenAPI retains anonymous access and ordinary keys remain allowed.
 The public switch is not enabled by this change.
 
-Key management previously had no feature gate even while the web panel and
-bearer API were off. It now returns the same disabled response when the account
-is not eligible, as required by the unified audience policy.
+A personal account can hold 20 active keys. The API allows 120 calls per key and 360 per issuing account per minute. Requests are limited to 256 KiB and responses to 1 MiB. The key list includes settled cost and uncertain call counts by key.
 
 ## Keys
 
@@ -71,7 +68,7 @@ Keys belong to an account and are managed with that account's browser session
 - **Scopes:** `memory.read` (recall, list records, the dashboard), `memory.history.read`
   (opt-in raw conversation recall, also requires `memory.read`), `memory.write` (note,
   episodes), `memory.remember` (direct statements with source), `memory.manage` (the dashboard's acts) and `memory.observe`
-  (prescription edits) — see below. Give a key
+  (prescription edits), `memory.ingest` (attended transcripts), `learning.signal` (verified feedback) and `memory.share` (account sharing). Give a key
   only what its agent needs.
 - **Project binding:** a key created with `projectId` can read and write that
   project (and account-level memory) and nothing else; an unbound key may name
@@ -156,9 +153,9 @@ infer capabilities from error responses.
 | Opening context | `GET /context` (`memory.read`), the resident supplement plus the gateway startup profile and listings. |
 | Direct explicit remember | `POST /remember` (`memory.remember`), page-origin direct statement with external source and durable idempotency. `/note` remains a candidate. |
 | Statement forget and forgotten list | `POST /forget` uses native statement/line withdrawal; `GET /forgotten` returns original text and the web-equivalent restore action. Requires account-scoped manage authority for withdrawal/restore; see below. |
-| Trusted conversation ingest | Unavailable: `external_conversation_history_authority_unavailable`; `/episodes` still waits for confirmation. |
-| General work signals | Unavailable: `external_run_evidence_unproven`; existing prescription observations are unchanged. |
-| Capsule sharing / selected-capsule-only recall | Unavailable; `capsuleIds` retains additive semantics. Trials stay web-only. |
+| Trusted conversation ingest | `POST /conversations`, with `memory.ingest`. |
+| Work signals | `POST /work-events`, with `learning.signal` and a completed transcript from the same host key. |
+| Capsule sharing | `POST /sharing`, with an account-scoped `memory.share` key. Capsule selection keeps its existing additive semantics. |
 | Clients | DSH and MCP provide status, history recall, forget and forgotten tools. Context/remember adapters consult status; context and directly stated remember are offered. |
 
 ### Opening context
@@ -352,8 +349,7 @@ password is read from a file, never from the command line.
 
 `packages/dsh-memory-capsule` is the standalone thin connector (English and Chinese
 READMEs included), independent of the hosted runtime's socket/universal preset.
-It is a **private, unpublished candidate**; publication and index hosting are the
-owner's decision, not a prerequisite claimed to have been completed here.
+Build the standalone npm tarball from its package directory. The package README describes local installation, owner publication and market-index validation.
 
 1. Use DSH `0.2.2-rc.1` on Node `>=24.9.0`. Its exact compatibility range is the
    approved DSH pin; another preview version needs a new contract check.
@@ -362,7 +358,7 @@ owner's decision, not a prerequisite claimed to have been completed here.
    a local file outside repositories, readable only by your OS account; do not
    paste it into plugin configuration or a shell command.
 3. Once released, install with
-   `dsh plugin --profile web add @evimed/dsh-memory-capsule@0.1.0`; before release,
+   `dsh plugin --profile web add @evimed/dsh-memory-capsule@0.2.0`; before release,
    a supplied local package directory/tarball can be reviewed with `add <local-path>`.
 4. Override the bundle's single row in `$DSH_HOME/profiles/web/cordis.patch.yml`:
 
@@ -387,8 +383,7 @@ that catalog's selection/budget cannot be loaded this way.
 `capsule_propose` calls `/note`; it always waits for the person's confirmation.
 `capsule_forget` uses `memory.manage`, and `capsule_forgotten` lists original withdrawn text with restore actions. Context and remember adapters first read status; this server offers context and remember with their respective scopes. Call context at most once at session start, only when offered.
 
-**Raw history is opt-in** with `include: ["history"]` and both read scopes. Automatic external-work learning is unavailable. Share and proposal confirmation stay on the web memory page (`/app/memory`). This is a remote connector, not a local memory engine, transcript
-collector, method mount or capsule-isolation mechanism. Ordinary work requires
+**Raw history is opt-in** with `include: ["history"]` and both read scopes. Attended host transcripts, human work feedback and web-equivalent sharing use separate opt-in scopes. Ordinary work requires
 no recall and continues if memory is unavailable.
 
 The credential is read from its file on every request (never inline or logged),
@@ -403,7 +398,7 @@ installing or publishing anything.
 
 ## The MCP adapter
 
-`runtime/mcp/evimed-memory/server.py` is a stdio MCP server with `memory_recall`, `memory_note`, `memory_status`, `memory_context`, `memory_remember`, `memory_forget` and `memory_forgotten`. New operations read server capabilities before calling their endpoint; closed capabilities return `capability_unavailable`. Listing ordinary records and posting episodes stay HTTP calls.
+`runtime/mcp/evimed-memory/server.py` is a stdio MCP server with `memory_recall`, `memory_note`, `memory_status`, `memory_context`, `memory_remember`, `memory_forget` and `memory_forgotten`. New operations read server capabilities before calling their endpoint; closed capabilities return `capability_unavailable`. The standalone package also exposes the remaining management, transcript and sharing operations from the OpenAPI contract.
 
 `memory_recall` takes `query`, `factKinds`, `since`, `limit`, `projectId`, optional `include: ["history"]`, and `capsuleIds` (1–8, read these capsules instead
 of the ones in force: one school at a time) and `methods` (`all`, `own`,
@@ -457,39 +452,10 @@ A confirmation returns `admission` alongside the candidate. Its immutable candid
 Capsule snapshots record each selected file's hash, version and capture time. Export re-reads the selected engine bytes after the database snapshot and before publication; a concurrent change returns `409 capsule_native_snapshot_changed` so the caller can retry. This is an optimistic consistency check across two stores. Revoking a hosted share prevents future hosted downloads; it does not remotely erase bytes or independent copies already exported.
 
 
-### Reserved host conversation ingestion (not available)
+### Trusted host transcripts and human feedback
 
-`memory.ingest` is a reserved, internal-host-only scope, not yet mintable or
-shown in the key panel. Neither `/conversations/{externalSessionId}/turns` nor
-its `/commit` sibling is served. The status and OpenAPI
-`x-unavailable-operations` disclose this without probing an absent endpoint.
+`POST /conversations` submits one complete, attended host transcript. The host supplies its own stable session ID and original dated turns, including role. The account, project incarnation and key bind the receipt. Resubmitting changed content under the same identity returns 409. Use this only with host-captured messages. `POST /episodes` retains the separate candidate and confirmation workflow.
 
-The existing history index accepts only canonical kernel conversations
-(`memoryHistory.mjs`, `indexArchive`), and `memoryHistorySources.mjs` proves their
-project incarnation, native session binding and live run-ledger records on
-both ingestion and recall. The worker cannot turn an arbitrary external engine
-session into that authority. A durable external conversation identity, batch
-idempotency/recovery, human/clinical admission and source-deletion integration
-must be completed together before this scope is offered to internal accounts.
-Sending turns to the engine alone would not satisfy that contract. `/episodes`
-retains its existing candidate-only behavior. No model tool or fabricated kernel
-conversation has been added for this operation.
+`POST /work-events` identifies the transcript, zero-based original message index, UTC timestamp, exact human text and a current record or method version. The same key must have admitted that transcript. The verified report enters the normal learning evidence ledger. A caller cannot grant itself a method activation.
 
-
-### Reserved host work signals (not available)
-
-`POST /work-events` and the internal-host-only `learning.signal` scope remain
-unavailable; the scope is not mintable or offered in the panel. Status and
-OpenAPI disclose `external_run_evidence_unproven`. The existing learning chain
-reads canonical finished runs, delivered file inventories and complete retained
-transcripts. A minimal external run row containing only an outcome, digest and
-method names still fails `learningRefusal` with `transcript_incomplete`; marking
-it complete without a verified transcript would manufacture learning evidence.
-
-A future host adapter must send only actions performed by a human: `used`
-requires a delivered-file digest, `continued` additionally requires the person's
-later words, and `corrected` requires their actual correction. `none` is silent,
-unknown evidence. A model's claim that its own work was used is never evidence.
-Neither DSH nor MCP exposes an ingest or work-signal tool. There is no host hook
-until genuine host events and the existing evidence authority can be connected
-without weakening the thresholds, pauses, trial or clinical refusals.
+`POST /sharing` operates on the account's web capsule sharing service. Use the one-page [Chinese guide](../apps/web/public/static/agent-memory.html) and [OpenAPI contract](../apps/web/public/static/agent-memory.openapi.json) for operations, limits, scopes, billing and examples.

@@ -485,6 +485,12 @@ export class NativeMemoryStore {
       userRoot: this.sessions.userRoot(userId), sessions: this.sessions };
   }
 
+  async #ownedContext(userId) {
+    return this.memoryContexts
+      ? this.memoryContexts.withOwner(userId, created => this.memoryContexts.view(userId, created))
+      : null;
+  }
+
   async #contexts(userId) {
     return this.memoryContexts ? this.memoryContexts.all(userId) : [this.#personalContext(userId)];
   }
@@ -1046,12 +1052,12 @@ export class NativeMemoryStore {
 
   /**
    * The page's list read with filters (`GET /api/memory/records`): scopes, kinds and a project.
-   * @param {string} userId @param {{ scopes?: string[], statuses?: string[], kinds?: string[], scopeId?: string, query?: string, pageSize?: number, allowRecord?: (record: any) => boolean }} filters
+   * @param {string} userId @param {{ scopes?: string[], statuses?: string[], kinds?: string[], scopeId?: string, query?: string, pageSize?: number, ownedOnly?: boolean, allowRecord?: (record: any) => boolean }} filters
    */
-  async listRecords(userId, { scopes = [], statuses = [], kinds = [], scopeId = "", query = "", pageSize = 100, allowRecord = () => true } = {}) {
+  async listRecords(userId, { scopes = [], statuses = [], kinds = [], scopeId = "", query = "", pageSize = 100, ownedOnly = false, allowRecord = () => true } = {}) {
     const words = String(query ?? "").trim().toLowerCase();
-    const view = scopeId ? await this.#projectContext(userId, scopeId) : null;
-    return (await this.records(userId, { context: view?.kind === 'geo-project' ? view : null }))
+    const view = ownedOnly ? await this.#ownedContext(userId) : scopeId ? await this.#projectContext(userId, scopeId) : null;
+    return (await this.records(userId, { context: ownedOnly || view?.kind === 'geo-project' ? view : null }))
       .filter(allowRecord)
       .filter((record) => !statuses.length || statuses.includes(record.status))
       .filter((record) => !scopes.length || scopes.includes(record.scope))
@@ -1066,17 +1072,18 @@ export class NativeMemoryStore {
    * resolved back to the record the page lists (a hit on the profile is the profile lines that share a word of the query).
    * @param {string} userId @param {string} query
    */
-  async search(userId, query) {
+  async search(userId, query, { ownedOnly = false } = {}) {
     const text = String(query ?? "").trim();
-    const records = (await this.#withConversationTitles(userId, await this.records(userId))).records;
+    const owned = ownedOnly ? await this.#ownedContext(userId) : null;
+    const records = (await this.#withConversationTitles(userId, await this.records(userId, { context: owned }))).records;
     const lower = text.toLowerCase();
     const items = text ? records.filter((record) => `${record.summary}\n${record.value}`.toLowerCase().includes(lower)) : records;
     const seen = new Set(items.map((record) => record.id));
     let semantic = 0, failedChannels = 0;
     if (text) {
-      const views = await this.#contexts(userId);
+      const views = owned ? [owned] : await this.#contexts(userId);
       const hits = (await mapLimit(views, 4, context => this.#engine(() => context.sessions.find(userId, text,
-        { target: context.sessions.memoryRoot(userId), limit: 25 })).catch(() => { failedChannels++; return []; }))).flat();
+        { target: context.sessions.memoryRoot(userId), limit: 25 })).catch(error => { if (ownedOnly && error?.status === 402) throw error; failedChannels++; return []; }))).flat();
       const words = lower.split(/\s+/).filter((word) => word.length >= 2);
       for (const hit of hits) {
         for (const record of records.filter((candidate) => candidate.uri === hit.uri)) {
@@ -2325,6 +2332,7 @@ export class NativeMemoryStore {
       if (!row.archiveUri && commits.length) await save({ archiveUri: commits[0].archiveUri, taskId: commits[0].taskId, state: "pending" });
       if (!row.archiveUri) {
         if (!await authorized()) return receipt(row);
+        if (row.billing && this.agentBilling) await this.agentBilling.reserveExtraction(row.billing, row);
         await this.sessions.register(userId);
         if (!await authorized()) return receipt(row);
         await this.sessions.createSession(userId, row.engineSession);
@@ -2408,7 +2416,7 @@ export class NativeMemoryStore {
         commit = await this.overlay.commit(userId, commit.replayedAs);
       }
       if (commit?.state === "completed") {
-        if (row.billing && this.agentBilling) await this.agentBilling.extraction(row.billing, { userId, sessions: this.sessions, commit, createdAt: row.createdAt });
+        if (row.billing && this.agentBilling) await this.agentBilling.extraction(row.billing, { userId, sessions: this.sessions, commit, createdAt: row.createdAt, engineSession: row.engineSession });
         const revisions = await this.overlay.admissionRevisions(userId, commit.archiveUri);
         await save({ state: "completed", recordIds: [...new Set(revisions.filter((revision) => revision.change !== "deleted").map((revision) => nativeFileId(revision.uri)))], error: "", release: true });
       } else {
@@ -2417,6 +2425,10 @@ export class NativeMemoryStore {
       return receipt(row);
     } catch (error) {
       if (/** @type {any} */ (error)?.code === "memory_admission_gone") throw error;
+      if (error?.status === 402) {
+        await save({ state: 'suspended', error: 'billing_refused', release: true });
+        throw error;
+      }
       await save({ state: (String(row.phase ?? "").startsWith("turn:") || ["context_submitting","message_submitting","commit_submitting"].includes(row.phase)) ? "uncertain" : "failed",
         error: String(/** @type {any} */ (error)?.code ?? "memory_admission_failed").slice(0,200), release: true });
       return receipt(row);

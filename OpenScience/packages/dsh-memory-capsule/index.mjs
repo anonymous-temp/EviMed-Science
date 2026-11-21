@@ -1,6 +1,8 @@
 /** A standalone Cordis connector. Only Node builtins; DSH supplies the injected registries. */
-import operations from './operations.json' with { type: 'json' };
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+
+const operations = JSON.parse(readFileSync(new URL('./operations.json', import.meta.url), 'utf8'));
 
 export const name = 'evimed-memory-capsule';
 export const inject = ['tools', 'systemPrompt'];

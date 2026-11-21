@@ -3602,7 +3602,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const agentMemoryRoutes = createAgentMemoryRoutes({
     meter: memoryBilling,
     workEvidence: () => learningEvidence?.judge?.available && feedbackEvents ? { judge: learningEvidence.judge, feedback: feedbackEvents } : null,
-    shareServices: capsuleSharing ? { service: capsuleService, sharing: capsuleSharing, transfers: capsuleTransferService, links: capsuleShareLinks } : null,
+    shareServices: capsuleTransferService ? { service: capsuleService, sharing: capsuleSharing, transfers: capsuleTransferService, links: capsuleShareLinks } : null,
     openingContext: { resident: residentProfiles, opening: input => /** @type {any} */ (memoryGatewayHandler).opening(input), get sourceDeletion() { return sourceDeletion; } },
     admission: { admit: input => memoryAdmission.admit(input) },
     config, apiKeys: agentApiKeys, store, memorySettings, capsules: capsuleService,
@@ -5255,7 +5255,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (!user) return { allowed: false, state: 'cancelled', reason: 'account_unavailable' };
       const project = await store.requireProject(user, row.projectId ?? 'default');
       const rememberContext = await rememberAdmission({ native: nativeMemory, admission: memoryAdmission },
-        { user, project, at: Date.parse(row.externalSource.saidAt) });
+        { user, project, at: Date.parse(row.externalSource.saidAt), engineSessionId: row.externalSource.operation === 'ingest' ? row.engineSession : null });
       if ((rememberContext.projectCreatedAt ?? null) !== row.externalSource.projectCreatedAt) return { allowed: false, state: 'cancelled', reason: 'project_changed' };
       return { allowed: true, state: null, reason: null };
     } catch (error) {

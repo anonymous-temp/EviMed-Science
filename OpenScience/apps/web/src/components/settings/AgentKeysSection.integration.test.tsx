@@ -51,6 +51,8 @@ it("creates and revokes through the actual browser client with session cookies a
   });
   const { AccountSection } = await import("./AccountSection");
   const user = userEvent.setup(); render(<MemoryRouter><AccountSection /></MemoryRouter>);
+  expect(await screen.findByRole("link", { name: "接入指南" })).toHaveAttribute("href", "/static/agent-memory.html");
+  expect(screen.getByRole("link", { name: "OpenAPI 规范" })).toHaveAttribute("href", "/static/agent-memory.openapi.json");
   await user.click(await screen.findByRole("button", { name: "创建密钥" }));
   await user.type(screen.getByLabelText("密钥名称"), "My DSH");
   await user.click(screen.getByLabelText("提出待确认的记忆"));

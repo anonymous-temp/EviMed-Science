@@ -133,7 +133,7 @@ test("the list and the dashboard are the engine's, without measured usage counts
   assert.deepEqual(list.body.data.map((record) => record.id), ["nm_0123456789abcdef01234567"]);
   const { allowRecord, ...listInput } = called(calls, "native.listRecords")[0][2];
   assert.equal(allowRecord(nativeRecord({ kind: "person" })), false);
-  assert.deepEqual(listInput, { scopes: ["user"], kinds: ["preference"], scopeId: "", query: "AMA", pageSize: 5 });
+  assert.deepEqual(listInput, { ownedOnly: true, scopes: ["user"], kinds: ["preference"], scopeId: "", query: "AMA", pageSize: 5 });
   // The engine's memories are all in force: a proposal, a replaced or a forgotten one is none of them.
   const pending = await run(`${AGENT_MEMORY_PATH}/records?status=pending`);
   assert.deepEqual(pending.body.data, []);
@@ -280,4 +280,16 @@ test("a project-bound key gets no existence clue for a private person outside it
   const { run, calls } = fixture({ projectId: "p1", native: { async getRecord() { return person; } } });
   const error = await rejected(run(`${AGENT_MEMORY_PATH}/records/${person.id}/forget`, { expectedVersion: 77 }));
   assert.equal(error?.status, 404); assert.equal(called(calls, "native.update").length, 0);
+});
+
+test('a project key cannot list a shared namespace and an owner key cannot mutate a guessed shared file', async () => {
+  const contexts = {forProject:async()=>({kind:'geo-project'}),forUri:async()=>({kind:'geo-project'})};
+  const bound = fixture({projectId:'team',native:{memoryContexts:contexts}});
+  const list = await rejected(bound.run(AGENT_MEMORY_PATH + '/records'));
+  assert.equal(list.code,'memory_scope_denied');
+  assert.equal(called(bound.calls, 'native.listRecords').length,0);
+  const personal = fixture({native:{memoryContexts:contexts}});
+  const forget = await rejected(personal.run(AGENT_MEMORY_PATH + '/records/nm_0123456789abcdef01234567/forget',{expectedVersion:77}));
+  assert.equal(forget.code,'memory_not_found');
+  assert.equal(called(personal.calls,'native.update').length,0);
 });
