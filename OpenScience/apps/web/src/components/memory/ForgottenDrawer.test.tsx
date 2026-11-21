@@ -46,6 +46,7 @@ describe("forgotten memory wording", () => {
     for (const label of ["已请求", "已执行", "待核验", "未执行"]) {
       expect(screen.getByText(`遗忘请求 · ${label}`)).toBeInTheDocument();
     }
+    expect(screen.getByRole("button", { name: "刷新遗忘状态" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "恢复" })).toBeNull();
   });
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Archive, RotateCcw } from "lucide-react";
+import { Archive, RefreshCw, RotateCcw } from "lucide-react";
 import { updateStructuredMemory, type WebForgetRequest, type WebForgetStatus, type WebStructuredMemory } from "@/lib/apiClient";
 import { announceMemoryChanged, restoreCapsuleEntry, type OwnCapsuleEntry } from "@/lib/memoryClient";
 import { kindTitle, recordGroup, entryGroup } from "@/lib/memoryGroups";
@@ -88,6 +88,7 @@ export function ForgottenDrawer({ records, entries, requests = [], projectName, 
     key: `request:${request.id}`, text: memoryExcerpt(request.text), kind: "遗忘请求", status: request.status,
   }));
   const rows = [...requestRows, ...recordRows, ...entryRows, ...methodRows];
+  const canRefresh = rows.some((row) => row.status === "requested" || row.status === "pending_verification");
 
   const restore = async (row: ForgottenRow) => {
     if (!row.restore) return;
@@ -105,7 +106,8 @@ export function ForgottenDrawer({ records, entries, requests = [], projectName, 
   };
 
   return (
-    <Drawer title="已忘记的内容" onClose={onClose}>
+    <Drawer title="已忘记的内容" onClose={onClose}
+      actions={canRefresh ? <IconButton icon={RefreshCw} label="刷新遗忘状态" onClick={onChanged} /> : undefined}>
       {failed && <LoadError className="mb-4" message="暂时读不到已停用的做法。" onRetry={reload} />}
       {methods === null && !failed ? <RunsSkeleton filter={false} />
         : rows.length === 0 ? (failed ? null : <EmptyState icon={Archive} title="没有已忘记的内容" reason="你忘记的记忆会列在这里，随时可以恢复。" />)

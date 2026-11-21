@@ -359,7 +359,7 @@ function MemoryHub() {
       controls={{
         onReset: reload,
         onShare: () => openShare("export"),
-        onForgotten: () => setDrawer("forgotten"),
+        onForgotten: () => { setDrawer("forgotten"); reload(); },
         onRemember: () => setDrawer("remember"),
         onImport: () => setDrawer("import"),
       }}
