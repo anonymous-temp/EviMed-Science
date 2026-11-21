@@ -87,7 +87,9 @@ export function keepUnexplainedLines(input) {
   if (!anchors.length) return keepRegion(input);
   const elsewhere = new Set([...(input.elsewhere ?? []), ...memoryLines(input.after).map(lineFingerprint)]);
   const history = memoryLines(input.after).filter(line => /(?:earlier:|曾为：)/i.test(line));
-  const result = [], outcomes = [];
+  const result = [];
+  /** @type {KeepLineOutcome[]} */
+  const outcomes = [];
   let start = 0, at = 0;
   for (const [end, until] of [...anchors, [before.length, after.length]]) {
     const region = after.slice(at, until);

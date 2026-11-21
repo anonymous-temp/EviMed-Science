@@ -29,7 +29,7 @@ export class LearningWorker {
   /**
    * `evidence` settles a finished run thirty minutes after it ended (`learningEvidence.mjs`, job kind `learning-evidence`); without it the
    * kind is not claimed.
-   * @param {{jobs: any, distillation: any, consolidation: any, evidence?: { settle: (request: { job: any }) => Promise<any> } | null, resolveProject?: (job: any) => Promise<any>,
+   * @param {{jobs: any, distillation: any, consolidation: any, evidence?: Pick<import("./learningEvidence.mjs").LearningEvidence, "settle" | "routineSourcesAllowed"> | null, resolveProject?: (job: any) => Promise<any>,
    *          resolveRun?: (project: any, job: any) => Promise<any>, maintain?: () => Promise<void>, sweep?: () => Promise<unknown>,
    *          enabled?: boolean, window?: string, windowTimeZone?: string, concurrency?: number,
    *          pollMs?: number, leaseMs?: number, reconcileMs?: number, now?: () => Date}} dependencies

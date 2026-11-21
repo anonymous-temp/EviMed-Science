@@ -109,7 +109,9 @@ function inlineFrameCandidate(frame, focus) {
   const candidateText = JSON.stringify(draft.candidate);
   if (Buffer.byteLength(draft.skill) + Buffer.byteLength(candidateText) > 16_384) return null;
   const { frontmatter } = parseSkillFrontmatter(draft.skill);
-  if (frontmatter?.name !== focus.name || frontmatter.metadata?.role !== focus.role || frontmatter.metadata?.depends_on) return null;
+  const { name, metadata } = frontmatter;
+  if (name !== focus.name || !metadata || typeof metadata !== "object"
+    || !("role" in metadata) || metadata.role !== focus.role || ("depends_on" in metadata && metadata.depends_on)) return null;
   const files = new Map([["SKILL.md", draft.skill], ["method-candidate.json", candidateText]]);
   const verdict = runGate({ contractKind: "method-candidate", files,
     expectedOutputs: [...files.keys()].map(path => ({ path, required: true })), checks: ["requiredOutputsExist"] });
