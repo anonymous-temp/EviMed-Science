@@ -1,0 +1,132 @@
+[
+  {
+    "qid": "a03-once-1",
+    "kind": "once",
+    "row": "2026-10-12-one-off-request-condition:#1",
+    "file": "observations/文献总结 · 仅亚洲人群 rct.md",
+    "quote": "文献总结：只纳入亚洲人群的 RCT（做证据总结时）"
+  },
+  {
+    "qid": "a03-once-2",
+    "kind": "once",
+    "row": "c01-form-reshaping-after-draft:#1",
+    "file": "observations/周报 · 三条 200 字.md",
+    "quote": "周报：压到 200 字、三条（写本周周报时）"
+  },
+  {
+    "qid": "a03-once-3",
+    "kind": "once",
+    "row": "c07-role-inside-a-brief:#1",
+    "file": "observations/销售 ppt · 不放价格.md",
+    "quote": "销售 PPT：不放价格（给渠道商做 6 页销售 PPT 时）"
+  },
+  {
+    "qid": "a03-once-4",
+    "kind": "once",
+    "row": "c08-tools-and-environment-in-passing:#1",
+    "file": "observations/排班表 · 基础函数.md",
+    "quote": "排班表：只用 WPS 支持的基础函数（做下周排班表时）"
+  },
+  {
+    "qid": "a03-once-5",
+    "kind": "once",
+    "row": "c09-everyday-context:#2",
+    "file": "observations/晚餐安排 · 一周菜单.md",
+    "quote": "晚餐安排：排一周菜单（排一周晚餐时）"
+  },
+  {
+    "qid": "a03-once-6",
+    "kind": "once",
+    "row": "e3b-one-conversation-alone:#1",
+    "file": "observations/汇总类表格 · 带透视表.md",
+    "quote": "汇总类表格：带透视表（做季度销售汇总时）"
+  },
+  {
+    "qid": "a03-once-7",
+    "kind": "once",
+    "row": "e3c-different-choices-in-two-conversations:#1",
+    "file": "observations/月度汇总 · 折线图.md",
+    "quote": "月度汇总：做成折线图、不要表格（做月度汇总时）"
+  },
+  {
+    "qid": "a03-once-8",
+    "kind": "once",
+    "row": "g09-designer-one-off-and-mood:#1",
+    "file": "observations/海报设计 · 黑白两色无渐变 a3.md",
+    "quote": "海报：只用黑白两色、不要渐变、A3 尺寸（做客户海报时）"
+  },
+  {
+    "qid": "a03-preference-1",
+    "kind": "preference",
+    "row": "2026-10-12-standing-method-and-format:#1",
+    "file": "preferences/self/meta 分析方法.md",
+    "quote": "Meta 分析一律用随机效应模型。"
+  },
+  {
+    "qid": "a03-preference-2",
+    "kind": "preference",
+    "row": "c04-standing-rule-after-proposal:#1",
+    "file": "preferences/self/长文写作流程.md",
+    "quote": "写长文时先给大纲，等用户确认后再写全文。"
+  },
+  {
+    "qid": "a03-preference-3",
+    "kind": "preference",
+    "row": "c06-approval-names-the-approach:#1",
+    "file": "preferences/self/报告结构.md",
+    "quote": "报告和其他材料一律按“背景 / 方法 / 结论”三栏表呈现。"
+  },
+  {
+    "qid": "a03-preference-4",
+    "kind": "preference",
+    "row": "g02-lawyer-style-and-a-question:#1",
+    "file": "preferences/self/法律文书写作规范.md",
+    "quote": "起草法律文书一律用正式的法律文书语言。"
+  },
+  {
+    "qid": "a03-preference-5",
+    "kind": "preference",
+    "row": "u01-upgrade-replaces-the-old-choice:#1",
+    "file": "preferences/self/参考文献格式.md",
+    "quote": "参考文献一律用 AMA 格式。"
+  },
+  {
+    "qid": "a03-shared-1",
+    "kind": "shared",
+    "row": "c07-role-inside-a-brief:#1",
+    "file": "observations/销售 ppt · 不放价格.md",
+    "quote": "销售 PPT：不放价格（给渠道商做 6 页销售 PPT 时）"
+  },
+  {
+    "qid": "a03-shared-2",
+    "kind": "shared",
+    "row": "g09-designer-one-off-and-mood:#1",
+    "file": "observations/海报设计 · 黑白两色无渐变 a3.md",
+    "quote": "海报：只用黑白两色、不要渐变、A3 尺寸（做客户海报时）"
+  },
+  {
+    "qid": "U04-q060",
+    "kind": "once",
+    "arm": "r3-synthetic-users-dev-cand-1"
+  },
+  {
+    "qid": "U04-q061",
+    "kind": "once",
+    "arm": "r3-synthetic-users-dev-cand-1"
+  },
+  {
+    "qid": "M03-q021",
+    "kind": "withdrawn",
+    "arm": "r3-synthetic-users-dev-cand-1"
+  },
+  {
+    "qid": "P01-q024",
+    "kind": "withdrawn",
+    "arm": "r3-synthetic-users-dev-cand-1"
+  },
+  {
+    "qid": "U05-q067",
+    "kind": "withdrawn",
+    "arm": "r3-synthetic-users-dev-cand-1"
+  }
+]

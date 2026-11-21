@@ -1870,3 +1870,23 @@ test('finished gateway responses record exact emitted history, profile and expli
   assert.equal(rows.every(row => row.sessionId === 'mine'), true);
   assert.doesNotMatch(JSON.stringify(rows), /A recorded sentence|Use metric units/);
 });
+
+test('recorded observation and preference controls use the read-only switch and shared scope fence', async t => {
+  const { observationFixtures } = await import('../../../evals/capsule-proving/replay/observation-recall.mjs');
+  const cases = (await observationFixtures()).filter(item => item.row);
+  const config = { memoryObservationRecallEnabled: true, memoryObservationInductionEnabled: false };
+  const owned = await fixture(t, { config });
+  const shared = await fixture(t, { config, memoryContexts: sessions => ({
+    forProject: async () => ({kind:'geo-project',ownerId:USER,namespaceId:OV_USER,userRoot:ROOT,sessions}),
+    configure: async () => sessions.register(USER), assertUri: (_ctx,uri) => uri,
+  }) });
+  for (const item of cases) {
+    const f = item.kind === 'shared' ? shared : owned;
+    f.stub.seedMemory(OV_USER, item.file, item.quote);
+    const result = await f.call('GET', '/api/v1/content/read?uri='+encodeURIComponent(ROOT+'/memories/'+item.file));
+    if (item.kind === 'shared') { assert.equal(result.status,404,item.qid); continue; }
+    assert.equal(result.status,200,item.qid);
+    assert.equal(result.json.result.includes(item.quote),true,item.qid);
+    assert.equal(result.json.result.startsWith('[seen once — observed choice, not a standing preference]'),item.kind==='once',item.qid);
+  }
+});
