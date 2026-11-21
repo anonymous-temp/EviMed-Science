@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { measuredRead, readStatus, searchStatusText, literalIndexMatch, memorySourceLabel } from '../src/memoryReadStatus.mjs';
+import { measuredRead, readStatus, searchStatusText, containsAnchor, literalAnchors, literalIndexMatch, memorySourceLabel } from '../src/memoryReadStatus.mjs';
 import { profileStatements } from '../src/nativeMemoryStore.mjs';
 import { MEMORY_PROFILE_NEUTRAL_TITLES, MEMORY_PROFILE_STRUCTURAL_TITLES, MEMORY_PROFILE_HEADING_RULE } from '@evimed/domain';
 import { renderMemoryTemplates } from '../../../deploy/web/openviking/memory-templates-src/build.mjs';
@@ -69,4 +69,29 @@ test('profile facts and opt-in next templates share the exact unnamed headings',
     assert.ok(template.includes(MEMORY_PROFILE_HEADING_RULE.split('\n').join('\n  ')));
     assert.doesNotMatch(template, /__PROFILE_HEADING__/);
   }
+});
+
+test('history retrieval arms default off and can be selected individually without V2', () => {
+  for (const flag of ['Fusion', 'Diversity', 'Parallel', 'Compact', 'Wide', 'Deadline']) {
+    const name = 'OPEN_SCIENCE_MEMORY_HISTORY_' + flag.toUpperCase() + '_ENABLED';
+    const previous = process.env[name];
+    try {
+      delete process.env[name];
+      assert.equal(loadConfig()['memoryHistory' + flag + 'Enabled'], false);
+      process.env[name] = 'true';
+      const config = loadConfig({ memoryHistoryRetrievalV2Enabled: false });
+      assert.equal(config['memoryHistory' + flag + 'Enabled'], true);
+      assert.equal(config.memoryHistoryRetrievalV2Enabled, false);
+    } finally { if (previous === undefined) delete process.env[name]; else process.env[name] = previous; }
+  }
+});
+
+test('explicit names, dates, numbered codes and quoted wording trigger literal lookups', () => {
+  for (const [question, witness] of [
+    ['what did Mara say?', 'Mara'], ['何时见过 2026年11月9日？', '2026年11月9日'],
+    ["where is 'sample room'?", 'sample room'], ['之前提到的「蓝猫」呢？', '蓝猫'],
+    ['which vial was 42?', '42'], ['ZX18 是什么？', 'ZX18'],
+  ]) assert.ok(literalAnchors(question).includes(witness));
+  assert.deepEqual(literalAnchors('What did we discuss?'), []);
+  assert.equal(containsAnchor('packet ZX180', ['ZX18']), false);
 });

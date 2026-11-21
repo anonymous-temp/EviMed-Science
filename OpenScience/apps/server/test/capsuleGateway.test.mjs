@@ -181,12 +181,17 @@ function sessionsDouble(running, states = {}) {
 
 test("a recall from the one running conversation is that conversation's, and lands on its run", async (t) => {
   const sessions = sessionsDouble([{ id: "run_1", sessionId: "ses_1" }]);
+  const operations = [];
+  sessions.recordDelivery = async (_project, runId, operation) => { operations.push({ runId, operation }); };
   const f = await fixture(t, {
     sessions,
     recallItems: [{ id: "fact_old", factKind: "workflow", content: "旧流程" }, { id: "fact_new", factKind: "preference", content: "中文作答" }],
   });
   const answer = await (await f.request("recall", { query: "流程" })).json();
   assert.deepEqual(answer.items.map((item) => item.id), ["fact_old", "fact_new"]);
+  assert.equal(operations[0].runId, "run_1");
+  assert.equal(operations[0].operation.entry, "capsule.search");
+  assert.deepEqual(operations[0].operation.references.map(ref => ref.uri), ["capsule:fact_old", "capsule:fact_new"]);
   assert.equal(answer.setAside, undefined, "there is nothing to report as withheld");
   // What the run was handed is on its own ledger line.
   assert.deepEqual(sessions.recorded, [{ runId: "run_1", ids: ["fact_old", "fact_new"] }]);

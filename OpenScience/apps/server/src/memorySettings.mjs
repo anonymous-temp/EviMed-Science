@@ -359,7 +359,7 @@ export class MemorySettingsStore {
    * `compactedSince` is whether the compaction came after the hand-over, decided by the database at its own precision: the two
    * instants below are milliseconds, and a compaction in the millisecond of a hand-over is later than it.
    * `memos` is what that block held, as the run record names it (`{ id, kind, scope }`), for the run a turn typed in the kernel's own composer becomes.
-   * @returns {Promise<{ digest: string | null, deliveredAt: string | null, compactedAt: string | null, compactedSince: boolean, memos: { id: string, kind?: string, scope?: string }[] }>}
+   * @returns {Promise<{ digest: string | null, blockHash?:string, deliveredAt: string | null, compactedAt: string | null, compactedSince: boolean, memos: { id: string, kind?: string, scope?: string }[] }>}
    */
   async residentState(userId, projectId, sessionId) {
     // Both times are kept to the millisecond (timestamptz(3)): a compaction in the same millisecond as the delivery cannot be
@@ -375,7 +375,8 @@ export class MemorySettingsStore {
       compactedAt: row?.compacted_at ? new Date(row.compacted_at).toISOString() : null,
       compactedSince: row?.compacted_since === true,
       /** What the block held, as `{ id, kind, scope }` (the run record's own shape), for the run a turn typed in the kernel's composer becomes. */
-      memos: Array.isArray(row?.resident_memos) ? row.resident_memos : [],
+      memos: Array.isArray(row?.resident_memos) ? row.resident_memos.filter(item => item.id) : [],
+      ...(row?.resident_memos?.at?.(-1)?.blockHash ? { blockHash: row.resident_memos.at(-1).blockHash } : {}),
     };
   }
 
@@ -384,15 +385,16 @@ export class MemorySettingsStore {
    * so a dispatch that failed leaves the next one to hand it over.
    * @param {string} userId @param {string} projectId @param {string} sessionId @param {string} digest
    * @param {readonly { id: string, kind?: string, scope?: string }[]} [memos] what the block held, for the run record
+   * @param {string} [blockHash] Exact delivered block, distinct from the scope-bound change detector.
    */
-  async noteResidentDelivered(userId, projectId, sessionId, digest, memos = []) {
+  async noteResidentDelivered(userId, projectId, sessionId, digest, memos = [], blockHash = undefined) {
     if (!/^[a-f0-9]{64}$/.test(String(digest))) throw invalid("digest");
     const held = memos.slice(0, 40).map((memo) => ({ id: String(memo.id).slice(0, 200), ...(memo.kind ? { kind: String(memo.kind).slice(0, 60) } : {}), ...(memo.scope ? { scope: String(memo.scope).slice(0, 60) } : {}),...(Array.isArray(/** @type {any} */(memo).originalSources)?sourceReceiptState(/** @type {any} */(memo).originalSources,{trusted:true,inheritedPrivacy:/** @type {any} */(memo).sourcePrivacy}):{}) }));
     await this.#query(`INSERT INTO evimed_memory.sessions AS s (user_id, project_id, session_id, resident_digest, resident_delivered_at, resident_memos)
       VALUES ($1, $2, $3, $4, clock_timestamp(), $5::jsonb)
       ON CONFLICT (user_id, project_id, session_id) DO UPDATE SET resident_digest = $4, resident_delivered_at = clock_timestamp(), resident_memos = $5::jsonb,
         updated_at = date_trunc('second', clock_timestamp())`,
-    [assertUserId(userId), assertProjectId(projectId), assertSessionId(sessionId), digest, JSON.stringify(held)]);
+    [assertUserId(userId), assertProjectId(projectId), assertSessionId(sessionId), digest, JSON.stringify(/^[a-f0-9]{64}$/.test(blockHash) ? [...held, { blockHash }] : held)]);
   }
 
   /**

@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { recallOperation } from './memoryRecallReceipt.mjs';
+import { recordRecallNote } from './nativeMemoryMetrics.mjs';
 import { memoryEnvelope } from './memorySourceEnvelope.mjs';
 import { readStatus, withReadStatus } from './memoryReadStatus.mjs';
 import { CAPSULE_FACT_KINDS, SOURCE_SCOPE_UNAVAILABLE_CONTEXT, identifierShapesIn } from "@evimed/domain";
@@ -106,9 +109,10 @@ export function createNativeCapsuleSearch({ service, subscriptions = null, conte
  *     state: (userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null }>,
  *     paused?: (userId: string, projectId: string, sessionId: string | null) => Promise<{ learning: boolean, recall: boolean, trial: boolean }>,
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
+ *     recordDelivery?: (project: any, runId: string, operation: any) => Promise<unknown>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null,
- *   resident?: { forSession: (user: any, project: any, sessionId: string) => Promise<{ text: string, digest: string, memories: { id: string, kind?: string, scope?: string }[] } | null>,
- *     attached: (user: any, project: any, sessionId: string, receipt: { digest: string, memories: { id: string, kind?: string, scope?: string }[] }) => Promise<unknown> } | null,
+ *   resident?: { forSession: (user: any, project: any, sessionId: string) => Promise<{ text: string, digest: string, blockHash?: string, memories: { id: string, kind?: string, scope?: string }[] } | null>,
+ *     attached: (user: any, project: any, sessionId: string, receipt: { digest: string, blockHash?: string, memories: { id: string, kind?: string, scope?: string }[] }) => Promise<unknown> } | null,
  *   contextPolicies?: any, contextItems?: any, sourceBound?: boolean }} dependencies
  *   `resident.forSession` answers the block a conversation is to be handed at its first step, or null when it holds it already (or is not to have one);
  *   `resident.attached` notes that it has been handed. `contextPolicies` says whether the workload's project is a shared GEO project, whose
@@ -183,7 +187,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
         // The block as it was when it was handed: asked again, and noted only if it is still the block the plugin names (a card that changed
         // between the two calls is handed again, with its own digest, at the next step).
         const current = resident ? await resident.forSession(currentUser, project, body.sessionId).catch(() => null) : null;
-        if (resident && current && current.digest === body.digest) await resident.attached(currentUser, project, body.sessionId, { digest: current.digest, memories: current.memories });
+        if (resident && current && current.digest === body.digest) await resident.attached(currentUser, project, body.sessionId, { digest: current.digest, memories: current.memories, ...(current.blockHash ? { blockHash: current.blockHash } : {}) });
         sendJson(res, 200, { attached: Boolean(current && current.digest === body.digest) });
         return;
       }
@@ -225,8 +229,15 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
           throw new HttpError(400, "capsule_payload_invalid", "Invalid memory limit.");
         }
         const limit = body.limit === undefined ? defaultLimit : Math.min(maxLimit, Math.trunc(Number(body.limit)));
+        const receiptOnFinish = (items, coverage) => {
+          if (!sessions?.recordDelivery || running.length !== 1) return;
+          const operation = recallOperation({ id: randomUUID(), entry: 'capsule.search', query: body.query,
+            items: items.filter(item => item.id).map(item => ({ uri: 'capsule:' + item.id, text: item.content, source: 'capsule' })), coverage });
+          res.once('finish', () => { void sessions.recordDelivery(project, running[0].id, operation).catch(() => recordRecallNote('receipt_failed')); });
+        };
         if (trialConversation) {
           recordRecallTool("trial");
+          receiptOnFinish([], { receivedCapsules: readStatus('skipped', 'trial') });
           sendJson(res, 200, { items: [], mode: "trial", contextOnly: true, sources: { memory: 0, capsule: 0 },
             notice: "这是一段试用别人胶囊的对话：只读这个胶囊，不读用户自己的记忆。" });
           return;
@@ -253,6 +264,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
         // is not mistaken for a tool that failed. A recall the researcher paused already carries its own notice, and says so.
         const answer = !pause?.recall && found.items.length === 0 && !found.notice ? { ...found, notice: NOTHING_ABOVE_THE_FLOOR } : found;
         recordRecallTool(pause?.recall ? "paused" : answer.items.length ? "hit" : "empty", answer.items.length);
+        receiptOnFinish(recalled.items, recalled.searchStatus ?? { receivedCapsules: readStatus(recalled.items.length ? 'searched' : 'empty') });
         sendJson(res, 200, sourceBound ? { ...answer, items: answer.items.map(item => ({ ...item, sourceEnvelope: memoryEnvelope(item) })) } : answer);
       } else if (shared) {
         sendJson(res,200,{entry:null,reviewRequired:false,takesEffect:false,contextOnly:true,status:"not_kept",

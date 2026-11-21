@@ -1,6 +1,8 @@
 import { memoryEnvelope, memoryQuoteUnit } from './memorySourceEnvelope.mjs';
 import { visibleStatementSources } from './memoryStatementSources.mjs';
-import { readStatus, searchStatusText, measuredRead, memorySourceLabel, literalIndexMatch } from './memoryReadStatus.mjs';
+import { randomUUID } from 'node:crypto';
+import { recallOperation } from './memoryRecallReceipt.mjs';
+import { readStatus, searchStatusText, measuredRead, memorySourceLabel, literalAnchors, containsAnchor } from './memoryReadStatus.mjs';
 import { PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';
@@ -245,31 +247,6 @@ async function scopedListSearch(sessions, ctx, given) {
       for (const hit of fresh) if (hit && remaining > 0) { result[kind].push(hit); remaining--; }
     }
   }
-  // The same scoped index and fresh-body fence authorize literal rescue; stored bodies
-  // are never returned from the metadata cache. No fallback on ordinary questions.
-  if (!result.memories.length && ctx.literalFallbackEnabled && String(given.query ?? '').trim()) {
-    try {
-      const entries = await sessions.tree(ctx.user.id, target, { levelLimit: 8, maxNodes: 512 });
-      const metadata = await ctx.fileMetadata();
-      for (const entry of entries) {
-        if (remaining <= 0) break;
-        if (entry.isDir || !ctx.recallFile(entry.uri) || hidden(entry.uri) || isMemorySummary(entry.uri)
-          || !(entry.uri === target || entry.uri.startsWith(`${target}/`))) continue;
-        const indexed = metadata.get(entry.uri);
-        const labels = [entry.name ?? entry.uri.split('/').at(-1),
-          ...String(indexed?.body ?? '').split('\n').filter(line => /^#{1,6}\s/.test(line)).map(line => line.replace(/^#+\s*/, ''))];
-        if (!literalIndexMatch(given.query, labels)) continue;
-        const body = await ctx.readMemory(entry.uri);
-        if (body === null) { result.readStatus.droppedByFence++; continue; }
-        // Recheck headings against the redacted current body, never a withdrawn cached title.
-        const currentLabels = [entry.name ?? entry.uri.split('/').at(-1), ...body.split('\n').filter(line => /^#{1,6}\s/.test(line)).map(line => line.replace(/^#+\s*/, ''))];
-        if (!literalIndexMatch(given.query, currentLabels) || !await ctx.personIdentityVisible(entry.uri, body)) continue;
-        result.memories.push({ uri: entry.uri, abstract: await ctx.recallText(entry.uri, body), retrieval: 'literal_index' });
-        remaining--;
-      }
-      result.readStatus.literalFallback = entries.length >= 512 ? 'partial' : 'searched';
-    } catch { result.readStatus.literalFallback = 'unavailable'; }
-  }
   if (ctx.inductionEnabled) {
     result.memories.sort((left, right) => Number(left.abstract.includes('[Inferred from behaviour;')) - Number(right.abstract.includes('[Inferred from behaviour;')));
     let available = limit;
@@ -388,6 +365,7 @@ export function parseEventStream(text) {
 
 /** The most capsule items one search adds, and the longest one is, in characters. */
 const CAPSULE_ITEMS_MAX = 8;
+const sharedCapsuleRows = Symbol('shared capsule search rows');
 const CAPSULE_ITEM_CHARS = 800;
 
 /**
@@ -424,6 +402,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   rememberJournal?: import("./geoNativeMemoryRemember.mjs").GeoNativeMemoryRemember | null,
  *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null, allowRunningFallback?: boolean }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
  *   sourceDeletion?: any,
+ *   recordDelivery?: ((request:any)=>Promise<void>) | null,
  *   sourceReceipt?: ((request:any)=>Promise<void>) | null,
  *   sourceReceiptFailed?: ((request:any)=>Promise<void>) | null,
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
@@ -440,7 +419,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  * @returns {((req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>) & { commitSession: MemoryGatewayCommitSession }}
  *   the request handler, with the one function the control plane commits a conversation by (`nativeTurnCommit.mjs`)
  */
-export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, overlay = null, memoryTool = null, personMessages = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, historySecrets = null, now = () => Date.now() }) {
+export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, recordDelivery = null, sourceReceipt = null, sourceReceiptFailed = null, overlay = null, memoryTool = null, personMessages = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, historySecrets = null, now = () => Date.now() }) {
   const personEdges = new MapEdgeCorrections({ database: overlay?.database });
   const peopleEnabled = config.memoryPersonMergeEnabled === true && typeof memoryTool?.people === 'function' && personMessages !== null;
   const enabled = config.memoryEngineEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
@@ -534,7 +513,60 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     }
   }
 
-  async function supplementarySearch(ctx, given, files) {
+  async function rescueMissingAnchor(ctx, given, files, history, capsules) {
+    const anchors = literalAnchors(given.query);
+    if (!anchors.length || [...files.memories, ...files.resources, ...files.skills].some(hit => containsAnchor(hit.abstract, anchors) || containsAnchor(hit.uri?.split('/').at(-1)?.replace(/\.md$/, ''), anchors))
+      || history.items.some(hit => hit.messages?.some(message => containsAnchor(message.text, anchors)))
+      || capsules.some(item => containsAnchor(item.content, anchors))) return;
+    const target = absolute(given.target_uri || `${ctx.userRoot}/memories`, ctx.userRoot);
+    const limit = Math.max(1, Math.min(20, Math.trunc(Number(given.limit)) || 5));
+    if (['searched', 'empty'].includes(files.readStatus?.state)) {
+      const kept = [];
+      try {
+        const excluded = (await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : [])).map(uri => absolute(uri, ctx.userRoot));
+        const entries = await ctx.sessions.tree(ctx.user.id, target, { levelLimit: 8, maxNodes: 512 });
+        const metadata = await ctx.fileMetadata();
+        for (const entry of entries.slice(0, 512)) {
+          if (entry.isDir || !ctx.recallFile(entry.uri) || !(entry.uri === target || entry.uri.startsWith(target + '/'))
+            || excluded.some(prefix => entry.uri === prefix || entry.uri.startsWith(prefix + '/')) || await ctx.hidden(entry.uri)) continue;
+          const name = entry.uri.split('/').at(-1).replace(/\.md$/, '');
+          if (!containsAnchor(name, anchors) && !containsAnchor(metadata.get(entry.uri)?.body, anchors)) continue;
+          const body = await ctx.readMemory(entry.uri);
+          if (body === null || !await ctx.personIdentityVisible(entry.uri, body)
+            || !containsAnchor(name, anchors) && !containsAnchor(body, anchors)) continue;
+          kept.push({ uri: entry.uri, abstract: await ctx.recallText(entry.uri, body), retrieval: 'literal_index' });
+          if (kept.length === limit) break;
+        }
+        files.readStatus.literalFallback = entries.length >= 512 ? 'partial' : 'searched';
+      } catch { files.readStatus.literalFallback = 'unavailable'; files.readStatus.state = 'unavailable'; }
+      if (kept.length) {
+        const ids = new Set(kept.map(hit => hit.uri));
+        files.memories = [...kept, ...files.memories.filter(hit => !ids.has(hit.uri))].slice(0, limit);
+        files.resources = files.resources.filter(hit => !ids.has(hit.uri)).slice(0, limit - files.memories.length);
+        files.skills = files.skills.filter(hit => !ids.has(hit.uri)).slice(0, limit - files.memories.length - files.resources.length);
+        files.total = files.memories.length + files.resources.length + files.skills.length;
+        if (files.readStatus.state === 'empty') files.readStatus.state = 'searched';
+        return;
+      }
+    }
+    if (!historySearch || !['searched', 'empty'].includes(history.status.state)) return;
+    const extra = await measuredRead(() => historySearch({ user: ctx.user, project: ctx.project,
+      query: given.query, limit, literalAnchors: anchors, contextPolicy: ctx.memoryContext?.policy }), capsuleWaitMs);
+    const exact = extra.items.filter(hit => !hit.withdrawn && hit.messages?.some(message => containsAnchor(message.text, anchors)));
+    const key = hit => hit.uri ?? JSON.stringify([hit.sessionId, hit.messages]);
+    const keys = new Set(exact.map(key));
+    if (exact.length) {
+      const originalItems = history.items;
+      const cap = config.memoryHistoryRetrievalV2Enabled || config.memoryHistoryWideEnabled ? 20 : 8;
+      history.items = [...new Map(exact.map(hit => [key(hit), hit])).values(), ...history.items.filter(hit => !hit.withdrawn && !keys.has(key(hit)))]
+        .slice(0, Math.min(limit, cap));
+      if (history.status.withdrawn || [...extra.items, ...originalItems].some(hit => hit.withdrawn)) history.items.push({ withdrawn: true, messages: [] });
+    }
+    history.status = { ...history.status, literalFallback: extra.status.state, promoted: exact.length,
+      state: extra.status.state === 'unavailable' ? 'unavailable' : exact.length ? 'searched' : history.status.state };
+  }
+
+  async function supplementarySearch(ctx, given, files, admitted) {
     const target = given.target_uri ? absolute(given.target_uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
     const reason = given.mode === 'context' ? 'opening' : target !== `${ctx.userRoot}/memories` ? 'narrow_scope'
       : !String(given.query ?? '').trim() ? 'empty_query' : ctx.shared ? 'shared_namespace' : null;
@@ -546,10 +578,31 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         : measuredRead(() => historySearch(request), capsuleWaitMs),
       reason ? skipped(reason) : !capsuleSearch ? skipped('disabled') : measuredRead(() => capsuleSearch(request), capsuleWaitMs),
     ]);
-    return { history: history.items.map(hit => hit.withdrawn ? { withdrawn: true, messages: [] } : hit), capsules: config.memorySourceEnvelopeEnabled === true ? capsule.items.map(item => ({ ...item, sourceEnvelope: memoryEnvelope(item) })) : capsule.items, searchStatus: {
+    if (ctx.literalFallbackEnabled && !ctx.shared && given.mode !== 'context' && Array.isArray(files.memories)) await rescueMissingAnchor(ctx, given, files, history, capsule.items);
+    const searchStatus = {
       memoryFiles: files.readStatus ?? readStatus((files.memories?.length || files.entries?.length) ? 'searched' : 'empty'),
       earlierConversations: history.status, receivedCapsules: files.capsuleReadStatus ?? capsule.status,
-    } };
+    };
+    const visibleHistory = history.items.map(hit => hit.withdrawn ? { withdrawn: true, messages: [] } : hit);
+    const items = [...(files.memories ?? []), ...(files.entries ?? []), ...(files.resources ?? []), ...(files.skills ?? [])]
+      .map(hit => ({ uri: hit.uri, text: hit.text ?? hit.abstract, source: 'memory-file' }));
+    for (const hit of visibleHistory) {
+      if (hit.withdrawn || !hit.messages?.length) continue;
+      items.push({ uri: hit.uri ?? hit.conversationUrl, source: 'history', text: ctx.route === 'mcp'
+        ? historySearchText([hit], { semanticSecrets: config.memoryHistorySecretRedactionEnabled === true }).split('\n').slice(1).join('\n')
+        : JSON.stringify(hit.messages) });
+    }
+    const renderedCapsules = ctx.route === 'mcp' || Boolean(files[sharedCapsuleRows]);
+    const capsuleRows = files[sharedCapsuleRows] ?? capsule.items;
+    for (const item of capsuleRows.slice(0, renderedCapsules ? CAPSULE_ITEMS_MAX : undefined)) {
+      if (item.source === 'evidence_zone' || !(item.id ?? item.factId)) continue;
+      const text = renderedCapsules ? capsuleSearchText([item], config.memorySourceEnvelopeEnabled === true)?.split('\n').slice(1).join('\n') : item.content;
+      if (text) items.push({ uri: 'capsule:' + (item.id ?? item.factId), source: 'capsule', text });
+    }
+    ctx.stage(admitted.sessionId, given.mode === 'context' ? 'opening.context' : (ctx.route === 'mcp' ? 'mcp.search' : 'rest.search'), given.query, items, searchStatus);
+    const capsules = config.memorySourceEnvelopeEnabled === true
+      ? capsule.items.map(item => ({ ...item, sourceEnvelope: memoryEnvelope(item) })) : capsule.items;
+    return { history: visibleHistory, capsules, searchStatus };
   }
 
   /** @param {Map<string, { until: number, count: number }>} windows @param {string} key @param {number} span @param {number} limit */
@@ -747,6 +800,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       result.capsuleReadStatus = capsule.status;
       const text = capsuleSearchText(capsule.items, config.memorySourceEnvelopeEnabled === true);
       if (text) {
+        result[sharedCapsuleRows] = capsule.items;
         if (context) result.rendered = [result.rendered, text].filter(Boolean).join('\n');
         else result.capsuleContext = text;
       }
@@ -903,9 +957,10 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     async search(ctx) {
       const given = ctx.json && typeof ctx.json === "object" && !Array.isArray(ctx.json) ? ctx.json : {};
       const context = given.mode === "context";
-      const admitted = await ctx.admit(typeof given.session_id === "string" ? given.session_id : null);
+      const admitted = await ctx.admit(ctx.route !== 'mcp' && typeof given.session_id === "string" ? given.session_id : null);
       if (!admitted.recall) {
         recordGatewayWithheld(admitted.recallReason ?? "memory_off");
+        ctx.stage(admitted.sessionId, context ? 'opening.context' : (ctx.route === 'mcp' ? 'mcp.search' : 'rest.search'), given.query, [], { memoryFiles: readStatus('skipped') });
         return { status: 200, json: ok({ ...(context ? { entries: [], rendered: '', digest: '' } : { memories: [], resources: [], skills: [], total: 0 }), searchStatus: Object.fromEntries(['memoryFiles', 'earlierConversations', 'receivedCapsules'].map(key => [key, readStatus('skipped', admitted.recallReason ?? 'admission')])) }), outcome: "withheld" };
       }
       if (given.target_uri !== undefined && (typeof given.target_uri !== "string" || !insideNativeMemories(given.target_uri, ctx.userRoot))) {
@@ -918,8 +973,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         if (ctx.shared) await ctx.ensureRegistered();
         const listed = await scopedListSearch(ctx.sessions, ctx, given);
         const found = ctx.shared ? await sharedProjectSearch(ctx, listed, false, given) : listed;
+        const extra = await supplementarySearch(ctx, given, found.result, admitted);
         await noteRecalled(ctx, (/** @type {any} */ (found).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
-        const extra = await supplementarySearch(ctx, given, found.result);
         return { status: 200, json: { ...found, result: { ...found.result, ...extra } }, outcome: "forwarded" };
       }
       if (given.target_uri !== undefined) throw new HttpError(400, "memory_gateway_body_invalid", "Context search does not accept a target URI.");
@@ -934,7 +989,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         answered = await sharedProjectSearch(ctx, await ctx.sessions.search(ctx.user.id, body), true, body);
       }
       await noteRecalled(ctx, [...(answered?.result?.entries ?? []), ...(answered?.result?.memories ?? [])].map((/** @type {any} */ hit) => hit?.uri));
-      const extra = await supplementarySearch(ctx, given, answered.result);
+      const extra = await supplementarySearch(ctx, given, answered.result, admitted);
       answered.result.searchStatus = extra.searchStatus;
       return { status: 200, json: answered, outcome: 'forwarded' };
     },
@@ -978,8 +1033,10 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // MCP profile reads always count and return the complete source.
       const startupProfile = !ctx.shared && uri === `${ctx.userRoot}/memories/profile.md` && ctx.query.get('model_use') !== 'true';
       if (!startupProfile) await noteUsed(ctx, [absolute(uri, ctx.userRoot)]);
-      return { status: 200, ...(ctx.origin === 'agent-api' && startupProfile ? { elided: openingProfileRead(text, `${ctx.userRoot}/memories`, config) !== text } : {}), json: { ...ok(startupProfile
-        ? openingProfileRead(config.memorySourceEnvelopeEnabled === true && ctx.origin !== 'agent-api' ? await ctx.recallText(uri, text) : text, `${ctx.userRoot}/memories`, config) : await ctx.recallText(uri, text)), readStatus: readStatus('searched') }, outcome: "forwarded" };
+      const delivered = startupProfile ? openingProfileRead(config.memorySourceEnvelopeEnabled === true && ctx.origin !== 'agent-api' ? await ctx.recallText(uri, text) : text, `${ctx.userRoot}/memories`, config) : await ctx.recallText(uri, text);
+      ctx.stage(admitted.sessionId, startupProfile ? 'opening.profile' : (ctx.route === 'mcp' ? 'mcp.read' : 'rest.read'), null,
+        [{ uri, text: delivered, source: uri === `${ctx.userRoot}/memories/profile.md` ? 'profile' : 'memory-file' }]);
+      return { status: 200, ...(ctx.origin === 'agent-api' && startupProfile ? { elided: openingProfileRead(text, `${ctx.userRoot}/memories`, config) !== text } : {}), json: { ...ok(delivered), readStatus: readStatus('searched') }, outcome: "forwarded" };
     },
     async list(ctx) {
       let uri = String(ctx.query.get("uri") ?? "");
@@ -1105,6 +1162,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         if (READ_TOOLS.has(name)) {
           if (!admitted.recall) {
             recordGatewayWithheld(admitted.recallReason ?? "memory_off");
+            if (name === 'search') ctx.stage(admitted.sessionId, 'mcp.search', args.query, [], { memoryFiles: readStatus('skipped') });
             local.push(toolText(message.id, (/** @type {any} */ (NOT_READ)[admitted.recallReason ?? ""] ?? NOT_READ.other)
               + '\n' + searchStatusText(Object.fromEntries(['memoryFiles', 'earlierConversations', 'receivedCapsules'].map(key => [key, readStatus('skipped', admitted.recallReason ?? 'admission')])))));
             continue;
@@ -1157,14 +1215,18 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             }
             // The engine's list mode is answered from its structured REST rows, filtered here (`scopedListSearch`).
             const result = await scopedListSearch(ctx.sessions, ctx, args);
+            const extra = await supplementarySearch(ctx, args, result.result, admitted);
             await noteRecalled(ctx, (/** @type {any} */ (result).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
-            const extra = await supplementarySearch(ctx, args, result.result);
             const content = [{ type: 'text', text: JSON.stringify(result.result) },
               { type: 'text', text: searchStatusText(extra.searchStatus) }];
             const capsuleText = capsuleSearchText(extra.capsules, config.memorySourceEnvelopeEnabled === true);
             if (capsuleText) content.push({ type: 'text', text: capsuleText });
             const original = historySearchText(extra.history, { semanticSecrets: config.memoryHistorySecretRedactionEnabled === true });
-            if (original) content.push({ type: 'text', text: original });
+            if (original) {
+              const block = { type: 'text', text: original };
+              if (extra.searchStatus.earlierConversations.promoted) content.unshift(block);
+              else content.push(block);
+            }
             local.push({ jsonrpc: "2.0", id: message.id, result: { content } });
           }
           continue;
@@ -1315,7 +1377,13 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // Only the authenticated bridge can set this header; model arguments and Mcp-Session-Id never bind a conversation.
       const toolSession = route === 'mcp' && typeof req.headers['x-evimed-memory-session'] === 'string'
         && /^[A-Za-z0-9_.@-]{1,180}$/.test(req.headers['x-evimed-memory-session']) ? req.headers['x-evimed-memory-session'] : null;
+      const staged = [];
+      const startedAt = now();
       const ctx = {
+        route,
+        stage(sessionId, entry, query, items, coverage = {}) {
+          if (recordDelivery && origin === 'kernel' && sessionId) staged.push({ sessionId, entry, query, items, coverage });
+        },
         memoryFileSearchMinScore: config.memoryFileSearchMinScore,
         literalFallbackEnabled: config.memoryLiteralFallbackEnabled === true,
         fileMetadata: () => overlay?.configured && typeof overlay.files === 'function' ? overlay.files(user.id) : Promise.resolve(new Map()),
@@ -1448,17 +1516,31 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const writes = route === 'sessionCreate' || route === 'messageWrite' || route === 'commit';
       let answer = writes ? await withNativeMemoryWrite(overlay?.database,user.id,()=>handlers[route](ctx)) : await handlers[route](ctx);
       if (sourceDeletion && await sourceDeletion.version(user.id) !== deletionVersion) throw new HttpError(503, 'memory_gateway_source_changed', 'The source privacy state changed during this request.');
+      let receiptItems = staged.map(row => row.items);
       if (config.memoryHistorySecretRedactionEnabled === true && ['search','mcp'].includes(route)) {
         // One account filter after all search blocks have been assembled. A
         // failed privacy lookup returns no result, never an unfiltered answer.
         if (!historySecrets) throw new HttpError(503,'memory_gateway_secret_filter_unavailable','The memory privacy state is unavailable.');
-        if ('json' in answer) answer = { ...answer,json:await historySecrets.filterValue(user.id,answer.json) };
+        const filter = async value => {
+          if (!staged.length) return historySecrets.filterValue(user.id, value);
+          const [wire, items] = await historySecrets.filterValue(user.id, [value, receiptItems]);
+          receiptItems = items;
+          return wire;
+        };
+        if ('json' in answer) answer = { ...answer,json:await filter(answer.json) };
         else if ('text' in answer && answer.text) {
           const stream = 'contentType' in answer && String(answer.contentType).includes('text/event-stream');
           const value = stream ? parseEventStream(answer.text) : JSON.parse(answer.text);
-          const safe = await historySecrets.filterValue(user.id,value);
+          const safe = await filter(value);
           answer = { ...answer,text:stream ? safe.map(message=>`event: message\ndata: ${JSON.stringify(message)}\n\n`).join('') : JSON.stringify(safe) };
         }
+      }
+      if (staged.length && answer.status === 200) {
+        // Redact the reference inputs as well as the wire. A failed audit is never a delivery.
+
+        const at = new Date(now()).toISOString();
+        return { ...answer, deliveries: staged.map((row, i) => ({ project, sessionId: staged[i].sessionId, startedAt,
+          operation: recallOperation({ ...row, items: receiptItems[i], id: randomUUID(), at }) })) };
       }
       return answer;
   }
@@ -1526,6 +1608,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (raw.length) await runtimeManager.assertActiveEviMedWorkloadToken(token).catch(() => { throw new HttpError(401, "memory_gateway_unauthenticated", "The memory gateway does not know this caller."); });
       const answer = await dispatch({ req, url, found, route, user, project, json });
       recordGatewayRequest(route, answer.outcome);
+      if ('deliveries' in answer && answer.deliveries.length) res.once('finish', () => {
+        void Promise.all(answer.deliveries.map(row => recordDelivery(row))).catch(() => recordRecallNote('receipt_failed'));
+      });
       send(answer);
     } catch (error) {
       // These internal privacy failures are safe to name, but their raw messages

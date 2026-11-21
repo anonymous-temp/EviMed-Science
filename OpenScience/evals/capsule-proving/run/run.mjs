@@ -637,7 +637,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   }
   if (options.retrievalOnly) {
     const report = retrieval.retrievalReport(retrievalRows, { runId, expectedQuestions: cases.reduce((n, c) => n + c.questions.length, 0),
-      historyExcerptCap:options.config.memoryHistoryRetrievalV2Enabled===true?20:8 });
+      historyExcerptCap:options.config.memoryHistoryRetrievalV2Enabled === true || options.config.memoryHistoryWideEnabled === true ? 20 : 8 });
     await writeAtomic(path.join(out, options.config.memoryHistoryRetrievalV2Enabled===true ? 'retrieval.v2.json' : 'retrieval.json'), `${JSON.stringify(report, null, 2)}\n`);
     process.stdout.write(retrieval.summaryText(report) + "\n");
   }

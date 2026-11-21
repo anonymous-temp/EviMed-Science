@@ -1,5 +1,6 @@
 import { createPasteRangeIndex } from './memoryPasteRanges.mjs';
 import { createMemoryBilling } from './agentMemoryBilling.mjs';
+import { recallDigest, recallRunAt, recallTurn, residentOperation } from './memoryRecallReceipt.mjs';
 import { rememberAdmission } from './agentMemoryRemember.mjs';
 import { recallHistoryForAgent } from './agentMemoryRecall.mjs';
 import { agentMemoryAvailable } from './agentMemoryAvailability.mjs';
@@ -4638,7 +4639,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const sessions = preStopTranscripts.take(run.id)
             ?? await collectRunTranscripts(runtimeManager, project, run, { children });
           const receipt = await persistRunTranscript({ project, run, sessions, ownedChildSessionIds: children.map(child => child.sessionId) });
-          await agentRuns.recordLearning(project, run.id, { transcript: receipt });
+          await agentRuns.recordLearning(project, run.id, { transcript: receipt, recallTurn: recallTurn(run, sessions, receipt.completeness === 'complete') });
           await rsiOnline?.offerRun(project, run.id).catch(error => securityAudit(config, "rsi.incident.offer", "failed", { code: error?.code ?? "rsi_incident_unavailable" }));
           if (evolutionRunSignals && reusableClinicalContext) await evolutionRunSignals.record(project, run).catch(error => securityAudit(config, "evolution.outcome", "failed", { code: error?.code ?? "evolution_outcome_unavailable" }));
           // The web pages the run read (contract X5), off the same transcript:
@@ -4655,7 +4656,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // A turn typed in the kernel's own composer was handed the project's card and the capsule's profile at its first step, before
           // there was a run to name them on: the conversation's state kept what they held, and the run says it recalled them.
           if (memorySettings.configured && run.sessionId && !run.dispatchId) {
-            const held = nativeResidentMemos(run, await memorySettings.residentState(project.userId, project.id, String(run.sessionId)).catch(() => null));
+            const state = await memorySettings.residentState(project.userId, project.id, String(run.sessionId)).catch(() => null);
+            const held = nativeResidentMemos(run, state);
+            if (state?.blockHash && recallRunAt(await agentRuns.list(project), run.sessionId, Date.parse(state.deliveredAt))?.id === run.id) {
+              await agentRuns.recordLearning(project, run.id, { recallOperations: [residentOperation(run.sessionId, state.blockHash, state.deliveredAt)] });
+            }
             if (held.length) await agentRuns.recordLearning(project, run.id, { recalledMemories: held }).catch((error) => securityAudit(config, "run.resident.record", "failed", {
               userId: project.userId, projectId: project.id, runId: run.id, code: typeof error?.code === "string" ? error.code : "resident_unrecorded",
             }));
@@ -5407,6 +5412,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // A runtime's recall of a subscribed zone is the frontier's too: an account outside its audience is offered nothing, as every zone route answers it.
   const recallSubscriptions = zoneSubscriptions?.enabled && frontier
     ? subscriptionsForAudience({ subscriptions: zoneSubscriptions, userById: userId => store.userById(userId), allows: user => frontier.service.allows(user) }) : null;
+  async function acknowledgeResident(project, run, resident) {
+    await resident.delivered();
+    if (run.sessionId && resident.due && resident.text) {
+      const operation = residentOperation(run.sessionId, recallDigest(resident.text), new Date().toISOString());
+      await agentRuns.recordLearning(project, run.id, { recallOperations: [operation] }).catch(() =>
+        securityAudit(config, 'run.resident.record', 'failed', { projectId: project.id, runId: run.id }));
+    }
+  }
   const memoryGatewayHandler = createMemoryGatewayHandler({
     config, runtimeManager, store, sessions: openVikingSessions, admission: memoryAdmission,
     personMessages: async (project, sessionId) => {
@@ -5422,6 +5435,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     historySecrets: memoryHistory?.secrets,
     historySearch: memoryHistory ? request => memoryHistory.search(request, { includeWithdrawn: true }) : null,
     sourceDeletion,
+    recordDelivery: async ({ project, sessionId, startedAt, operation }) => {
+      const run = recallRunAt(await agentRuns.list(project), sessionId, startedAt);
+      if (run) await agentRuns.recordLearning(project, run.id, { recallOperations: [operation] });
+    },
     sourceReceipt:async({user,project,sessionId,uris,context:sourceContext})=>{
       // Unbound/concurrent native reads remain an acceptance gap; never guess the latest run.
       if(!sessionId)return;
@@ -5506,6 +5523,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         })().catch(() => SOURCE_SCOPE_UNAVAILABLE_CONTEXT);
         return [...(bound ? [bound] : []), ...fromCard, ...await sessionDispatchNotes({ memorySettings, capsules: capsuleService }, userId, projectId, sessionId).catch(() => [])];
       },
+      recordDelivery: (project, runId, operation) => agentRuns.recordLearning(project, runId, { recallOperations: [operation] }),
       recordRecall: (project, runId, items) => agentRuns.recordLearning(project, runId, {
         appendRecalledMemories: items.map((item) => (item.source === "capsule"
           ? { id: `capsule:${item.id}`, kind: item.factKind ?? "capsule", scope: "capsule" }
@@ -6225,7 +6243,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           unattended: true,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
         });
-        await resident.delivered();
+        await acknowledgeResident(project, dispatchedRun, resident);
       });
       return { runId: run.id, sessionId: session.id, status: run.status, placement };
     } catch (error) {
@@ -6323,7 +6341,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           unattended: true,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
         });
-        await resident.delivered();
+        await acknowledgeResident(project, dispatchedRun, resident);
       });
       return { runId: run.id, sessionId: session.id, status: run.status };
     } catch (error) {
@@ -6721,7 +6739,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // Calculation completion resumes unattended; a person's channel message remains attended.
           unattended: options.nativeContinuation === true || options.unattended === true,
         });
-        await resident.delivered();
+        await acknowledgeResident(project, dispatchedRun, resident);
       } catch (error) {
         if (options.dispatchFingerprint && !promptAttempted) error.definitivelyRejected = true;
         throw error;
@@ -7389,6 +7407,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               geo: Boolean(geo) && geoAudienceAllows(config, user),
               vcr: Boolean(vcr) && vcrAudienceAllows(config, user),
               // 「记忆地图」 (the memory page's 地图 tab): with the memory subsystem and its own switch, as the map's routes decide (memoryMap.mjs).
+              memoryRecallRecords: config.memoryEnabled !== false,
               memoryMap: config.memoryEnabled !== false && config.memoryMapEnabled !== false,
               openList: openListConnector
                 ? await openListConnector.storageStatus({ allowStale: true }).then((status) => status.storage === "mounted", () => false)
@@ -8006,7 +8025,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             ...(body.timeBudgetMinutes != null ? { timeBudgetMinutes: body.timeBudgetMinutes } : {}),
           });
           // The profile is the conversation's from here: the next dispatch finds it there (`ResidentProfiles`).
-          await resident.delivered();
+          await acknowledgeResident(ctx.project, dispatchedRun, resident);
         });
         const run = pluginService ? await pluginService.withAdmission(ctx.project, dispatch) : await dispatch();
         if (researchGoal) await researchGoals?.register(ctx.project, { sessionId: body.sessionId }).catch(() => {});
@@ -9168,7 +9187,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         strictContext: true,
         unattended: true,
       });
-      await resident.delivered();
+      await acknowledgeResident(project, dispatchedRun, resident);
     });
     return pluginService ? pluginService.withAdmission(project, dispatch) : dispatch();
   }

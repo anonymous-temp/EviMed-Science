@@ -47,7 +47,7 @@ function fixedAdmission(answer = {}) {
   return { asked, admit: async (caller) => { asked.push(caller.engineSessionId ?? null); return { ...base, ...(typeof answer === "function" ? answer(caller) : answer) }; } };
 }
 
-async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, personMessages = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, timeoutMs = 4_000, project = {}, memoryContexts = null, rememberJournal = null } = {}) {
+async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, personMessages = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, recordDelivery = null, sourceReceipt = null, sourceReceiptFailed = null, timeoutMs = 4_000, project = {}, memoryContexts = null, rememberJournal = null } = {}) {
   resetNativeMemoryMetrics();
   const stub = await startOpenVikingStub(t, stubOptions);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
@@ -57,7 +57,7 @@ async function fixture(t, { admission = fixedAdmission(), config = {}, overlay =
     config: { memoryEngineEnabled: true, memoryEnabled: true, ...config },
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); }, runtimeGeneration: () => "generation-1" },
     store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER, ...project }) },
-    sessions, admission, overlay, memoryTool, personMessages, capsuleSearch, historySearch, sourceDeletion, sourceReceipt, sourceReceiptFailed,
+    sessions, admission, overlay, memoryTool, personMessages, capsuleSearch, historySearch, sourceDeletion, recordDelivery, sourceReceipt, sourceReceiptFailed,
     memoryContexts: typeof memoryContexts === "function" ? memoryContexts(sessions) : memoryContexts, rememberJournal,
   });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
@@ -1864,3 +1864,73 @@ for (const safe of [false, true]) for (const bound of [false, true]) {
     }
   });
 }
+
+test('literal rescue displaces a full page of neighbours only for an absent explicit anchor', async t => {
+  const f = await fixture(t, { config: { memoryLiteralFallbackEnabled: true } });
+  f.stub.seedMemory(OV_USER, 'notes/ZX17.md', 'The sample was delayed.');
+  f.stub.seedMemory(OV_USER, 'notes/neighbour.md', 'An adjacent discussion.');
+  f.sessions.search = async () => ({ result: { memories: [{ uri: `${ROOT}/memories/notes/neighbour.md`, score: 1 }] } });
+  const lookup = async query => (await f.call('POST', '/api/v1/search/search', { query, limit: 1 })).json.result;
+  const rescued = await lookup('What happened to ZX17?');
+  assert.deepEqual(rescued.memories.map(hit => hit.uri), [`${ROOT}/memories/notes/ZX17.md`]);
+  assert.equal(rescued.total, 1);
+  assert.equal((await lookup('what happened?')).readStatus.literalFallback, undefined);
+});
+
+test('finished gateway responses record exact emitted history, profile and explicit file reads', async t => {
+  const rows = [];
+  const f = await fixture(t, { admission: fixedAdmission({ sessionId: 'mine' }), config: { memoryHistorySearchEnabled: true },
+    recordDelivery: async row => { rows.push(row); }, historySearch: async () => [{ uri:'history:one', conversationTitle:'T', conversationUrl:'/s',
+      messages:[{sourceRole:'user',text:'A recorded sentence.'}] }, {withdrawn:true,messages:[]}] });
+  f.stub.seedMemory(OV_USER, 'profile.md', 'Use metric units.');
+  const read = await f.call('GET', '/api/v1/content/read?uri=' + encodeURIComponent(ROOT + '/memories/profile.md'));
+  await f.mcp({ jsonrpc:'2.0', id:2,method:'tools/call',params:{name:'read',arguments:{uris:[ROOT+'/memories/profile.md']}} });
+  await f.mcp({ jsonrpc:'2.0', id:3,method:'tools/call',params:{name:'search',arguments:{query:'past'}} });
+  await new Promise(resolve => setImmediate(resolve));
+  const { recallDigest } = await import('../src/memoryRecallReceipt.mjs');
+  assert.equal(rows[0].operation.references[0].contentHash, recallDigest(read.json.result));
+  assert.equal(rows[1].operation.references[0].action, 'read');
+  assert.deepEqual(rows[2].operation.references.filter(ref=>ref.source==='history').map(ref=>ref.uri), ['history:one']);
+  assert.equal(rows.every(row => row.sessionId === 'mine'), true);
+  assert.doesNotMatch(JSON.stringify(rows), /A recorded sentence|Use metric units/);
+});
+
+test('recorded observation and preference controls use the read-only switch and shared scope fence', async t => {
+  const { observationFixtures } = await import('../../../evals/capsule-proving/replay/observation-recall.mjs');
+  const cases = (await observationFixtures()).filter(item => item.row);
+  const config = { memoryObservationRecallEnabled: true, memoryObservationInductionEnabled: false };
+  const owned = await fixture(t, { config });
+  const shared = await fixture(t, { config, memoryContexts: sessions => ({
+    forProject: async () => ({kind:'geo-project',ownerId:USER,namespaceId:OV_USER,userRoot:ROOT,sessions}),
+    configure: async () => sessions.register(USER), assertUri: (_ctx,uri) => uri,
+  }) });
+  for (const item of cases) {
+    const f = item.kind === 'shared' ? shared : owned;
+    f.stub.seedMemory(OV_USER, item.file, item.quote);
+    const result = await f.call('GET', '/api/v1/content/read?uri='+encodeURIComponent(ROOT+'/memories/'+item.file));
+    if (item.kind === 'shared') { assert.equal(result.status,404,item.qid); continue; }
+    assert.equal(result.status,200,item.qid);
+    assert.equal(result.json.result.includes(item.quote),true,item.qid);
+    assert.equal(result.json.result.startsWith('[seen once — observed choice, not a standing preference]'),item.kind==='once',item.qid);
+  }
+});
+
+test('history rescue promotes a verified literal excerpt and preserves a withdrawal notice', async t => {
+  const calls = [];
+  const excerpt = (uri, text) => ({ uri, sessionId: uri, messages: [{ sourceRole: 'user', text }] });
+  const f = await fixture(t, { config: { memoryLiteralFallbackEnabled: true, memoryHistorySearchEnabled: true },
+    historySearch: async request => {
+      calls.push(request.literalAnchors);
+      return request.literalAnchors
+        ? [excerpt('history:target', 'Shipment ZX18 arrived.'), excerpt('history:target', 'Shipment ZX18 arrived.')]
+        : [excerpt('history:nearby', 'Shipment ZX19 arrived.'), { withdrawn: true, messages: [] }];
+    } });
+  const lookup = async query => (await f.call('POST', '/api/v1/search/search', { query, limit: 1 })).json.result;
+  const rescued = await lookup('Which shipment was ZX18?');
+  assert.deepEqual(rescued.history.map(hit => hit.uri ?? hit.withdrawn), ['history:target', true]);
+  assert.deepEqual(calls.splice(0), [undefined, ['ZX18']]);
+  for (const query of ['Which shipment was ZX19?', 'which shipment arrived?']) {
+    await lookup(query);
+    assert.deepEqual(calls.splice(0), [undefined]);
+  }
+});

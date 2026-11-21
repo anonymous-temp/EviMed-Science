@@ -933,6 +933,14 @@ export interface WebAgentRun {
    * only by reading a filesystem. Absent on older ledger rows; `[]` never
    * appears, because a dispatch that recalled nothing writes no field.
    */
+  memoryRecall?: {
+    version: 1;
+    state: "not_searched" | "empty" | "hit" | "incomplete" | "unknown";
+    partial: boolean;
+    operations: { id: string; entry: string; at: string; queryHash: string | null; refs: number[]; coverage: Record<string, string> }[];
+    references: { uri: string; contentHash: string; entry: string; source: string; action: "delivered" | "read"; at: string }[];
+    turn: { complete: boolean; questionHash: string | null; searchCalls: number; answer: { seq: number; contentHash: string } | null } | null;
+  };
   recalledMemories?: { id: string; kind: string; scope: string }[];
   /**
    * The web pages the run read through `web_read`, from its transcripts at the

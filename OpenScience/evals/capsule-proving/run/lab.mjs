@@ -642,7 +642,7 @@ export async function openLab({
       historySecrets: history.secrets,
       historySearch: (request) => history.search(request),
       storeFor,
-      historySearchFor: selected => request => history.search(request,{ retrievalV2:selected.memoryHistoryRetrievalV2Enabled === true, sourceBound: selected.memorySourceEnvelopeEnabled === true }),
+      historySearchFor: selected => request => history.search(request,{ retrievalConfig:selected, retrievalV2:selected.memoryHistoryRetrievalV2Enabled === true, sourceBound: selected.memorySourceEnvelopeEnabled === true }),
     }, config, answerVariants);
     const gateway = gatewayGroup.gateways.get("");
     const handler = gateway.handler;

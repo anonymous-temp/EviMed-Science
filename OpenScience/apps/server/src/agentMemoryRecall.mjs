@@ -338,7 +338,7 @@ export async function recallHistoryForAgent({ config, history, admission, source
   const admitted = await admission.admit({ user: input.user, project: input.project, allowRunningFallback: false });
   if (!admitted.recall) return [];
   const version = sourceDeletion ? await sourceDeletion.version(input.user.id) : null;
-  const found = await history.search(input, { includeWithdrawn: true, accountScope: input.accountScope === true });
+  const found = await history.search(input, { includeWithdrawn: true, readOnly: true, accountScope: input.accountScope === true });
   // Like the gateway, apply the account-wide secret filter to the completed
   // reply, including labels, and fail closed if its privacy state is unreadable.
   const safe = config.memoryHistorySecretRedactionEnabled === true ? await history.secrets.filterValue(input.user.id, found) : found;

@@ -1047,3 +1047,19 @@ for (const boundary of ['withdrawn', 'deleted', 'unreviewed']) {
     assert.doesNotMatch(JSON.stringify(result), /trial tables|weekly analyses/);
   });
 }
+
+test('literal candidates require a live authorized archive and a read-only probe never removes it', options, async t => {
+  const f = await setup(t);
+  await f.service.ingestArchive(f.commit, f.context);
+  const candidates = [...f.files.keys()].map(uri => ({ uri }));
+  f.resources.searchHistoryAnchors = async () => candidates;
+  const request = { user: { id: f.userId }, project: { id: 'default', userId: f.userId }, query: 'trial', literalAnchors: ['trial'] };
+  assert.equal((await f.service.search(request, { readOnly: true }))[0].uri, candidates[0].uri);
+  assert.deepEqual(await f.service.search({ ...request, literalAnchors: ['missing'] }), []);
+  f.service.eligible = async () => false;
+  assert.deepEqual(await f.service.search(request, { readOnly: true }), []);
+  f.service.eligible = async () => true;
+  assert.equal((await f.service.search(request))[0].uri, candidates[0].uri);
+  await f.overlay.reject(f.userId, 'preferences', f.root + '/preferences/a.md', ['I prefer trial tables.']);
+  assert.deepEqual(await f.service.search(request), []);
+});

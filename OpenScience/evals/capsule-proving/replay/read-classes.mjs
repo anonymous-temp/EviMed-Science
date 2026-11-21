@@ -76,7 +76,7 @@ export function lexicalAudit(sessions, queries) {
   });
 }
 
-function parseHistory(text) {
+export function parseHistory(text) {
   const hits = []; let hit = null, message = null;
   for (const line of text.split('\n').slice(1)) {
     if (line.startsWith('Some earlier conversation material was withdrawn.')) { hits.push({ withdrawn: true, messages: [] }); continue; }

@@ -102,3 +102,15 @@ export function compactHistoryMessages(messages, query, scorer, maxChars, seen, 
     return { ...message,text:`${start ? '…' : ''}${message.text.slice(start,start+allowance-2)}${start+allowance-2 < message.text.length ? '…' : ''}` };
   });
 }
+
+export function fuseHistoryChannels(lexical, vector, root) {
+  const found = new Map();
+  for (const {hits:channel,weight} of [{hits:lexical,weight:3},{hits:vector,weight:1}]) {
+    const seen = new Set();
+    for (const [rank,hit] of channel.entries()) {
+      if (typeof hit?.uri!=='string' || !hit.uri.startsWith(`${root}/`) || seen.has(hit.uri)) continue;
+      seen.add(hit.uri); found.set(hit.uri,(found.get(hit.uri)??0)+weight/(20+rank));
+    }
+  }
+  return [...found].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,80).map(([uri,score])=>({uri,score}));
+}

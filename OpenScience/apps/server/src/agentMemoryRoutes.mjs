@@ -421,7 +421,11 @@ export function createAgentMemoryRoutes({
             historySearch({ user, project, query, accountScope: identity.projectId == null && input.projectId == null, limit: Math.min(20, Math.max(1, Math.trunc(Number(input.limit)) || 5)) }),
             new Promise(resolve => { timer = setTimeout(() => resolve([]), Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4000)); }),
           ]).finally(() => clearTimeout(timer)) : [];
-          await reply(200, { data: { ...result, history } });
+          await reply(200, { data: { ...result, history, historyAccess: {
+            ownerHash: user ? createHash('sha256').update(user.id).digest('hex') : null,
+            projectId: project?.id ?? null, scope: identity.projectId == null && input.projectId == null ? 'account' : 'project',
+            requiredScopes: ['memory.read', 'memory.history.read'],
+          } } });
         } else await reply(200, { data: result });
         return true;
       }
@@ -640,6 +644,7 @@ export function createAgentMemoryRoutes({
         // What this key can do, from the key. An integrator's first call.
         await reply(200, { data: {
           version: 1,
+          accountHash: createHash('sha256').update(keyAccount.id).digest('hex'),
           scopes: identity.scopes,
           capabilities: {
             rawConversationRecall: {
