@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Archive, RotateCcw } from "lucide-react";
-import { updateStructuredMemory, type WebStructuredMemory } from "@/lib/apiClient";
+import { updateStructuredMemory, type WebForgetRequest, type WebForgetStatus, type WebStructuredMemory } from "@/lib/apiClient";
 import { announceMemoryChanged, restoreCapsuleEntry, type OwnCapsuleEntry } from "@/lib/memoryClient";
 import { kindTitle, recordGroup, entryGroup } from "@/lib/memoryGroups";
 import { memoryExcerpt } from "@/lib/memoryText";
@@ -14,6 +14,15 @@ import { useCapsuleData } from "@/components/capsule/useCapsuleData";
 import { Drawer } from "@/components/ui/Drawer";
 import { IconButton } from "@/components/ui/IconButton";
 import { List, ListRow } from "@/components/ui/ListRow";
+import { memorySource } from "./FactDrawer";
+import { SourceConversationDelete } from "./SourceConversationDelete";
+
+const statusLabel: Record<WebForgetStatus, string> = {
+  requested: "已请求",
+  executed: "已执行",
+  pending_verification: "待核验",
+  not_executed: "未执行",
+};
 
 /** One thing the researcher forgot, whichever store holds it, with the way back. */
 interface ForgottenRow {
@@ -21,7 +30,9 @@ interface ForgottenRow {
   text: string;
   /** What it was: where it sat on the page. */
   kind: string;
-  restore: () => Promise<unknown>;
+  status: WebForgetStatus;
+  source?: { projectId: string; sessionId: string };
+  restore?: () => Promise<unknown>;
 }
 
 /**
@@ -36,12 +47,13 @@ interface ForgottenRow {
  * read them every time would pay for what almost nobody opens. A read that
  * fails says so in the drawer, with 重试, and never reads as 「没有」.
  *
- * Rows do not open: the drawer is already the second layer, and the one thing
- * to do with a forgotten row is bring it back.
+ * Requests carry their reviewed execution status. A restored item and a source
+ * conversation use their own operations.
  */
-export function ForgottenDrawer({ records, entries, projectName, onClose, onChanged }: {
+export function ForgottenDrawer({ records, entries, requests = [], projectName, onClose, onChanged }: {
   records: readonly WebStructuredMemory[];
   entries: readonly OwnCapsuleEntry[];
+  requests?: readonly WebForgetRequest[];
   projectName: (id: string | null) => string | null;
   onClose: () => void;
   onChanged: () => void;
@@ -54,23 +66,31 @@ export function ForgottenDrawer({ records, entries, projectName, onClose, onChan
     .map((record): ForgottenRow => {
       const statement = memoryExcerpt(record.value || record.summary);
       const forgetIntent = record.nativeType === "notes" && record.summary.startsWith("forget-");
+      const source = memorySource(record);
       return {
         key: `record:${record.id}`, text: forgetIntent ? `${statement}（未存为记忆，已阻止以后记住）` : statement,
         kind: recordGroup(record) === "project" ? projectName(record.scope === "project" ? record.scopeId : null) ?? kindTitle(record.kind) : kindTitle(record.kind),
+        status: record.forgetStatus ?? "executed",
+        ...(source?.projectId ? { source: { projectId: source.projectId, sessionId: source.sessionId } } : {}),
         restore: () => updateStructuredMemory(record, { status: "active" }),
       };
     });
   const entryRows = entries.map((entry): ForgottenRow => ({
     key: `entry:${entry.id}`, text: memoryExcerpt(entry.payload.content),
     kind: entryGroup(entry) === "project" ? projectName(entry.projectId ?? null) ?? kindTitle(entry.payload.factKind) : kindTitle(entry.payload.factKind),
+    status: "executed",
     restore: () => restoreCapsuleEntry(entry.payload.capsuleId, entry),
   }));
   const methodRows = (methods ?? []).map((method: WebMethod): ForgottenRow => ({
-    key: `method:${method.id}`, text: methodTitle(method), kind: "做法", restore: () => rollbackMethod(method, method.revision - 1),
+    key: `method:${method.id}`, text: methodTitle(method), kind: "做法", status: "executed", restore: () => rollbackMethod(method, method.revision - 1),
   }));
-  const rows = [...recordRows, ...entryRows, ...methodRows];
+  const requestRows = requests.map((request): ForgottenRow => ({
+    key: `request:${request.id}`, text: memoryExcerpt(request.text), kind: "遗忘请求", status: request.status,
+  }));
+  const rows = [...requestRows, ...recordRows, ...entryRows, ...methodRows];
 
   const restore = async (row: ForgottenRow) => {
+    if (!row.restore) return;
     setBusy(row.key);
     try {
       await row.restore();
@@ -96,8 +116,11 @@ export function ForgottenDrawer({ records, entries, projectName, onClose, onChan
                   key={row.key}
                   muted
                   title={<span className="line-clamp-2 max-w-measure">{row.text}</span>}
-                  meta={row.kind}
-                  actions={<IconButton icon={RotateCcw} label="恢复" size="sm" disabled={busy !== null} onClick={() => void restore(row)} />}
+                  meta={`${row.kind} · ${statusLabel[row.status]}`}
+                  actions={row.restore || row.source ? <div className="flex flex-wrap items-center justify-end gap-2">
+                    {row.source && <SourceConversationDelete {...row.source} onChanged={onChanged} afterForget />}
+                    {row.restore && <IconButton icon={RotateCcw} label="恢复" size="sm" disabled={busy !== null} onClick={() => void restore(row)} />}
+                  </div> : undefined}
                 />
               ))}
             </List>

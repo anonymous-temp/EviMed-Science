@@ -1,9 +1,25 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseForgetRequestJudgement, parseForgetTargetReview, createForgetRequestJudge } from '../src/nativeMemoryForgetRequests.mjs';
+import { forgetRequestStatus } from '../src/memoryForgetStatus.mjs';
 const candidates = [{ text: 'Project M-41633.' }];
 const conversation = [{ role: 'user', text: 'Forget Project M-41633.' }, { role: 'assistant', text: 'Forgotten.' }];
 const valid = { requests: [{ message: 0, quote: conversation[0].text, decision: 'remove', targets: [0], intents: [] }], claims: [{ message: 1, quote: 'Forgotten.' }] };
+
+test('execution status follows persisted actions, even if the assistant said it was done', () => {
+  const scenarios = [
+    { request: 'applying', plan: { state: 'applying' }, expected: 'requested' },
+    { request: 'applying', plan: { state: 'failed', attempts: 1 }, expected: 'pending_verification' },
+    { request: 'applying', plan: { state: 'failed', attempts: 3 }, expected: 'not_executed' },
+    { request: 'pending', plan: { state: 'completed' }, expected: 'pending_verification' },
+    { request: 'completed', plan: { state: 'completed' }, expected: 'executed' },
+    { request: 'confirmed', plan: { state: 'completed' }, expected: 'executed' },
+    { request: 'dismissed', plan: { state: 'completed' }, expected: 'not_executed' },
+  ];
+  for (const { request, plan, expected } of scenarios) {
+    assert.equal(forgetRequestStatus({ status: request }, { ...plan, claims: valid.claims }), expected);
+  }
+});
 test('structured judgement requires exact own-message quotes and offered targets', () => {
   assert.deepEqual(parseForgetRequestJudgement(JSON.stringify(valid), candidates, conversation), valid);
   for (const mutate of [v => v.requests[0].targets.push(5), v => v.requests[0].message = 1, v => v.requests[0].quote = 'invented',

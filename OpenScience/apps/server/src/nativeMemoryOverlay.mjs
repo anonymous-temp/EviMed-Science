@@ -585,8 +585,16 @@ export class NativeMemoryOverlay {
     return new Set(result.rows.flatMap(row => [...(row.result?.requests ?? []), ...(row.result?.claims ?? [])].map(item => item.key).filter(Boolean)));
   }
 
-  /** Pending confirmations live with their settled commit, not in the extraction queue. */
-  async forgetRequestCommits(userId) {
+  /** Pending confirmations live with their settled commit, not in the extraction queue.
+   * The activity view separately includes recorded requests still applying, and resolved ones.
+   */
+  async forgetRequestCommits(userId, { activity = false } = {}) {
+    if (activity) {
+      const result = await this.#query(`SELECT * FROM evimed_memory.native_commits WHERE user_id=$1
+        AND extraction->'forgetRequests'->'requests'->0 IS NOT NULL
+        ORDER BY created_at DESC, archive_uri DESC LIMIT 100`, [owner(userId)]);
+      return result.rows.map(publicCommit);
+    }
     const result = await this.#query(`SELECT * FROM evimed_memory.native_commits WHERE user_id=$1
       AND state='completed' AND extraction->'forgetRequests'->'requests' @> '[{"status":"pending"}]'::jsonb ORDER BY created_at DESC`, [owner(userId)]);
     return result.rows.map(publicCommit);

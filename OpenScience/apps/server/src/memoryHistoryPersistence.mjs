@@ -445,13 +445,16 @@ export class MemoryHistoryLedger {
   }
 
   /** @param {string} ownerId */
-  async pendingForgetScans(ownerId) {
+  async pendingForgetScans(ownerId, { includeScope = false } = {}) {
     await this.migrate();
-    const result = await this.database.query(`SELECT s.id,s.cutoff,s.error FROM evimed_memory.history_forget_scans s
+    const result = await this.database.query(`SELECT s.id,s.cutoff,s.error,s.user_root,s.fingerprint,s.memory_sweep->>'act' AS act FROM evimed_memory.history_forget_scans s
       JOIN evimed_control.users u ON u.id=s.owner_id AND u.created_at::text=s.owner_created_at
       WHERE s.owner_id=$1 AND s.state='pending' ORDER BY s.cutoff`, [ownerId]);
-    return result.rows.map((/** @type {{id:string,cutoff:Date,error:string}} */ row) => ({ id:`forget-scan:${row.id}`, text:'Checking earlier conversations for a recorded withdrawal.',
-      at:row.cutoff.toISOString(), state:row.error ? 'retrying' : 'pending', reason:'forget_scan_pending' }));
+    return result.rows.map((/** @type {{id:string,cutoff:Date,error:string,user_root:string,fingerprint:string,act:string|null}} */ row) => ({
+      id:`forget-scan:${row.id}`, text:'Checking earlier conversations for a recorded withdrawal.',
+      at:row.cutoff.toISOString(), state:row.error ? 'retrying' : 'pending', reason:'forget_scan_pending',
+      ...(includeScope ? { scope: { root: row.user_root, fingerprint: row.fingerprint, act: row.act } } : {}),
+    }));
   }
 
   async boundRejections(context, sessionUri) {

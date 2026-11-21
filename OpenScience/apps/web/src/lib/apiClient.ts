@@ -579,6 +579,15 @@ export type WebStructuredMemoryKind =
   | "note"
   | "run_summary";
 
+export type WebForgetStatus = "requested" | "executed" | "pending_verification" | "not_executed";
+
+export interface WebForgetRequest {
+  id: string;
+  text: string;
+  at: string;
+  status: WebForgetStatus;
+}
+
 export interface WebStructuredMemory {
   id: string;
   scope: "user" | "project" | "session" | "organization";
@@ -648,6 +657,7 @@ export interface WebStructuredMemory {
    * no use for them and the type leaves them out so nothing can show them.
    */
   nativeType?: string;
+  forgetStatus?: WebForgetStatus;
   /** Present on a line of the profile document: the document the line belongs to. */
   document?: { id: string };
 }
@@ -703,6 +713,7 @@ export interface WebMemoryProfile {
   usage?: Record<string, WebMemoryUsage>;
   /** What 「记住这一条」 asked and the engine has not written yet. */
   pending?: WebPendingMemory[];
+  forgetRequests?: WebForgetRequest[];
 }
 
 /** One thing the person asked the page to remember that is not in the list yet (about twelve seconds). */

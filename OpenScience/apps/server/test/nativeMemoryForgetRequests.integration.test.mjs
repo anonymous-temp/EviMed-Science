@@ -76,6 +76,7 @@ for (const deferred of [false, true]) test(`request without tool removes only re
   const result = (await f.overlay.commit(f.userId, committed.archive_uri)).extraction.forgetRequests;
   assert.equal(result.requests[0].removed, 1);
   assert.equal(result.falseClaims, 0);
+  assert.equal((await f.store.profile(f.userId)).forgetRequests[0].status, 'executed');
   const revisionCount = (await f.overlay.revisionsOf(f.userId, uri)).length;
   await worker.processCommits({ userId: f.userId });
   assert.equal((await f.overlay.revisionsOf(f.userId, uri)).length, revisionCount);
@@ -117,6 +118,7 @@ test('ambiguous reference removes nothing and records pending confirmation and a
   const result = (await f.overlay.commit(f.userId, committed.archive_uri)).extraction.forgetRequests;
   assert.equal(result.requests[0].status, 'pending');
   assert.equal(result.falseClaims, 1);
+  assert.equal((await f.store.profile(f.userId)).forgetRequests[0].status, 'pending_verification');
 });
 
 test('an unstored target records an undoable intent that refuses later extraction of earlier messages', options, async t => {
@@ -148,6 +150,7 @@ test('pending page choices can be confirmed without deleting unrelated lines, or
   await f.store.resolveForgetRequest(f.userId, pending[0].id, { action: 'confirm', choices: [0] });
   assert.equal(await f.sessions.read(f.userId, uri), `- ${other}`);
   assert.equal((await f.store.pending(f.userId)).length, 0);
+  assert.equal((await f.store.profile(f.userId)).forgetRequests[0].status, 'executed');
 });
 
 test('confirmation refuses a changed before-image and never accepts another account request', options, async t => {
@@ -164,6 +167,28 @@ test('confirmation refuses a changed before-image and never accepts another acco
   await f.store.resolveForgetRequest(f.userId, pending.id, { action: 'dismiss', choices: [] });
   assert.equal((await f.store.pending(f.userId)).length, 0);
   assert.equal(await f.sessions.read(f.userId, uri), `${fact}\n${other}`);
+  assert.equal((await f.store.profile(f.userId)).forgetRequests[0].status, 'not_executed');
+});
+
+test('activity uses the recorded request and a forgotten row uses the original conversation', options, async t => {
+  const f = await fixture(t, { conversationTitles: async (_owner, refs) => Object.fromEntries(refs
+    .filter(ref => ref.sessionId === 'session_original').map(ref => [ref.sessionId, 'Original conversation'])) });
+  const uri = `${f.root}/notes/original.md`;
+  f.stub.extract = () => ({ adds: [{ uri, after: fact }] });
+  const original = await f.commitConversation('original', [{ role: 'user', text: fact }], { projectId: 'default' });
+  await f.worker.processCommits({ userId: f.userId });
+  const request = await f.commitConversation('request', [{ role: 'user', text: 'Forget that project.' }], { projectId: 'default' });
+  await f.overlay.setForgetRequests(f.userId, request.archive_uri, { state: 'applying', requests: [
+    { status: 'applying', quote: 'Forget that project.', intents: [], candidates: [] },
+  ] });
+  const [{ status }] = (await f.store.profile(f.userId)).forgetRequests;
+  assert.equal(status, 'requested');
+  await f.store.forget({ id: f.userId }, { id: 'default', userId: f.userId }, uri, { engineSession: request.session });
+  const archived = (await f.store.profile(f.userId)).records.find(row => row.status === 'archived');
+  assert.ok(archived);
+  assert.equal(archived.forgetStatus, 'executed');
+  assert.deepEqual(archived.evidence.map(source => [source.sourceRef, source.projectId]),
+    [[`sessions/session_original/commits/${original.archive_uri.split('/').at(-1)}`, 'default']]);
 });
 
 test('selected headings disappear too and a removed identifier leaves the filename without losing independent content', options, async t => {
