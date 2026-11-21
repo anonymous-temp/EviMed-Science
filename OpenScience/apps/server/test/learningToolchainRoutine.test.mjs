@@ -155,3 +155,31 @@ test("missing or ineligible peer requests cannot establish similarity", async ()
     assert.equal(state.lessons.length, 0);
   }
 });
+
+test("a chain is an observed sequence in one session, with three clean results still required", async () => {
+  const trace = (sessionId, tools) => ({ sessionId, steps: tools.map(tool => ({ tool })) });
+  for (const [traces, expected] of [
+    [[trace("child-a", ["web_search"]), trace("child-b", ["web_read"])], 0],
+    [[trace("child-a", ["web_search", "web_read"]), trace("child-b", ["calculate", "plot"])], 0],
+    [[trace("child-a", ["web_search", "web_read"])], 1],
+  ]) {
+    const state = setup({ readTraces: async () => traces });
+    const ask = "Compare weekly warehouse inventory discrepancies";
+    await state.settle(ask);
+    await state.settle(ask);
+    assert.equal(state.lessons.length, 0);
+    await state.settle(ask);
+    assert.equal(state.lessons.length, expected);
+  }
+});
+
+test("a previous file-free peer whose completed trace is gone cannot supply the third experience", async () => {
+  const missing = new Set();
+  const state = setup({ readTraces: async (_project, id) => missing.has(id) ? [] : [{ steps: chain.tools.map(tool => ({ tool })) }] });
+  const ask = "Compare weekly warehouse inventory discrepancies";
+  const first = await state.settle(ask);
+  await state.settle(ask);
+  missing.add(first.id);
+  await state.settle(ask);
+  assert.equal(state.lessons.length, 0);
+});
