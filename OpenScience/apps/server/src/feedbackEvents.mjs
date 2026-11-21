@@ -412,10 +412,10 @@ export class FeedbackEvents {
    * The shape comes from an event of the run that carries one (the settling `silent` row, or the follow-up), so a use that arrives after
    * the settling needs none of its own. A rolling evidence window reads completion time with an event-time fallback for legacy rows.
    *
-   * @param {string} userId @param {{ scope: string, from: Date, to: Date, limit?: number, projectId?: string|null, toolchainEnabled?: boolean, requireShape?: boolean, completedWithin?: boolean, transactionClient?: any }} window
+   * @param {string} userId @param {{ scope: string, from: Date, to: Date, limit?: number, projectId?: string|null, toolchainEnabled?: boolean, requireShape?: boolean, completedWithin?: boolean, runIds?: string[] | null, transactionClient?: any }} window
    * @returns {Promise<{ runId: string, projectId: string | null, at: string, endedAt: string | null, shape: any[], toolchain?: any }[]>}
    */
-  async cleanSettledRuns(userId, { scope, from, to, limit = 200, projectId = undefined, toolchainEnabled = false, requireShape = true, completedWithin = false, transactionClient = null }) {
+  async cleanSettledRuns(userId, { scope, from, to, limit = 200, projectId = undefined, toolchainEnabled = false, requireShape = true, completedWithin = false, runIds = null, transactionClient = null }) {
     productInteger(limit, 1, 1000);
     if (projectId != null) productId(projectId,"project");
     if (!transactionClient) await migrateProductStore(this.database);
@@ -424,6 +424,7 @@ export class FeedbackEvents {
       FROM evimed_product.feedback_events e
       WHERE e.user_id=$1 AND e.trigger_kind='learning-evidence' AND e.subject_type='run' AND e.detail->>'scope'=$2
         AND ${time} >= $3 AND ${time} < $4
+        AND ($11::text[] IS NULL OR e.subject_id=ANY($11::text[]))
         AND ($7::boolean=false OR e.project_id IS NOT DISTINCT FROM $8::text)
         AND e.detail->>'evidence' IN ('silent','follow-up','used') AND ($10::boolean=false OR e.detail ? 'shape' OR ($9::boolean AND e.detail ? 'toolchain'))
         AND EXISTS (SELECT 1 FROM evimed_product.feedback_events k
@@ -435,7 +436,7 @@ export class FeedbackEvents {
               OR (c.detail->>'evidence' IN ('steer','follow-up') AND c.detail->>'verdict'=ANY($5::text[]))))
       ORDER BY e.subject_id, e.occurred_at, e.id`,
     [productId(userId, "user"), scope, from.toISOString(), to.toISOString(), [...LEARNING_CORRECTION_VERDICTS], [...LEARNING_ACCEPT_VERDICTS],
-      projectId !== undefined, projectId ?? null, toolchainEnabled, requireShape]);
+      projectId !== undefined, projectId ?? null, toolchainEnabled, requireShape, runIds]);
     return this.visible(userId, result.rows
       .map((/** @type {any} */ row) => ({ runId: String(row.subject_id), projectId: row.project_id ?? null, at: new Date(row.occurred_at).toISOString(),
         endedAt: Number.isFinite(Date.parse(String(row.ended_at ?? ""))) ? new Date(row.ended_at).toISOString() : null, shape: Array.isArray(row.shape) ? row.shape : [],
@@ -471,7 +472,7 @@ export class FeedbackEvents {
       [user, candidates]);
       const used = new Set(rows.map(row => row.run_id));
       if (used.has(runId)) return null;
-      const current = await this.cleanSettledRuns(user, { ...window, requireShape: false, transactionClient: client });
+      const current = await this.cleanSettledRuns(user, { ...window, requireShape: false, runIds: candidates, limit: candidates.length, transactionClient: client });
       const visible = new Set(current.map(member => member.runId));
       if (!visible.has(runId)) return null;
       return enqueue(matching.filter(peer => visible.has(peer.runId) && !used.has(peer.runId)), client);

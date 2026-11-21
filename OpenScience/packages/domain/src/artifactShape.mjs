@@ -62,8 +62,7 @@ export function cleanArtifactShape(value) {
 }
 
 /**
- * A run's files as shapes, in a fixed order (by format, then labels) so two runs that made the same things in another order
- * compare equal. Files past the bound are left out.
+ * A run's files as shapes, ordered deterministically by primary status, format and labels. The bound keeps primary files first.
  * @param {unknown} shapes @returns {ArtifactShape[]}
  */
 export function cleanArtifactShapes(shapes) {

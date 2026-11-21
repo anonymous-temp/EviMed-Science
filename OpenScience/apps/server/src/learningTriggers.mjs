@@ -277,13 +277,13 @@ export function learningTriggersFor({ run, runs, project = null, internalAgent =
  */
 export function routineGroupFor({ run, shape, family, toolchain = null, toolchainEnabled = false, minSimilarity = 0.8 }) {
   const artifact = Array.isArray(shape) && shape.length > 0;
-  const matching = [...new Map((family ?? []).filter((member) => member.runId !== run?.id && (artifact
+  const unique = [...new Map((family ?? []).map(member => [member.runId, member])).values()];
+  const matching = unique.filter((member) => member.runId !== run?.id && (artifact
     ? artifactShapesMatch(member.shape, shape)
     : toolchainEnabled && !(Array.isArray(member.shape) && member.shape.length) && !leftFiles(run)
       && toolchainsMatch(member.toolchain, toolchain, { minSimilarity })
-      && Number(member.requestSimilarity) >= METHOD_SIMILARITY_PAIR_FLOOR)).map(member => [member.runId, member])).values()];
-  const count = new Set(matching.map(member => member.runId)).size + 1;
-  return { matching, count };
+      && Number(member.requestSimilarity) >= METHOD_SIMILARITY_PAIR_FLOOR));
+  return { matching, count: matching.length + 1 };
 }
 
 /**

@@ -433,8 +433,9 @@ export class LearningEvidence {
       if (!member) return false;
       sources.push({ project: home, run: member });
     }
+    const cutoff = this.now().getTime() - this.periodMs;
     for (const source of sources) {
-      if (Date.parse(source.run.finishedAt) < this.now().getTime() - this.periodMs
+      if (source.run.status !== "succeeded" || !(Date.parse(source.run.finishedAt) >= cutoff)
         || await this.#triggers.refusalFor(source.project, source.run)) return false;
       const events = await this.feedback.learningEvidenceOf(project.userId, source.run.id);
       if (learningRunOutcome(events.map(event => event.detail)) !== "clean") return false;
