@@ -273,6 +273,19 @@ async function scopedListSearch(sessions, ctx, given) {
     let available = limit;
     for (const kind of ['memories', 'resources', 'skills']) { result[kind] = result[kind].slice(0, available); available -= result[kind].length; }
   }
+  if (ctx.personMergeEnabled && result.memories.length < limit && String(given.query ?? '').trim() && typeof ctx.personMerges === 'function') {
+    const merges = await ctx.personMerges().catch(() => []);
+    for (const row of merges) {
+      if (row.state !== 'applied' || !row.snapshot || result.memories.some(hit => hit.uri === row.keepUri)) continue;
+      const alias = personLabel(row.mergeUri, row.snapshot.merge?.body ?? '');
+      if (!literalIndexMatch(given.query, [alias]) || !(row.keepUri === target || row.keepUri.startsWith(`${target}/`)) || await ctx.hidden(row.keepUri)) continue;
+      if (!await ctx.personIdentityVisible(row.mergeUri, '')) continue;
+      const body = await ctx.readMemory(row.keepUri).catch(() => null);
+      if (body === null) continue;
+      result.memories.push({ uri: row.keepUri, abstract: await ctx.recallText(row.keepUri, body), retrieval: 'confirmed_alias' });
+      if (result.memories.length >= limit) break;
+    }
+  }
   result.total = result.memories.length + result.resources.length + result.skills.length;
   result.readStatus.state = result.readStatus.unreadable || result.readStatus.literalFallback === 'unavailable' ? 'unavailable' : result.total ? 'searched' : 'empty';
   return ok(result);
@@ -1315,6 +1328,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const ctx = {
         memoryFileSearchMinScore: config.memoryFileSearchMinScore,
         literalFallbackEnabled: config.memoryLiteralFallbackEnabled === true,
+        personMergeEnabled: config.memoryPersonMergeEnabled === true,
+        personMerges: () => overlay && typeof overlay.personMerges === 'function' ? overlay.personMerges(user.id) : Promise.resolve([]),
         fileMetadata: () => overlay?.configured && typeof overlay.files === 'function' ? overlay.files(user.id) : Promise.resolve(new Map()),
         user, project, json, origin, query: url.searchParams, match: found.match, engineUser, userRoot, sessions: view, memoryContext, shared,
         account: /** @type {any} */ (view).client.account,

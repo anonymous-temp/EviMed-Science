@@ -6,7 +6,7 @@ import { personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { orderStandingPreferences } from './memoryOpeningByUse.mjs';
 import { personalMemoryTravels } from './openVikingLayout.mjs';
-import { inferredChoiceMessage, choiceRows, choiceKey, normaliseChoice, aliasesFor, aliasVariants, personLabel } from './nativeMemoryInduction.mjs';
+import { inferredChoiceMessage, choiceRows, choiceKey, normaliseChoice, aliasesFor, aliasVariants, personLabel, closePersonNames, confirmedAliases } from './nativeMemoryInduction.mjs';
 import { forgetRequestId } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
@@ -634,6 +634,22 @@ export class NativeMemoryStore {
           value: line.replace(/^#\s+/, "").replace(AS_OF, "").trim(), summary: "",
           document: { id: base.id, uri: file.uri }, revisions: [], evidence, evidenceCount: evidence.length,
         });
+      }
+    }
+    if (this.personAliasHintEnabled && this.personMergeEnabled) {
+      const dismissed = await this.personEdges.dismissed(userId).catch(() => null);
+      if (dismissed) for (const record of records) {
+        const file = held.find(candidate => candidate.uri === record.uri && candidate.type === 'people');
+        if (!file) continue;
+        const label = personLabel(file.uri, file.body), aliases = confirmedAliases(file.body);
+        record.possibleSamePerson = held.filter(candidate => candidate.type === 'people' && candidate.uri !== file.uri
+          && (candidate.namespaceId ?? null) === (file.namespaceId ?? null)
+          && personProjectScope(candidate.projectId) === personProjectScope(file.projectId)
+          && !dismissed.has(personPairId(file.uri, candidate.uri))).flatMap(candidate => {
+          const other = personLabel(candidate.uri, candidate.body);
+          return closePersonNames(label, other) || aliases.includes(other) || confirmedAliases(candidate.body).includes(label)
+            ? [{ id: nativeFileId(candidate.uri), label: other }] : [];
+        }).slice(0, 8);
       }
     }
     const external = typeof this.overlay.externalSources === 'function' ? await this.overlay.externalSources(userId, archives) : new Map();

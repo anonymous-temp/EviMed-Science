@@ -156,6 +156,21 @@ test('profile H1 is a visible editable row; forgetting the title preserves neigh
   assert.doesNotMatch(files.get(uri).body, /Mara Santos/);
 });
 
+test('people cards offer only unconfirmed name hints on the page and honour a distinct-person decision', async () => {
+  const { files, store } = engine({ count: 0, delay: 0 });
+  Object.assign(store, { personAliasHintEnabled: true, personMergeEnabled: true });
+  const a = `${ROOT}/people/王阿姨.md`, b = `${ROOT}/people/小王阿姨.md`, other = `${ROOT}/people/陈主任.md`;
+  files.set(a, { body: '# 王阿姨\n- Likes tea.', modTime: '2026-11-17' });
+  files.set(b, { body: '# 小王阿姨\n- Likes walking.', modTime: '2026-11-17' });
+  files.set(other, { body: '# 陈主任\n- Works nearby.', modTime: '2026-11-17' });
+  const records = await store.records('u1');
+  assert.deepEqual(records.find(row => row.uri === a).possibleSamePerson.map(row => row.label), ['小王阿姨']);
+  assert.deepEqual(records.find(row => row.uri === other).possibleSamePerson, []);
+  const { personPairId } = await import('../src/nativeMemoryPeople.mjs');
+  store.personEdges.dismissed = async () => new Set([personPairId(a, b)]);
+  assert.deepEqual((await store.records('u1')).find(row => row.uri === a).possibleSamePerson, []);
+});
+
 test('a file heading is its visible title, rather than a stale filename after correction', async () => {
   const { files, store } = engine({ count: 0, delay: 0 });
   files.set(`${ROOT}/people/old-label.md`, { body: '# Current name\n- Independent fact.', modTime: '2026-11-17' });

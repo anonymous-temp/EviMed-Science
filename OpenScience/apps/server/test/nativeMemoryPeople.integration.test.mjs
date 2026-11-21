@@ -88,6 +88,14 @@ test('AL9 real gateway and PostgreSQL: distinct, confirmation, merge, inherited-
   await worker.processCommits({ userId: f.userId });
   assert.equal(await f.sessions.read(f.userId, merge), null);
   assert.match(await f.sessions.read(f.userId, keep), /Likes walking/);
+  const consolidated = (await f.sessions.read(f.userId, keep)).split('\n').filter(line => !line.includes('又称：小王阿姨')).join('\n');
+  await f.sessions.replace(f.userId, keep, consolidated);
+  await worker.ingestConsolidation(f.userId, { taskId: 'person-alias-cleanup', updates: [keep] }, { context });
+  assert.doesNotMatch(await f.sessions.read(f.userId, keep), /小王阿姨/, 'ordinary cleanup may remove the visible alias line');
+  const recalled = await call('search', { query: '小王阿姨喜欢什么？' });
+  const hits = JSON.parse(recalled.result.content[0].text);
+  assert.equal(hits.memories[0].uri, keep, 'the durable confirmed merge still resolves its alias in the next conversation');
+  assert.match(hits.memories[0].abstract, /Likes walking/);
   await f.overlay.scrubLines(f.userId, keep, ['Weight: 50 kg'], { sourceDeleted: true });
   assert.equal((await f.overlay.personMerges(f.userId))[0].snapshot, null, 'privacy deletion invalidates both undo before-images');
   await f.database.query('DELETE FROM evimed_control.users WHERE id=$1', [f.userId]);

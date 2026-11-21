@@ -1428,6 +1428,24 @@ test('stated preferences rank ahead of inferred choices even at limit one', asyn
   assert.equal(found.json.result.memories.length, 1);
   assert.equal(found.json.result.memories[0].uri, stated);
 });
+test('a confirmed merge keeps alias retrieval after ordinary cleanup removes the alias line', async t => {
+  const keep = `${ROOT}/memories/people/王阿姨.md`, retired = `${ROOT}/memories/people/小王阿姨.md`;
+  const f = await fixture(t, { config: { memoryPersonMergeEnabled: true }, overlay: { configured: true,
+    sensitiveUris: async () => [], otherProjectUris: async () => [], noteRecalled: async () => {},
+    personMerges: async () => [{ state: 'applied', keepUri: keep, mergeUri: retired,
+      snapshot: { merge: { uri: retired, body: '# 小王阿姨\n- Likes tea.' } } }] } });
+  f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Likes walking.');
+  for (const query of ['小王阿姨', '小王阿姨喜欢什么？']) {
+    const found = await f.call('POST', '/api/v1/search/search', { query });
+    assert.equal(found.json.result.memories.length, 1);
+    assert.equal(found.json.result.memories[0].uri, keep);
+    assert.equal(found.json.result.memories[0].retrieval, 'confirmed_alias');
+    assert.match(found.json.result.memories[0].abstract, /Likes walking/);
+  }
+  const unrelated = await f.call('POST', '/api/v1/search/search', { query: '大王阿姨' });
+  assert.equal(unrelated.json.result.memories.length, 0);
+});
+
 test('an old people URI resolves only through one confirmed alias, never a similar name', async t => {
   const f = await fixture(t, { config: { memoryPersonAliasHintEnabled: true } });
   f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Confirmed aliases: ["王阿姨","小王阿姨"]\n- Likes walking.');

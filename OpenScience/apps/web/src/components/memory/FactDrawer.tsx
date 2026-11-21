@@ -91,7 +91,7 @@ export interface FormerStatement { id: string; text: string; until: string | nul
  * Responsive: existing bounded drawer width.
  * Verification: FactDrawer tests; live native path acceptance is separate.
  */
-export function FactDrawer({ item, formerly = [], projectName, conversations, siblings = [], onClose, onChanged, onOpenRecord, canOpenRecord }: {
+export function FactDrawer({ item, formerly = [], projectName, conversations, siblings = [], onClose, onChanged, onOpenRecord, canOpenRecord, onAskAbout }: {
   /** Its old statements, which are the person's to have gone: where the map opened the drawer, it knows them. */
   formerly?: readonly FormerStatement[];
   item: FactItem;
@@ -106,6 +106,8 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
   /** Opens another memory in this drawer, from its 关联 section; absent where the page cannot. */
   onOpenRecord?: (recordId: string) => void;
   canOpenRecord?: (recordId: string) => boolean;
+  /** Drafts the identity question in the ordinary composer; nothing is merged from this hint alone. */
+  onAskAbout?: (draft: string) => void;
 }) {
   const record = item.kind === "record" ? item.record : null;
   const entry: OwnCapsuleEntry | null = item.kind === "entry" ? item.entry : null;
@@ -314,6 +316,19 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
           )}
 
           {record && <ValidityBar span={validitySpan(record)} />}
+
+          {record && onAskAbout && (record.possibleSamePerson?.length ?? 0) > 0 && (
+            <DrawerSection label="可能是同一人">
+              <ul className="space-y-2">
+                {record.possibleSamePerson?.map((person) => (
+                  <li key={person.id} className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-ui text-text">{person.label}</span>
+                    <Button size="sm" variant="secondary" onClick={() => onAskAbout(`请确认“${record.summary}”和“${person.label}”是否是同一人。只有我明确回答是同一人后才能合并；如果不是，我会明确回答不是。`)}>去确认</Button>
+                  </li>
+                ))}
+              </ul>
+            </DrawerSection>
+          )}
 
           {candidate && (
             <div className="flex flex-wrap items-center gap-2">
