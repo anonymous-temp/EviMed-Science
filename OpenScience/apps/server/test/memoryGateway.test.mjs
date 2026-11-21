@@ -11,7 +11,7 @@ import { AUTOPILOT_VERIFICATION_ROUTE_REASON as VERIFICATION_ROUTE_REASON } from
 import { createNativeCapsuleSearch } from "../src/capsuleGateway.mjs";
 import { createMemoryAdmission, isPlatformStartedRun } from "../src/memoryAdmission.mjs";
 import {
-  MEMORY_GATEWAY_PATH, MEMORY_GATEWAY_TOOLS, PLUGIN_CONTEXT_TAG, capsuleSearchText, createMemoryGatewayHandler, filterCapturedMessage, memoryGatewayRoutePattern, parseEventStream,
+  MEMORY_GATEWAY_PATH, MEMORY_GATEWAY_TOOLS, PLUGIN_CONTEXT_TAG, capsuleSearchText, createMemoryGatewayHandler, filterCapturedMessage, personDecisionMessages, memoryGatewayRoutePattern, parseEventStream,
 } from "../src/memoryGateway.mjs";
 import { MapEdgeCorrections } from '../src/memoryMapEdges.mjs';
 import { personPairId } from '../src/nativeMemoryPeople.mjs';
@@ -1461,7 +1461,7 @@ test('a confirmed merge keeps alias retrieval after ordinary cleanup removes the
 
 test('confirmed alias lookup honours explicit exclusions, withdrawal, scope and undo even behind opaque filenames', async t => {
   const keep = `${ROOT}/memories/people/first.md`, retired = `${ROOT}/memories/people/second.md`;
-  const merge = { state: 'applied', keepUri: keep, mergeUri: retired, snapshot: { merge: { body: '# Old Name', projectId: null } } };
+  const merge = { state: 'applied', keepUri: keep, mergeUri: retired, snapshot: { merge: { body: '# Old Name', projectId: null }, keep: { body: '# Former Keeper\n- Confirmed aliases: ["Former Keeper","Keeper Alias"]', projectId: null } } };
   let withdrawn = [];
   const f = await fixture(t, { config: { memoryPersonMergeEnabled: true }, overlay: { configured: true,
     sensitiveUris: async () => [], otherProjectUris: async () => [], noteRecalled: async () => {},
@@ -1469,11 +1469,14 @@ test('confirmed alias lookup honours explicit exclusions, withdrawal, scope and 
   f.stub.seedMemory(OV_USER, 'people/first.md', '# Pat\n- Likes walking.');
   const search = async (patch = {}) => (await f.call('POST', '/api/v1/search/search', { query: 'Old Name', limit: 1, ...patch })).json.result.memories;
   assert.deepEqual((await search()).map(hit => hit.uri), [keep]);
+  for (const query of ['Former Keeper', 'Keeper Alias']) assert.deepEqual((await search({ query })).map(hit => hit.uri), [keep]);
   for (const excluded of [keep, retired]) assert.deepEqual(await search({ exclude_uris: [excluded] }), []);
   merge.snapshot.merge.projectId = 'other-project';
   assert.deepEqual(await search(), []);
   merge.snapshot.merge.projectId = null;
   const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  withdrawn = [{ fingerprint: lineFingerprint('又称：Keeper Alias') }];
+  assert.deepEqual(await search({ query: 'Keeper Alias' }), []);
   withdrawn = [{ fingerprint: lineFingerprint('又称：Old Name') }];
   assert.deepEqual(await search(), []);
   assert.equal((await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(retired)}`)).status, 404);
@@ -1896,4 +1899,14 @@ test('literal and observation reads retain same-date neighbours through the shar
   assert.match(text, /blue cabinet/); assert.match(text, /seen once/); assert.doesNotMatch(text, /night shifts/);
   const read = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read', arguments: { uris: [`${ROOT}/memories/observations/Keys.md`] } } });
   assert.match(JSON.stringify(read.messages), /seen once/); assert.doesNotMatch(JSON.stringify(read.messages), /night shifts/);
+});
+
+test('only the live human reply can authorize a decision in a fork or after an unattended turn', () => {
+  const msg = (seq, role, source, content) => ({ seq, role, source, content });
+  assert.deepEqual(personDecisionMessages({ seedEndSeq: 2, messages: [
+    msg(1, 'user', 'user', 'Inherited consent'), msg(3, 'assistant', 'system', 'Are A and B the same person?'),
+    msg(4, 'user', 'plugin', 'context'), msg(5, 'user', 'user', 'yes'),
+    msg(6, 'user', 'loopx-continuation', 'yes'), msg(7, 'user', 'user', '')
+  ] }), [{ role: 'assistant', text: 'Are A and B the same person?' }, { role: 'user', text: 'yes' },
+    { role: 'user', text: '' }, { role: 'user', text: '' }]);
 });

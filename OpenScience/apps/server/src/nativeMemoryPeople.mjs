@@ -27,10 +27,13 @@ export function personDecisionRefusal({ root, a, b, confirmation, messages }) {
 }
 
 /** A typed consent receipt names both current cards and the operation. Free text is never parsed for intent. */
-export function personConsentRefusal(left, right, distinct, confirmation) {
+export function personConsentRefusal(left, right, distinct, confirmation, question = '') {
   const relation = distinct ? '不是同一个人' : '是同一个人';
   const action = distinct ? '记录为不同人' : '合并';
   for (const [a, b] of [[left, right], [right, left]]) {
+    const asks = [`“${a}”和“${b}”是同一个人吗？`, `Are ${a} and ${b} the same person?`];
+    const answers = distinct ? ['不是', '不是同一个人', 'no'] : ['是', '是的', '是同一个人', 'yes'];
+    if (asks.includes(question.trim()) && answers.includes(String(confirmation ?? '').trim().replace(/[.。]$/u, '').toLowerCase())) return null;
     const sentence = `${a}和${b}${relation}`;
     const english = `${a} and ${b} are ${distinct ? 'different people' : 'the same person'}`;
     const forms = [sentence, `${sentence}，请${action}`, `更正一下，${sentence}，请${action}`, english];
@@ -81,7 +84,7 @@ export function mergePeopleText(keep, merge, label) {
 
 export const PERSON_MEMORY_TOOLS = {
   merge_people: {
-    description: 'Merge two people files ONLY after the person explicitly confirms in this conversation that they are the same person. Never infer identity from similar names or facts. Quote the person’s confirming sentence verbatim. Both histories and conflicting facts are kept; the memory page can undo this operation.',
+    description: 'Merge two people files ONLY after the person explicitly confirms in this conversation that they are the same person. Never infer identity from similar names or facts. Ask “<first name>”和“<second name>”是同一个人吗？ as a standalone question to bind a short yes or no. Quote the person’s complete latest answer verbatim. Both histories and conflicting facts are kept; the memory page can undo this operation.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['keep', 'merge', 'confirmation'], properties: {
       keep: { type: 'string' }, merge: { type: 'string' }, confirmation: { type: 'string', minLength: 1, maxLength: 6000 },
     } },

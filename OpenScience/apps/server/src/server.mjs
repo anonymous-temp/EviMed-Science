@@ -489,7 +489,7 @@ import { GeoInclusionClient, inclusionEnabled } from "./geoInclusionClient.mjs";
 import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget.mjs";
 import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler, createNativeCapsuleSearch } from "./capsuleGateway.mjs";
-import { MEMORY_GATEWAY_PATH, filterCapturedMessage, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
+import { MEMORY_GATEWAY_PATH, personDecisionMessages, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
 import { createMemoryAdmission } from "./memoryAdmission.mjs";
 import { isPlatformStartedRun } from "./memoryDispatch.mjs";
 import { OpenVikingSessions } from "./openVikingSessions.mjs";
@@ -5393,13 +5393,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const memoryGatewayHandler = createMemoryGatewayHandler({
     config, runtimeManager, store, sessions: openVikingSessions, admission: memoryAdmission,
     personMessages: async (project, sessionId) => {
-      // Read the kernel's recorded human messages, never the tool's role-labelled remember arguments.
-      // Admission binds the only running conversation; a concurrent or unbound call is refused before this reader.
       const transcript = await runtimeManager.sessionTranscript(project, sessionId, { wake: false });
-      return transcript.messages.filter(message => message.role === 'user' && message.source === 'user').flatMap(message => {
-        const captured = filterCapturedMessage(message);
-        return 'forward' in captured ? [{ role: 'user', text: captured.forward.parts.map(part => part.text).join('\n') }] : [];
-      });
+      return personDecisionMessages(transcript);
     },
     memoryContexts: nativeMemoryContexts, rememberJournal: nativeRememberJournal,
     historySecrets: memoryHistory?.secrets,

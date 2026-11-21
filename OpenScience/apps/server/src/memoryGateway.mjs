@@ -194,6 +194,13 @@ function insideNativeMemories(uri, userRoot) {
   return insideOwnSpace(uri, userRoot) && (full === root || full.startsWith(`${root}/`));
 }
 
+/** Both sides of an old merge must belong to this project before using the relationship.
+ * @param {import('./nativeMemoryPeople.mjs').PersonMerge} row @param {string} projectId */
+function visibleMergeSnapshot(row, projectId) {
+  return row.snapshot?.merge && [row.snapshot.merge, row.snapshot.keep].every(file =>
+    !file || !file.sensitive && (!file.projectId || file.projectId === 'default' || file.projectId === projectId));
+}
+
 /** Native list search has no context-only exclusion fields; filter structured rows before returning any bytes.
  * @param {any} sessions @param {any} ctx @param {any} given */
 async function scopedListSearch(sessions, ctx, given) {
@@ -279,15 +286,17 @@ async function scopedListSearch(sessions, ctx, given) {
     const applied = new Map(rows.filter(row => row.state === 'applied' && row.snapshot).map(row => [row.mergeUri, row]));
     const matches = [];
     for (const row of applied.values()) {
-      const snapshot = row.snapshot.merge;
-      if (!snapshot || ctx.recallFile(row.mergeUri)?.type !== 'people' || hidden(row.mergeUri)
-        || snapshot.sensitive || snapshot.projectId && snapshot.projectId !== 'default' && snapshot.projectId !== ctx.project.id) continue;
-      const labels = [personLabel(row.mergeUri, snapshot.body), ...confirmedAliases(snapshot.body)];
-      const alias = labels.find(label => literalIndexMatch(given.query, [label]));
-      if (!alias || !await ctx.aliasVisible(row.mergeUri, alias)) continue;
+      if (!visibleMergeSnapshot(row, ctx.project.id) || ctx.recallFile(row.mergeUri)?.type !== 'people' || hidden(row.mergeUri)) continue;
+      const candidates = [{ sourceUri: row.mergeUri, file: row.snapshot.merge }, { sourceUri: row.keepUri, file: row.snapshot.keep }]
+        .flatMap(({ sourceUri, file }) => file ? [personLabel(sourceUri, file.body), ...confirmedAliases(file.body)]
+          .filter(label => literalIndexMatch(given.query, [label])).map(label => ({ sourceUri, label })) : [])
+        .sort((left, right) => right.label.length - left.label.length);
+      const match = candidates[0];
+      if (!match || hidden(match.sourceUri) || !await ctx.aliasVisible(match.sourceUri, match.label)) continue;
       let uri = row.keepUri;
       const seen = new Set([row.mergeUri]);
       while (applied.has(uri) && !seen.has(uri) && !hidden(uri) && ctx.recallFile(uri)?.type === 'people'
+        && visibleMergeSnapshot(applied.get(uri), ctx.project.id)
         && await ctx.aliasVisible(uri, personLabel(uri, applied.get(uri).snapshot.merge.body))) {
         seen.add(uri);
         uri = applied.get(uri).keepUri;
@@ -390,6 +399,19 @@ export function filterCapturedMessage(body, { researchGoal = false, semanticSecr
   }
   if (!parts.length) return { drop: "no_text" };
   return { forward: { role: body.role, parts, ...(typeof body.created_at === "string" && body.created_at.length <= 40 ? { created_at: body.created_at } : {}) }, masked };
+}
+
+/** A fork's inherited messages and a platform-authored turn cannot authorize an identity decision.
+ * Injected context is transparent to the human exchange. An unreadable live reply invalidates an earlier one.
+ * @param {Pick<import('@evimed/domain').RunTranscript, 'messages'|'seedEndSeq'>} transcript */
+export function personDecisionMessages(transcript) {
+  return transcript.messages.filter(message => message.seq > (transcript.seedEndSeq ?? -1)
+    && (message.role === 'assistant' || message.role === 'user' && message.source !== 'plugin')).map(message => {
+    const captured = filterCapturedMessage(message);
+    const witnessed = message.role === 'assistant' || message.source === 'user';
+    return { role: message.role, text: witnessed && 'forward' in captured && !captured.masked
+      ? captured.forward.parts.map(part => part.text).join('\n') : '' };
+  });
 }
 
 /** The JSON-RPC messages of a buffered `text/event-stream` body. @param {string} text */
@@ -984,8 +1006,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         while (redirected) {
           const target = redirected.keepUri;
           if (visited.has(target) || ctx.recallFile(target)?.type !== 'people' || await ctx.hidden(target)
-            || redirected.snapshot?.merge?.projectId && redirected.snapshot.merge.projectId !== 'default' && redirected.snapshot.merge.projectId !== ctx.project.id
-            || !redirected.snapshot?.merge || !await ctx.aliasVisible(uri, personLabel(uri, redirected.snapshot.merge.body))) return missing;
+            || !visibleMergeSnapshot(redirected, ctx.project.id) || !await ctx.aliasVisible(uri, personLabel(uri, redirected.snapshot.merge.body))) return missing;
           visited.add(target);
           uri = await ctx.checkUri(target);
           redirected = redirects.find(row => row.mergeUri === uri && row.state === 'applied');
@@ -1126,8 +1147,11 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           if (otherProjects.includes(a) || otherProjects.includes(b) || await ctx.hidden(a) || await ctx.hidden(b)) {
             local.push(rpcError(message.id, -32602, 'These people files are not writable in this conversation.')); continue;
           }
+          const latest = evidenceMessages.map(turn => turn.role).lastIndexOf('user');
+          const previous = evidenceMessages[latest - 1];
+          const question = previous?.role === 'assistant' ? previous.text : '';
           let result;
-          try { result = await memoryTool.people(ctx.user, ctx.project, { a, b, distinct: name === 'distinct_people', confirmation: args.confirmation, engineSession: `dsh-${admitted.sessionId}` }); }
+          try { result = await memoryTool.people(ctx.user, ctx.project, { a, b, distinct: name === 'distinct_people', confirmation: args.confirmation, question, engineSession: `dsh-${admitted.sessionId}` }); }
           catch (error) {
             if (!(error instanceof HttpError) || !['memory_conflict', 'memory_scope_denied', 'memory_payload_invalid', 'memory_source_cleanup_busy', 'memory_map_edges_full'].includes(error.code)) throw error;
             local.push(rpcError(message.id, -32602, error.message)); continue;

@@ -97,6 +97,12 @@ test('the store independently refuses disabled, foreign, non-people, identical a
   }
   await store.people(user, project, { a, b, distinct: true, confirmation: '王阿姨和小王阿姨不是同一个人。', engineSession: 'dsh-current' });
   assert.deepEqual(decisions, [[user.id, personPairId(a, b), true]]);
+  const third = b.replace(/[^/]+$/, 'other.md');
+  f.metadata.set(third, { uri: third, body: first, projectId: null });
+  await assert.rejects(call(), /full decision/);
+  const names = [a, b].map((uri, i) => `${['王阿姨', '小王阿姨'][i]}（${uri.split('/').at(-1)}）`);
+  await store.people(user, project, { a, b, distinct: true, confirmation: `${names[0]}和${names[1]}不是同一个人。`, engineSession: 'dsh-current' });
+  assert.deepEqual(decisions[1], [user.id, personPairId(a, b), true]);
   assert.equal(f.revisions.length, 0); assert.equal(f.bytes.get(a), first); assert.equal(f.bytes.get(b), second);
 });
 

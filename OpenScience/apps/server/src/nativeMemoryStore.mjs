@@ -686,10 +686,10 @@ export class NativeMemoryStore {
       // Use only identities that survived the final page fences, including filename fallback.
       const candidates = [];
       for (const record of people) {
-        const file = held.find(file => file.uri === record.uri);
+        const file = held.find(candidate => candidate.uri === record.uri);
         const label = personLabel(record.uri, record.value);
         if (await fenceWithdrawnMemoryBody(this.overlay, userId, record.uri, `# ${label}`, file.namespaceId) === null) continue;
-        candidates.push({ record, label, reading: await personNameReading(label), aliases: confirmedAliases(record.value), file });
+        candidates.push({ record, label, reading: personNameReading(label), aliases: confirmedAliases(record.value), file });
       }
       if (dismissed) for (const { record, label, reading, aliases, file } of candidates) {
         record.possibleSamePerson = candidates.filter(other => other.record.id !== record.id
@@ -1780,8 +1780,8 @@ export class NativeMemoryStore {
 
   /** Gateway-only entry: evidence is checked against the bound human conversation before this method is called.
    * @param {{id:string}} user @param {{id:string,userId:string}} project
-   * @param {{a:string,b:string,distinct:boolean,engineSession:string,confirmation:string}} decision */
-  async people(user, project, { a, b, distinct, engineSession, confirmation }) {
+   * @param {{a:string,b:string,distinct:boolean,engineSession:string,confirmation:string,question?:string}} decision */
+  async people(user, project, { a, b, distinct, engineSession, confirmation, question = '' }) {
     if (!this.personMergeEnabled) throw new HttpError(400, 'memory_payload_invalid', 'People decisions are not enabled.');
     return withNativeMemoryWrite(this.overlay.database, user.id, async () => {
       this.#touch(user.id);
@@ -1801,7 +1801,11 @@ export class NativeMemoryStore {
       const keep = files.find(file => file.uri === a), merge = files.find(file => file.uri === b) ?? pending?.snapshot?.merge;
       if (!keep || !merge || a === b || keep.sensitive || merge.sensitive) throw new HttpError(400, 'memory_payload_invalid', 'Choose two available, different people files.');
       if (personProjectScope(keep.projectId) !== personProjectScope(merge.projectId)) throw new HttpError(403, 'memory_scope_denied', 'People files in different project scopes cannot be combined.');
-      const refusal = personConsentRefusal(personLabel(a, keep.body), personLabel(b, merge.body), distinct, confirmation);
+      const labels = [personLabel(a, keep.body), personLabel(b, merge.body)];
+      const ambiguous = labels[0] === labels[1] || files.some(file => file.type === 'people' && !file.sensitive && file.uri !== a && file.uri !== b
+        && personProjectScope(file.projectId) === personProjectScope(keep.projectId) && labels.includes(personLabel(file.uri, file.body)));
+      const [left, right] = ambiguous ? [a, b].map((uri, index) => `${labels[index]}（${uri.split('/').at(-1)}）`) : labels;
+      const refusal = personConsentRefusal(left, right, distinct, confirmation, question);
       if (refusal) throw new HttpError(400, 'memory_payload_invalid', refusal);
       if (distinct) return this.personEdges.set(user.id, personPairId(a, b), true);
       const origins = await this.overlay.originsOf(user.id, [a, b]);

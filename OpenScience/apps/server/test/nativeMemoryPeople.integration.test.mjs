@@ -6,7 +6,7 @@ import { once } from 'node:events';
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
 import { NativeMemoryStore, nativeFileId } from '../src/nativeMemoryStore.mjs';
 import { NativeMemoryWorker } from '../src/nativeMemoryWorker.mjs';
-import { createMemoryGatewayHandler, filterCapturedMessage, MEMORY_GATEWAY_PATH, parseEventStream } from '../src/memoryGateway.mjs';
+import { createMemoryGatewayHandler, personDecisionMessages, MEMORY_GATEWAY_PATH, parseEventStream } from '../src/memoryGateway.mjs';
 import { createMemoryAdmission } from '../src/memoryAdmission.mjs';
 import { GeoNativeMemoryContext } from '../src/geoNativeMemoryContext.mjs';
 import { normalizeTranscript } from '../src/dshRuntimeAdapter.mjs';
@@ -31,7 +31,8 @@ test('AL9 real gateway and PostgreSQL: distinct, confirmation, merge, inherited-
     await f.overlay.upsertFile({ userId: f.userId, uri, body, memoryType: 'people' });
     await f.overlay.syncOrigins(f.userId, uri, { after: body, origin: { engineSession, projectId: project.id, projectCreatedAt: context.projectCreatedAt } });
   }
-  const sessionId = 'session_0123456789abcdef0123456789abcdef', token = 'person-test-token';
+  let sessionId = 'session_0123456789abcdef0123456789abcdef';
+  const token = 'person-test-token';
   const events = [];
   const say = text => events.push({ type: 'user/message', seq: events.length, time: Date.now(), data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } });
   const admission = createMemoryAdmission({ config, memorySettings: f.memorySettings,
@@ -39,16 +40,13 @@ test('AL9 real gateway and PostgreSQL: distinct, confirmation, merge, inherited-
   const handler = createMemoryGatewayHandler({ config, sessions: f.sessions, overlay: f.overlay, memoryTool: store, memoryContexts: contexts, admission,
     runtimeManager: { assertActiveEviMedWorkloadToken: async value => { assert.equal(value, token); return { userId: user.id, projectId: project.id }; } },
     store: { userById: async () => user, requireProject: async () => project },
-    personMessages: async () => normalizeTranscript(sessionId, events).messages.filter(message => message.source === 'user').flatMap(message => {
-      const captured = filterCapturedMessage(message);
-      return 'forward' in captured ? [{ role: captured.forward.role, text: captured.forward.parts.map(part => part.text).join('\n') }] : [];
-    }) });
+    personMessages: async () => personDecisionMessages(normalizeTranscript(sessionId, events)) });
   const server = createServer((req, res) => { void handler(req, res, () => {}); });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
   const base = `http://127.0.0.1:${server.address().port}${MEMORY_GATEWAY_PATH}`;
   const call = async (name, args) => {
-    const response = await fetch(`${base}/mcp`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    const response = await fetch(`${base}/mcp`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-evimed-memory-session': sessionId },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) });
     const text = await response.text();
     assert.equal(response.status, 200, text);
@@ -94,6 +92,9 @@ test('AL9 real gateway and PostgreSQL: distinct, confirmation, merge, inherited-
   await f.sessions.replace(f.userId, keep, consolidated);
   await worker.ingestConsolidation(f.userId, { taskId: 'person-alias-cleanup', updates: [keep] }, { context });
   assert.doesNotMatch(await f.sessions.read(f.userId, keep), /小王阿姨/, 'ordinary cleanup may remove the visible alias line');
+  sessionId = 'session_abcdef0123456789abcdef0123456789';
+  events.length = 0;
+  say('小王阿姨喜欢什么？');
   const recalled = await call('search', { query: '小王阿姨喜欢什么？' });
   const hits = JSON.parse(recalled.result.content[0].text);
   assert.equal(hits.memories[0].uri, keep, 'the durable confirmed merge still resolves its alias in the next conversation');
