@@ -99,18 +99,18 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     process.stdout.write(JSON.stringify(bindings,null,2)+'\n');
     if (new Set(bindings.map(row => row.qid)).size !== 5) process.exitCode = 1;
   } else {
-  const fixtures = await observationFixtures(bindingsFile && bindingsFile !== '-' ? await read(bindingsFile) : []);
-  if (command === 'prepare') process.stdout.write(JSON.stringify(fixtures,null,2)+'\n');
-  else if (command === 'check') {
-    const answers = new Map(), reviews = reviewsFile ? await read(reviewsFile) : [];
-    for await (const {answer} of answersFrom(answersDir)) {
-      if (!fixtures.some(f => f.qid === answer.qid)) continue;
-      if (answers.has(answer.qid)) throw Error('multiple answer arms for '+answer.qid);
-      answers.set(answer.qid,answer);
-    }
-    const outcomes = fixtures.map(f => checkObservation(f,answers.get(f.qid),reviews.find(r => r.qid === f.qid)));
-    process.stdout.write(JSON.stringify(outcomes,null,2)+'\n');
-    if (outcomes.some(r=>r.outcome!=='pass')) process.exitCode=1;
-  } else throw Error('usage: bind PACKS_DIR | prepare [bindings.json] | check bindings.json|- RECORDINGS_DIR [reviews.json]');
+    const fixtures = await observationFixtures(bindingsFile && bindingsFile !== '-' ? await read(bindingsFile) : []);
+    if (command === 'prepare') process.stdout.write(JSON.stringify(fixtures,null,2)+'\n');
+    else if (command === 'check') {
+      const answers = new Map(), reviews = reviewsFile ? await read(reviewsFile) : [];
+      for await (const {answer} of answersFrom(answersDir)) {
+        if (!fixtures.some(f => f.qid === answer.qid)) continue;
+        if (answers.has(answer.qid)) throw Error('multiple answer arms for '+answer.qid);
+        answers.set(answer.qid,answer);
+      }
+      const outcomes = fixtures.map(f => checkObservation(f,answers.get(f.qid),reviews.find(r => r.qid === f.qid)));
+      process.stdout.write(JSON.stringify(outcomes,null,2)+'\n');
+      if (outcomes.some(r=>r.outcome!=='pass')) process.exitCode=1;
+    } else throw Error('usage: bind PACKS_DIR | prepare [bindings.json] | check bindings.json|- RECORDINGS_DIR [reviews.json]');
   }
 }

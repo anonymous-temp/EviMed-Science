@@ -33,3 +33,20 @@ test('legacy text blocks retain distinct excerpts and memory-file traces use the
   const file=replaySearch({args:{query:'A17'},blocks:[JSON.stringify({memories:[{uri:'notes/1',abstract:'A17 arrived'}]})]}, {...label,source:'memory'});
   assert.equal(file.returnedRank,1);
 });
+
+test('GX G13 query files replay their recorded size, gold URI and complete blocks without external labels', async t => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { answersFrom } = await import('./recall-ranking.mjs');
+  const dir = await mkdtemp(join(tmpdir(), 'gx-recording-'));
+  t.after(() => rm(dir, { recursive:true, force:true }));
+  const blocks = [JSON.stringify({ memories: [{ uri:'notes/control', abstract:'near' }, { uri:'notes/target', abstract:'exact' }] })];
+  await writeFile(join(dir,'queries-1000.jsonl'), JSON.stringify({ size:1000, id:'q', sourceUri:'notes/target', query:'where', blocks }));
+  for await (const entry of answersFrom(dir)) {
+    assert.equal(entry.label.librarySize,1000);
+    assert.equal(replaySearch(entry.answer.toolCalls[0],entry.label).returnedRank,2);
+    return;
+  }
+  assert.fail('no GX recording was read');
+});

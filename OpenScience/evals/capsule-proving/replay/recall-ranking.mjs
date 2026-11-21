@@ -11,7 +11,7 @@ import { diverseHistoryCandidates, compactHistoryMessages, historyLexicalScorer,
 export async function* answersFrom(input) {
   if ((await stat(input)).isDirectory()) {
     for (const entry of (await readdir(input, {withFileTypes:true})).sort((a,b) => a.name.localeCompare(b.name))) {
-      if (entry.isDirectory() || entry.isFile() && /^(?:answers.*\.jsonl|.*\.json)$/.test(entry.name)) yield* answersFrom(path.join(input, entry.name));
+      if (entry.isDirectory() || entry.isFile() && /^(?:answers.*\.jsonl|queries-\d+\.jsonl|.*\.json)$/.test(entry.name)) yield* answersFrom(path.join(input, entry.name));
     }
     return;
   }
@@ -20,6 +20,14 @@ export async function* answersFrom(input) {
   for await (const line of rows) {
     if (!line.trim()) continue;
     const raw = JSON.parse(line);
+    // GX G13 records its gold file and library size beside each actual gateway response.
+    if (raw.sourceUri && raw.id && Number.isInteger(raw.size) && Array.isArray(raw.blocks)) {
+      const label = {qid:raw.id, source:'memory', librarySize:raw.size, topK:5, target:{uri:raw.sourceUri}};
+      yield {file:input, label, answer:{qid:raw.id, question:raw.query, toolCalls:[{
+        name:'search', args:{query:raw.query,limit:5}, blocks:raw.blocks, isError:raw.error, memoryTrace:raw.memoryTrace,
+      }]}};
+      continue;
+    }
     // LongMemEval's paired retrieval probes preserve channels separately from the rendered answer blocks.
     for (const row of raw.report?.rows ?? raw.rows ?? []) {
       if (!Array.isArray(row.results) || !row.qid) continue;
@@ -97,7 +105,7 @@ export function replaySearch(call, label) {
     else if (targetRow?.decision === 'denied') reason = 'permission_denied';
     else if (targetRow?.decision === 'stale') reason = 'invalidated';
     else if (candidateRank > topK && targetRow?.decision === 'allowed') reason = 'ranked_below_cutoff';
-    else if (complete && candidates && !candidateRank && contentKnown) reason = 'not_in_candidates';
+    else if (complete && coverage !== 'unavailable' && coverage !== 'skipped' && candidates && !candidateRank && contentKnown) reason = 'not_in_candidates';
   }
   const result = {query:call.args?.query ?? null, returnedRank:rank, candidateRank, returnedCount:hits.length,
     candidateCount:candidates?.length ?? null, topK, reason, coverage:coverage ?? (usable ? 'returned_only' : 'unknown'),
@@ -149,8 +157,11 @@ export function largeLibraryBreakdown(rows) {
     group.counts[row.reason] = (group.counts[row.reason] ?? 0) + 1;
   }
   for (const group of Object.values(groups)) {
+    group.misses = group.searches - (group.counts.hit ?? 0);
+    group.sharesOfMisses = {};
     for (const reason of ['hit','not_in_candidates','ranked_below_cutoff','permission_denied','invalidated','unknown']) {
       group.shares[reason] = (group.counts[reason] ?? 0) / group.searches;
+      if (reason !== 'hit') group.sharesOfMisses[reason] = group.misses ? (group.counts[reason] ?? 0) / group.misses : null;
     }
   }
   return groups;
@@ -158,11 +169,13 @@ export function largeLibraryBreakdown(rows) {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const [root, labelsFile] = process.argv.slice(2);
-  if (!root || !labelsFile) throw Error('usage: recall-ranking.mjs RECORDINGS_DIR LABELS.json');
-  const labels = JSON.parse(await readFile(labelsFile,'utf8'));
+  if (!root) throw Error('usage: recall-ranking.mjs RECORDINGS_DIR [LABELS.json]');
+  const labels = labelsFile ? JSON.parse(await readFile(labelsFile,'utf8')) : [];
   const rows = [], found = new Set(), noSearch = [];
-  for await (const {file, answer} of answersFrom(root)) {
-    for (const label of labels.filter(label => label.qid === answer.qid && (!label.file || file.endsWith(label.file)))) {
+  for await (const {file, answer, label:embedded} of answersFrom(root)) {
+    const selected = labels.filter(item => item.qid === answer.qid && (!item.file || file.endsWith(item.file)));
+    if (!labelsFile && embedded) selected.push(embedded);
+    for (const label of selected) {
       found.add(label);
       const calls = answer.toolCalls.filter(call => /^(?:mcp__openviking__)?search$/.test(call.name));
       if (!calls.length) noSearch.push({qid:answer.qid, file});
