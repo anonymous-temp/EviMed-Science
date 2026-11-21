@@ -4968,6 +4968,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // Lab switches, both off by default: the training camp's lesson and two-stage distillation.
       camp: config.learningCampEnabled === true,
       taskOutcomes: config.methodTaskOutcomesEnabled === true,
+      inlineDetail: config.methodInlineDetailEnabled === true,
       twoStage: config.methodTwoStageDistillationEnabled === true,
       concise: config.methodConciseDistillationEnabled === true,
     });

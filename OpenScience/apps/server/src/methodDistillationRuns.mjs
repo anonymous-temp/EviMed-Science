@@ -45,7 +45,7 @@ export { DISTILLATION_SKILL_VARIANTS, distillationSkillVariants } from "./method
 
 import {
   METHOD_EVIDENCE_QUOTE_LENGTH, METHOD_OPERATIONS, METHOD_ROLES, TRAJECTORY_ANCHOR_RADIUS, isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName, methodContentDigest, methodScientific,
-  parseDependsOn, parseSkillFrontmatter, projectMethodResultLinks, rootSessionOf, scopeRunTranscript, sourcePrivacyOf, SKILL_AUTHORING_LIMITS, steeredMessages, trajectoryDigest, transcriptMessageText, unwrapUserWrappers,
+  parseDependsOn, parseSkillFrontmatter, projectMethodResultLinks, rootSessionOf, runGate, scopeRunTranscript, sourcePrivacyOf, SKILL_AUTHORING_LIMITS, steeredMessages, trajectoryDigest, transcriptMessageText, unwrapUserWrappers,
 } from "@evimed/domain";
 import { readArtifactShapes } from "./artifactShapes.mjs";
 import { LEARNING_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
@@ -98,6 +98,23 @@ export const METHOD_FRAME_CONTRACT = "method-frame";
 /** How many details one frame may set going (the contract's own bound on `newSkills`, and two amendments). */
 const TWO_STAGE_MAX_NEW = 5;
 const TWO_STAGE_MAX_AMEND = 2;
+
+/** A frame can finish its sole independent text-only creation in the same run.
+ * Validate the exact bytes with the normal candidate gate before saving a detail dispatch.
+ * @param {any} frame @param {any} focus */
+function inlineFrameCandidate(frame, focus) {
+  const draft = frame.detail;
+  if (frame.newSkills?.length !== 1 || frame.amend?.length || frame.reuses?.length || focus.kind !== "new" || focus.buildsOn?.length
+    || typeof draft?.skill !== "string" || draft.candidate?.operation !== "create" || draft.candidate.files || draft.candidate.dependencies?.length) return null;
+  const candidateText = JSON.stringify(draft.candidate);
+  if (Buffer.byteLength(draft.skill) + Buffer.byteLength(candidateText) > 16_384) return null;
+  const { frontmatter } = parseSkillFrontmatter(draft.skill);
+  if (frontmatter?.name !== focus.name || frontmatter.metadata?.role !== focus.role || frontmatter.metadata?.depends_on) return null;
+  const files = new Map([["SKILL.md", draft.skill], ["method-candidate.json", candidateText]]);
+  const verdict = runGate({ contractKind: "method-candidate", files,
+    expectedOutputs: [...files.keys()].map(path => ({ path, required: true })), checks: ["requiredOutputsExist"] });
+  return verdict.ok ? { skill: draft.skill, candidate: draft.candidate } : null;
+}
 
 /** The dispatch question with the switched-on skill sections after it; the question itself when there are none. @param {string} question @param {string} variants */
 function withSkillVariants(question, variants) {
@@ -745,7 +762,7 @@ export class MethodDistillationRuns {
    *   onCodeSkill?: ((outcome: string) => void) | null,
    *   contextProvenance?: any,
    *   onEvidence?: ((counts: { kept: number, dropped: number }) => void) | null,
-   *   taskOutcomes?: boolean, concise?: boolean, officialMethods?: ((userId: string) => Promise<readonly any[]>) | null, camp?: boolean, twoStage?: boolean, correctionJudge?: any}} dependencies
+   *   inlineDetail?: boolean, taskOutcomes?: boolean, concise?: boolean, officialMethods?: ((userId: string) => Promise<readonly any[]>) | null, camp?: boolean, twoStage?: boolean, correctionJudge?: any}} dependencies
    *   `camp` (`OPEN_SCIENCE_LEARNING_CAMP_ENABLED`, false by default and never set for real accounts) reads a `camp` lesson: any finished lab run with
    *   a machine-checked outcome, with the camp section of the skill. `twoStage` (`OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED`, false by
    *   default) distils a lesson in two steps, the frame and then one method per new sub-skill (`#executeTwoStage`). Off, a lesson is one step as it was.
@@ -756,7 +773,7 @@ export class MethodDistillationRuns {
    */
   constructor({ dispatch, readResult, learning, jobs = null, notifications = null, resolveProject = null, usedMethods = null, resetInstant = null,
     similarity = null, resolveRun = null, scriptUses = null, verifyCode = null, onCodeSkill = null, onEvidence = null, contextProvenance = null,
-    officialMethods = null, camp = false, twoStage = false, concise = false, taskOutcomes = false, correctionJudge = null }) {
+    officialMethods = null, camp = false, twoStage = false, inlineDetail = false, concise = false, taskOutcomes = false, correctionJudge = null }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method distillation requires the bounded run dispatcher and result reader.");
     }
@@ -781,6 +798,7 @@ export class MethodDistillationRuns {
     this.camp = camp === true;
     this.portableMethodInstruction = taskOutcomes
       ? " Distil only transferable decisions and checks. Never teach interface wording, command syntax, or guessed alternatives to a rejected command. Consult the active interface for its accepted operations. If only wording was learned, return no_change. Preserve the researcher's verified corrections." : "";
+    this.inlineDetail = inlineDetail;
     this.twoStage = twoStage === true;
     this.concise = concise === true;
   }
@@ -1042,7 +1060,8 @@ export class MethodDistillationRuns {
       `Step one of a two-stage distillation: write the frame for the finished ${runs} described in ${DISTILLATION_INPUT_FILE}, using the `
       + "method-distillation capability. Read relatedMethods first and name what the lesson reuses as it stands, the sub-skills nothing on file "
       + "covers, and any method on file it contradicts or extends. Write method-frame.json and submit the method-frame contract; no method is "
-      + `written in this step, and an empty frame with its reason is a correct and common answer. ${closing}`);
+      + `written in this step, and an empty frame with its reason is a correct and common answer. ${closing}`
+      + (this.inlineDetail ? " Split a lesson only for independently reusable steps. When the frame names just one new text method with no dependencies or amendments, include its complete candidate in the optional detail field of method-frame.json: {skill: full SKILL.md text, candidate: the method-candidate.json object}. Keep detail under 16 KiB and submit only the frame." : ""));
     if (waiting(framed.result)) return { state: "pending", ...framed.record };
     if (framed.result.status !== "succeeded") throw new HttpError(409, "method_distillation_run_failed", "The distillation frame run did not succeed.");
     const frame = framed.result.output?.["method-frame.json"] ?? {};
@@ -1094,7 +1113,8 @@ export class MethodDistillationRuns {
         seen.add(String(document.id));
         pool.push(document);
       }
-      const detailed = await step(discriminator, "method-candidate",
+      const inline = this.inlineDetail && !target ? inlineFrameCandidate(frame, focus) : null;
+      const detailed = inline ? { result: { status: "succeeded", output: inline }, record: framed.record } : await step(discriminator, "method-candidate",
         { ...input, relatedMethods: pool.slice(0, MAX_RELATED).map(relatedMethodEntry), stage: "detail", frame: accepted, focus },
         `Step two of a two-stage distillation: write the one method that focus names in ${DISTILLATION_INPUT_FILE}, using the method-distillation `
         + "capability, against the frame it carries. A new sub-skill is its own create, pinning in depends_on the methods in relatedMethods it builds on; "

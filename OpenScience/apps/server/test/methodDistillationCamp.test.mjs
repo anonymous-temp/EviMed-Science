@@ -390,3 +390,32 @@ test("outcome-aware lessons exclude interface syntax and retain verified correct
     assert.match(request.question, /Preserve the researcher's verified corrections/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("a frame carrying one complete independent candidate saves one dispatch with the same persisted body and evidence", async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), "distill-inline-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const { run, transcript } = campRun({ success: true });
+  const project = await projectFor(dir, { transcript, peers: [] });
+  const name = "check-sink-first", role = "atomic", quote = "I should check the sink before carrying the mug.";
+  const files = methodPackage({ name, role, runId: run.id, quote });
+  const valid = { skill: files["SKILL.md"], candidate: JSON.parse(files["method-candidate.json"]) };
+  const lesson = campLessonFor({ run, outcome: { success: true, score: 1, verdict: "Won." }, anchors: [{ seq: 1 }], enabled: true });
+  const job = { id: "j", userId: "u", projectId: project.id, payload: lesson.payload };
+  let reference;
+  for (const [inlineDetail, detail, calls] of [[false, valid, 2], [true, valid, 1], [true, { ...valid, skill: "incomplete" }, 2],
+    [true, { ...valid, candidate: { ...valid.candidate, testScenarios: [] } }, 2], [true, null, 2]]) {
+    const learning = new LearningService({ documents: productDocumentsDouble() });
+    const requests = [];
+    const distil = new MethodDistillationRuns({ learning, camp: true, twoStage: true, inlineDetail,
+      dispatch: async request => { requests.push(request); return { runId: String(requests.length), sessionId: "s" }; },
+      readResult: async () => ({ status: "succeeded", output: requests.at(-1).contractKind === "method-frame"
+        ? { "method-frame.json": { schemaVersion: 1, newSkills: [{ name, role, summary: "Check first." }], detail } } : valid }) });
+    const result = await distil.execute({ job, project, run });
+    assert.equal(requests.length, calls);
+    assert.equal(result.operation, "create");
+    const { body, contentDigest, provenance } = (await learning.getMethod(job.userId, result.methodId)).payload;
+    const comparison = [body, contentDigest, provenance.evidence, provenance.distillationStep];
+    reference ??= comparison;
+    assert.deepEqual(comparison, reference);
+  }
+});

@@ -13,6 +13,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 
 for (const [key, property] of [
   ["OPEN_SCIENCE_METHOD_OFFICIAL_RELEVANCE_ENABLED", "methodOfficialRelevanceEnabled"],
+  ["OPEN_SCIENCE_METHOD_INLINE_DETAIL_ENABLED", "methodInlineDetailEnabled"],
   ["OPEN_SCIENCE_METHOD_TASK_OUTCOMES_ENABLED", "methodTaskOutcomesEnabled"],
   ['OPEN_SCIENCE_MEMORY_PEOPLE_ACROSS_PROJECTS_ENABLED', 'memoryPeopleAcrossProjectsEnabled'],
   ['OPEN_SCIENCE_MEMORY_LITERAL_FALLBACK_ENABLED', 'memoryLiteralFallbackEnabled'],
