@@ -190,3 +190,22 @@ test('the late prompt has its own quotation protocol and keeps the exact shared 
   assert.equal(row.detail.quote, shared);
   assert.equal(row.detail.relation, 'share');
 });
+
+test('export and share evidence bind the archived owner, run and digest even when a later run reused its path', async () => {
+  const later = { id: 'later', sessionId: 'later-session', status: 'succeeded', outputFiles: [DELIVERY.path],
+    finishedAt: new Date(LATE_NOW - 1).toISOString() };
+  const state = lateFixture({ extraRuns: [later] });
+  await state.snapshot();
+  const version = { projectId: state.project.id, versionId: `rv_${'e'.repeat(64)}`, path: DELIVERY.path, digest: DELIVERY.sha256,
+    producer: { kind: 'deliverable', runId: state.run.id, sessionId: state.run.sessionId } };
+  const receipt = { actorId: 'owner', source: /** @type {const} */ ('export'), version };
+  assert.equal((await state.evidence.noteResultUse(state.project, { ...receipt, actorId: 'other-user' })).recorded, false);
+  assert.equal((await state.evidence.noteResultUse(state.project, { ...receipt,
+    version: { ...version, producer: { ...version.producer, kind: 'workspace' } } })).recorded, false);
+  assert.deepEqual(await state.evidence.noteResultUse(state.project, receipt), { recorded: true, runId: state.run.id });
+  assert.equal((await state.evidence.noteResultUse(state.project, receipt)).recorded, false);
+  await state.evidence.noteResultUse(state.project, { ...receipt, source: 'share' });
+  assert.equal(state.outcome(), 'clean');
+  assert.deepEqual(state.rows.filter(row => row.detail.resultUse).map(row => [row.runId, row.detail.resultUse.source, row.detail.artifact]),
+    [[state.run.id, 'export', DELIVERY], [state.run.id, 'share', DELIVERY]]);
+});

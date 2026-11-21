@@ -1,9 +1,8 @@
 import { attachmentDisposition, HttpError, readJson, sendJson } from "./security.mjs";
 
 /**
- * `onExported(user, projectId, versionId)` is told, after the package has been sent, that the owner took a result: the learning loop counts a
- * delivered file taken as the run's use (`LearningEvidence.noteFileUse`). An observation: never awaited, a failure is its own.
- * @param {{ store: any, exporter: any, revisions: any, onExported?: ((user: any, projectId: string, versionId: string) => Promise<unknown> | unknown) | null }} dependencies
+ * `onExported` observes the exact result included in a successfully sent package. A failed observation leaves the response alone.
+ * @param {{ store: any, exporter: any, revisions: any, onExported?: ((user: any, projectId: string, versionId: string, receipt: any) => Promise<unknown> | unknown) | null }} dependencies
  */
 export function createResultReuseRoutes({ store, exporter, revisions, onExported = null }) {
   return async (req, res) => {
@@ -17,8 +16,10 @@ export function createResultReuseRoutes({ store, exporter, revisions, onExported
       const file = await exporter.export(user.id, url.searchParams.get("projectId"), matched[1]);
       res.writeHead(200, { "Content-Type": file.mimeType, "Content-Length": file.bytes.length,
         "Content-Disposition": attachmentDisposition(file.filename), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
-      res.end(file.bytes);
-      if (onExported) void Promise.resolve().then(() => onExported(user, String(url.searchParams.get("projectId") ?? ""), matched[1])).catch(() => {});
+      res.end(file.bytes, () => {
+        if (onExported && file.useReceipt) void Promise.resolve()
+          .then(() => onExported(user, String(url.searchParams.get("projectId") ?? ""), matched[1], file.useReceipt)).catch(() => {});
+      });
       return true;
     }
     if (matched[2] === "revisions" && req.method === "POST") {

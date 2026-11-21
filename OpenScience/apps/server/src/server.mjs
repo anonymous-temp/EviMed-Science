@@ -2910,6 +2910,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const geoRoutes = createGeoRoutes({
     store, service: geo?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details),
+    onPublicationConfirmed: async (user, geoId, receipt) => {
+      if (!learningEvidence || !resultProvenance || !geoNativeAuthority) return;
+      const { project } = await geoNativeAuthority.identity(user, geoId, { ability: "read" });
+      if (project.userId !== user.id) return;
+      const { version } = await resultProvenance.raw(user.id, project.id, receipt.resultVersionId);
+      if (version.digest === receipt.digest) await learningEvidence.noteResultUse(project, { actorId: user.id,
+        source: "share", version });
+    },
     projects: {
       create: (user, name, options) => createResearcherProject(user, { name }, false, options?.reservation),
       // Create the real primary only when the person explicitly opens it.
@@ -3327,11 +3335,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const resultExporter = resultProvenance ? new ResultExportService({ results: resultProvenance, replays: resultReplays, corrections: resultCorrections,
     maxBytes: config.resultExportMaxBytes, maxFiles: config.resultExportMaxFiles }) : null;
   const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions,
-    // The owner took a result as a package: the file the result is of was used (`LearningEvidence.noteFileUse`), beside the answer.
-    onExported: async (user, projectId, versionId) => {
-      if (!learningEvidence || !resultProvenance) return;
-      const version = await resultProvenance.get(user.id, projectId, versionId);
-      if (typeof version?.path === "string" && version.path) await learningEvidence.noteFileUse(await store.requireProject(user, projectId), { path: version.path });
+    onExported: async (user, projectId, versionId, version) => {
+      if (learningEvidence && version.versionId === versionId) await learningEvidence.noteResultUse(
+        await store.requireProject(user, projectId), { actorId: user.id, source: "export", version });
     } });
   const resultImpactRoutes = createResultImpactRoutes({ store, service: resultImpacts });
   const resultCapture = resultProvenance ? createResultProducerCapture({ service: resultProvenance,

@@ -562,18 +562,20 @@ test('distribution history and source annotations use project routes with bounde
 });
 
 test('owned publication updates preserve the explicit old and new pins at the guarded HTTP boundary', async () => {
-  const calls = [];
+  const calls = [], observed = [];
+  const receipt = { basis: "user_reported_update", revision: 2, resultVersionId: "v2", digest: "2".repeat(64) };
   const service = { allows: () => true,
     ownedPublicationList: async (...args) => { calls.push(['list', ...args]); return { items: [], total: 0 }; },
     ownedPublicationDetail: async (...args) => { calls.push(['detail', ...args]); return { revision: 0 }; },
-    confirmOwnedPublication: async (...args) => { calls.push(['confirm', ...args]); return { revision: 2 }; },
+    confirmOwnedPublication: async (...args) => { calls.push(['confirm', ...args]); return receipt; },
   };
-  const f = fixture({ service });
+  const f = fixture({ service, onPublicationConfirmed: async (user, geoId, held) => { observed.push([user.id, geoId, held]); } });
   await f.routes(request('GET', '/api/geo/projects/geo_1/owned-links?limit=1&cursor=older'), response());
   await f.routes(request('GET', '/api/geo/projects/geo_1/owned-links/link_1?beforeRevision=3'), response());
   const input = { requestKey: 'publication-update', expectedRevision: 0, expectedResultVersionId: 'v1', expectedDigest: '1'.repeat(64), resultVersionId: 'v2', digest: '2'.repeat(64), publishedAt: '2026-10-23T00:00:00Z' };
   await f.routes(request('POST', '/api/geo/projects/geo_1/owned-links/link_1/published-version', input), response());
   assert.deepEqual(calls, [['list', { id: 'reader' }, 'geo_1', { limit: '1', cursor: 'older' }], ['detail', { id: 'reader' }, 'geo_1', 'link_1', { beforeRevision: '3' }], ['confirm', { id: 'reader' }, 'geo_1', 'link_1', input]]);
+  assert.deepEqual(observed, [['reader', 'geo_1', receipt]]);
   assert.equal(f.calls.filter(row => row[0] === 'csrf').length, 3);
   await assert.rejects(f.routes(request('POST', '/api/geo/projects/geo_1/owned-links/link_1/published-version', { ...input, autopublish: true }), response()), { status: 400 });
 });

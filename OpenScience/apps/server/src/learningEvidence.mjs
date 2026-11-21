@@ -55,7 +55,7 @@
 
 import {
   LEARNING_CORRECTION_VERDICTS, LEARNING_EVIDENCE_VERDICTS, LEARNING_FOLLOW_UP_WINDOW_MS, LEARNING_RULE_VERDICTS, LEARNING_STEER_VERDICTS,
-  METHOD_SIMILARITY_PAIR_FLOOR, toolchainFingerprint, toolchainsMatch, isLearningCorrection, methodSourceIdentifierShapesIn, isResearcherOwnedWork, learningRunOutcome,
+  METHOD_SIMILARITY_PAIR_FLOOR, cleanLearningEvidence, toolchainFingerprint, toolchainsMatch, isLearningCorrection, methodSourceIdentifierShapesIn, isResearcherOwnedWork, learningRunOutcome,
 } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { readLearningDeliveryBindings } from "./learningDeliveryBindings.mjs";
@@ -766,6 +766,38 @@ export class LearningEvidence {
   }
 
   /**
+   * A completed export or publication of an immutable result, from the control plane.
+   * Attribution comes from its archived producer and version, even when the workspace path now holds another run's file.
+   * @param {any} project
+   * @param {{ actorId: string, source: "export" | "share", version: any }} receipt
+   */
+  async noteResultUse(project, { actorId, source, version }) {
+    const producer = version?.producer;
+    const artifact = { path: version?.path, sha256: version?.digest };
+    const resultUse = { source, versionId: version?.versionId };
+    if (actorId !== project.userId || version?.projectId !== project.id
+      || !producer?.runId || !producer.sessionId || !["deliverable", "tool"].includes(producer.kind)
+      || !cleanLearningEvidence({ evidence: "used", at: this.now().toISOString(), artifact, resultUse })?.resultUse) {
+      return { recorded: false, reason: "binding_unavailable" };
+    }
+    const runs = await this.agentRuns.list(project);
+    const run = runs.find(item => item.id === producer.runId && item.sessionId === producer.sessionId);
+    if (!run || run.status !== "succeeded" || !this.#filesOf(run).concat((run.presentedFiles ?? []).map(file => file?.path ?? file)).includes(artifact.path)) {
+      return { recorded: false, reason: "not_delivered" };
+    }
+    const refused = await this.#triggers.refusalFor(project, run, { runs });
+    if (refused) return { recorded: false, reason: refused };
+    const { created } = await this.feedback.recordLearningEvidence(project.userId, {
+      runId: run.id, projectId: project.id, key: `used:${source}:${resultUse.versionId}`,
+      detail: { evidence: "used", artifact, resultUse, sessionId: run.sessionId, at: this.now().toISOString(),
+        scope: learningScopeOf(run), endedAt: run.finishedAt },
+    });
+    // A retry can resume settlement after a successful insert.
+    await this.#settleRun(project, run);
+    return { recorded: created, runId: run.id };
+  }
+
+  /**
    * The owner opened or downloaded a file through the control plane (the files routes, the kernel frame's file reads): when it is one a
    * finished run delivered, that run was used, and says so once, with no words. A file that no run delivered (an upload, a scratch
    * file), a run still going and a run the loop may not read are nothing. A use that comes after the run was settled completes its
@@ -853,7 +885,11 @@ export class LearningEvidence {
     const scope = learningScopeOf(run);
     let settling = events.find((/** @type {any} */ event) => event.detail?.evidence === "silent" || event.detail?.evidence === "follow-up");
     let shape = Array.isArray(settling?.detail?.shape) ? settling.detail.shape : [];
-    if (!shape.length) shape = await this.#shapeOf(project, run);
+    const versionedUse = events.find(event => event.detail?.resultUse)?.detail.artifact;
+    if (!shape.length && (!versionedUse || (await this.readDeliveryBindings(project, run).catch(() => []))
+      .some(file => file.path === versionedUse.path && file.sha256 === versionedUse.sha256))) {
+      shape = await this.#shapeOf(project, run);
+    }
     const toolchain = this.toolchainEnabled && !shape.length && !leftFiles(run)
       ? settling?.detail?.toolchain ?? toolchainFingerprint(await this.readTraces(project, run.id).catch(() => [])) : null;
     let settled = settling?.detail?.evidence ?? null;

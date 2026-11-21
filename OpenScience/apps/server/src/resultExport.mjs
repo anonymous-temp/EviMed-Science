@@ -205,7 +205,9 @@ export class ResultExportService {
         throw new HttpError(409, "result_export_authorization_changed", "Source access changed during export. Rebuild the package.");
       }
     }
+    const included = files.find(file => file.role === "result" && file.versionId === selected.versionId && file.sha256 === selected.digest);
     return { bytes: Buffer.from(zipSync(contents, { level: 0 })), manifest,
+      useReceipt: included ? selected : null,
       filename: `${selected.versionId}.evimed.zip`, mimeType: "application/zip" };
   }
 }
