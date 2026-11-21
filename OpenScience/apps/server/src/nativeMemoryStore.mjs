@@ -11,7 +11,7 @@ import { orderStandingPreferences } from './memoryOpeningByUse.mjs';
 import { personalMemoryTravels } from './openVikingLayout.mjs';
 import { inferredChoiceMessage, choiceRows, choiceKey, normaliseChoice, aliasesFor, aliasVariants, personLabel, personNameReading, closePersonNames, confirmedAliases } from './nativeMemoryInduction.mjs';
 import { forgetRequestId } from './nativeMemoryForgetRequests.mjs';
-import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
+import { withMemorySummaryBatch, withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
@@ -2346,7 +2346,7 @@ export class NativeMemoryStore {
         this.recordForgetIntent(String(user.id), actual, null, [removalText(statement).replace(/\s+/g, ' ')], { engineSession }));
       return { removed: false, historyRejected: true, ...(historyScanPending ? { historyScanPending: true } : {}) };
     }
-    const files = await this.files(String(user.id), { context: this.memoryContexts ? actual : null });
+    const files = await this.files(String(user.id), { context: this.memoryContexts ? actual : null, uris: [uri] });
     const file = files.find((candidate) => candidate.uri === uri);
     if (!file) return { removed: heldLines.length > 0, ...(heldLines.length ? { removedLines: heldLines.length } : {}), ...heldScan };
     if (lines?.length) {
@@ -2354,7 +2354,8 @@ export class NativeMemoryStore {
       const available = new Set([...availableLines, ...heldLines].map(lineFingerprint));
       const missingLines = lines.filter(line => !available.has(lineFingerprint(removalText(line))));
       if (missingLines.length) return { removed: false, missingLines, availableLines };
-      const liveRemoved = await this.forgetLines(String(user.id), file, lines, { engineSession });
+      const liveRemoved = await withMemorySummaryBatch(this.overlay, String(user.id), () =>
+        this.forgetLines(String(user.id), file, lines, { engineSession }));
       const removedLines = heldLines.length + liveRemoved;
       return { removed: removedLines > 0, removedLines, ...heldScan, ...(this.history && this.overlay.deferredSummaryRebuildEnabled === true ? {historyScanPending:true} : {}), fileRemoved: liveRemoved === availableLines.length };
     }

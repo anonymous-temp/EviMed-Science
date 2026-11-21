@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MEMORY_SUMMARY_NAMES, memorySummaryDirectories, withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from '../src/nativeMemorySummaries.mjs';
+import { MEMORY_SUMMARY_NAMES, memorySummaryDirectories, withMemorySummaryBatch, withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from '../src/nativeMemorySummaries.mjs';
 
 const root = 'viking://user/test/memories';
 function fixture() {
@@ -111,4 +111,25 @@ test('late extraction bytes cannot recall a withdrawn line before settlement, an
   assert.equal(await fenceWithdrawnMemoryBody(overlay, 'test', `${root}/notes/a.md`, '- Old booking.'), null);
   overlay.deferredSummaryRebuildEnabled = false;
   assert.equal(await fenceWithdrawnMemoryBody(overlay, 'test', `${root}/notes/a.md`, late), late);
+});
+
+test('one withdrawal rebuilds shared ancestors only once and preserves failed generations', async () => {
+  const f = fixture();
+  const mutate = uri => withMemorySummaryInvalidation(f.sessions, f.overlay, 'test', root + '/' + uri, async () => {});
+  const run = () => withMemorySummaryBatch(f.overlay, 'test', async () => {
+    await mutate('safety_notes/a.md');
+    assert.equal(f.calls.some(call => call.startsWith('rebuild:')), false);
+    assert.ok(f.calls.includes('delete:' + root + '/.overview.md'));
+    await mutate('safety_notes/b.md');
+    await mutate('people/source.md');
+    return 'complete';
+  });
+  assert.equal(await run(), 'complete');
+  assert.deepEqual(f.calls.filter(call => call.startsWith('rebuild:')),
+    [root + '/safety_notes', root + '/people', root].map(dir => 'rebuild:' + dir));
+  assert.equal(f.pending.size, 0);
+  f.calls.length = 0;
+  f.sessions.rebuildMemoryDirectory = async () => { throw new Error('offline'); };
+  await assert.rejects(run(), /offline/);
+  assert.equal(f.pending.size, 3);
 });
