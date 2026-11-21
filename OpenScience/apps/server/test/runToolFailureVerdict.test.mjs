@@ -482,6 +482,16 @@ test("a turn ending on an unexecuted tool-call payload fails explicitly instead 
     const finished = await reconcile();
     assert.equal(finished.status, "succeeded", "a requested code example is not an unexecuted call");
   });
+  await withRun(null, async ({ dispatch, turn, reconcile }) => {
+    await dispatch();
+    turn([{ type: "text", text: payloads[0] }, call("search", { q: "x" })]);
+    assert.equal((await reconcile()).status, "succeeded", "a later executed tool supersedes the earlier text");
+  });
+  await withRun(null, async ({ dispatch, turn, reconcile }) => {
+    await dispatch();
+    turn([{ type: "text", text: payloads[2] }], { kind: "max-tokens", code: "runtime_session_error", subCode: "model_max_tokens" });
+    assert.equal((await reconcile()).errorSubCode, "model_max_tokens", "the kernel's own terminal reason wins");
+  });
   await withRun(null, async ({ project, store, dispatch, reconcile, runtimeGone }) => {
     const run = await dispatch();
     store.noteRunEvent(project, run.id, { sessionId: "ses_verdict", event: { type: "message/assistant", seq: 1, text: payloads[0], interrupted: false } });
@@ -489,6 +499,7 @@ test("a turn ending on an unexecuted tool-call payload fails explicitly instead 
     runtimeGone();
     const finished = await reconcile();
     assert.equal(finished.status, "failed", "the durable fallback cannot turn a raw payload into an answered turn");
+    assert.equal(finished.errorSubCode, "unexecuted_tool_call");
   });
 });
 

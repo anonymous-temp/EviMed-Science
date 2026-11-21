@@ -104,15 +104,10 @@ export function replyCheckSummary(check) {
 
 /** Whether the settled answer itself is an unexecuted tool-call payload. @param {any} node @returns {boolean} */
 export function rawToolCallAnswer(node) {
-  const finalNode = node?.data?.finalNode;
-  if (!finalNode) return false;
-  const candidates = [finalNode.content, finalNode.message?.content, finalNode.parts, finalNode.text];
-  for (const content of candidates) {
-    const text = typeof content === 'string' ? content : Array.isArray(content)
-      ? content.filter((part) => part?.type === 'text').map((part) => String(part.text ?? '')).join('\n') : '';
-    if (text.trim()) return isRawToolCallText(text);
-  }
-  return false;
+  const blocks = node?.data?.blocks;
+  if (!node?.data?.finalNode || !Array.isArray(blocks)) return false;
+  if (blocks.some((part) => part.kind !== 'text' && part.kind !== 'reasoning')) return false;
+  return isRawToolCallText(blocks.filter((part) => part.kind === 'text').map((part) => part.text).join('\n'));
 }
 
 /**
@@ -153,12 +148,14 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
 
   /** @param {any} props */
   function AssistantStep(props) {
-    if (props?.groupPart !== 'reasoning' && rawToolCallAnswer(props?.node)) {
+    const Shadowed = kit.shadowed(slot, 'assistant-step', AssistantStep);
+    const state = kit.useFrameState((/** @type {any} */ frameState) => frameState.replyChecks);
+    const tail = typeof props?.useTurnData === 'function' ? props.useTurnData('turn-tail') : undefined;
+    const seq = props?.node?.data?.finalNode?.seq;
+    if (props?.groupPart !== 'reasoning' && Number.isInteger(seq) && tail?.closing?.finalNode?.seq === seq && rawToolCallAnswer(props.node)) {
       return h('div', { role: 'alert', 'data-evimed-run-error': 'unexecuted_tool_call', style: { ...text, color: 'var(--dsw-alias-state-error-primary)' } },
         '这次回答没有完成：工具调用没有执行，请重试。');
     }
-    const Shadowed = kit.shadowed(slot, 'assistant-step', AssistantStep);
-    const state = kit.useFrameState((/** @type {any} */ frameState) => frameState.replyChecks);
     let model = null;
     try { model = replyCheckSummary(replyCheckFor(state, props?.node)); } catch { model = null; }
     const own = Shadowed ? h(Shadowed, props) : null;

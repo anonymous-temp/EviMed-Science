@@ -10,6 +10,8 @@ test('whole-message XML and JSON tool-call payloads are not answers', () => {
     JSON.stringify({ id: 'call_1', type: 'function', function: { name: 'search', arguments: '{}' } }),
     JSON.stringify({ tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'search', arguments: '{}' } }] }),
     '{"name":"search","arguments":',
+    '{"name":"search","arguments":{"q":"x"}',
+    '{"tool_calls":[{"function":{"name":"search","arguments":"unfinished',
   ]
   for (const text of raw) assert.equal(isRawToolCallText(text), true, text)
 });
@@ -17,8 +19,14 @@ test('whole-message XML and JSON tool-call payloads are not answers', () => {
 test('ordinary prose, code examples and unrelated JSON are left alone', () => {
   const answers = [
     'I will call the search tool next.',
+    '<tool_call> is the opening tag used in this example.',
+    '<tool_call>说明文字</tool_call>',
+    '{"name":"search","arguments":{}} is only an example.',
+    JSON.stringify({ answer: 'Example', tool_calls: [{ name: 'search', arguments: {} }] }),
+    JSON.stringify({ function: { name: 'log', description: 'Document this function' } }),
     'Example: <tool_call>{"name":"search"}</tool_call>',
     '```json\n{"name":"search","arguments":{}}\n```',
+    JSON.stringify({ type: 'example', name: 'claim', arguments: {} }),
     JSON.stringify({ name: 'report', title: 'A report' }),
     JSON.stringify({ name: 'search' }),
     '',

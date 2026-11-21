@@ -96,19 +96,26 @@ test('a turn whose process is folded draws the answer node twice; the row follow
 test('an unexecuted tool-call payload is replaced by a clear failure instead of drawn as the answer', () => {
   const f = frame();
   const raw = '<tool_call>{"name":"search","arguments":{"q":"x"}}</tool_call>';
-  const node = { kind: 'assistant-step', data: { finalNode: { seq: 13, content: [{ type: 'text', text: raw }] } } };
-  assert.equal(rawToolCallAnswer(node), true);
-  assert.equal(rawToolCallAnswer({ data: { finalNode: { content: [{ type: 'text', text: 'The answer.' }] } } }), false);
-  const rendered = renderStatic(f.ours.component, { node });
+  const node = { kind: 'assistant-step', data: { finalNode: { seq: 13 }, blocks: [{ kind: 'text', text: raw }] } };
+  const useTurnData = () => ({ closing: { finalNode: { seq: 13 } } });
+  const rendered = renderStatic(f.ours.component, { node, useTurnData });
   assert.match(rendered, /role="alert"/);
   assert.match(rendered, /这次回答没有完成：工具调用没有执行，请重试。/);
-  assert.doesNotMatch(rendered, /data-kernel-assistant|tool_call|search/);
-  assert.match(renderStatic(f.ours.component, { node, groupPart: 'reasoning' }), /data-kernel-assistant="13"/);
-  const ordinary = { node: { data: { finalNode: { seq: 14, content: [{ type: 'text', text: 'The answer.' }] } } } };
+  assert.doesNotMatch(rendered, /data-kernel-assistant|&lt;tool_call|search/);
+  assert.match(renderStatic(f.ours.component, { node, useTurnData, groupPart: 'reasoning' }), /data-kernel-assistant="13"/);
+  assert.match(renderStatic(f.ours.component, { node, useTurnData: () => ({ closing: { finalNode: { seq: 14 } } }) }), /data-kernel-assistant="13"/);
+  const ordinary = { node: { data: { finalNode: { seq: 14 }, blocks: [{ kind: 'text', text: 'The answer.' }] } } };
   assert.equal(renderStatic(f.ours.component, ordinary), '<div data-kernel-assistant="14">answer</div>');
 });
 
 test('outside a frame nothing is taken over', () => {
   const f = frame({ framed: false });
   assert.equal(f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.options.priority === -1).length, 0);
+});
+
+test('the native reader checks the rendered text blocks of a settled step', () => {
+  const blocks = [{ kind: 'text', text: '{"name":"search","arguments":{}}' }];
+  assert.equal(rawToolCallAnswer({ data: { finalNode: { seq: 1 }, blocks } }), true);
+  assert.equal(rawToolCallAnswer({ data: { blocks } }), false);
+  assert.equal(rawToolCallAnswer({ data: { finalNode: { seq: 1 }, blocks: [...blocks, { kind: 'tool' }] } }), false);
 });
