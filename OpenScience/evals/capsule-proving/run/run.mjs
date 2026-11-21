@@ -98,7 +98,7 @@ export function parseArguments(argv) {
   const options = {
     answerModel: "", answerBase: "", answerKeyFile: "", stockEngine: false, answersOnly: false, retrievalOnly: false, variantsOnly: false,
     set: "", split: "", data: "", out: "", engineUrl: "", engineKeyFile: "", databaseUrlFile: "", deepseekKeyFile: "",
-    arm: "product", only: "", maxSessions: 0, concurrency: 3, databasePoolMax: 2, historySearch: true, commitEvery: "session", plantCorruptionsAfter: -1,
+    arm: "product", only: "", qids: "", maxSessions: 0, concurrency: 3, databasePoolMax: 2, historySearch: true, commitEvery: "session", plantCorruptionsAfter: -1,
     config: {}, answerVariants: [], maintain: "none", maintainAfter: [], rejectionJudge: true, label: "", thinking: "enabled", reasoningEffort: "high",
     liveTurns: "", questionCategory: "", limitQuestions: 0, pluginTgz: "", ingestOnly: false, snapshotCheckpoints: false, templatesDir: "", maxRounds: 8, extractionTimeoutMs: 300_000, gatewayTimeoutMs: 4_000, engineTimeoutMs: 30_000,
   };
@@ -108,7 +108,7 @@ export function parseArguments(argv) {
     "--answer-model": ["answerModel", "string"], "--answer-base": ["answerBase", "string"], "--answer-key-file": ["answerKeyFile", "string"],
     "--set": ["set", "string"], "--split": ["split", "string"], "--data": ["data", "string"], "--out": ["out", "string"],
     "--engine-url": ["engineUrl", "string"], "--engine-key-file": ["engineKeyFile", "string"], "--database-url-file": ["databaseUrlFile", "string"],
-    "--deepseek-key-file": ["deepseekKeyFile", "string"], "--arm": ["arm", "string"], "--only": ["only", "string"],
+    "--deepseek-key-file": ["deepseekKeyFile", "string"], "--arm": ["arm", "string"], "--only": ["only", "string"], "--qids": ["qids", "string"],
     "--database-pool-max": ["databasePoolMax", "int"], "--max-sessions": ["maxSessions", "int"], "--concurrency": ["concurrency", "int"], "--commit-every": ["commitEvery", "string"],
     "--plant-corruptions-after": ["plantCorruptionsAfter", "int"], "--limit-questions": ["limitQuestions", "int"], "--plugin-tgz": ["pluginTgz", "string"],
     "--templates-dir": ["templatesDir", "string"], "--max-rounds": ["maxRounds", "int"], "--extraction-timeout-ms": ["extractionTimeoutMs", "int"],
@@ -278,6 +278,11 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   const wallStart = Date.now();
 
   const cases = await (dependencies.loadCases ?? loadCases)({ set: options.set, split: options.split, dataDir: options.data, only: options.only || null });
+  const wanted = new Set(options.qids.split(',').filter(Boolean));
+  if (wanted.size) {
+    const available = new Set(cases.flatMap(item => item.questions.map(question => question.qid)));
+    for (const qid of wanted) if (!available.has(qid)) throw new Error(`unknown question in --qids: ${qid}`);
+  }
   if (options.liveTurns && cases.some(item => item.meta?.unlocatedLiveTurns)) throw new Error("forget_message_index_missing: annotate schedule messageIndex before live replay");
   if (!cases.length) throw new Error("no cases to run");
 
@@ -369,7 +374,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     answerVariants: options.answerVariants.map((variant) => ({ ...variant, model: { answer: clients.get(variant.name)?.model ?? null, thinking: clients.get(variant.name)?.thinking ?? null, answerJudgeSameFamily: /^qwen/.test(clients.get(variant.name)?.model ?? "") }, flags: { config: { ...options.config, ...variant.config } } })), label: options.label,
     answerOptions: baseAnswer,
     model: { answer: client?.model ?? null, thinking: client?.thinking ?? null, extraction: options.arm === "product" ? "deepseek-flash (lab engine ov.conf, provider direct)" : null },
-    options: { liveTurns: options.liveTurns, questionCategory: options.questionCategory, only: options.only || null, maxSessions: options.maxSessions || null, concurrency: options.concurrency, databasePoolMax: options.databasePoolMax, limitQuestions: options.limitQuestions || null,
+    options: { ...(wanted.size ? { qids: [...wanted] } : {}), liveTurns: options.liveTurns, questionCategory: options.questionCategory, only: options.only || null, maxSessions: options.maxSessions || null, concurrency: options.concurrency, databasePoolMax: options.databasePoolMax, limitQuestions: options.limitQuestions || null,
       ingestOnly: options.ingestOnly, snapshotCheckpoints: options.snapshotCheckpoints, answersOnly: options.answersOnly, retrievalOnly: options.retrievalOnly, maxRounds: options.maxRounds, extractionTimeoutMs: options.extractionTimeoutMs, engineTimeoutMs: options.engineTimeoutMs, dataDir: path.resolve(options.data) },
     cases: cases.map((item) => item.caseId),
   };
@@ -391,6 +396,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     await mkdir(path.join(caseDir, "snapshots"), { recursive: true, mode: 0o700 });
     const sessions = options.maxSessions ? item.sessions.slice(0, options.maxSessions) : item.sessions;
     let questions = options.ingestOnly ? [] : item.questions.filter((question) => question.afterSession <= sessions.length);
+    if (wanted.size) questions = questions.filter(question => wanted.has(question.qid));
     if (options.questionCategory) questions = questions.filter(question => question.category === options.questionCategory);
     if (options.limitQuestions) questions = questions.slice(0, options.limitQuestions);
     const plantAfter = options.plantCorruptionsAfter;

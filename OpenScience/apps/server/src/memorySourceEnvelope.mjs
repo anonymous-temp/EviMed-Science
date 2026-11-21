@@ -1,3 +1,5 @@
+import { carriesPlatformContext } from '@evimed/domain';
+
 // Source roles describe transport. A user-role message can contain a copied document,
 // a question about another person, or a platform context block.
 const origins = { explicit: 'user_statement', manual: 'user_edit', assistant: 'assistant_statement',
@@ -6,7 +8,8 @@ const speakers = { user_statement: 'user', user_edit: 'user', user_opinion: 'use
   tool_result: 'tool', pasted_material: 'unknown', attachment: 'unknown' };
 
 export function sourceEnvelope(kind, { subject = 'unknown', adoption = 'unknown', date = null, speaker = null } = {}) {
-  return { kind, speaker: speaker ?? speakers[kind] ?? 'unknown', subject, adoption, date };
+  const timestamp = typeof date === 'string' && Number.isFinite(Date.parse(date)) ? date : null;
+  return { kind, speaker: speaker ?? speakers[kind] ?? 'unknown', subject, adoption, date: timestamp };
 }
 
 // A receiver of a capsule never inherits its author's identity. Only the write-side
@@ -86,6 +89,7 @@ function envelopeText(text, source, pasteSpans) {
   if (/^\[(?:File "[^\n]*" \(\d+ bytes, sha256:[a-f\d]{8}\)|image omitted because this model accepts text only; attachment sha256:)/.test(text)) {
     return sourceText({ ...sourceEnvelope('attachment'), id: source.id }, text);
   }
+  if (carriesPlatformContext(text)) return sourceText({ ...sourceEnvelope('platform_context'), id: source.id }, text);
   const spans = [...pasteSpans(text), ...suppliedSyntax(text)].sort((a,b) => a.start - b.start || b.end - a.end);
   // A document full of quotations must not multiply the conversation's size.
   if (spans.length > 64) return sourceText(sourceEnvelope('mixed_input'), text);
@@ -122,7 +126,8 @@ export function sourceBoundRequest(body, protocol = 'chat', pasteSpans = (_text)
   const calls = new Map(), attachments = new Set();
   const toolSource = (callId, id) => {
     const call = calls.get(callId);
-    const kind = call?.name === 'read' && attachments.has(call.path) ? 'attachment' : 'tool_result';
+    const parsed = typeof call?.path === 'string' && /(?:^|\/)(?:\.evimed-derived|library)\/[^/]+\/index\.md$/.test(call.path);
+    const kind = call?.name === 'read' && (attachments.has(call.path) || parsed) ? 'attachment' : 'tool_result';
     return { ...sourceEnvelope(kind), id, ...(call ? { tool: call.name } : {}) };
   };
   const messages = body.messages.map((message, index) => {
@@ -145,7 +150,7 @@ export function sourceBoundRequest(body, protocol = 'chat', pasteSpans = (_text)
       }
     }
     const source = message.role === 'assistant' ? conversationEnvelope('assistant')
-      : message.role === 'tool' ? toolSource(message.tool_call_id, id) : sourceEnvelope('user_input');
+      : message.role === 'tool' ? toolSource(message.tool_call_id, id) : { ...sourceEnvelope('user_input'), submittedBy: 'user' };
     return { ...message, content: wrapContent(message.content, { ...source, id }, pasteSpans, toolSource) };
   });
   if (protocol === 'messages') {

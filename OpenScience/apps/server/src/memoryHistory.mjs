@@ -713,7 +713,10 @@ export class MemoryHistory {
           const seen=seenMessages.get(meta.session_id)??new Set();seenMessages.set(meta.session_id,seen);
           const headerChars=historySearchText([{...hit,messages:[]}],{semanticSecrets:this.secretRedaction}).length;
           hit.messages=compactHistoryMessages(hit.messages,query,historyLexicalScorer([{messages:hit.messages}],query),Math.floor(48_000/asked)-headerChars,seen, sourceBound && !forRemoval);
-          if (!hit.messages.length) continue;
+          if (!hit.messages.length) {
+            if (sourceBound && !forRemoval && !seen.size) { status.state = 'unavailable'; status.reason = 'complete_quote_budget'; }
+            continue;
+          }
         }
         hits.push(hit);
       }

@@ -161,7 +161,7 @@ export function renderMemoryContext(memories, { lookup = "", sourceBound = false
         ...(memo.validity?.from || memo.validity?.until
           ? [`有效期：${escapeContext(memo.validity.from ?? "起点未知")} 起，${escapeContext(memo.validity.until ?? "至今")} 止`] : []),
         ...(Array.isArray(memo.conflictsWith) ? memo.conflictsWith.map((other) =>
-          `与此冲突的另一条记忆（${escapeContext(other.key)}${originOf(other.origin) ? `，origin ${originOf(other.origin)}` : ""}）：${escapeContext(other.summary)}`) : []),
+          `与此冲突的另一条记忆（${escapeContext(other.key)}${originOf(other.origin) ? `，origin ${originOf(other.origin)}` : ""}）：${(sourceBound ? '请读取完整的冲突记录。' : escapeContext(other.summary))}`) : []),
         ...(Array.isArray(memo.staleSources) ? memo.staleSources.map((source) =>
           `所依据的来源 ${escapeContext(source.id)}：${SOURCE_STATE_TEXT[/** @type {keyof typeof SOURCE_STATE_TEXT} */ (source.state)] ?? escapeContext(source.state)}`) : []),
         "</evimed-memory>",

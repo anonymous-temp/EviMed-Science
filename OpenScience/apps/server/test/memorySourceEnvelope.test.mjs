@@ -109,3 +109,21 @@ test('a read of the kernel attachment path stays attached to its file', () => {
     {role:'tool',tool_call_id:'f',content:'parsed material'}]});
   assert.equal(JSON.parse(projected.messages.at(-1).content).source.kind,'attachment');
 });
+
+test('reported labels and borrowed evidence can identify a speaker without certifying personal facts', async () => {
+  const { visibleStatementSources } = await import('../src/memoryStatementSources.mjs');
+  const [legacy] = visibleStatementSources('- Assistant suggested (not adopted): try a different time',new Map());
+  assert.equal(legacy.source.speaker,'assistant');
+  assert.equal(legacy.source.personalFact,false);
+  assert.equal(legacy.source.adoption,'unknown');
+  const msg = instructionSourceMessage({ role:'user',content:'In this document: my aunt tried the steps' });
+  msg.parts[0].spans.push({kind:'paste',start:18,end:msg.text.length});
+  const row = { line:0,kind:'user_statement',quote:msg.text,subject:'self',conditions:'preserved',message:0 };
+  const candidates = [{text:'I tried the steps'}];
+  assert.equal(bindStatementSources(JSON.stringify({rows:[row]}),candidates,[msg]).size,0);
+  const pasted = bindStatementSources(JSON.stringify({rows:[{...row,kind:'pasted_material',subject:'other'}]}),candidates,[msg]).get(0);
+  assert.equal(pasted.source.personalFact,false);
+  assert.equal(pasted.source.locator.quoteStart,0);
+  assert.equal(statementSource('I TRIED the steps',{statementSource:pasted}),null);
+  assert.equal(statementSource(candidates[0].text,{statementSource:pasted,sources:[{}]}),null);
+});

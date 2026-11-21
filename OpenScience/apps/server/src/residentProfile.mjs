@@ -60,7 +60,7 @@ const CATCH_ALL_PROJECT_ID = "default";
 /**
  * The project's card as one memo, the rows the memory page's 项目 tab reads (`{ slot, label?, text, updatedAt }`), one line each in
  * the card's own order and words, cut at a whole line when the next would pass `maxChars`. Null when the card says nothing.
- * @param {string} projectId @param {readonly { slot?: string, label?: string | null, text?: string, updatedAt?: string | null }[]} rows
+ * @param {string} projectId @param {readonly { slot?: string, label?: string | null, text?: string, updatedAt?: string | null, statementSources?: any[] }[]} rows
  * @param {{ maxChars?: number, sourceBound?: boolean }} [options]
  * @returns {{ id: string, memoryType: string, kind: string, scope: string, origin: string, content: string, updatedAt: string | null,originalSources:any[],attribution:any,sourcePrivacy:any,statementSources?:any[] } | null}
  */
@@ -129,7 +129,7 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
     : { text: '', memos: [] };
   const standingCandidates = standingPreferenceMemos(nativeFiles, config);
   /** @type {ReturnType<typeof standingPreferenceMemos>} */ const standingMemos = [];
-  const standingHeader = '用户本人的持续偏好（保留原适用范围，本次明确要求优先）：';
+  const standingHeader = sourceBound ? '持续偏好记录（按每条来源与适用范围使用）：' : '用户本人的持续偏好（保留原适用范围，本次明确要求优先）：';
   const renderStanding = () => standingMemos.length
     ? `${standingHeader}\n${render(sourceBound ? standingMemos : [{ ...standingMemos[0], id: 'native-standing-preferences',
       content: standingMemos.map(memo => memo.content).join('\n') }]).split('\n').slice(1).join('\n')}` : '';

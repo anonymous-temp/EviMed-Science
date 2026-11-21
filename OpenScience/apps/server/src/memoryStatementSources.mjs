@@ -49,6 +49,11 @@ export function bindStatementSources(content, candidates, messages) {
       }
     }
     const { text } = candidates[row.line];
+    const locator = { message: row.message, quoteStart: m.text.indexOf(row.quote), quoteLength: row.quote.length };
+    // This is an offset in the admitted archive projection, never a public link.
+    if (adoption === 'adopted' || adoption === 'rejected') {
+      locator.response = { message: row.response, quoteStart: messages[row.response].text.indexOf(row.responseQuote), quoteLength: row.responseQuote.length };
+    }
     // Persist positions only. Recover names strictly from the visible, digest-bound record.
     const layout = Array.isArray(row.layoutFields) ? row.layoutFields.slice(0, 20).flatMap(name => {
       if (typeof name !== 'string' || !name.trim() || name.length > 60) return [];
@@ -56,7 +61,7 @@ export function bindStatementSources(content, candidates, messages) {
       return at < 0 ? [] : [[at, name.length]];
     }) : [];
     byLine.set(row.line, { lineDigest: digest(text), layout, source: { ...sourceEnvelope(row.kind, { subject: row.subject, adoption, date: m.created_at ?? null }),
-      conditions: row.conditions, personalFact: row.kind === 'user_statement' && row.subject === 'self' && row.conditions === 'preserved' } });
+      locator, conditions: row.conditions, personalFact: row.kind === 'user_statement' && row.subject === 'self' && row.conditions === 'preserved' } });
   }
   return byLine;
 }
@@ -76,7 +81,7 @@ export function statementSourceReviewer({ config, usageLedger, pasteRangeIndex, 
     const session = platformSessionOf(commit.engineSession);
     const messages = archived.map(message => !pasteRangeIndex || message.role !== 'user' ? message : {
       ...message, parts: message.parts.map(part => ({ ...part, spans: [
-        ...part.spans, ...pasteRangeIndex.lookup(commit.userId, commit.projectId, session, part.text),
+        ...part.spans, ...pasteRangeIndex.lookup(commit.userId, commit.projectId ?? 'default', session, part.text),
       ] })),
     });
     if (!messages.length) return byFile;
