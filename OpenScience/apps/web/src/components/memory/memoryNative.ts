@@ -38,9 +38,24 @@ export function breath(value: string): string {
   return fileStatements(value).map((line) => line.replace(/[。.；;]+$/u, "")).join("；");
 }
 
+function isEarlierLine(line: string, earlierValues: readonly string[] = []): boolean {
+  const fold = (value: string) => value.replace(/^(?:[-*+]|\d+[.)])\s+/u, "").replace(/\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/iu, "").replace(/\s+/gu, " ").trim().toLowerCase();
+  const current = fold(line);
+  return earlierValues.some((value) => fold(value) === current);
+}
+
 /** The quiet line under a file's topic: what it says, in a breath. */
-export function fileSummary(record: Pick<WebStructuredMemory, "value">): string {
-  return memoryExcerpt(breath(record.value), 160);
+export function fileSummary(record: Pick<WebStructuredMemory, "value" | "earlierValues">): string {
+  const statements = fileStatements(record.value).map((line) => isEarlierLine(line, record.earlierValues) ? `早先值：${line}` : line);
+  return memoryExcerpt(statements.map((line) => line.replace(/[。.；;]+$/u, "")).join("；"), 160);
+}
+
+/** Display labels never enter the editor or become stored memory text. */
+export function displayMemoryText(record: WebStructuredMemory): string {
+  const text = memoryText(record);
+  if (!record.earlierValues?.length) return text;
+  if (record.document) return isEarlierLine(text, record.earlierValues) ? `早先值：${text}` : text;
+  return text.replace(/\r\n/gu, "\n").split("\n").map((line) => isEarlierLine(line, record.earlierValues) ? `早先值：${line}` : line).join("\n");
 }
 
 /** The text a memory's drawer opens with and its edit starts from: a file's own text, else the sentence. */

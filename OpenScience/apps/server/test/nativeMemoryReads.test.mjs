@@ -185,6 +185,36 @@ test('a profile H1 and its exact name bullet are one visible fact and forget and
   }
 });
 
+test('profile and preference values use the newer revision, read with an earlier label and reconcile without rejection', async () => {
+  for (const newer of ['profile', 'preference']) {
+    const { files, store } = engine({ count: 0, delay: 0 });
+    const profile = `${ROOT}/profile.md`, preference = `${ROOT}/preferences/language.md`, rejected = [];
+    Object.assign(store, { preferenceReconcileEnabled: true, preferenceJudge: { available: true, overlaps: async () => [{ profile: 0, preference: 0 }] } });
+    store.overlay.reject = async (...args) => rejected.push(args);
+    files.set(profile, { body: '# 用户\n- 回答一律用中文 (as of 2026-11-01)', modTime: newer === 'profile' ? '2026-11-03' : '2026-11-01' });
+    files.set(preference, { body: '- 回答一律用英文\n- 表格不超过五列', modTime: newer === 'preference' ? '2026-11-03' : '2026-11-01' });
+    const records = await store.records('u1');
+    const old = records.find(row => row.uri === (newer === 'profile' ? preference : profile));
+    assert.deepEqual(old.earlierValues, [newer === 'profile' ? '回答一律用英文' : '回答一律用中文']);
+    assert.match(await store.preferenceRecallText('u1', old.uri, old.value), /\[earlier value\]/);
+    assert.deepEqual((await store.reconcilePreferences('u1')).removed, 1);
+    assert.doesNotMatch(files.get(old.uri).body, /回答一律用/);
+    assert.match(files.get(newer === 'profile' ? profile : preference).body, /回答一律用/);
+    if (newer === 'profile') assert.match(files.get(preference).body, /表格不超过五列/);
+    assert.deepEqual(rejected, [], 'platform reconciliation is not a forget or a ban on the old words');
+  }
+  const { files, store } = engine({ count: 0, delay: 0 }), rejected = [];
+  const profile = `${ROOT}/profile.md`, preference = `${ROOT}/preferences/language.md`;
+  Object.assign(store, { preferenceReconcileEnabled: true, preferenceJudge: { available: true, overlaps: async () => [{ profile: 0, preference: 0 }] } });
+  store.overlay.reject = async (...args) => rejected.push(args);
+  store.overlay.forgetText = async () => {}; store.overlay.removeFile = async () => {};
+  files.set(profile, { body: '# 用户\n- 回答一律用中文', modTime: '2026-11-03' });
+  files.set(preference, { body: '- 回答一律用英文', modTime: '2026-11-01' });
+  await store.reconcilePreferences('u1');
+  assert.equal(files.has(preference), false, 'an empty old preference file is retired');
+  assert.deepEqual(rejected, [], 'retiring that file still creates no withdrawal authority');
+});
+
 test('people cards offer only unconfirmed name hints on the page and honour a distinct-person decision', async () => {
   const { files, store } = engine({ count: 0, delay: 0 });
   Object.assign(store, { personAliasHintEnabled: true, personMergeEnabled: true });

@@ -402,6 +402,8 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     memoryPersonMergeEnabled: overrides.memoryPersonMergeEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PERSON_MERGE_ENABLED", false),
     memoryKeepUnexplainedLinesEnabled: overrides.memoryKeepUnexplainedLinesEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_KEEP_UNEXPLAINED_LINES_ENABLED", false),
     memoryPersonAliasHintEnabled: overrides.memoryPersonAliasHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PERSON_ALIAS_HINT_ENABLED", false),
+    memoryPreferenceReconcileEnabled: overrides.memoryPreferenceReconcileEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PREFERENCE_RECONCILE_ENABLED", false),
+    memoryPreferenceJudgeDailyCalls: boundedInteger(overrides.memoryPreferenceJudgeDailyCalls ?? process.env.OPEN_SCIENCE_MEMORY_PREFERENCE_JUDGE_DAILY_CALLS, 20, 0, 1000, "OPEN_SCIENCE_MEMORY_PREFERENCE_JUDGE_DAILY_CALLS"),
     memorySafetyNotesEnabled: overrides.memorySafetyNotesEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED", false),
     memoryOpeningIndexEnabled: overrides.memoryOpeningIndexEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OPENING_INDEX_ENABLED", false),
     memoryOpeningByUseEnabled: overrides.memoryOpeningByUseEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OPENING_BY_USE_ENABLED", false),

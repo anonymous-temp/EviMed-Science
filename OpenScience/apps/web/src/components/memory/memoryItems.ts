@@ -53,7 +53,8 @@ export function factItems(
       .filter((record) => record.status !== "archived")
       .map((record): FactItem => ({
         kind: "record", key: `record:${record.id}`, group: recordGroup(record), section: selfSection(record.kind), projectId: recordProjectId(record),
-        at: record.updatedAt ?? record.createdAt ?? "", text: isFileMemory(record) ? fileTopic(record) : memoryExcerpt(record.summary || record.value),
+        at: record.updatedAt ?? record.createdAt ?? "", text: isFileMemory(record) ? fileTopic(record)
+          : memoryExcerpt(record.earlierValues?.length ? `早先值：${record.summary || record.value}` : record.summary || record.value),
         record,
       })),
     ...entries

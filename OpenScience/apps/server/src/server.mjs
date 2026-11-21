@@ -506,6 +506,7 @@ import { createMemoryHistorySources } from './memoryHistorySources.mjs';
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
+import { createPreferenceJudge } from "./nativeMemoryPreferences.mjs";
 import { createPastedInstructionJudge } from "./nativeMemoryPastedInstructions.mjs";
 import { createVerificationJudge } from './nativeMemoryVerification.mjs';
 import { NativeMemoryConsolidation } from "./nativeMemoryConsolidation.mjs";
@@ -1411,7 +1412,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // One judge of whether a line says what another says: it holds a line the engine wrote near one the person removed out (one call a
   // commit) and finds the other lines that say what a line the person forgot said (`nativeMemoryRejections.mjs`, `nativeMemoryForgetEverywhere.mjs`).
   const rejectionJudge = createRejectionJudge({ config, usageLedger });
-  const nativeMemory = new NativeMemoryStore({ personMergeEnabled: config.memoryPersonMergeEnabled, personAliasHintEnabled: config.memoryPersonAliasHintEnabled, standingInstructionsEnabled: config.memoryStandingInstructionsEnabled, peopleAcrossProjectsEnabled: config.memoryPeopleAcrossProjectsEnabled, forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions: openVikingSessions, overlay: nativeMemoryOverlay, memoryContexts: nativeMemoryContexts, rejectionJudge,
+  const nativeMemory = new NativeMemoryStore({ personMergeEnabled: config.memoryPersonMergeEnabled, personAliasHintEnabled: config.memoryPersonAliasHintEnabled, preferenceReconcileEnabled: config.memoryPreferenceReconcileEnabled, preferenceJudge: createPreferenceJudge({ config, usageLedger }), standingInstructionsEnabled: config.memoryStandingInstructionsEnabled, peopleAcrossProjectsEnabled: config.memoryPeopleAcrossProjectsEnabled, forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions: openVikingSessions, overlay: nativeMemoryOverlay, memoryContexts: nativeMemoryContexts, rejectionJudge,
     report: (line) => process.stderr.write(`${line}\n`),
     // The conversation a memory came out of is named from the run ledger, which is composed further down.
     conversationTitles: (userId, refs) => nativeConversationTitles(userId, refs) });

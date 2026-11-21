@@ -258,6 +258,28 @@ test('the worker removes an extracted name bullet that exactly repeats the real 
   assert.deepEqual((await store.records(userId)).map(row => row.value).sort(), ['林舟', '喜欢游泳'].sort());
 });
 
+test('a judged cross-file preference update keeps only the newer value on the real worker path', options, async t => {
+  const f = await fixture(t), { userId, store, overlay, sessions } = f;
+  Object.assign(store, { preferenceReconcileEnabled: true,
+    preferenceJudge: { available: true, overlaps: async () => [{ profile: 0, preference: 0 }] } });
+  const profile = f.seed('profile.md', '# 用户\n- 回答一律用中文 (as of 2026-11-01)', { type: 'profile' });
+  const preference = f.seed('preferences/language.md', '- 回答一律用英文\n- 表格不超过五列', { type: 'preferences' });
+  await new Promise(resolve => setTimeout(resolve, 5));
+  const current = (await store.records(userId)).find(row => row.uri === preference);
+  await store.update(userId, current.id, { value: current.value, expectedVersion: current.version });
+  const before = await store.records(userId);
+  assert.deepEqual(before.find(row => row.uri === profile).earlierValues, ['回答一律用中文']);
+  const worker = new NativeMemoryWorker({ ...f, config: { ...f.config, memoryPreferenceReconcileEnabled: true }, nativeMemory: store });
+  await f.commitConversation('preference-reconcile', [{ role: 'user', text: '以后回答用英文。' }]);
+  await worker.processCommits({ userId });
+  assert.equal(await sessions.read(userId, profile), '# 用户');
+  assert.match(await sessions.read(userId, preference), /回答一律用英文/);
+  assert.match(await sessions.read(userId, preference), /表格不超过五列/);
+  assert.ok(!(await overlay.rejectedFingerprints(userId, 'profile')).has(lineFingerprint('回答一律用中文')));
+  assert.ok((await overlay.revisionsOf(userId, profile)).some(row => row.reason === 'preference superseded across files'));
+  worker.close(); await worker.running;
+});
+
 test("the worker enters an idle commit it never saw, ingests the diff into revisions once, and 刚记住了 reads them", options, async (t) => {
   const state = { engineUser: null };
   const { userId, store, worker, overlay, stub, engineUser, sessions, root } = await fixture(t, {

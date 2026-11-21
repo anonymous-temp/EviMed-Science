@@ -895,6 +895,9 @@ export class NativeMemoryWorker {
       // Failure leaves the extracted lines available; the next commit can retry the merge.
       await reconcileMemoryNames({ userId, context, overlay: this.overlay }).catch(() => this.report('native memory name reconciliation unavailable'));
     }
+    if (!sourceDeleted && this.config.memoryPreferenceReconcileEnabled === true && this.nativeMemory) {
+      await this.nativeMemory.reconcilePreferences(userId).catch(() => this.report('native memory preference reconciliation unavailable'));
+    }
     recordNativeOperations(counts);
     return counts.added + counts.updated + counts.deleted;
   }
@@ -1161,6 +1164,9 @@ export class NativeMemoryWorker {
         await this.overlay.inheritOrigins(userId, file.uri, new Map([...(origins.get(file.uri) ?? [])].map(([print, origin]) => [print, originalSources(origin)])));
         await this.#afterWrite(userId, file.uri, file.type, { projectId: file.projectId, diffAfter: restored, diffBefore: '', fresh: true, archiveUri: null, memoryContext: context, extraOrigins: mergeOrigins });
       }
+    }
+    if (this.config.memoryPreferenceReconcileEnabled === true && this.nativeMemory) {
+      await this.nativeMemory.reconcilePreferences(userId).catch(() => this.report('native memory preference reconciliation unavailable'));
     }
     return counts;
   }

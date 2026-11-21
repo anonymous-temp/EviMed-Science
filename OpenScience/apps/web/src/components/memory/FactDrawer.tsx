@@ -26,7 +26,7 @@ import { ConversationLink } from "./ConversationLink";
 import { DrawerSection } from "./DrawerSection";
 import { RelatedSection } from "./RelatedSection";
 import type { FactItem } from "./memoryItems";
-import { breath, fileTopic, isFileMemory, memoryText } from "./memoryNative";
+import { breath, displayMemoryText, fileTopic, isFileMemory, memoryText } from "./memoryNative";
 import { ValidityBar, validitySpan } from "./ValidityBar";
 
 function when(value: string | null | undefined) {
@@ -262,7 +262,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
     ...(record ? [{ label: "不再记这条", destructive: true, disabled: busy, onSelect: () => setRejecting(true) }] : []),
   ];
 
-  const sentence = memoryExcerpt(text, 4_000);
+  const sentence = memoryExcerpt(record ? displayMemoryText(record) : text, 4_000);
   const lines = record?.document ? siblings.filter((other) => other.document?.id === record.document?.id && other.id !== record.id) : [];
   const save = () => (record ? void saveRecord({ value, status: "active" }) : void saveEntry());
 
@@ -316,6 +316,9 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
           )}
 
           {record && <ValidityBar span={validitySpan(record)} />}
+          {record?.currentPreferenceId && onOpenRecord && canOpenRecord?.(record.currentPreferenceId) && (
+            <Button size="sm" variant="secondary" onClick={() => onOpenRecord(record.currentPreferenceId!)}>查看当前值</Button>
+          )}
 
           {record && onAskAbout && (record.possibleSamePerson?.length ?? 0) > 0 && (
             <DrawerSection label="可能是同一人">

@@ -1371,6 +1371,10 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           sourceFiles ??= ctx.fileMetadata();
           const metadata = (await sourceFiles).get(uri);
           if (metadata && ['origin', 'attribution', 'speaker', 'asOf', 'updatedAt', 'earlierValue'].some(key => metadata[key] != null)) text = `[Memory source ${memorySourceLabel(metadata)}]\n${text}`;
+          if (config.memoryPreferenceReconcileEnabled === true && memoryTool && typeof memoryTool.preferenceRecallText === 'function'
+            && ['profile', 'preferences'].includes(nativeMemoryFile(uri, `${userRoot}/memories`)?.type)) {
+            text = await memoryTool.preferenceRecallText(user.id, uri, text).catch(() => text);
+          }
           if (observationFile(uri, `${userRoot}/memories`)) return `[seen once — observed choice, not a standing preference]\n${text}`;
           if (config.memoryPersonAliasHintEnabled !== true || nativeMemoryFile(uri, `${userRoot}/memories`)?.type !== 'people') return text;
           if (!await ctx.personIdentityVisible(uri, text)) return text;

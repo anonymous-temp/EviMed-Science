@@ -14,6 +14,7 @@ import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
 import { neutralMemoryUri, removalStatement, containsRemoved, similarity, removalRefusals, removalLines, removalText, lineDecisionKey } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
+import { markPreferenceOverlaps, preferenceCandidates, preferenceJudgementKey } from './nativeMemoryPreferences.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
 import { memoryHistoryLine, carriesPlatformContext, identifierShapesIn, maskIdentifiers, platformIdentifiersIn, projectContextLine, sourcePrivacyOf, MEMORY_SAFETY_NOTES_ANCHOR } from "@evimed/domain";
@@ -432,15 +433,19 @@ export class NativeMemoryStore {
    *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null,
    *   now?: () => Date, conversationTitles?: ConversationTitles | null,
    *   rejectionJudge?: { same: (request: any) => Promise<{ same: Map<number, string>, stated: Set<number> }> } | null,
-   *   report?: (line: string) => void, settleExtractionsMs?: number, forgetTargetsEnabled?: boolean, personAliasHintEnabled?: boolean, personMergeEnabled?: boolean, standingInstructionsEnabled?: boolean, peopleAcrossProjectsEnabled?: boolean, replacedDeadlineMs?: number }} dependencies
+   *   preferenceJudge?: { available: boolean, overlaps: (request: any) => Promise<{ profile: number, preference: number }[]> } | null,
+   *   report?: (line: string) => void, settleExtractionsMs?: number, forgetTargetsEnabled?: boolean, personAliasHintEnabled?: boolean, personMergeEnabled?: boolean, preferenceReconcileEnabled?: boolean, standingInstructionsEnabled?: boolean, peopleAcrossProjectsEnabled?: boolean, replacedDeadlineMs?: number }} dependencies
    *   `conversationTitles` names the conversations a memory came out of (the run ledger knows them; this store does not). `rejectionJudge` is the
    *   rejection list's own judge (`nativeMemoryRejections.mjs`), asked which other lines say what a forgotten one said
    *   (`nativeMemoryForgetEverywhere.mjs`); absent, only the lines that contain a forgotten line's words go with it. `memoryContexts` names
    *   the registered namespaces (the account's own and each shared GEO project's, `geoNativeMemoryContext.mjs`).
    */
-  constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, report = () => {},
-    settleExtractionsMs = 20_000, forgetTargetsEnabled = false, personAliasHintEnabled = false, personMergeEnabled = false, standingInstructionsEnabled = false, peopleAcrossProjectsEnabled = false, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
+  constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, preferenceJudge = null, report = () => {},
+    settleExtractionsMs = 20_000, forgetTargetsEnabled = false, personAliasHintEnabled = false, personMergeEnabled = false, preferenceReconcileEnabled = false, standingInstructionsEnabled = false, peopleAcrossProjectsEnabled = false, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
     this.sessions = sessions;
+    this.preferenceReconcileEnabled = preferenceReconcileEnabled === true;
+    this.preferenceJudge = preferenceJudge;
+    this.preferenceJudgements = new Map();
     this.standingInstructionsEnabled = standingInstructionsEnabled;
     this.peopleAcrossProjectsEnabled = peopleAcrossProjectsEnabled;
     this.forgetTargetsEnabled = forgetTargetsEnabled === true;
@@ -594,6 +599,32 @@ export class NativeMemoryStore {
     return files;
   }
 
+  /** Semantic pairs are cached only against the exact visible texts and revision times the judge saw. */
+  async #preferencePairs(userId, records) {
+    if (!this.preferenceReconcileEnabled || !this.preferenceJudge?.available) return [];
+    const key = preferenceJudgementKey(records), cached = this.preferenceJudgements.get(userId);
+    if (cached?.key === key) return cached.pairs;
+    const { profile, preferences } = preferenceCandidates(records);
+    const pairs = await this.preferenceJudge.overlaps({ userId, profile: profile.map(record => record.value), preferences: preferences.map(row => row.text) }).catch(() => []);
+    this.preferenceJudgements.delete(userId);
+    this.preferenceJudgements.set(userId, { key, pairs });
+    while (this.preferenceJudgements.size > 20) this.preferenceJudgements.delete(this.preferenceJudgements.keys().next().value);
+    return pairs;
+  }
+
+  async #withPreferenceCurrentness(userId, records) {
+    return markPreferenceOverlaps(records, await this.#preferencePairs(userId, records));
+  }
+
+  /** The same current/earlier labels on an explicit conversation read as on the page. */
+  async preferenceRecallText(userId, uri, text) {
+    if (!this.preferenceReconcileEnabled || !this.preferenceJudge?.available || typeof text !== 'string') return text;
+    const records = await this.records(userId), old = new Set(records.filter(record => record.uri === uri)
+      .flatMap(record => record.earlierValues ?? []).map(lineFingerprint));
+    if (!old.size) return text;
+    return text.split('\n').map(line => old.has(lineFingerprint(removalText(line))) ? `[earlier value] ${line}` : line).join('\n');
+  }
+
   /**
    * The account's memories as records (`publicRecord`'s shape plus `engine`, `nativeType`, `uri`, `contentHash` and, for a
    * profile line, `document`), newest change first.
@@ -665,7 +696,7 @@ export class NativeMemoryStore {
     const withdrawn = new Set(this.sourceDeletion ? await this.sourceDeletion.hiddenMemoryUris(userId) : []);
     const visible=records.filter(record=>![...withdrawn].some(prefix=>record.uri===prefix||record.uri.startsWith(`${prefix}/`)));
     const protectedRecords=this.sourceDeletion?await this.sourceDeletion.redactRecords(userId,visible):visible;
-    return protectedRecords.sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
+    return (await this.#withPreferenceCurrentness(userId, protectedRecords)).sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
   }
 
   /** Producer evidence is per statement. Editing one statement and restoring a version never confirm its neighbours. */
@@ -1210,7 +1241,8 @@ export class NativeMemoryStore {
         sourcePrivacy: record.sourcePrivacy, attribution: record.attribution })), { trusted: true });
       const origins = [...new Set(sources.flatMap(record => record.attribution?.origins ?? ['unknown']))];
       return [{ ...selected.find(row => row.uri === file.uri), ...file,
-        body: sources.map(record => record.value).join('\n'),
+        body: sources.map(record => record.earlierValues?.some(text => lineFingerprint(text) === lineFingerprint(record.value))
+          ? `[earlier value] ${record.value}` : record.value).join('\n'),
         originalSources: receipt.originalSources, sourcePrivacy: receipt.sourcePrivacy,
         attribution: { schemaVersion: 1, origins, confirmed: false } }];
     });
@@ -1391,6 +1423,28 @@ export class NativeMemoryStore {
   }
 
   // ----------------------------------------------------------------- writing
+
+  /** Keep only the newer of a judged profile/preference pair. This is an ordinary revision, never a forget rejection. */
+  async reconcilePreferences(userId) {
+    if (!this.preferenceReconcileEnabled || !this.preferenceJudge?.available) return { removed: 0 };
+    return withNativeMemoryWrite(this.overlay.database, userId, async () => {
+      const records = await this.records(userId), marked = records.filter(record => record.earlierValues?.length);
+      if (!marked.length) return { removed: 0 };
+      const files = await this.rawFiles(userId);
+      let removed = 0;
+      for (const record of marked) {
+        const file = files.find(candidate => candidate.uri === record.uri);
+        if (!file) continue;
+        const prints = new Set(record.earlierValues.map(lineFingerprint));
+        const next = file.body.split('\n').filter(line => !prints.has(lineFingerprint(removalText(line)))).join('\n');
+        if (next === file.body) continue;
+        removed += record.earlierValues.length;
+        if (removalLines(next).length) await this.#write(userId, file, next, { actor: 'platform', reason: 'preference superseded across files' });
+        else await this.forgetFile(userId, file, { keepText: true, actor: 'platform', reason: 'preference superseded across files', reject: false });
+      }
+      return { removed };
+    }, { exclusive: true });
+  }
 
   /**
    * The person's own edit (`PATCH /api/memory/records/:id`): `value` replaces the file (a profile line replaces that line of
@@ -1978,7 +2032,7 @@ export class NativeMemoryStore {
     return wordings;
   }
 
-  /** @param {string} userId @param {any} file @param {{ keepText?: boolean, actor?: string, reason?: string, engineSession?: string | null, memorySweep?: import('./memoryHistoryPersistence.mjs').MemorySweep|null }} [options] */
+  /** @param {string} userId @param {any} file @param {{ keepText?: boolean, actor?: string, reason?: string, reject?: boolean, engineSession?: string | null, memorySweep?: import('./memoryHistoryPersistence.mjs').MemorySweep|null }} [options] */
   async forgetFile(userId,file,options={}) {
     return withNativeMemoryWrite(this.overlay.database,userId,async()=>{
       const context=await this.#fileContext(userId,file.uri);
@@ -1987,16 +2041,16 @@ export class NativeMemoryStore {
       return this.#forgetFileOwned(userId,file,options);
     });
   }
-  async #forgetFileOwned(userId, file, { keepText = false, actor = "user", reason = "", engineSession = null, memorySweep = /** @type {import('./memoryHistoryPersistence.mjs').MemorySweep|null} */ (null) } = {}) {
+  async #forgetFileOwned(userId, file, { keepText = false, actor = "user", reason = "", reject = true, engineSession = null, memorySweep = /** @type {import('./memoryHistoryPersistence.mjs').MemorySweep|null} */ (null) } = {}) {
     const context = await this.#fileContext(userId, file.uri);
     this.#touch(userId);
     const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
     const names = [...new Set([titleOf(file.type, file.uri, file.body), ...memoryNameVariants(file.uri)])].filter(name => hardTokens(name).length);
     const removedLines = await this.#aliasRemovalLines(userId, file, [...new Set([...removalLines(file.body), ...names])]);
     const activate = async () => { await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, removedLines); };
-    if (this.history && actor !== "platform") await this.history.rejectRemoved(context,file,
+    if (reject && this.history && actor !== "platform") await this.history.rejectRemoved(context,file,
       [...new Map([...statements(file.body).map(removalText), ...names].map(text => [lineFingerprint(text), text])).values()],this.rejectionJudge, { activate, memorySweep, allowDeferred: Boolean(memorySweep || actOf(reason) && this.overlay.deferredSummaryRebuildEnabled === true) });
-    else await activate();
+    else if (reject) await activate();
     await this.history?.retireWriteSessions(context,oldOrigins,statements(file.body));
     const removed = await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.remove(userId, file.uri)));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change: "deleted", actor: /** @type {any} */ (actor),

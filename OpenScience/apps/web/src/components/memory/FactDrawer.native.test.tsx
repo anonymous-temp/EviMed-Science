@@ -254,6 +254,17 @@ it('offers a similar-name person for explicit confirmation without merging from 
   expect(client.archiveMemoryRecord).not.toHaveBeenCalled();
 });
 
+it('labels an earlier preference and opens its current value without editing the label into memory', async () => {
+  const line = nativeProfileLine('回答一律用中文。', { earlierValues: ['回答一律用中文。'], currentPreferenceId: 'nm_current' });
+  const onOpenRecord = vi.fn();
+  show(line, { onOpenRecord, canOpenRecord: () => true });
+  expect(screen.getByText('早先值：回答一律用中文。')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: '查看当前值' }));
+  expect(onOpenRecord).toHaveBeenCalledWith('nm_current');
+  await userEvent.click(screen.getByRole('button', { name: '编辑' }));
+  expect(screen.getByRole('textbox', { name: '编辑这条记忆' })).toHaveValue('回答一律用中文。');
+});
+
 it('a filename-only topic is editable as the file heading without changing its independent facts', async () => {
   vi.clearAllMocks(); client.fetchMemorySources.mockResolvedValue([]);
   const file = nativeFile('Mara Santos', '- Designs reports.');
