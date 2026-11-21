@@ -77,6 +77,14 @@ test("bootstrap always injects the trusted response ceiling over frame input", a
   assert.ok(Object.isFrozen(sandbox.__EVIMED_FRAME__));
 });
 
+test("bootstrap gives native date rendering the same default display zone as hosted pages", async () => {
+  const { runtimeUiBootstrapSource } = await import("../src/runtimeUiDocument.mjs");
+  const sandbox = {};
+  runInNewContext(runtimeUiBootstrapSource({}, function () {}, function (target, timeZone) { target.displayTimeZone = timeZone; }), sandbox);
+  assert.equal(sandbox.__EVIMED_FRAME__.timeZone, "Asia/Shanghai");
+  assert.equal(sandbox.displayTimeZone, "Asia/Shanghai");
+});
+
 
 test("rc.2 relative native plugin preloads use the same immutable asset route as absolute URLs", async () => {
   const { rebaseRuntimeUiDocument } = await import("../src/runtimeUiDocument.mjs");
