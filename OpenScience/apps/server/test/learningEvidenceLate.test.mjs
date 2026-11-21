@@ -38,6 +38,7 @@ test('late replies recover unambiguous JSON framing and casing without changing 
 });
 
 test('late replies retry exactly once on incomplete, ambiguous or invalid objects', async () => {
+  const validUse = JSON.parse(boundAcceptance(message));
   const cases = [
     '', ' \n ', 'null', '{"verdict":', '{"verdict":"none"', '{"verdict":"unsupported"}', '{"verdict":true}', '{}',
     '[{"verdict":"none"}]', 'Preamble\n[{"verdict":"none"}]\nEnd', '{"verdict":"none",,}', '{"verdict":"none","concerns":[,]}',
@@ -45,6 +46,7 @@ test('late replies retry exactly once on incomplete, ambiguous or invalid object
     '{"verdict":"none","verdict":"none"}', '{"verdict":"none","ver\\u0064ict":"accept"}',
     '{"verdict":"accept","artifact":{"path":"a","Path":"b"}}', `${noReaction}\n${noReaction}`, `${noReaction}\n{`,
     '```json\n' + noReaction, '~~~json\n' + noReaction + '\n```', `<think>${noReaction}</think>`, `<think>${noReaction}`,
+    ...['accepted', 'approved', 'adopt'].map(verdict => JSON.stringify({ ...validUse, verdict, rule: message })),
   ];
   for (const content of cases) {
     const calls = [];
@@ -82,6 +84,11 @@ test('late replies use final message content and retry the same gateway body aft
     assert.equal(calls[0].runId, calls[1].runId);
     assert.equal(calls[0].purpose, 'learning');
     assert.deepEqual(calls[0].body.thinking, { type: 'disabled' });
+    const instructions = calls[0].body.messages[0].content;
+    assert.match(instructions, /exactly one of these literal strings: "accept", "correction", "preference", "rejection", "none"\./);
+    for (const value of ['accept', 'correction', 'preference', 'rejection', 'none']) {
+      assert.match(instructions, new RegExp(`^- ${value}: .+\\.$`, 'm'));
+    }
   }
   const truncated = new FollowUpJudge({ deepseekProviderEnabled: true, deepseekApiKey: 'test', deepseekModel: 'test' }, {
     callModel: async () => ({ choices: [{ finish_reason: 'length', message: { content: accepted } }] }),
@@ -96,6 +103,7 @@ test('a readable late reply with invalid evidence does not earn a retry or an ac
     [boundAcceptance(message, { ...DELIVERY, path: DELIVERY.path.toUpperCase() }), 'none', null],
     [boundAcceptance(message, { ...DELIVERY, sha256: DELIVERY.sha256.toUpperCase() }), 'none', null],
     [JSON.stringify({ verdict: 'rejection', rule: 'Redo it', quote: 'A different quote.' }), null, 'quote_not_found'],
+    [JSON.stringify({ verdict: 'reject', rule: null, quote: 'A different quote.' }), null, 'quote_not_found'],
     [JSON.stringify({ verdict: 'rejection', rule: 'My email is person@example.com', quote: message }), null, 'rule_unsafe'],
   ]) {
     let calls = 0;
@@ -104,6 +112,48 @@ test('a readable late reply with invalid evidence does not earn a retry or an ac
     assert.equal('failure' in result ? result.failure : null, failure);
     assert.equal(calls, 1);
   }
+});
+
+test('fj-050 records a quoted rejection without a rule and never queues a lesson, including on replay', async () => {
+  const text = '这个不行，换个思路重写。';
+  const answer = '{"verdict":"rejection","rule":null,"quote":"这个不行，换个思路重写。","concerns":[],"relation":"none","artifact":null}';
+  const state = lateFixture({ answer });
+  let lessons = 0;
+  state.evidence.triggers.afterCorrection = async () => { lessons++; return { queued: ['correction'] }; };
+  await state.snapshot();
+  await state.feedback.recordLearningEvidence('owner', { runId: state.run.id, projectId: 'project', key: 'earlier-use',
+    detail: { evidence: 'used', verdict: 'none', at: state.run.finishedAt } });
+  assert.equal(state.outcome(), 'clean');
+  const result = await state.turn(text);
+  assert.equal(result.verdict, 'rejection');
+  assert.deepEqual(result.queued, []);
+  assert.equal(state.outcome(), 'corrected');
+  const detail = state.rows.find(row => row.detail.lateFollowUp).detail;
+  assert.equal(detail.rule, null);
+  assert.equal(detail.quote, text);
+  assert.equal((await state.turn(text)).reason, 'already_followed_up');
+  assert.equal(state.calls.length, 1);
+  assert.equal(lessons, 0);
+});
+
+test('fj-056 normalizes reject and ignores a rejection relation and artifact', async () => {
+  const text = "No, this isn't what I wanted at all. Redo it as a table.";
+  const artifact = { path: 'results/delivery.md', sha256: 'd'.repeat(64) };
+  const rule = 'Redo it as a table.';
+  const quote = "this isn't what I wanted at all. Redo it as a table.";
+  const answer = JSON.stringify({ verdict: 'reject', rule, quote, concerns: [], relation: 'rejection', artifact });
+  const state = lateFixture({ answer, files: [artifact] });
+  await state.snapshot();
+  const result = await state.turn(text);
+  assert.equal(result.verdict, 'rejection');
+  assert.deepEqual(result.queued, ['correction']);
+  assert.equal(state.outcome(), 'corrected');
+  assert.equal(state.calls.length, 1);
+  const detail = state.rows.find(row => row.detail.lateFollowUp).detail;
+  assert.equal(detail.rule, rule);
+  assert.equal(detail.quote, quote);
+  assert.equal(detail.relation, undefined);
+  assert.equal(detail.artifact, undefined);
 });
 
 test('the production path can recover a late continuation on its second reply', async () => {
