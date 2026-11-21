@@ -188,7 +188,7 @@ const WALK_TABLES = {
       {"view":"frontier-daily","route":"/app/frontier?view=daily","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"controls":10},"budgetNote":"a published issue with a lead has both its 24px headline link and 16px row links","shapes":3,"rows":true},
       {"view":"frontier-all","route":"/app/frontier?view=all","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"controls":10,"colors":9},"budgetNote":"colours: the cards' titles are title-ink, the brand accent the owner asked for (2026-10-23), one colour more — 9 on the live walk of evimed-01e965e99a11-1; controls: the 「AI 评分」 pill on every card (owner 2026-10-23: a score says its name and opens its four parts) is a control of its own — 22 px, 12 px, round, one look for its three tiers — beside the shell's, the tabs, the search, the 「筛选」 button and its tokens (the 栏目 sit inside it since c2-band 2026-10-25), ☆/⋯ and the card titles: 10 kinds (fixture walk 2026-10-23, fr2; re-measured with the walk's functions on the one-row band, c2-band)","shapes":3,"rows":true},
       {"view":"frontier-following","route":"/app/frontier?view=following&follow=all","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"borders":4,"controls":12,"colors":9},"budgetNote":"colours: title-ink on the cards' titles (see frontier); controls: the feed's ten (see frontier) and the 「查看全部关注专区」 text link, 11 (fixture walk 2026-10-23, fr2), and the framed field 「关注一个药物、试验或问题」 of a typed follow, 12 (c3-watch; fixture walk 2026-10-25) — the 全部关注 entry of the 关注 view (c2-band 2026-10-25: a bare ?view=following opens 与我相关 beside the follow list); borders: the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","shapes":3,"rows":false},
-      {"view":"frontier-zones","route":"/app/frontier/zones","pattern":"/app/frontier/zones","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"controls":10,"borders":4},"budgetNote":"the topic zones' directory (2026-10-29): the tab row's hairline and the selected tab's underline, the rule between a group's zones, and the search field's frame; a group inside a specialty is a 12/400 label, not a 14/600 heading (the integrated walk counted five size × weight pairs with it, the page holds four); controls: the directory's nine plus 「新建专区」, the one header primary the design requires for a reader who may create a zone (FrontierControls.tsx, reviewed 2026-11-21)","shapes":3,"rows":true},
+      {"view":"frontier-zones","route":"/app/frontier/zones","pattern":"/app/frontier/zones","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the topic zones' directory (2026-10-29): the tab row's hairline and the selected tab's underline, the rule between a group's zones, and the search field's frame; a group inside a specialty is a 12/400 label, not a 14/600 heading (the integrated walk counted five size × weight pairs with it, the page holds four)","shapes":3,"rows":true},
       {"view":"frontier-track","route":"/app/frontier?view=track","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"typePairs":5},"budgetNote":"追踪 · 审批 (c3-track): 12/400 meta, 14/400 the year's line, 16/600 the rows' drug names, 18/600 the months' headings, 24/600 the title — 5 pairs (fixture walk 2026-10-25); its rows open the reader the feed's rows open, clicked on 精选","shapes":3,"rows":false},
       {"view":"frontier-track-guidelines","route":"/app/frontier?view=track&segment=guidelines","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetNote":"追踪 · 指南 (c3-track): its rows open the reader the feed's rows open, clicked on 精选","shapes":3,"rows":false},
       {"view":"frontier-track-congresses","route":"/app/frontier?view=track&segment=congresses","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"typePairs":5},"budgetNote":"追踪 · 会议 (c3-track): 12/400 meta, 14/400 the dates and place, 16/600 the congresses' names, 18/600 进行中 / 即将召开 / 近期 headings, 24/600 the title — 5 pairs (fixture walk 2026-10-25); a row opens the congress hub, walked as frontier-congress","shapes":3,"rows":false},
@@ -5278,7 +5278,7 @@ async function walkSchedules(page, base) {
  * `effort` is the composer seat's accessible name; `documentChunk` is the document preview's PDF viewer chunk, which the shared
  * asset route has to serve or a PDF, Word, Excel or PowerPoint file opens to a blank pane.
  */
-export async function nativeSurfaceProbe() {
+export async function nativeSurfaceProbe(operator = false) {
   const base = location.pathname.replace(/\/$/, "");
   /** @type {{ developerTools: boolean | null, effort: string | null, documentChunk: { status: number, type: string } | null }} */
   const read = { developerTools: null, effort: null, documentChunk: null };
@@ -5291,10 +5291,21 @@ export async function nativeSurfaceProbe() {
   } catch { /* stays null: not observable */ }
   // The composer's controls mount after the frame's first paint; a read before that found nothing on production (2026-11-05)
   // while the control was there ("思考强度，当前：高"). Wait for it, bounded, inside the page.
-  const findSeat = () => [...document.querySelectorAll("button[aria-label]")].map((el) => el.getAttribute("aria-label") ?? "").find((label) => label.includes("思考强度") || /model|模型/i.test(label));
+  // Read the visible editor's own card. A settings button elsewhere can also mention a model.
+  const visible = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
+  const expected = operator ? /^(?:请)?选择模型(?:，|$)/ : /^思考强度(?:，当前：[^，]+)?$/;
+  const findSeat = () => {
+    const editor = [...document.querySelectorAll("[contenteditable='true']")].filter(visible).pop();
+    const card = editor?.closest('[class$="_card"]');
+    const labels = [...(card?.querySelectorAll("button[aria-label]") ?? [])].filter(visible).map((el) => el.getAttribute("aria-label") ?? "");
+    return labels.find((label) => expected.test(label)) ?? labels.find((label) => /思考强度|model|模型/i.test(label));
+  };
   let seat = findSeat();
-  // a new conversation draws the seat once its session's model list is in: about 30 s on production (2026-11-06/08), so the bound is 45 s
-  for (let waited = 0; !seat && waited < 45_000; waited += 500) { await new Promise((resolve) => setTimeout(resolve, 500)); seat = findSeat(); }
+  // The native picker can appear before the researcher seat replaces it.
+  for (let waited = 0; !expected.test(seat ?? "") && waited < 45_000; waited += 500) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    seat = findSeat();
+  }
   read.effort = seat ?? null;
   try {
     const entry = /** @type {any} */ (globalThis).__DSH_BOOT__?.entries?.find((/** @type {any} */ item) => item?.id === "@deepseek-ai/dsh-client-ui-sidebar-documentpreview");
@@ -5318,7 +5329,7 @@ export function nativeSurfaceFindings(read, operator = false) {
   /** @type {string[]} */ const failures = [];
   if (read.developerTools !== true) failures.push(`chat@desktop: the page reads the developer-tools preference as ${read.developerTools === null ? "unreadable" : "off"}, so a conversation has no native 运行 tab`);
   if (read.effort === null) failures.push(`chat@desktop: the composer draws no ${operator ? "model" : "thinking-strength"} control`);
-  else if (operator ? !/model|模型|deepseek/i.test(read.effort) : (!read.effort.startsWith("思考强度") || /model|模型|deepseek/i.test(read.effort))) {
+  else if (operator ? !/^(?:请)?选择模型(?:，|$)/.test(read.effort) : (!/^思考强度(?:，当前：[^，]+)?$/.test(read.effort) || /model|模型|deepseek/i.test(read.effort))) {
     failures.push(`chat@desktop: the composer's control is not worded as the ${operator ? "native model" : "thinking strength"} (“${read.effort}”)`);
   }
   if (!read.documentChunk) failures.push("chat@desktop: not observable: the document preview's PDF viewer chunk was not requested");
@@ -5337,8 +5348,9 @@ async function walkNativeSurface(page, operator) {
   // is the conversation's, and a later frame without one must not replace it (2026-11-08: the seat was on screen, the walk said none).
   for (const frame of page.frames()) {
     if (!frame.url().includes("/__evimed/f/")) continue;
-    const seen = await frame.evaluate(nativeSurfaceProbe).catch(() => null);
-    if (seen && (!read || !read.effort || seen.effort)) read = seen;
+    const seen = await frame.evaluate(nativeSurfaceProbe, operator).catch(() => null);
+    if (seen && (!read || !read.effort)) read = seen;
+    if (seen?.effort && nativeSurfaceFindings(seen, operator).length === 0) { read = seen; break; }
   }
   return { failures: nativeSurfaceFindings(read, operator), read: read ?? {} };
 }

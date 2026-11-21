@@ -23,7 +23,6 @@ import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { Button, buttonClasses } from "@/components/ui/Button";
-import { List, ListRow } from "@/components/ui/ListRow";
 import { Section } from "@/components/ui/Section";
 import { StateScreen } from "@/components/ui/StateScreen";
 import { Tag } from "@/components/ui/Tag";
@@ -251,12 +250,16 @@ function TopicOverview({ topic }: { topic: FrontierTopicSummary }) {
         )))}
       </p>
       {cited.length > 0 && (
-        <List label="概览引用的报道与研究" className="mt-3 max-w-measure-body">
+        <ul aria-label="概览引用的报道与研究" className="mt-3 max-w-measure-body space-y-1 text-caption text-text-3">
           {cited.map((ref) => (
-            <ListRow key={ref.n} to={articlePath(ref.itemId)} state={state} title={ref.title}
-              leading={<span className="w-5 text-caption tabular-nums text-text-3">{ref.n}</span>} meta={ref.sourceName || undefined} />
+            <li key={ref.n}>
+              <span className="tabular-nums">[{ref.n}] </span>
+              <Link to={articlePath(ref.itemId)} state={state} onClick={rememberFrontierPosition}
+                className="rounded text-link underline underline-offset-2">{ref.title}</Link>
+              {ref.sourceName && <span> · {ref.sourceName}</span>}
+            </li>
           ))}
-        </List>
+        </ul>
       )}
     </section>
   );
