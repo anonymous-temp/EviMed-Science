@@ -291,3 +291,19 @@ test('a correction in the stage section cannot overwrite identical words in an u
   const result = await reviewer.assessCommit('u', [{ uri: 'p', type: 'project_context', before, after: before + added }], [source('I believe this is difficult.')]);
   assert.equal(result.rewrites[0].after, '- User believes: this is difficult.\n' + before + '\n## Stage');
 });
+
+test('only complete clause evidence from one standing request leaves a paraphrase locator', async () => {
+  const original = '以后报告先给结论再给依据。';
+  const line = '报告一律先给结论，再给依据。';
+  const sources = [source(original), source('以后报告用表格。')];
+  const evidence = [{clause:'报告一律先给结论，', source:0, quote:'先给结论'}, {clause:'再给依据。', source:0, quote:'再给依据'}];
+  const judge = createVerificationJudge({config:{deepseekApiKey:'fixture', deepseekModel:'test'},
+    callModel:async()=>response([{index:0, verdict:'supported', corrected:null, evidence}])});
+  const { NativeMemoryVerification } = await import('../src/nativeMemoryVerification.mjs');
+  const { inputDigest } = await import('../src/memoryHumanSegments.mjs');
+  const verification = new NativeMemoryVerification({config:{}, sessions:{}, overlay:{}, judge});
+  const check = async () => (await verification.assessCommit('u', [{type:'preferences', uri:'p', after:'- ' + line}], sources)).results[0];
+  assert.deepEqual((await check()).presentation, {message:0, digest:inputDigest(original), lineDigest:inputDigest(line)});
+  evidence[1] = {...evidence[1], source:1, quote:'用表格'};
+  assert.equal((await check()).presentation, undefined);
+});

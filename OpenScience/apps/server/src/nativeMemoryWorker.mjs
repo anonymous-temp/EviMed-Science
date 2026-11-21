@@ -204,7 +204,7 @@ export class NativeMemoryWorker {
     this.consolidation = null;
     /** What promotes a choice two conversations repeated (`nativeMemoryObservations.mjs`); built from the store when there is one. @type {{ promote: (userId: string) => Promise<any> } | null} */
     this.observations = nativeMemory && typeof nativeMemory.keepRepeatedChoice === "function"
-      ? new NativeMemoryObservations({ overlay, sessions, memorySettings, inductionEnabled: config.memoryObservationInductionEnabled === true, keepRepeatedChoice: (userId, choice, origins, evidence) => nativeMemory.keepRepeatedChoice(userId, choice, origins, evidence), report }) : null;
+      ? new NativeMemoryObservations({ overlay, sessions, memorySettings, clinicalSegmentsEnabled: config.memoryClinicalSegmentsEnabled === true, inductionEnabled: config.memoryObservationInductionEnabled === true, keepRepeatedChoice: (userId, choice, origins, evidence) => nativeMemory.keepRepeatedChoice(userId, choice, origins, evidence), report }) : null;
     /** When each account's type allowlist was last checked against the deployment's (`#syncPolicy`). @type {Map<string, number>} */
     this.policyChecked = new Map();
     this.now = now ?? (() => new Date());
@@ -860,10 +860,14 @@ export class NativeMemoryWorker {
     const pastedInstructions = sourceDeleted ? new Set() : await this.#pastedInstructions(commit, operations, context).catch(() => {
       recordPastedInstructionCheck("failed"); return new Set();
     });
-    const reviewed = !sourceDeleted && this.config.memorySourceEnvelopeEnabled === true && context.kind !== 'geo-project'
-      && platformSessionOf(commit.engineSession) && commit.archiveUri && ['gateway', 'scan'].includes(commit.origin)
-      ? await this.reviewStatementSources(commit, operations, () => this.verification.readSources(userId, [commit], context, new Map(), { structured: true }))
-        .catch(() => new Map()) : new Map();
+    const conversation = platformSessionOf(commit.engineSession);
+    const segment = this.config.memoryClinicalSegmentsEnabled && commit.engineSession?.startsWith('evimed-segment-') && commit.sourceSession;
+    const sourceEnvelope = this.config.memorySourceEnvelopeEnabled === true && conversation;
+    const presentationReview = this.config.memoryAccountPresentationEnabled === true && (conversation || segment);
+    const reviewed = !sourceDeleted && (sourceEnvelope || presentationReview) && context.kind !== 'geo-project'
+      && commit.archiveUri && ['gateway', 'scan'].includes(commit.origin)
+      ? await this.reviewStatementSources(commit, operations, () => this.verification.readSources(userId, [commit], context, new Map(), { structured: true }),
+        { presentationOnly: !sourceEnvelope }).catch(() => new Map()) : new Map();
     const instructionRevisions = !sourceDeleted && this.robustInstructions ? await this.#prepareInstructionWrites(commit, diff, context, pastedInstructions, true) : new Map();
     for (const [list, change] of /** @type {const} */ ([["adds", "added"], ["updates", "updated"], ["deletes", "deleted"]])) {
       for (const operation of Array.isArray(operations[list]) ? operations[list] : []) {
@@ -965,7 +969,8 @@ export class NativeMemoryWorker {
       if (await this.verification.write(userId, change, change.after, 'commit source verification', origins, context, { instructionReview: false })) applied++;
     }
     await this.overlay.recordCommitVerification(userId, archiveUri, { state: 'complete', calls: assessed.calls,
-      omitted: assessed.omitted, applied, findings: assessed.results.map(row => ({ uri: row.uri, fingerprint: row.fingerprint, status: row.status })) });
+      omitted: assessed.omitted, applied, findings: assessed.results.map(row => ({ uri: row.uri, fingerprint: row.fingerprint, status: row.status,
+        ...(this.config.memoryAccountPresentationEnabled && row.presentation ? { presentation: row.presentation } : {}) })) });
   }
 
   /** Accept an extraction after-image before either ingestion or instruction review records it.

@@ -43,7 +43,8 @@ export function createClinicalSegments({ config, contexts, admission, overlay, n
       if (!policy.learn) continue;
       for (const quote of clinicalStatements(input, source.boundary)) {
         if (!quote || quote.length > 2000) continue;
-        const ref = {operation:'clinical-segment', projectCreatedAt:source.context.projectCreatedAt, sessionId, runId:run.id,
+        const afterRead = input.time >= source.boundary || Date.parse(run.memoryInput.at) >= source.boundary;
+        const ref = {operation:'clinical-segment', ...(afterRead ? { presentationOnly:true } : {}), projectCreatedAt:source.context.projectCreatedAt, sessionId, runId:run.id,
           inputSeq:input.seq, inputDigest:run.memoryInput.digest, saidAt:new Date(input.time).toISOString()};
         const digest = clinicalSegmentDigest(project.userId,project.id,ref,quote);
         entries.push({text:quote,candidateId:'segment:' + digest, revision:1,projectId:project.id,engineSession:'evimed-segment-' + digest,
@@ -79,7 +80,7 @@ export function createClinicalSegments({ config, contexts, admission, overlay, n
         || !Number.isSafeInteger(ref.inputSeq) || run.nativeTurn && run.nativeTurn.userSeq !== ref.inputSeq
         || !(Date.parse(run.memoryInput.at) <= time) || digest !== ref.digest || row.candidateId !== 'segment:' + digest
         || row.engineSession !== 'evimed-segment-' + digest || !row.text) return false;
-      if (time >= source.boundary && !presentationRule(row.text)) return false;
+      if (ref.presentationOnly && time < source.boundary || time >= source.boundary && !presentationRule(row.text)) return false;
       return (await admission.admitSegment({user:{id:userId},project,engineSessionId:'dsh-' + ref.sessionId,at:time,runId:run.id})).learn;
     },
   };

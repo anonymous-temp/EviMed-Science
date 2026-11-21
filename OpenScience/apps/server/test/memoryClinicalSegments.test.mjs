@@ -104,3 +104,52 @@ test('a clinical input receipt keeps pasted requests out of extraction after the
   assert.deepEqual(clinicalStatements(input, 100), [typed]);
   assert.deepEqual(clinicalStatements({ ...input, run:{ memoryInput:humanInputReceipt(text, 101) }, time:101 }, 100), [pastedQuote, typed]);
 });
+
+for (const inductionEnabled of [false, true]) test(`short choices count original clinical conversations once (typed induction ${inductionEnabled})`, async () => {
+  const {NativeMemoryObservations} = await import('../src/nativeMemoryObservations.mjs');
+  const {clinicalSegmentDigest} = await import('../src/memoryClinicalSegments.mjs');
+  const f = fixture();
+  await f.service.capture(f.project, f.runs[2]);
+  const original = f.writes.find(row=>row.text === '说简短点。');
+  assert.equal(original.externalSource.presentationOnly, true);
+  assert.equal(f.writes[0].externalSource.presentationOnly, undefined);
+  const root = 'viking://user/u-test/memories', uri = root + '/observations/brevity.md';
+  const bullet = '- Choice: ' + JSON.stringify({kind:'length', scope:'reply', choice:original.text, subject:'work'});
+  const revisions = [], admissions = new Map(), promoted = [];
+  let body = '';
+  const add = (sessionId, inputSeq) => {
+    const ref = {...original.externalSource, sessionId, inputSeq};
+    ref.digest = clinicalSegmentDigest('u', 'p', ref, original.text);
+    const engineSession = 'evimed-segment-' + ref.digest, archiveUri = root + '/fixture/' + engineSession;
+    const before = body;
+    body = [before, bullet].filter(Boolean).join('\n');
+    revisions.push({actor:'engine', change:before ? 'updated':'added', engineSession, archiveUri, before, after:body,
+      sourceProjectId:'p', sourceProjectCreatedAt:ref.projectCreatedAt});
+    admissions.set(archiveUri, {...original, state:'completed', engineSession, archiveUri, externalSource:ref});
+  };
+  const service = new NativeMemoryObservations({
+    clinicalSegmentsEnabled:true, inductionEnabled,
+    overlay:{ observationFiles:async()=>[{uri}], revisionsOf:async()=>revisions, originsOf:async()=>new Map(),
+      admissionOfCommit:async(_user,revision)=>admissions.get(revision.archiveUri),
+      admissionAuthority:async(_user,row)=>({allowed:row.text === original.text}),
+      deferredSummaryRebuildEnabled:true, queueSummaryInvalidation:async()=>[], addRevision:async()=>{}, removeFile:async()=>{} },
+    sessions:{ read:async(_user,path)=>path === uri ? body : null, remove:async()=>{}, memoryRoot:()=>root },
+    keepRepeatedChoice:async(_user,words,origins)=>{ promoted.push({words,origins}); return {archiveUri:'promotion'}; },
+  });
+  add('first', 2);
+  assert.equal((await service.promote('u')).promoted, 0);
+  add('first', 6);
+  assert.equal((await service.promote('u')).promoted, 0);
+  add('second', 2);
+  const last = admissions.get(revisions.at(-1).archiveUri);
+  last.state = 'cancelled';
+  assert.equal((await service.promote('u')).promoted, 0);
+  last.state = 'completed';
+  last.externalSource.presentationOnly = false;
+  assert.equal((await service.promote('u')).promoted, 0);
+  last.externalSource.presentationOnly = true;
+  assert.equal((await service.promote('u')).promoted, 1);
+  assert.equal(promoted.length, 1);
+  assert.match(promoted[0].words, /说简短点。/);
+  assert.doesNotMatch(promoted[0].words, /SEALED|Choice:|CASE/);
+});
