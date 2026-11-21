@@ -735,6 +735,7 @@ function routePattern(pathname) {
   if (pathname === "/api/connectors") return pathname;
   if (pathname.startsWith("/api/connectors/")) return "/api/connectors/:connector";
   if (pathname === "/api/ops/metrics") return pathname;
+  if (pathname === "/api/ops/native-memory/consolidation") return pathname;
   if (pathname === "/api/ops/evidence-flywheel") return pathname;
   if (pathname === "/api/ops/frontier-usage") return pathname;
   if (pathname === "/api/ops/frontier-reading") return pathname;
@@ -7087,6 +7088,24 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
       // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): the north star, the five asset groups and the guardrails, from the tables that
       // already exist. Behind the scrape token like the usage report; off, the route answers by name once the token has been checked.
+      if (pathname === "/api/ops/native-memory/consolidation" && req.method === "GET") {
+        assertOperatorMetricsAccess(req, config);
+        if (!productDatabase) throw new HttpError(503, "product_state_unavailable", "Native memory state is unavailable.");
+        const query = new URL(req.url ?? "/", apiBaseFromRequest(req, config)).searchParams;
+        const after = query.has("after") ? safeId(query.get("after"), "account cursor") : "";
+        const result = await productDatabase.query("SELECT id FROM evimed_control.users WHERE id > $1 ORDER BY id LIMIT 6", [after]);
+        const rows = [];
+        for (const { id } of result.rows.slice(0, 5)) {
+          try { rows.push(await nativeMemoryWorker.consolidation.diagnose(id)); }
+          catch (error) {
+            rows.push({ userId: id, eligible: null, blockers: ["unavailable"], code: safeLogId(error?.code) ?? "native_memory_diagnostic_failed" });
+          }
+        }
+        res.setHeader("Cache-Control", "no-store");
+        sendJson(res, 200, { data: { rows, nextAfter: result.rows.length > rows.length ? rows.at(-1)?.userId : null } });
+        return;
+      }
+
       if (pathname === "/api/ops/evidence-flywheel" && req.method === "GET") {
         assertOperatorMetricsAccess(req, config);
         if (!evidenceFlywheel) throw new HttpError(404, "evidence_flywheel_not_enabled", "The evidence flywheel's figures are not enabled.");

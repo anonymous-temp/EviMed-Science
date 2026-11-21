@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { consolidationDirectories } from "../src/nativeMemoryConsolidation.mjs";
+import { consolidationDirectories, NativeMemoryConsolidation } from "../src/nativeMemoryConsolidation.mjs";
 
 const root = "viking://user/u-0123456789abcdef01234567/memories";
 const file = (path) => ({ uri: `${root}/${path}` });
@@ -23,4 +23,34 @@ test("the directories are the memory types that hold at least two files the plat
 test("a root with nothing in a type directory has no directory to ask for, and a file outside the root is nobody's", () => {
   assert.deepEqual(consolidationDirectories([file("profile.md"), file("entities/a.md")], root), []);
   assert.deepEqual(consolidationDirectories([{ uri: "viking://user/other/memories/entities/a.md" }, { uri: "viking://user/other/memories/entities/b.md" }], root), []);
+});
+
+test("one preference and one correction do not qualify as two files of the same type", () => {
+  assert.deepEqual(consolidationDirectories([file("preferences/self/a.md"), file("preferences/corrections/b.md")], root), []);
+  assert.deepEqual(consolidationDirectories([file("preferences/corrections/a.md"), file("preferences/corrections/b.md")], root), ["preferences"]);
+});
+
+test("the read-only eligibility snapshot reports every missing threshold even inside the hourly recheck window", async () => {
+  const state = { checkedAt: "2026-11-21T00:00:00.000Z", leaseUntil: "2026-11-21T00:06:00.000Z" };
+  const files = [file("profile.md"), file("preferences/self/a.md"), file("preferences/corrections/b.md"), file("notes/.overview.md")];
+  const consolidation = new NativeMemoryConsolidation(/** @type {any} */ ({
+    config: { nativeMemoryConsolidationEnabled: true, memoryEngineEnabled: true },
+    now: () => new Date("2026-11-21T00:05:00.000Z"),
+    memorySettings: { settings: async () => ({ learningPaused: false }) },
+    overlay: {
+      configured: true, consolidationState: async () => state,
+      hasUnprovenNativeWrites: async () => true,
+      commitsOf: async () => [{ createdAt: "2026-11-21T00:02:00.000Z" }],
+    },
+    resources: { configured: true },
+    sessions: { configured: true, memoryRoot: () => root, tree: async () => files },
+  }));
+  const result = await consolidation.diagnose("alice");
+  assert.deepEqual(result.blockers, ["hourly_check", "lease", "extraction_pending", "quiet_period", "too_few_files", "too_few_same_type"]);
+  assert.equal(result.recheckRemainingMs, 55 * 60_000);
+  assert.equal(result.quietRemainingMs, 7 * 60_000);
+  assert.equal(result.leaseRemainingMs, 60_000);
+  assert.equal(result.files, 3);
+  assert.equal(result.missingFiles, 1);
+  assert.equal(result.missingSameTypeFiles, 1);
 });

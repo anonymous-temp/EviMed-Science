@@ -396,6 +396,7 @@ export class NativeMemoryOverlay {
     return {
       consolidatedAt: instant(row?.consolidated_at), checkedAt: instant(row?.consolidation_checked_at), fingerprint: /** @type {string | null} */ (row?.consolidation_fingerprint ?? null),
       task: /** @type {string | null} */ (row?.consolidation_task ?? null), startedAt: instant(row?.consolidation_started_at),
+      leaseUntil: instant(row?.consolidation_lease_until),
     };
   }
 
