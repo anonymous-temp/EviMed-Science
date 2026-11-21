@@ -201,7 +201,7 @@ export function standingPreferenceMemos(files, config) {
   for (const file of orderStandingPreferences(files)) {
     const body = String(file.body ?? '').replace(/<!--[\s\S]*?-->/g, '').trim();
     if (!body) continue;
-    const size = [...body].length + 1;
+    const size = [...body].length;
     const fits = size <= remaining;
     if (fits) remaining -= size;
     memos.push({ id: `native-standing:${file.uri}`, memoryType: 'native_standing_preference',

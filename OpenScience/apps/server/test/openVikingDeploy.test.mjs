@@ -306,19 +306,26 @@ test("ordinary init writes only a root-readable configuration digest for offline
   // than changing this local machine's users; existing capability assertions
   // above hold the production UID/mode relationship.
   const program = `import os,json,pathlib\nowners=[]\nos.chown=lambda p,u,g: owners.append([pathlib.Path(p).name,u,g])\nexec(${JSON.stringify(prefix)})\nprint(json.dumps(owners))`;
-  const run = spawnSync("python3", ["-B", "-c", program], { encoding: "utf8", timeout: 5000 });
+  const initialize = (safety, directory = 'memory-templates') => spawnSync("python3", ["-B", "-c", program], {
+    encoding: "utf8", timeout: 5000, env: { ...process.env, OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED: String(safety),
+      OPEN_SCIENCE_MEMORY_TEMPLATES_DIR: directory } });
+  const run = initialize(false);
   assert.equal(run.status, 0, run.stderr);
   const owners = JSON.parse(run.stdout);
   assert.ok(owners.some(([name, uid, gid]) => name === "ov.conf.sha256.tmp" && uid === 0 && gid === 0));
   assert.ok(owners.some(([name, uid]) => name === "ov.conf.tmp" && uid === 10001));
   assert.deepEqual(await readFile(path.join(output, 'ov.conf')), bytes);
-  const enabled = spawnSync("python3", ["-B", "-c", program], { encoding: "utf8", timeout: 5000,
-    env: { ...process.env, OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED: 'true' } });
+  const enabled = initialize(true);
   assert.equal(enabled.status, 0, enabled.stderr);
   const actual = JSON.parse(await readFile(path.join(output, 'ov.conf'), 'utf8'));
   assert.equal(actual.memory.custom_templates_dir, '/app/memory-templates-safety');
   assert.deepEqual(actual.server.user_config_defaults.memory_policy.memory_types, [...OPENVIKING_MEMORY_TYPES, 'safety_notes']);
-  assert.equal(spawnSync("python3", ["-B", "-c", program]).status, 0);
+  for (const directory of ['memory-templates-next', 'memory-templates-extraction-v2']) {
+    const refused = initialize(true, directory);
+    assert.notEqual(refused.status, 0);
+    assert.match(refused.stderr, /standalone variants/);
+  }
+  assert.equal(initialize(false).status, 0);
   const receipt = path.join(output, "ov.conf.sha256"), expected = createHash("sha256").update(bytes).digest("hex");
   assert.equal(await readFile(receipt, "utf8"), `${expected}\n`);
   assert.equal((await stat(receipt)).mode & 0o777, 0o600);

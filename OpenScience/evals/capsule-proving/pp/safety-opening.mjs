@@ -49,6 +49,8 @@ try {
   check(history.some(revision => revision.archiveUri === ingested.commit.archiveUri && revision.engineSession === ingested.engineSession && revision.projectId === a.id), 'new card has the extractor conversation as its source');
 
   const long = await replaceLabFile(lab.parts, user, 'safety_notes/long-card.md', '# 长卡\n' + '保留原始病史的限定范围。'.repeat(180) + '仅在条件 Z-71 成立时。');
+  await sessions.setTags(user.userId, long.uri, ['project=' + a.id]);
+  await overlay.upsertFile({ userId: user.userId, uri: long.uri, memoryType: 'safety_notes', projectId: a.id });
   const longProfile = Array.from({ length: 80 }, (_, n) => '- ' + n + ' ' + '个人工作记录。'.repeat(24)).join('\n');
   await replaceLabFile(lab.parts, user, 'profile.md', longProfile);
   const opening = async () => ({ profile: await buildProfileBlock(reader, { pluginTgz: values['plugin-tgz'] }), resident: await reader.residentBlock() });

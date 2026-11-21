@@ -69,12 +69,13 @@ test('previously withdrawn, paused, hidden and shared records never reach the cl
 });
 
 test('a withdrawal or source change during classification cannot publish a stale result', async () => {
-  for (const change of ['rejected', 'edited', 'hidden', 'deleted', 'paused']) {
+  for (const change of ['rejected', 'edited', 'hidden', 'deleted', 'paused', 'stale-cache']) {
     const f = scene();
     f.deps.classify = async () => {
       if (change === 'rejected') f.removals.push({ fingerprint: 'withheld' });
       if (change === 'edited') f.files.get(f.uri).body += ' changed';
       if (change === 'hidden') f.hidden.push(f.uri);
+      if (change === 'stale-cache') f.deps.sessions.read = async () => f.text.replace(' X ', ' Y ');
       if (change === 'deleted') f.files.delete(f.uri);
       if (change === 'paused') f.settings.learningPaused = true;
       return [[2,3]];

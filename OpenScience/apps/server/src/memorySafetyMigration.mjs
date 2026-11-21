@@ -103,6 +103,7 @@ export async function migrateSafetyNotes({ config, store, overlay, sessions, set
   for (const { file, cursor } of candidates) {
     const reviewKey = hash => digest(JSON.stringify(['safety-classification-v1', file.uri, hash]));
     if (file.contentHash && await overlay.instructionCheck(userId, reviewKey(file.contentHash))) continue;
+    await overlay.noteSafetyScan(userId, cursor);
     const source = await read(file);
     if (!source) continue;
     if (file.contentHash && source.hash !== file.contentHash) continue;
@@ -116,13 +117,13 @@ export async function migrateSafetyNotes({ config, store, overlay, sessions, set
     const sourceTitle = lines.find(line => /^#\s+\S/.test(line));
     const title = sourceTitle ?? (file.uri.endsWith('/profile.md') ? '# 用户本人' : '# ' + file.uri.split('/').pop().replace(/\.md$/, ''));
     if ((await safe([removalText(title)])).size) continue;
-    await overlay.noteSafetyScan(userId, cursor);
     const ranges = safetySelections(lines, await classify(userId, file.uri, lines));
     await withNativeMemoryWrite(overlay.database, userId, async () => {
       const latestSettings = await settings.settings(userId);
       if (latestSettings.learningPaused || (latestSettings.pausedProjects ?? []).includes(file.projectId)) return;
       if (!(await visibleSources()).some(row => row.uri === file.uri) || (await read(file))?.body !== source.body) return;
-      if (JSON.stringify(await overlay.removals(userId)) !== removalsBefore) return;
+      // A listing cache can reuse the same modification time and size. The mutation needs fresh engine bytes.
+      if (await sessions.read(userId, file.uri) !== source.raw || JSON.stringify(await overlay.removals(userId)) !== removalsBefore) return;
       if (!file.contentHash) await overlay.upsertFile({ userId, uri: file.uri, memoryType: source.type,
         projectId: source.projectId, body: source.raw });
       const origins = (await overlay.originsOf(userId, [file.uri])).get(file.uri);

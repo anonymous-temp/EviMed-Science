@@ -19,6 +19,8 @@ test('standing opening keeps complete scoped preference lines, recent then used,
   assert.ok(memos[0].content.includes(files[4].uri));
   assert.ok(memos.map(row => row.content).join('\n').length <= 400);
   assert.ok(memos.every(row => row.memoryType === 'native_standing_preference'));
+  const exact = '忆'.repeat(399) + '。';
+  assert.equal(opening.standingPreferenceMemos([pref('self/exact', exact)], { memoryStandingInstructionsEnabled: true })[0].content, exact);
 });
 
 test('memory file and capsule floors share normalization and reject unknown scores only when enabled', () => {
