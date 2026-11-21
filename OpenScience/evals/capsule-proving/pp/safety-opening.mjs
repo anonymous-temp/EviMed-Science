@@ -41,12 +41,12 @@ try {
   check(!migrated.body.includes('咖啡'), 'ordinary preference was not classified as safety history');
 
   const saidAt = new Date().toISOString();
-  await lab.ingestSession(user, { sessionId: 'new-fact', project: a, at: saidAt,
+  const ingested = await lab.ingestSession(user, { sessionId: 'new-fact', project: a, at: saidAt,
     messages: [{ role: 'user', text: '请记住，我本人对乳胶过敏，不能使用乳胶手套。', at: saidAt }] });
   const fresh = (await nativeMemory.safetyNotes(user.userId, b.id)).find(file => file.type === 'safety_notes' && !file.sourceUri && file.body.includes('乳胶'));
   check(fresh?.originalSources.length && fresh.updatedAt && /过敏/.test(fresh.body) && /不能|禁止|避免|不可/.test(fresh.body), 'newly extracted card preserves the negative condition and has a dated receipt');
   const history = await overlay.revisionsOf(user.userId, fresh.uri);
-  check(history.some(revision => revision.archiveUri && revision.engineSession), 'new card has the extractor conversation as its source');
+  check(history.some(revision => revision.archiveUri === ingested.commit.archiveUri && revision.engineSession === ingested.engineSession && revision.projectId === a.id), 'new card has the extractor conversation as its source');
 
   const long = await replaceLabFile(lab.parts, user, 'safety_notes/long-card.md', '# 长卡\n' + '保留原始病史的限定范围。'.repeat(180) + '仅在条件 Z-71 成立时。');
   const longProfile = Array.from({ length: 80 }, (_, n) => '- ' + n + ' ' + '个人工作记录。'.repeat(24)).join('\n');

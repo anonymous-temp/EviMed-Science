@@ -116,6 +116,7 @@ test('switch off and non-health accounts remain identical through the database-b
 test('legacy line migration survives retries, travels and follows an exact source withdrawal', options, async t => {
   const f = await fixture(t, { config: { memorySafetyNotesEnabled: true, memorySafetyNotesMigrationEnabled: true } });
   f.worker.nativeMemory = f.store;
+  await f.sessions.setLearning(f.userId, true);
   const source = '# Owner\n- Old reported reaction, only after exposure.\n- A different hobby.';
   const uri = f.seed('people/owner.md', source, { type: 'people', tags: ['project=first'] });
   await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'people', projectId: 'first', body: source });
@@ -130,8 +131,9 @@ test('legacy line migration survives retries, travels and follows an exact sourc
   assert.equal(await f.sessions.read(f.userId, copy.uri), null);
   assert.match(await f.sessions.read(f.userId, uri), /different hobby/);
   // Simulate an old extractor writing the withdrawn words again after cleanup.
-  await f.sessions.replace(f.userId, uri, source);
-  await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'people', body: source });
+  const replay = source + '\n- An unrelated fresh note changes the file digest.';
+  await f.sessions.replace(f.userId, uri, replay);
+  await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'people', body: replay });
   await f.overlay.database.query('UPDATE evimed_memory.native_accounts SET safety_scan_at=NULL WHERE user_id=$1', [f.userId]);
   await f.worker.migrateSafety(f.userId);
   assert.equal(await f.sessions.read(f.userId, copy.uri), null);

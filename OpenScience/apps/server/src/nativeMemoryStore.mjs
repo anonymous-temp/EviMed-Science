@@ -1,3 +1,4 @@
+import { withdrawSafetyProjection } from './memorySafetyMigration.mjs';
 import { filterCapturedMessage } from './memoryGateway.mjs';
 import { isNeutralProfileHeading, profileMemoryStatements, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
 import { readStatus } from './memoryReadStatus.mjs';
@@ -1533,13 +1534,22 @@ export class NativeMemoryStore {
    * An already-removed engine file is a retryable partial cleanup. No duplicate discovery or model is needed. */
   async #withdrawSafetyCopies(userId, file, next) {
     if (!['people','profile'].includes(file.type) || file.namespaceId || !this.overlay.safetyCopies) return;
-    const hashes = new Set((next ?? '').split(/\r?\n/).map(line => createHash('sha256').update(line).digest('hex')));
     for (const { uri, binding } of await this.overlay.safetyCopies(userId, file.uri)) {
-      if (next !== null && binding.lineHashes.every(hash => hashes.has(hash)) &&
-          (!binding.titleFromFile || hashes.has(binding.titleHash))) continue;
-      await withMemorySummaryInvalidation(this.sessions, this.overlay, userId, uri, () => this.sessions.remove(userId, uri));
-      await this.overlay.forgetText(userId, uri);
-      await this.overlay.removeFile(userId, uri);
+      const current = await this.sessions.read(userId, uri);
+      const withdrawal = withdrawSafetyProjection(file.body, next, binding, current ?? '');
+      if (!withdrawal) continue;
+      if (withdrawal.body) {
+        if (current !== withdrawal.body) {
+          await this.#write(userId, { uri, type: 'safety_notes', hash: contentHash(current), body: current },
+            withdrawal.body, { actor: 'platform', reason: 'legacy safety source withdrawn' });
+        }
+        await this.overlay.scrubLines(userId, uri, withdrawal.words);
+        await this.overlay.clearSafetySource(userId, uri);
+      } else {
+        await withMemorySummaryInvalidation(this.sessions, this.overlay, userId, uri, () => this.sessions.remove(userId, uri));
+        await this.overlay.forgetText(userId, uri);
+        await this.overlay.removeFile(userId, uri);
+      }
     }
   }
 

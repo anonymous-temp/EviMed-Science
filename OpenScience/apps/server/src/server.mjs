@@ -1423,6 +1423,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     pastedInstructionJudge: createPastedInstructionJudge({ config, usageLedger }),
     report: (line) => process.stderr.write(`${line}\n`),
   });
+  nativeMemoryWorker.safetyReady = () => openVikingEngine?.ready("nativeMemory").ok === true;
   nativeMemoryWorker.classifySafety = safetyClassifier(config, usageLedger);
   nativeMemoryWorker.verification.judge = createVerificationJudge({ config, usageLedger });
   // 重读旧记忆 on the native engine: the engine's own memory consolidation, asked for now and then and read back into the overlay as

@@ -186,6 +186,7 @@ export class NativeMemoryWorker {
     this.pastedInstructionJudge = pastedInstructionJudge;
     this.forgetRequestJudge = forgetRequestJudge;
     /** @type {Promise<void> | null} */ this.safetyScan = null;
+    this.safetyReady = () => true;
     this.classifySafety = safetyClassifier(config, null);
     if (nativeMemory && this.robustInstructions) nativeMemory.instructionWriteCheck = (userId, file, body, context) => this.checkInstructionWrite(userId, file, body, context);
     if (this.robustInstructions) this.verification.instructionWriteCheck = async (userId, file, body, origins, context) => {
@@ -309,6 +310,7 @@ export class NativeMemoryWorker {
   }
 
   async migrateSafety(userId) {
+    if (!this.safetyReady()) return;
     return migrateSafetyNotes({ config: this.config, store: this.nativeMemory, overlay: this.overlay,
       sessions: this.sessions, settings: this.memorySettings, classify: this.classifySafety }, userId);
   }

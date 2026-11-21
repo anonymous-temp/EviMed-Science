@@ -71,10 +71,16 @@ export function renderSafetyNotes(files, { maxTokens, maxChars = SAFETY_NOTES_MA
       remainingTokens -= tokens;
       memos.push(memo);
     } else {
-      pointers.push({ ...memo, content: `${reference} · 可查全文 mcp__openviking__read ${file.uri}` });
+      const source = file.sourceUri ? ` · 来源 ${file.sourceUri}` : '';
+      pointers.push({ ...memo, content: `${label} · ${date ?? '日期未知'}${source} · 可查全文 mcp__openviking__read ${file.uri}` });
     }
   }
-  const items = [...memos, ...pointers];
-  return { text: [HEADER, ...renderMemoryContext(items).split('\n').slice(1),
-    ...(pointers.length ? [SAFETY_NOTES_MORE] : []), ...(coverage ? [coverage] : []), CHECK].join('\n'), memos: items };
+  // The content budget is fixed. A compact directory grows by one escaped pointer for each overflow file.
+  // Keep the individual source receipts on delivery even though the pointers share an envelope.
+  const directory = pointers.length ? [{ id: 'native-safety-directory', memoryType: 'native_safety_note', kind: 'note',
+    scope: 'user', origin: 'unknown', content: pointers.map(row => row.content).join('\n') }] : [];
+  const text = [HEADER, '按卡内主体区分本人和他人；记录更新时间与事实发生日期分开核对。',
+    ...renderMemoryContext([...memos, ...directory]).split('\n').slice(1), ...(pointers.length ? [SAFETY_NOTES_MORE] : []),
+    ...(coverage ? [coverage] : []), CHECK].join('\n');
+  return { text, memos: [...memos, ...pointers] };
 }

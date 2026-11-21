@@ -923,13 +923,21 @@ export class NativeMemoryOverlay {
 
   async claimSafetyScan(userId) {
     const result = await this.#query(`UPDATE evimed_memory.native_accounts SET safety_scan_at=clock_timestamp() WHERE user_id=$1
-      AND (safety_scan_at IS NULL OR safety_scan_at <= clock_timestamp()-interval '5 minutes') RETURNING user_id`, [owner(userId)]);
-    return Boolean(result.rowCount);
+      AND (safety_scan_at IS NULL OR safety_scan_at <= clock_timestamp()-interval '5 minutes') RETURNING safety_scan_cursor`, [owner(userId)]);
+    return result.rowCount ? { cursor: result.rows[0].safety_scan_cursor ?? '' } : null;
+  }
+
+  async noteSafetyScan(userId, cursor) {
+    await this.#query('UPDATE evimed_memory.native_accounts SET safety_scan_cursor=$2 WHERE user_id=$1', [owner(userId), cursor]);
   }
 
   async bindSafetySource(userId, uri, binding) {
     await this.#query(`INSERT INTO evimed_memory.native_files(user_id,uri,memory_type,safety_source) VALUES($1,$2,'safety_notes',$3::jsonb)
       ON CONFLICT(user_id,uri) DO UPDATE SET safety_source=EXCLUDED.safety_source`, [owner(userId), uri, JSON.stringify(binding)]);
+  }
+
+  async clearSafetySource(userId, uri) {
+    await this.#query('UPDATE evimed_memory.native_files SET safety_source=NULL WHERE user_id=$1 AND uri=$2', [owner(userId), uri]);
   }
 
   async safetyCopies(userId, sourceUri) {

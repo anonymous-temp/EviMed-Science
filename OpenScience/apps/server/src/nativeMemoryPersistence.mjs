@@ -78,7 +78,8 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_accounts (
 );
 -- The replay of the legacy engine's records into the engine left a mark here; the replay is deleted (2026-10-25).
 ALTER TABLE evimed_memory.native_accounts DROP COLUMN IF EXISTS migrated_at;
-ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS safety_scan_at timestamptz;
+ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS safety_scan_at timestamptz,
+  ADD COLUMN IF NOT EXISTS safety_scan_cursor text;
 CREATE TABLE IF NOT EXISTS evimed_memory.native_admissions (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   candidate_id text NOT NULL CHECK (char_length(candidate_id) BETWEEN 1 AND 200),

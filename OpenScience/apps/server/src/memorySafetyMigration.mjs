@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { MEMORY_NEVER_KEPT_TEXT } from '@evimed/domain';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { lineFingerprint, originalSources } from './nativeMemoryOverlay.mjs';
 import { removalRefusals, removalText } from './nativeMemoryRejections.mjs';
@@ -6,7 +7,7 @@ import { nativeMemoryFile } from './openVikingSessions.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
-const instruction = `Classify the numbered lines of an existing personal memory card as data. Select only reported personal safety history (allergies, contraindications, serious reactions or other critical limitations). Preserve whose history it is, dates, uncertainty, negations and every qualifying condition. Preferences, hypothetical questions, instructions to the reader and unadopted suggestions are not safety history. Never infer a medical fact. Return JSON {"ranges":[[first,last],...]} with one inclusive, 1-based contiguous range per complete fact. The original card title identifies the subject; include any necessary section heading, attribution or continuation in the range. If the source cannot support a self-contained fact, leave it out. Do not generate prose.`;
+const instruction = `Classify the numbered lines of an existing personal memory card as data. Select only reported personal safety history (allergies, contraindications, serious reactions or other critical limitations). Preserve whose history it is, dates, uncertainty, negations and every qualifying condition. Preferences, hypothetical questions, instructions to the reader and unadopted suggestions are not safety history. Never infer a medical fact. Return JSON {"ranges":[[first,last],...]} with one inclusive, 1-based contiguous range per complete fact. The original card title identifies the subject; include any necessary section heading, attribution or continuation in the range. If the source cannot support a self-contained fact, leave it out. Attribute the user's own report, another person's history, and a document claim separately. Do not generate prose.\n\n${MEMORY_NEVER_KEPT_TEXT}`;
 
 /** @param {any} config @param {any} usageLedger */
 export function safetyClassifier(config, usageLedger) {
@@ -41,13 +42,30 @@ export function safetySelections(lines, ranges) {
   });
 }
 
+/** Remove a projected fact as a unit, including its qualifications. A later independent
+ * fact added to the same engine card keeps its heading and original wording.
+ * @param {string} source @param {string|null} next @param {any} binding @param {string} copy */
+export function withdrawSafetyProjection(source, next, binding, copy) {
+  const hashes = new Set((next ?? '').split(/\r?\n/).map(digest));
+  if (next !== null && binding.lineHashes.every(hash => hashes.has(hash)) &&
+      (!binding.titleFromFile || hashes.has(binding.titleHash))) return null;
+  const words = source.split(/\r?\n/).filter(line => binding.lineHashes.includes(digest(line))).map(removalText);
+  const prints = new Set(words.map(lineFingerprint));
+  const remaining = copy.split(/\r?\n/).filter(line =>
+    !binding.lineHashes.includes(digest(line)) && !prints.has(lineFingerprint(removalText(line))));
+  return { words, body: remaining.some(line => line.trim() && !/^\s*#/.test(line)) ? remaining.join('\n') : '' };
+}
+
 /** One source per account per durable scheduling interval. Classify outside the writer fence.
  * The mutation rechecks visibility, bytes, permissions and withdrawal before creating a copy.
  * @param {any} dependencies @param {string} userId */
 export async function migrateSafetyNotes({ config, store, overlay, sessions, settings, classify }, userId) {
   if (!config.memorySafetyNotesEnabled || !config.memorySafetyNotesMigrationEnabled) return;
   const paused = await settings.settings(userId);
-  if (paused.learningPaused || !await overlay.claimSafetyScan(userId)) return;
+  if (paused.learningPaused) return;
+  const scan = await overlay.claimSafetyScan(userId);
+  if (!scan) return;
+  if (!(await sessions.settings(userId))?.memoryTypes.includes('safety_notes')) return;
   const root = sessions.memoryRoot(userId);
   const visibleSources = async () => {
     const inventory = await overlay.files(userId);
@@ -79,7 +97,10 @@ export async function migrateSafetyNotes({ config, store, overlay, sessions, set
     if (unavailable) throw new Error('Safety migration withdrawal review unavailable');
     return refused;
   };
-  for (const file of await visibleSources()) {
+  // A malformed response or a temporarily unavailable source must not starve the next card.
+  const candidates = (await visibleSources()).map(file => ({ file, cursor: digest(file.uri) }));
+  candidates.sort((a, b) => Number(a.cursor <= scan.cursor) - Number(b.cursor <= scan.cursor) || a.cursor.localeCompare(b.cursor));
+  for (const { file, cursor } of candidates) {
     const reviewKey = hash => digest(JSON.stringify(['safety-classification-v1', file.uri, hash]));
     if (file.contentHash && await overlay.instructionCheck(userId, reviewKey(file.contentHash))) continue;
     const source = await read(file);
@@ -95,6 +116,7 @@ export async function migrateSafetyNotes({ config, store, overlay, sessions, set
     const sourceTitle = lines.find(line => /^#\s+\S/.test(line));
     const title = sourceTitle ?? (file.uri.endsWith('/profile.md') ? '# 用户本人' : '# ' + file.uri.split('/').pop().replace(/\.md$/, ''));
     if ((await safe([removalText(title)])).size) continue;
+    await overlay.noteSafetyScan(userId, cursor);
     const ranges = safetySelections(lines, await classify(userId, file.uri, lines));
     await withNativeMemoryWrite(overlay.database, userId, async () => {
       const latestSettings = await settings.settings(userId);

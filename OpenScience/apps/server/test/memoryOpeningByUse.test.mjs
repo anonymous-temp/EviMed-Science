@@ -172,21 +172,33 @@ test('a hidden used file cannot change the opening bytes of otherwise unused vis
   assert.deepEqual(await f.call(`${path}&output=agent`), await f.call(`${path}&output=original`));
 });
 
-test('24 opening fixture replays cover cold start, use, correction, budget, forget and ties', () => {
+test('24 one-slot opening replays compare use order with the alphabetical listing at equal capacity', () => {
+  let byUseHits = 0, alphabeticalHits = 0;
   for (const group of ['preferences', 'entities']) for (const multilingual of [false, true]) {
     const entries = ['a', 'b', 'c'].map(key => leaf(multilingual ? `${key}-写作` : key, group));
     const [old, used, correction] = entries;
     const files = new Map(entries.map(item => [item.uri, held(item)]));
-    const replay = (visible, config = enabled) => selectOpeningEntries({ preferences: group === 'preferences' ? visible : [],
-      entities: group === 'entities' ? visible : [], files, root: ROOT, config, now: Date.parse('2026-11-21') })[group];
-    assert.deepEqual(replay(entries), entries);
+    const slot = ['<available-memories>', `  ${ROOT}/${group}/`, `    - ${old.rel_path}`, '</available-memories>'].join('\n').length;
+    const compare = (visible, expected, byUse, cap = slot) => {
+      const result = selectOpeningEntries({ preferences: group === 'preferences' ? visible : [],
+        entities: group === 'entities' ? visible : [], files, root: ROOT,
+        config: { ...enabled, memoryOpeningMaxChars: cap }, now: Date.parse('2026-11-21') })[group];
+      assert.deepEqual(result, byUse ? [byUse] : []);
+      const alphabetical = cap === slot ? [...visible].sort((a,b) => a.rel_path.localeCompare(b.rel_path))[0] : undefined;
+      byUseHits += Number(result[0] === expected);
+      alphabeticalHits += Number(alphabetical === expected);
+    };
+    compare(entries, old, old);                          // Cold start.
     files.get(used.uri).usedCount = 9;
-    assert.deepEqual(replay(entries), [used, old, correction]);
+    compare(entries, used, used);                        // Repeated explicit reads.
     files.get(correction.uri).createdAt = '2026-11-21';
-    assert.deepEqual(replay(entries), [used, correction, old]);
-    assert.deepEqual(replay(entries, { ...enabled, memoryOpeningMaxChars: 1 }), []);
-    assert.deepEqual(replay([old, correction]), [old, correction]);
+    compare(entries, correction, used);                  // A newer correction loses to the old high count.
+    compare(entries, undefined, undefined, 1);           // No file fits.
+    compare([old, correction], correction, correction);  // A withdrawn used URI is absent, new-file grace applies.
     files.get(correction.uri).usedCount = 9;
-    assert.deepEqual(replay(entries), [used, correction, old]);
+    files.get(correction.uri).lastUsedAt = '2026-11-20';
+    compare(entries, correction, correction);            // Equal counts, fresher evidence.
   }
+  assert.equal(byUseHits, 20);
+  assert.equal(alphabeticalHits, 8);
 });

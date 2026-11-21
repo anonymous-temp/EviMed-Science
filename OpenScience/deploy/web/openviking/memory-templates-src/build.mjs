@@ -108,7 +108,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   // `node build.mjs --variant extraction-v2 --out deploy/web/openviking/memory-templates-extraction-v2` renders the selectable release.
   // `node build.mjs --variant next --out deploy/web/openviking/memory-templates-next` renders the attribution candidate.
   // Add `--check` to compare without writing.
-  // `node build.mjs --safety-notes --out /tmp/templates-safety` adds the dedicated safety type only in a lab variant.
+  // `node build.mjs --safety-notes --out deploy/web/openviking/memory-templates-safety` renders the selectable safety release.
   const arguments_ = process.argv.slice(2);
   const option = (/** @type {string} */ name) => { const at = arguments_.indexOf(name); return at >= 0 ? arguments_[at + 1] : undefined; };
   const variant = option("--variant") ?? "full";

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { migrateSafetyNotes, safetySelections } from '../src/memorySafetyMigration.mjs';
+import { migrateSafetyNotes, safetySelections, withdrawSafetyProjection } from '../src/memorySafetyMigration.mjs';
 import { contentHash, lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 
 const root = 'viking://user/owner/memories';
@@ -18,11 +18,11 @@ function scene(type = 'people') {
     store: { files: async (_user, { uris }) => uris.map(uri => files.get(uri)).filter(Boolean),
       records: async (_user, { files: [file] }) => (type === 'profile' ? file.body.split('\n').map(line => line.replace(/^[-#] /, '').trim()) : [file.body])
         .map(value => ({ value, updatedAt: '2026-10-01' })) },
-    overlay: { files: async () => files, claimSafetyScan: async () => true, sensitiveUris: async () => hidden,
+    overlay: { files: async () => files, claimSafetyScan: async () => ({ cursor: '' }), noteSafetyScan: async () => {}, sensitiveUris: async () => hidden,
       removals: async () => removals, instructionCheck: async (_u, key) => decisions.has(key),
       originsOf: async () => new Map(), inheritOrigins: async () => {}, bindSafetySource: async (_u, uri, binding) => bindings.set(uri, binding),
       upsertFile: async () => {}, recordInstructionCheck: async (_u, key) => decisions.add(key) },
-    sessions: { memoryRoot: () => root, tree: async () => [...files.values()], read: async (_u, uri) => files.get(uri)?.body ?? null,
+    sessions: { settings: async () => ({ memoryTypes: ['safety_notes'] }), memoryRoot: () => root, tree: async () => [...files.values()], read: async (_u, uri) => files.get(uri)?.body ?? null,
       replace: async (_u, uri, body) => { writes++; files.set(uri, { uri, body }); } },
     classify: async () => { calls++; return [[2,3]]; },
   };
@@ -81,4 +81,15 @@ test('a withdrawal or source change during classification cannot publish a stale
     };
     await f.run(); assert.equal(f.bindings.size, 0, change); assert.equal(f.decisions.size, 0, change);
   }
+});
+
+test('withdrawal removes the bound statement and its exception while preserving independently added facts', async () => {
+  const f = scene(); await f.run();
+  const [[uri, binding]] = f.bindings;
+  const copy = f.files.get(uri).body;
+  const changed = f.text.replace('  Only when X is present.', '');
+  assert.equal(withdrawSafetyProjection(f.text, f.text, binding, copy), null);
+  assert.equal(withdrawSafetyProjection(f.text, changed, binding, copy).body, '');
+  assert.equal(withdrawSafetyProjection(f.text, null, binding, copy + '\n- Independent history.').body,
+    '# Account owner\n- Independent history.');
 });
