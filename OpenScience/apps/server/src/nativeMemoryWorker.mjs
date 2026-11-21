@@ -1,3 +1,4 @@
+import { migrateSafetyNotes, safetyClassifier } from './memorySafetyMigration.mjs';
 import { reconcileMemoryNames } from './nativeMemoryNames.mjs';
 import { keepUnexplainedLines } from './nativeMemoryKeepLines.mjs';
 import { confirmedAliasRequest, confirmedAliases, choiceRows, choiceKey } from './nativeMemoryInduction.mjs';
@@ -184,6 +185,9 @@ export class NativeMemoryWorker {
     this.rejectionJudge = rejectionJudge;
     this.pastedInstructionJudge = pastedInstructionJudge;
     this.forgetRequestJudge = forgetRequestJudge;
+    /** @type {Promise<void> | null} */ this.safetyScan = null;
+    this.safetyReady = () => true;
+    this.classifySafety = safetyClassifier(config, null);
     if (nativeMemory && this.robustInstructions) nativeMemory.instructionWriteCheck = (userId, file, body, context) => this.checkInstructionWrite(userId, file, body, context);
     if (this.robustInstructions) this.verification.instructionWriteCheck = async (userId, file, body, origins, context) => {
       context ??= await this.#contextForUri(userId, file.uri);
@@ -227,9 +231,16 @@ export class NativeMemoryWorker {
   start() {
     if (this.timer || !this.applicable) return;
     const every = Math.max(5_000, Number(this.config.nativeMemoryScanMs) || 60_000);
-    this.timer = setInterval(() => { void this.pass().catch(() => {}); }, every);
+    const tick = () => {
+      void this.pass().catch(() => {});
+      if (this.config.memorySafetyNotesEnabled && this.config.memorySafetyNotesMigrationEnabled && !this.safetyScan) {
+        this.safetyScan = this.scanSafetyAccounts().catch(() => this.report('native memory safety scan unavailable'))
+          .finally(() => { this.safetyScan = null; });
+      }
+    };
+    this.timer = setInterval(tick, every);
     this.timer.unref?.();
-    void this.pass().catch(() => {});
+    tick();
   }
 
   close() {
@@ -289,6 +300,19 @@ export class NativeMemoryWorker {
       recordNativePass(false);
     }
     return this.last;
+  }
+
+  async scanSafetyAccounts() {
+    for (const userId of await this.overlay.accounts()) {
+      if (!this.timer) break;
+      await this.migrateSafety(userId).catch(() => this.report('native memory safety migration deferred'));
+    }
+  }
+
+  async migrateSafety(userId) {
+    if (!this.safetyReady()) return;
+    return migrateSafetyNotes({ config: this.config, store: this.nativeMemory, overlay: this.overlay,
+      sessions: this.sessions, settings: this.memorySettings, classify: this.classifySafety }, userId);
   }
 
   /** Maintenance waits for active writers, including a crashed writer's expiring lease. */

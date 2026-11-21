@@ -435,7 +435,9 @@ test('standing preferences appear late without use counts, preserve escaping and
   assert.equal((await profiles.forDispatch('owner', scope)).reason, 'changed');
   for (const maxTokens of [0, 40, 200, 1500]) {
     const block = renderResidentProfile({ nativeFiles: files(), config, maxTokens });
-    assert.ok(estimatePromptTokens(block.text) <= maxTokens);
+    assert.equal(block.text, block.standing);
+    assert.ok(block.standing.includes('native-standing:' + files()[0].uri));
+    assert.ok(block.standing.includes(body));
   }
   const rendered = renderResidentProfile({ nativeFiles: files(), config, capsuleFacts: [fact()] });
   assert.ok(rendered.text.indexOf('用户本人的持续偏好') > rendered.text.indexOf('type="'));

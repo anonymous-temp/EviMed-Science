@@ -21,7 +21,7 @@ test('dedicated safety history uses ordinary sensitive, project, source-deletion
     hiddenMemoryUris: async () => [`${f.root}/safety_notes/source-deleted.md`],
     redactRecords: async (_id, rows) => rows,
   };
-  assert.deepEqual((await f.store.safetyNotes(f.userId, 'default')).map(file => file.relPath), ['safety_notes/visible.md']);
+  assert.deepEqual((await f.store.safetyNotes(f.userId, 'default')).map(file => file.relPath).sort(), ['safety_notes/other-project.md', 'safety_notes/visible.md']);
   f.store.sourceDeletion.redactRecords = async (_id, rows) => rows.map(row => ({ ...row, value: '' }));
   assert.deepEqual(await f.store.safetyNotes(f.userId, 'default'), [], 'a raw safety body cannot bypass source redaction');
 });
@@ -111,4 +111,31 @@ test('switch off and non-health accounts remain identical through the database-b
     safetyNotes: async () => { reads++; throw new Error('must not read'); } });
   assert.equal((await disabled.forDispatch(f.userId, scope)).text, '');
   assert.equal(reads, 0);
+});
+
+test('legacy line migration survives retries, travels and follows an exact source withdrawal', options, async t => {
+  const f = await fixture(t, { config: { memorySafetyNotesEnabled: true, memorySafetyNotesMigrationEnabled: true } });
+  f.worker.nativeMemory = f.store;
+  await f.sessions.setLearning(f.userId, true);
+  const source = '# Owner\n- Old reported reaction, only after exposure.\n- A different hobby.';
+  const uri = f.seed('people/owner.md', source, { type: 'people', tags: ['project=first'] });
+  await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'people', projectId: 'first', body: source });
+  let calls = 0;
+  f.worker.classifySafety = async (_u, _uri, lines) => { calls++; return lines.includes(source.split('\n')[1]) ? [[2,2]] : []; };
+  await Promise.all([f.worker.migrateSafety(f.userId), f.worker.migrateSafety(f.userId)]);
+  assert.equal(calls, 1);
+  const [copy] = await f.store.safetyNotes(f.userId, 'second');
+  assert.equal(copy.sourceUri, uri); assert.equal(copy.type, 'safety_notes');
+  assert.ok(copy.body.includes('only after exposure')); assert.ok(!copy.body.includes('hobby'));
+  await f.store.forgetLines(f.userId, (await f.store.files(f.userId, { uris: [uri] }))[0], ['Old reported reaction, only after exposure.']);
+  assert.equal(await f.sessions.read(f.userId, copy.uri), null);
+  assert.match(await f.sessions.read(f.userId, uri), /different hobby/);
+  // Simulate an old extractor writing the withdrawn words again after cleanup.
+  const replay = source + '\n- An unrelated fresh note changes the file digest.';
+  await f.sessions.replace(f.userId, uri, replay);
+  await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'people', body: replay });
+  await f.overlay.database.query('UPDATE evimed_memory.native_accounts SET safety_scan_at=NULL WHERE user_id=$1', [f.userId]);
+  await f.worker.migrateSafety(f.userId);
+  assert.equal(await f.sessions.read(f.userId, copy.uri), null);
+  assert.equal(calls, 1);
 });

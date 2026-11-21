@@ -503,6 +503,7 @@ import { createConversationSourceDeletionRoutes } from './conversationSourceDele
 import { nativeFileId } from './nativeMemoryStore.mjs';
 import { MemoryHistory, MemoryHistoryLedger } from './memoryHistory.mjs';
 import { createMemoryHistorySources } from './memoryHistorySources.mjs';
+import { safetyClassifier } from './memorySafetyMigration.mjs';
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
@@ -1422,6 +1423,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     pastedInstructionJudge: createPastedInstructionJudge({ config, usageLedger }),
     report: (line) => process.stderr.write(`${line}\n`),
   });
+  nativeMemoryWorker.safetyReady = () => openVikingEngine?.ready("nativeMemory").ok === true;
+  nativeMemoryWorker.classifySafety = safetyClassifier(config, usageLedger);
   nativeMemoryWorker.verification.judge = createVerificationJudge({ config, usageLedger });
   // 重读旧记忆 on the native engine: the engine's own memory consolidation, asked for now and then and read back into the overlay as
   // revisions (`nativeMemoryConsolidation.mjs`). On by default since 2026-10-24; `OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED=false` turns it

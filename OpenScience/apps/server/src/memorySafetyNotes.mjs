@@ -38,7 +38,7 @@ export function safetyNoteLines(body, type) {
 export function safetyNoteFile(file, { memoryRoot, projectId, hiddenUris = [], peopleAcrossProjects = false }) {
   const place = nativeMemoryFile(String(file.uri ?? ''), memoryRoot);
   return !!place && ['people', 'profile', 'notes', 'safety_notes'].includes(place.type) && !file.sensitive
-    && (!file.projectId || file.projectId === 'default' || file.projectId === projectId || personalMemoryTravels(file.uri, memoryRoot, peopleAcrossProjects)
+    && (!file.projectId || file.projectId === 'default' || file.projectId === projectId || place.type === 'safety_notes' || personalMemoryTravels(file.uri, memoryRoot, peopleAcrossProjects)
       || peopleAcrossProjects && place.type === 'profile')
     && !hiddenUris.some(uri => file.uri === uri || file.uri.startsWith(`${uri}/`));
 }
@@ -54,27 +54,33 @@ export function renderSafetyNotes(files, { maxTokens, maxChars = SAFETY_NOTES_MA
   const coverage = /** @type {any} */ (files).legacyUnclassified > 0 ? '旧画像或人物记录尚未全部标注安全信息；提供个人建议前，用 mcp__openviking__search 查找并读取对应人的完整文件。' : '';
   if (!rows.length) return { text: '', memos: [] };
   const memos = [];
-  let partial = false;
-  const render = (items, more) => [HEADER,
-    // Reuse the ordinary memory envelope rather than interpreting reported history as instructions.
-    ...(items.length ? renderMemoryContext(items).split('\n').slice(1) : []),
-    ...(more ? [SAFETY_NOTES_MORE] : []), ...(coverage ? [coverage] : []), CHECK].join('\n');
-  const fits = text => [...text].length <= maxChars && estimatePromptTokens(text) <= maxTokens;
+  const pointers = [];
+  let remainingChars = maxChars, remainingTokens = maxTokens;
   for (const { file, lines } of rows) {
-    const label = /^#\s+(.+)$/m.exec(file.body)?.[1]?.trim() || (file.type === 'profile' ? '用户' : file.relPath ?? file.uri);
-    const content = `${label} · ${file.relPath ?? file.uri}：${lines.join('；')}`;
-    const chars = [...content];
-    const truncated = file.type !== 'safety_notes' && chars.length > lineMaxChars;
+    const label = /^#\s+(.+)$/m.exec(file.body)?.[1]?.trim() || (file.type === 'profile' ? '用户' : file.uri.split('/').pop());
+    const date = file.updatedAt ?? file.modTime ?? null;
+    const reference = `${label} · ${file.sourceUri ?? file.uri} · 记录更新 ${date ?? '未知'}`;
+    const content = `${reference}：${lines.join('；')}`;
     const memo = { id: `native-safety:${file.uri}`, memoryType: 'native_safety_note', kind: 'note',
-      scope: file.projectId && file.projectId !== 'default' ? 'project' : 'user', origin: file.origin ?? 'unknown',
-      content,
-      updatedAt: file.updatedAt ?? file.modTime ?? null, originalSources: file.originalSources ?? [],
+      scope: 'user', origin: file.origin ?? 'unknown', content, updatedAt: date, originalSources: file.originalSources ?? [],
       sourcePrivacy: file.sourcePrivacy, attribution: file.attribution };
-    // Always leave room for an overflow notice; never hide the existence of older people.
-    if (truncated || !fits(render([...memos, memo], true))) { partial = true; continue; }
-    memos.push(memo);
-    partial ||= truncated;
+    const rendered = renderMemoryContext([memo]);
+    const chars = [...rendered].length, tokens = estimatePromptTokens(rendered);
+    if (chars <= remainingChars && tokens <= remainingTokens && (file.type === 'safety_notes' || [...content].length <= lineMaxChars)) {
+      remainingChars -= chars;
+      remainingTokens -= tokens;
+      memos.push(memo);
+    } else {
+      const source = file.sourceUri ? ` · 来源 ${file.sourceUri}` : '';
+      pointers.push({ ...memo, content: `${label} · ${date ?? '日期未知'}${source} · 可查全文 mcp__openviking__read ${file.uri}` });
+    }
   }
-  const text = render(memos, partial);
-  return fits(text) ? { text, memos } : { text: SAFETY_NOTES_MORE, memos: [] };
+  // The content budget is fixed. A compact directory grows by one escaped pointer for each overflow file.
+  // Keep the individual source receipts on delivery even though the pointers share an envelope.
+  const directory = pointers.length ? [{ id: 'native-safety-directory', memoryType: 'native_safety_note', kind: 'note',
+    scope: 'user', origin: 'unknown', content: pointers.map(row => row.content).join('\n') }] : [];
+  const text = [HEADER, '按卡内主体区分本人和他人；记录更新时间与事实发生日期分开核对。',
+    ...renderMemoryContext([...memos, ...directory]).split('\n').slice(1), ...(pointers.length ? [SAFETY_NOTES_MORE] : []),
+    ...(coverage ? [coverage] : []), CHECK].join('\n');
+  return { text, memos: [...memos, ...pointers] };
 }

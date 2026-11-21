@@ -189,11 +189,11 @@ export function accountExportTables(source = queries) {
 export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
   "evimed_memory.map_edge_dismissals": "opaque account-scoped map corrections and confirmed distinct-person pairs; hashes name deployment-local file paths and are not portable identity facts",
   "evimed_memory.native_person_merges": "deployment-local exact-path redirects and two-file undo before-images; current merged content leaves through native-memory.zip and the operation through native revisions; snapshots can contain withdrawn facts and are not exported",
-  "evimed_memory.native_accounts": "engine registration, scan and consolidation scheduling state; the account's memory files leave through memory/native-memory.zip, not the engine's maintenance authority",
+  "evimed_memory.native_accounts": "engine registration, safety migration rate limits, scan and consolidation scheduling state; the account's memory files leave through memory/native-memory.zip, not the engine's maintenance authority",
   "evimed_memory.native_summary_invalidations": "generation tickets for rebuilding engine directory summaries after writes; an operational outbox, not authored memory content",
   "evimed_memory.native_source_copies": "derived archive-to-copy bindings used to prevent a synthetic memory write from manufacturing new source authority; not portable customer content",
   "evimed_memory.native_sessions": "deployment-local engine session and project-incarnation bindings; the owned native conversation journals leave through the project archive",
-  "evimed_memory.native_files": "the overlay's cached memory bodies, source labels and derived recall/use counters; the current memory files themselves leave through memory/native-memory.zip",
+  "evimed_memory.native_files": "the overlay's cached memory bodies, internal safety migration source bindings, source labels and derived recall/use counters; the current memory files themselves leave through memory/native-memory.zip",
   "evimed_memory.native_sources": "derived knowledge-source and DOI status links used to label native memory files; the labelled memory content itself leaves through memory/native-memory.zip",
   "evimed_memory.native_rejections": "private removal fingerprints and matching text retained only to prevent forgotten information from returning; exporting that text would disclose the information the person removed",
   "evimed_memory.native_line_origins": "derived line fingerprints and engine archive/revision bindings used for provenance checks; deployment-specific authority rather than portable memory content",

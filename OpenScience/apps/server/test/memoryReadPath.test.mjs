@@ -15,9 +15,12 @@ test('standing opening keeps complete scoped preference lines, recent then used,
     pref('self/large', `- ${'x'.repeat(500)}`, { updatedAt: '2026-11-15' })];
   assert.deepEqual(opening.standingPreferenceMemos(files, {}), []);
   const memos = opening.standingPreferenceMemos(files, { memoryStandingInstructionsEnabled: true });
-  assert.deepEqual(memos.map(row => row.content), ['- For weekly reports, use at most 140 characters.', '- Old rule.']);
+  assert.deepEqual(memos.slice(1).map(row => row.content), ['# Reply\n- For weekly reports, use at most 140 characters.', '- Old rule.']);
+  assert.ok(memos[0].content.includes(files[4].uri));
   assert.ok(memos.map(row => row.content).join('\n').length <= 400);
   assert.ok(memos.every(row => row.memoryType === 'native_standing_preference'));
+  const exact = '忆'.repeat(399) + '。';
+  assert.equal(opening.standingPreferenceMemos([pref('self/exact', exact)], { memoryStandingInstructionsEnabled: true })[0].content, exact);
 });
 
 test('memory file and capsule floors share normalization and reject unknown scores only when enabled', () => {
@@ -62,7 +65,9 @@ test('search hint rejects neighbouring facts and requires original history for e
 test('standing preference budget never separates a rule from its continuation or exception', () => {
   const scope = `- Use brief replies.\n  Except when ${'x'.repeat(400)}.`;
   const memos = opening.standingPreferenceMemos([pref('self/rule', scope)], { memoryStandingInstructionsEnabled: true });
-  assert.deepEqual(memos, []);
+  assert.equal(memos.length, 1);
+  assert.match(memos[0].content, /可查全文.*preferences\/self\/rule.md/);
+  assert.doesNotMatch(memos[0].content, /Use brief replies/);
 });
 
 test('standing language preference explicitly overrides the later default language rule', () => {

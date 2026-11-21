@@ -226,3 +226,17 @@ only when its SHA256 matches the recorded value. Such missing inputs stay explic
 turn reconstruction or proof that the model will newly decide to search. No extra
 search is inserted into a recorded tool-free ordinary question. Historical failures
 are re-serialized as unavailable, and an unrecorded history lookup is not called empty.
+
+### S-A07 safety opening and source withdrawal
+
+Use an already-running local lab with the candidate web service, safety template set, engine and test database. Supply the same pinned plugin archive used by the other opening probes. This probe creates a unique synthetic account, ingests one real conversation, classifies a legacy card, and reads the product opening in a second project. It exercises the actual rate-limited retry after five minutes and removes its account on exit.
+
+```sh
+node evals/capsule-proving/pp/safety-opening.mjs \
+  --base "$LAB_WEB_URL" --engine-url "$LAB_ENGINE_URL" \
+  --engine-key-file "$LAB_ENGINE_KEY_FILE" --database-url-file "$LAB_DATABASE_URL_FILE" \
+  --deepseek-key-file "$LAB_MODEL_KEY_FILE" --plugin-tgz "$CAPSULE_PROVING_PLUGIN_TGZ" \
+  --out safety-opening.json
+```
+
+The process exits successfully only if readiness, extraction, exact legacy lineage, cross-project opening, overflow read, withdrawal, surviving neighbour and retry checks pass. The JSON report includes the before/after synthetic openings and cleanup result. Use the same lab instance for both URLs.

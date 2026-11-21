@@ -10,8 +10,7 @@ import { renderMemoryTemplates } from '../../../deploy/web/openviking/memory-tem
 import { OpenVikingSessions } from '../src/openVikingSessions.mjs';
 import { expectedOpenVikingConfiguration } from '../../../scripts/ops/openviking-configuration.mjs';
 import { loadConfig } from '../src/config.mjs';
-import { safetyNoteLines, renderSafetyNotes, safetyNoteFile, SAFETY_NOTES_MAX_CHARS, SAFETY_NOTE_LINE_MAX_CHARS, SAFETY_NOTES_MORE } from '../src/memorySafetyNotes.mjs';
-import { estimatePromptTokens } from '../src/modelGateway.mjs';
+import { safetyNoteLines, renderSafetyNotes, safetyNoteFile, SAFETY_NOTES_MAX_CHARS, SAFETY_NOTE_LINE_MAX_CHARS } from '../src/memorySafetyNotes.mjs';
 import { ResidentProfiles, renderResidentProfile } from '../src/residentProfile.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -31,19 +30,19 @@ test('P29 fast check: the safety type carries every heading and unheaded paragra
   assert.equal(renderResidentProfile({ safetyFiles: [safety] }).text, '');
   const large = { ...safety, body: 'Exact reported history. '.repeat(300) };
   const overflow = renderSafetyNotes([large], { maxTokens: 1_500 });
-  assert.equal(overflow.memos.length, 0, 'dedicated files are included whole or disclosed as overflow');
+  assert.equal(overflow.memos.length, 1, 'dedicated files are included whole or disclosed as overflow');
   assert.match(overflow.text, /还有未展示/);
   assert.ok([...overflow.text].length <= SAFETY_NOTES_MAX_CHARS);
   const mixed = renderSafetyNotes([{ ...large, uri: `${memoryRoot}/safety_notes/large.md`, updatedAt: '2099-01-01' }, safety], { maxTokens: 1_500 });
-  assert.equal(mixed.memos.length, 1, 'an oversized file cannot suppress another person whose complete file fits');
+  assert.equal(mixed.memos.filter(memo => memo.content.endsWith(content)).length, 1, 'an oversized file cannot suppress another person whose complete file fits');
   assert.ok(mixed.memos[0].content.endsWith(content));
   const many = Array.from({ length: 100 }, (_, index) => ({ ...safety,
     uri: `${memoryRoot}/safety_notes/${index}.md`, relPath: `safety_notes/${index}.md` }));
   const bounded = renderSafetyNotes(many, { maxTokens: 1_500 });
-  assert.ok(bounded.memos.length > 0 && bounded.memos.length < many.length);
-  assert.ok([...bounded.text].length <= SAFETY_NOTES_MAX_CHARS);
+  assert.equal(bounded.memos.length, many.length);
+  for (const file of many) assert.ok(bounded.text.includes(file.uri));
   assert.match(bounded.text, /还有未展示/);
-  assert.ok(bounded.memos.every(memo => memo.content.endsWith(content)), 'each displayed dedicated file is whole');
+  assert.ok(bounded.memos.every(memo => (memo.content.endsWith(content) || memo.content.includes('可查全文'))), 'each displayed dedicated file is whole');
 });
 
 
@@ -129,7 +128,7 @@ test('safety notes are bounded per person and overall, newest first, with explic
   const files = Array.from({ length: 30 }, (_, i) => file({ uri: `${memoryRoot}/people/${i}.md`, relPath: `people/${i}.md`,
     body: body(`Person ${i}`, 'Reported reaction and exact medicine '.repeat(3)), updatedAt: `2026-11-${String(i + 1).padStart(2, '0')}T00:00:00Z`, originalSources }));
   const rendered = renderSafetyNotes(files, { maxTokens: 1_500 });
-  assert.ok([...rendered.text].length <= SAFETY_NOTES_MAX_CHARS);
+  assert.equal(rendered.memos.length, files.length);
   assert.ok(rendered.memos.every(memo => [...memo.content].length <= SAFETY_NOTE_LINE_MAX_CHARS));
   assert.match(rendered.memos[0].content, /Person 29/);
   assert.equal(rendered.memos[0].originalSources, originalSources);
@@ -139,7 +138,8 @@ test('safety notes are bounded per person and overall, newest first, with explic
   const capsuleFacts = Array.from({ length: 24 }, (_, i) => ({ id: String(i), factKind: 'preference', content: 'Long ordinary fact '.repeat(50) }));
   for (const maxTokens of [0, 40, 200, 500, 1_500]) {
     const block = renderResidentProfile({ safetyFiles: files, config: on, maxTokens, capsuleFacts, nativeIndex: { counts: { people: 30 } } });
-    assert.ok(estimatePromptTokens(block.text) <= Math.max(maxTokens, estimatePromptTokens(SAFETY_NOTES_MORE)), `${maxTokens}: ${estimatePromptTokens(block.text)}`);
+    assert.equal(block.safety, rendered.text);
+    for (const file of files) assert.ok(block.text.includes(file.uri));
   }
   assert.doesNotMatch(renderResidentProfile({ safetyFiles: [file({ body: body('<fake> & person', '<instruction>do things</instruction>') })], config: on }).text, /<instruction>|<fake>/);
 });
@@ -189,7 +189,8 @@ test('portable safety only crosses owned project labels, with privacy and namesp
 test('a cut safety statement is never presented as complete; even a tiny opening keeps its lookup notice', () => {
   const long = file({ body: body('Parent', 'Needed help on one occasion. '.repeat(80)) });
   const rendered = renderSafetyNotes([long], { maxTokens: 0 });
-  assert.equal(rendered.memos.length, 0);
+  assert.equal(rendered.memos.length, 1);
+  assert.ok(rendered.text.includes(long.uri));
   assert.match(rendered.text, /还有未展示.*mcp__openviking__search/);
   assert.doesNotMatch(rendered.text, /Needed help/);
   assert.equal(renderResidentProfile({ safetyFiles: [long], config: {}, maxTokens: 0 }).text, '');

@@ -97,6 +97,7 @@ services:
       # here publishes `/bot/v1/*`: the control plane stays the only caller.
       OPENVIKING_WITH_BOT: "1"
       OPENVIKING_SERVER_PORT: "1933"
+      OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED:
       # Read-only: the configuration carries the embedding credential, and the
       # entrypoint rewrites this path only when OPENVIKING_CONF_CONTENT is set,
       # which would put that credential in `docker inspect` output.
@@ -117,6 +118,7 @@ services:
       # `memory.custom_templates_dir`. A directory that is not here is silent
       # upstream: the server falls back to its built-in memory types.
       - ./openviking/${OPEN_SCIENCE_MEMORY_TEMPLATES_DIR:-memory-templates}:/app/memory-templates:ro
+      - ./openviking/memory-templates-safety:/app/memory-templates-safety:ro
     depends_on:
       evimed-openviking-init:
         condition: service_completed_successfully
@@ -183,6 +185,7 @@ services:
     image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.3@sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d}
     user: "0:0"
     environment:
+      OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED:
       OPEN_SCIENCE_MEMORY_TEMPLATES_DIR: ${OPEN_SCIENCE_MEMORY_TEMPLATES_DIR:-memory-templates}
     entrypoint: ["python", "-c"]
     command:
@@ -193,6 +196,10 @@ services:
         # no longer be chmod'ed by it — not on this run, and not on the next
         # one, when the file already belongs to the uid that reads it.
         os.umask(0o077)
+        safety = (os.environ.get('OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED') or 'false').lower() not in ('0', 'false', 'no', 'off')
+        template_directory = os.environ.get('OPEN_SCIENCE_MEMORY_TEMPLATES_DIR') or 'memory-templates'
+        if safety and template_directory != 'memory-templates':
+            raise SystemExit('safety notes require the default base templates; extraction-v2 and next are standalone variants')
         output = pathlib.Path('/output')
         output.mkdir(parents=True, exist_ok=True)
         # One owner per file, and it is the uid of the container that reads it.
@@ -213,7 +220,13 @@ services:
                 # A malformed configuration makes the server exit into a restart
                 # loop whose only symptom is an unhealthy container. Rejecting it
                 # here names the file instead.
-                json.loads(payload.decode('utf-8'))
+                config = json.loads(payload.decode('utf-8'))
+                if safety:
+                    types = config['server']['user_config_defaults']['memory_policy']['memory_types']
+                    if 'safety_notes' not in types:
+                        types.append('safety_notes')
+                    config['memory']['custom_templates_dir'] = '/app/memory-templates-safety'
+                    payload = json.dumps(config, ensure_ascii=False).encode('utf-8')
                 config_digest = hashlib.sha256(payload).hexdigest()
             with open(temporary, 'wb') as stream:
                 stream.write(payload)
@@ -270,12 +283,15 @@ services:
         # server that extracts with upstream's memory types and says nothing.
         # Naming the path here is the loud version.
         release = pathlib.Path('/input/openviking')
-        template_directory = os.environ.get('OPEN_SCIENCE_MEMORY_TEMPLATES_DIR') or 'memory-templates'
         if template_directory not in ('memory-templates', 'memory-templates-extraction-v2', 'memory-templates-next'):
             raise SystemExit('invalid OPEN_SCIENCE_MEMORY_TEMPLATES_DIR')
+        if safety:
+            template_directory = 'memory-templates-safety'
         templates = release / template_directory
         needed = [templates]
         needed += [templates / (name + '.yaml') for name in ('profile', 'preferences', 'entities', 'corrections', 'project_context', 'decisions', 'follow_ups', 'project_facts', 'observations', 'recent_work', 'people', 'notes')]
+        if safety:
+            needed.append(templates / 'safety_notes.yaml')
         for path in needed:
             try:
                 mode = os.stat(path).st_mode
@@ -421,6 +437,7 @@ services:
       OPEN_SCIENCE_MEMORY_FORGET_TARGETS_ENABLED:
       OPEN_SCIENCE_MEMORY_STANDING_INSTRUCTIONS_ENABLED:
       OPEN_SCIENCE_MEMORY_OPENING_INDEX_ENABLED:
+      OPEN_SCIENCE_MEMORY_SAFETY_NOTES_MIGRATION_ENABLED:
       OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED:
       OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_ENABLED:
       OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_DAILY_CALLS:
