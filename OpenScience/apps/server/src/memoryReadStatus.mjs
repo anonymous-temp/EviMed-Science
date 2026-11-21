@@ -57,3 +57,26 @@ export function literalIndexMatch(query, labels) {
     return false;
   });
 }
+
+// Use marked literals only. Sentence-initial capitalization alone is ambiguous.
+export function literalAnchors(query) {
+  const text = String(query ?? '').normalize('NFKC').slice(0, 2000);
+  const anchors = new Set();
+  for (const match of text.matchAll(/"([^"\n]{1,120})"|“([^”\n]{1,120})”|「([^」\n]{1,120})」|《([^》\n]{1,120})》|‘([^’\n]{1,120})’/gu)) {
+    anchors.add(match.slice(1).find(Boolean).trim());
+  }
+  for (const match of text.matchAll(/\d{4}年\d{1,2}月(?:\d{1,2}日)?|[A-Za-z0-9]+(?:[-_.:/][A-Za-z0-9]+)*/gu)) {
+    const word = match[0];
+    if (/\d|[a-z][A-Z]|[A-Z]{2}/u.test(word) || /^[A-Z][a-z]{1,}$/u.test(word) && (match.index > 0 || text.trim() === word)) anchors.add(word);
+  }
+  return [...anchors].filter(Boolean).slice(0, 16);
+}
+
+export function containsAnchor(text, anchors) {
+  const normalized = String(text ?? '').normalize('NFKC').toLowerCase();
+  return anchors.some(anchor => {
+    const escaped = anchor.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp((/^[a-z0-9]/i.test(anchor) ? '(?<![a-z0-9])' : '') + escaped
+      + (/[a-z0-9]$/i.test(anchor) ? '(?![a-z0-9])' : ''), 'u').test(normalized);
+  });
+}

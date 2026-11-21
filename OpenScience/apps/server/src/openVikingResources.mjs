@@ -210,6 +210,13 @@ export class OpenVikingResources {
           limitReached: (index ? words : vector).length >= (index && literalFallback ? 500 : bound) })])));
   }
 
+  async searchHistoryAnchors(userId, root, anchors) {
+    this.historyAddress(root);
+    const { matches } = await this.grep(userId, root, anchors.map(escapeGrepPattern).join('|'), { limit: 80, caseInsensitive: true });
+    return [...new Set(matches.map(hit => hit.uri).filter(uri => typeof uri === 'string' && uri.startsWith(root + '/')))]
+      .map(uri => ({ uri }));
+  }
+
   /** Request-local BM25 over grep's actual resource text, fused with vectors.
    * This deliberately retains no corpus cache: every result is reauthorized and
    * re-read by MemoryHistory, including after a reset, rejection or secret edit. */

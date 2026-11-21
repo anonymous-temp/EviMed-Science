@@ -1,4 +1,4 @@
-import { readStatus, searchStatusText, measuredRead, memorySourceLabel, literalIndexMatch } from './memoryReadStatus.mjs';
+import { readStatus, searchStatusText, measuredRead, memorySourceLabel, literalAnchors, containsAnchor } from './memoryReadStatus.mjs';
 import { PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId } from './nativeMemoryPeople.mjs';
 import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';
@@ -242,31 +242,6 @@ async function scopedListSearch(sessions, ctx, given) {
       }));
       for (const hit of fresh) if (hit && remaining > 0) { result[kind].push(hit); remaining--; }
     }
-  }
-  // The same scoped index and fresh-body fence authorize literal rescue; stored bodies
-  // are never returned from the metadata cache. No fallback on ordinary questions.
-  if (!result.memories.length && ctx.literalFallbackEnabled && String(given.query ?? '').trim()) {
-    try {
-      const entries = await sessions.tree(ctx.user.id, target, { levelLimit: 8, maxNodes: 512 });
-      const metadata = await ctx.fileMetadata();
-      for (const entry of entries) {
-        if (remaining <= 0) break;
-        if (entry.isDir || !ctx.recallFile(entry.uri) || hidden(entry.uri) || isMemorySummary(entry.uri)
-          || !(entry.uri === target || entry.uri.startsWith(`${target}/`))) continue;
-        const indexed = metadata.get(entry.uri);
-        const labels = [entry.name ?? entry.uri.split('/').at(-1),
-          ...String(indexed?.body ?? '').split('\n').filter(line => /^#{1,6}\s/.test(line)).map(line => line.replace(/^#+\s*/, ''))];
-        if (!literalIndexMatch(given.query, labels)) continue;
-        const body = await ctx.readMemory(entry.uri);
-        if (body === null) { result.readStatus.droppedByFence++; continue; }
-        // Recheck headings against the redacted current body, never a withdrawn cached title.
-        const currentLabels = [entry.name ?? entry.uri.split('/').at(-1), ...body.split('\n').filter(line => /^#{1,6}\s/.test(line)).map(line => line.replace(/^#+\s*/, ''))];
-        if (!literalIndexMatch(given.query, currentLabels) || !await ctx.personIdentityVisible(entry.uri, body)) continue;
-        result.memories.push({ uri: entry.uri, abstract: await ctx.recallText(entry.uri, body), retrieval: 'literal_index' });
-        remaining--;
-      }
-      result.readStatus.literalFallback = entries.length >= 512 ? 'partial' : 'searched';
-    } catch { result.readStatus.literalFallback = 'unavailable'; }
   }
   if (ctx.inductionEnabled) {
     result.memories.sort((left, right) => Number(left.abstract.includes('[Inferred from behaviour;')) - Number(right.abstract.includes('[Inferred from behaviour;')));
@@ -531,6 +506,54 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     }
   }
 
+  async function rescueMissingAnchor(ctx, given, files, history, capsules) {
+    const anchors = literalAnchors(given.query);
+    if (!anchors.length || [...files.memories, ...files.resources, ...files.skills].some(hit => containsAnchor(hit.abstract, anchors))
+      || history.items.some(hit => hit.messages?.some(message => containsAnchor(message.text, anchors)))
+      || capsules.some(item => containsAnchor(item.content, anchors))) return;
+    const target = absolute(given.target_uri || `${ctx.userRoot}/memories`, ctx.userRoot);
+    const limit = Math.max(1, Math.min(20, Math.trunc(Number(given.limit)) || 5));
+    if (['searched', 'empty'].includes(files.readStatus?.state)) {
+      const kept = [];
+      try {
+        const excluded = (await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : [])).map(uri => absolute(uri, ctx.userRoot));
+        const entries = await ctx.sessions.tree(ctx.user.id, target, { levelLimit: 8, maxNodes: 512 });
+        const metadata = await ctx.fileMetadata();
+        for (const entry of entries.slice(0, 512)) {
+          if (entry.isDir || !ctx.recallFile(entry.uri) || !(entry.uri === target || entry.uri.startsWith(target + '/'))
+            || excluded.some(prefix => entry.uri === prefix || entry.uri.startsWith(prefix + '/')) || await ctx.hidden(entry.uri)) continue;
+          const name = entry.uri.split('/').at(-1).replace(/\.md$/, '');
+          if (!containsAnchor(name, anchors) && !containsAnchor(metadata.get(entry.uri)?.body, anchors)) continue;
+          const body = await ctx.readMemory(entry.uri);
+          if (body === null || !await ctx.personIdentityVisible(entry.uri, body)
+            || !containsAnchor(name, anchors) && !containsAnchor(body, anchors)) continue;
+          kept.push({ uri: entry.uri, abstract: await ctx.recallText(entry.uri, body), retrieval: 'literal_index' });
+          if (kept.length === limit) break;
+        }
+        files.readStatus.literalFallback = entries.length >= 512 ? 'partial' : 'searched';
+      } catch { files.readStatus.literalFallback = 'unavailable'; files.readStatus.state = 'unavailable'; }
+      if (kept.length) {
+        const ids = new Set(kept.map(hit => hit.uri));
+        files.memories = [...kept, ...files.memories.filter(hit => !ids.has(hit.uri))].slice(0, limit);
+        files.resources = files.resources.filter(hit => !ids.has(hit.uri)).slice(0, limit - files.memories.length);
+        files.skills = files.skills.filter(hit => !ids.has(hit.uri)).slice(0, limit - files.memories.length - files.resources.length);
+        files.total = files.memories.length + files.resources.length + files.skills.length;
+        if (files.readStatus.state === 'empty') files.readStatus.state = 'searched';
+        return;
+      }
+    }
+    if (!historySearch || !['searched', 'empty'].includes(history.status.state)) return;
+    const extra = await measuredRead(() => historySearch({ user: ctx.user, project: ctx.project,
+      query: given.query, limit, literalAnchors: anchors, contextPolicy: ctx.memoryContext?.policy }), capsuleWaitMs);
+    const exact = extra.items.filter(hit => !hit.withdrawn && hit.messages?.some(message => containsAnchor(message.text, anchors)));
+    const key = hit => JSON.stringify([hit.sessionId, hit.messages]);
+    const keys = new Set(exact.map(key));
+    history.items = [...exact, ...history.items.filter(hit => !hit.withdrawn && !keys.has(key(hit)))].slice(0, Math.min(limit, 8))
+      .concat(history.items.filter(hit => hit.withdrawn));
+    history.status = { ...history.status, literalFallback: extra.status.state,
+      state: extra.status.state === 'unavailable' ? 'unavailable' : exact.length ? 'searched' : history.status.state };
+  }
+
   async function supplementarySearch(ctx, given, files) {
     const target = given.target_uri ? absolute(given.target_uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
     const reason = given.mode === 'context' ? 'opening' : target !== `${ctx.userRoot}/memories` ? 'narrow_scope'
@@ -543,6 +566,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         : measuredRead(() => historySearch(request), capsuleWaitMs),
       reason ? skipped(reason) : !capsuleSearch ? skipped('disabled') : measuredRead(() => capsuleSearch(request), capsuleWaitMs),
     ]);
+    if (ctx.literalFallbackEnabled && !ctx.shared && given.mode !== 'context' && Array.isArray(files.memories)) await rescueMissingAnchor(ctx, given, files, history, capsule.items);
     return { history: history.items.map(hit => hit.withdrawn ? { withdrawn: true, messages: [] } : hit), capsules: capsule.items, searchStatus: {
       memoryFiles: files.readStatus ?? readStatus((files.memories?.length || files.entries?.length) ? 'searched' : 'empty'),
       earlierConversations: history.status, receivedCapsules: files.capsuleReadStatus ?? capsule.status,
@@ -915,8 +939,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         if (ctx.shared) await ctx.ensureRegistered();
         const listed = await scopedListSearch(ctx.sessions, ctx, given);
         const found = ctx.shared ? await sharedProjectSearch(ctx, listed, false, given) : listed;
-        await noteRecalled(ctx, (/** @type {any} */ (found).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
         const extra = await supplementarySearch(ctx, given, found.result);
+        await noteRecalled(ctx, (/** @type {any} */ (found).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
         return { status: 200, json: { ...found, result: { ...found.result, ...extra } }, outcome: "forwarded" };
       }
       if (given.target_uri !== undefined) throw new HttpError(400, "memory_gateway_body_invalid", "Context search does not accept a target URI.");
@@ -1154,8 +1178,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             }
             // The engine's list mode is answered from its structured REST rows, filtered here (`scopedListSearch`).
             const result = await scopedListSearch(ctx.sessions, ctx, args);
-            await noteRecalled(ctx, (/** @type {any} */ (result).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
             const extra = await supplementarySearch(ctx, args, result.result);
+            await noteRecalled(ctx, (/** @type {any} */ (result).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
             const content = [{ type: 'text', text: JSON.stringify(result.result) },
               { type: 'text', text: searchStatusText(extra.searchStatus) }];
             const capsuleText = capsuleSearchText(extra.capsules);

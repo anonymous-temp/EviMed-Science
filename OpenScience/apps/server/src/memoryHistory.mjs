@@ -1,3 +1,4 @@
+import { containsAnchor } from './memoryReadStatus.mjs';
 import { readStatus, withReadStatus } from './memoryReadStatus.mjs';
 import { removalContentMatch, removalRefusals, removalText, removalStatement, retainedRemovalKey, lineDecisionKey, decisionCovers } from './nativeMemoryRejections.mjs';
 import { recordNativeMaintenance } from './nativeMemoryMetrics.mjs';
@@ -572,7 +573,7 @@ export class MemoryHistory {
   }
   status() { return { enabled: this.enabled, backfill: { ...this.lastBackfill }, maintenance: { ...this.maintenance } }; }
 
-  async search({ user, project, query, limit = 5 }, { includeOrigins = false, includeWithdrawn = false, accountScope = true, forRemoval = false, removalUri = null, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
+  async search({ user, project, query, limit = 5, literalAnchors = undefined }, { includeOrigins = false, includeWithdrawn = false, accountScope = true, forRemoval = false, removalUri = null, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
     if (!this.enabled || !query?.trim()) return withReadStatus([], readStatus('skipped', !this.enabled ? 'disabled' : 'empty_query'));
     const status = readStatus('empty', null, { candidates: 0, droppedByFence: 0, droppedByScore: 0, droppedByLimit: 0 });
     // Leave time for the gateway to render already verified hits. A slow tail
@@ -591,7 +592,7 @@ export class MemoryHistory {
     const root = account ? `${context.userRoot}/resources/history/${hash(context.ownerCreatedAt).slice(0,24)}` : this.root(context,source);
     const resources = this.resourcesFor(context);
     const asked = Math.max(1, Math.min(retrievalV2 ? 20 : 8, Math.trunc(Number(limit)) || 5));
-    const found = await resources.searchHistory(user.id, root, query.slice(0, 2000), { limit: 40, literalFallback: this.config.memoryLiteralFallbackEnabled === true, ...(retrievalV2 ? { retrievalV2:true } : {}) });
+    const found = literalAnchors?.length ? await resources.searchHistoryAnchors(user.id, root, literalAnchors) : await resources.searchHistory(user.id, root, query.slice(0, 2000), { limit: 40, ...(retrievalV2 ? { retrievalV2:true } : {}) });
     const candidates = retrievalV2 ? diverseHistoryCandidates(found) : found;
     status.candidates = candidates.length;
     if (found.readStatus) status.channels = found.readStatus;
@@ -683,6 +684,7 @@ export class MemoryHistory {
           hit.messages=compactHistoryMessages(hit.messages,query,historyLexicalScorer([{messages:hit.messages}],query),Math.floor(48_000/asked)-headerChars,seen);
           if (!hit.messages.length) continue;
         }
+        if (literalAnchors && !hit.messages.some(message => containsAnchor(message.text, literalAnchors))) continue;
         hits.push(hit);
       }
     }

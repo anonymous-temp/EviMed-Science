@@ -1840,3 +1840,15 @@ test('literal and observation reads retain same-date neighbours through the shar
   const read = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read', arguments: { uris: [`${ROOT}/memories/observations/Keys.md`] } } });
   assert.match(JSON.stringify(read.messages), /seen once/); assert.doesNotMatch(JSON.stringify(read.messages), /night shifts/);
 });
+
+test('literal rescue displaces a full page of neighbours only for an absent explicit anchor', async t => {
+  const f = await fixture(t, { config: { memoryLiteralFallbackEnabled: true } });
+  f.stub.seedMemory(OV_USER, 'notes/ZX17.md', 'The sample was delayed.');
+  f.stub.seedMemory(OV_USER, 'notes/neighbour.md', 'An adjacent discussion.');
+  f.sessions.search = async () => ({ result: { memories: [{ uri: `${ROOT}/memories/notes/neighbour.md`, score: 1 }] } });
+  const search = async query => (await f.call('POST', '/api/v1/search/search', { query, limit: 1 })).json.result;
+  const rescued = await search('What happened to ZX17?');
+  assert.deepEqual(rescued.memories.map(hit => hit.uri), [`${ROOT}/memories/notes/ZX17.md`]);
+  assert.equal(rescued.total, 1);
+  assert.equal((await search('what happened?')).readStatus.literalFallback, undefined);
+});
