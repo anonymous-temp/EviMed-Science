@@ -9064,7 +9064,10 @@ test("a dispatch's recalled memories are on the run, as ids and kinds and never 
     store.recallCutoff = async userId => { assert.equal(userId, project.userId); return Date.parse(run.startedAt); };
     assert.equal((await store.list(project))[0].memoryRecall, undefined);
     await store.recordLearning(project, run.id, { recallOperations: [operation] });
+    const archived = path.join(project.metaDir, 'runs.jsonl.1');
+    await writeFile(archived, await readFile(path.join(project.metaDir, 'runs.jsonl')));
     await store.scrubWithdrawnRecall(project);
+    assert.doesNotMatch(await readFile(archived, 'utf8'), /memoryRecall|memory:a/);
     assert.doesNotMatch(await readFile(path.join(project.metaDir, 'runs.jsonl'), 'utf8'), /memoryRecall|memory:a/);
     assert.deepEqual((await store.list(project))[0].recalledMemories, appended.recalledMemories);
 

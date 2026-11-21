@@ -540,7 +540,7 @@ function normalizeArtifacts(value) {
 
 // The byte budget belongs to a segment, not to a project's lifetime. Sealed
 // prefixes remain ordinary JSONL; every reader folds the concatenated events.
-async function ledgerSegments(project) {
+async function ledgerSegments(project, { includeArchived = false } = {}) {
   await assertNoSymlinkPath(project.rootDir, project.metaDir, { allowMissingTail: true });
   let names;
   try { names = await readdir(project.metaDir); }
@@ -548,7 +548,10 @@ async function ledgerSegments(project) {
   const tails = names.filter(name => /^runs\.\d{6}\.jsonl$/.test(name)).sort();
   if (tails.some((name, index) => name !== `runs.${String(index + 1).padStart(6, "0")}.jsonl`)
     || (tails.length && !names.includes(ledgerFileName))) throw corrupt("Agent run ledger has missing segments.");
-  return [ledgerFile(project), ...tails.map(name => path.join(project.metaDir, name))];
+  // The archive also carries older numbered backups. They are never replayed by the run store.
+  const archived = includeArchived ? names.filter(name => /^runs\.jsonl\.[1-9]\d*$/.test(name))
+    .sort((a, b) => Number(b.split('.').at(-1)) - Number(a.split('.').at(-1))) : [];
+  return [...archived.map(name => path.join(project.metaDir, name)), ledgerFile(project), ...tails.map(name => path.join(project.metaDir, name))];
 }
 
 async function readLedgerSegment(project, file, maxBytes, allowMissing = false, metadata = null) {
@@ -5291,9 +5294,9 @@ export class AgentRunStore {
     if (cutoff === -Infinity) return;
     return withProjectStorageMutation(project, async () => {
       const starts = new Map();
-      const files = await ledgerSegments(project);
+      const files = await ledgerSegments(project, { includeArchived: true });
       for (const file of files) {
-        const previous = await readLedgerSegment(project, file, this.maxBytes, files.length === 1);
+        const previous = await readLedgerSegment(project, file, this.maxBytes, file === ledgerFile(project));
         const events = parseEvents(previous);
         let changed = false;
         for (const event of events) {
