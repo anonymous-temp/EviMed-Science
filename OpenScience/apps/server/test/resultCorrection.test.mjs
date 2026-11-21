@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import test from "node:test";
 import { FeedbackEvents } from "../src/feedbackEvents.mjs";
 import { LearningTriggers } from "../src/learningTriggers.mjs";
@@ -70,7 +71,7 @@ const ORIGINAL_REPORT = "合并 OR 为 0.71，I² 为 41.2%。\n\n## 参考文�
 const REVISED_REPORT = "合并 OR 为 0.68，I² 为 41.2%。\n\n## 参考文献\n[1] Smith 2020 doi:10.1000/alpha\n[2] Lee 2021 doi:10.1000/beta\n";
 
 async function fixture(t, { runOverrides = {}, jobsEnabled = true, memory = null } = {}) {
-  const root = await mkdtemp("/tmp/evimed-correction-");
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-correction-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const project = { id: "p", userId: "owner", rootDir: root, baseDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, "meta") };
   await mkdir(project.workspaceDir); await mkdir(project.metaDir);
@@ -395,4 +396,21 @@ test("a correction is carried to the methods the corrected result's run read onc
   const unjoined = await h.revise();
   await h.capture(`${unjoined.directory}/report.md`, REVISED_REPORT);
   assert.equal((await h.events()).length, 1);
+});
+
+test("a redo receipt binds only the final same-session replacement of the actor's original", async t => {
+  const f = await fixture(t);
+  f.originalRun.sessionId = f.run.sessionId;
+  await f.deliver();
+  const { directory } = await f.revise();
+  const replacementPath = `${directory}/report.md`;
+  const final = await f.capture(replacementPath, REVISED_REPORT);
+  const use = { resultUse: { versionId: final.versionId }, artifact: { path: replacementPath, sha256: final.digest } };
+  assert.equal(await f.corrections.confirmedRedo(f.project, f.run, use), null, "capture alone cannot attest the final replacement");
+  await f.corrections.settle(f.project, f.run);
+  const proof = await f.corrections.confirmedRedo(f.project, f.run, use);
+  assert.equal(proof.detail.original.versionId, f.original.versionId);
+  assert.equal(proof.detail.successor.versionId, final.versionId);
+  assert.equal(await f.corrections.confirmedRedo(f.project, { ...f.run, kernelRequestIds: ['unrelated'] }, use), null);
+  assert.equal(await f.corrections.confirmedRedo(f.project, f.run, { ...use, artifact: { ...use.artifact, sha256: 'a'.repeat(64) } }), null);
 });

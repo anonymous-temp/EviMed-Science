@@ -143,3 +143,19 @@ acknowledgements remain unknown. fj-071 exercises the unchanged half-hour path. 
 
 A live judge check, if separately run on the lab, must use only these same 28 cases and report false clean decisions and missed positives
 individually. The replay is synthetic labelled material, not 28 production conversations and not evidence of production benefit.
+
+### Live late-follow-up check
+
+From `OpenScience`, supply `DEEPSEEK_API_KEY` in the lab environment and run
+`node evals/follow-up-judge/run-late.mjs`. Set `FOLLOW_UP_JUDGE_MODEL` to the
+deployed judge model if it differs from the script's default. The command
+reads the same 28 labelled messages through the production late prompt and
+parser once each. It exits nonzero for any false acceptance, more than one
+missed positive, or any unreadable or failed judgement. It reports individual
+case IDs and checks the exact target and relation for both positive cases.
+The slide fixture has a presentation and speaker notes, and only the
+presentation fits the requested prior work.
+
+Use `--dry-run` to print the fixture inventory without contacting the model.
+Run `node evals/follow-up-judge/replay-late.mjs` separately to check the timing,
+withdrawal and replay behavior with deterministic inputs.

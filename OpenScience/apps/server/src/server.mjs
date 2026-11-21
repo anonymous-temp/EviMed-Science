@@ -2930,6 +2930,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const geoRoutes = createGeoRoutes({
     store, service: geo?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details),
+    onPublicationConfirmed: async (user, geoId, receipt) => {
+      if (!learningEvidence || !resultProvenance || !geoNativeAuthority) return;
+      const { project } = await geoNativeAuthority.identity(user, geoId, { ability: "read" });
+      if (project.userId !== user.id) return;
+      const { version } = await resultProvenance.raw(user.id, project.id, receipt.resultVersionId);
+      if (version.digest === receipt.digest) await learningEvidence.noteResultUse(project, { actorId: user.id,
+        source: "share", version });
+    },
     projects: {
       create: (user, name, options) => createResearcherProject(user, { name }, false, options?.reservation),
       // Create the real primary only when the person explicitly opens it.
@@ -3329,6 +3337,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     documents: productDocuments, feedback: feedbackEvents,
     runs: { list: project => agentRuns.list(project) },
     learning: () => (learningWorker ? learningTriggers : null),
+    onRevisionSettled: (project, run) => learningEvidence?.considerRedo(project, run) ?? Promise.resolve(),
     // And the correction itself, carried to the learned methods the corrected result's run read (N14).
     methods: () => methodFeedback,
     report: code => { void securityAudit(config, "result.correction", "failed", { code }).catch(() => {}); } }) : null;
@@ -3349,11 +3358,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const resultExporter = resultProvenance ? new ResultExportService({ results: resultProvenance, replays: resultReplays, corrections: resultCorrections,
     maxBytes: config.resultExportMaxBytes, maxFiles: config.resultExportMaxFiles }) : null;
   const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions,
-    // The owner took a result as a package: the file the result is of was used (`LearningEvidence.noteFileUse`), beside the answer.
-    onExported: async (user, projectId, versionId) => {
-      if (!learningEvidence || !resultProvenance) return;
-      const version = await resultProvenance.get(user.id, projectId, versionId);
-      if (typeof version?.path === "string" && version.path) await learningEvidence.noteFileUse(await store.requireProject(user, projectId), { path: version.path });
+    onExported: async (user, projectId, versionId, version) => {
+      if (learningEvidence && version.versionId === versionId) await learningEvidence.noteResultUse(
+        await store.requireProject(user, projectId), { actorId: user.id, source: "export", version });
     } });
   const resultImpactRoutes = createResultImpactRoutes({ store, service: resultImpacts });
   const resultCapture = resultProvenance ? createResultProducerCapture({ service: resultProvenance,
@@ -4976,6 +4983,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         { userId, projectId: document.payload.provenance?.sourceProjectId ?? LEARNING_PROJECT_ID, runId: document.payload.provenance?.runId ?? document.id });
     };
     const distillation = new MethodDistillationRuns({
+      readConfirmedRedo: (project, run, pointer) => learningEvidence?.readRedoLesson(project, run, pointer) ?? Promise.resolve(null),
       correctionJudge,
       contextProvenance,
       scriptUses, verifyCode: (candidate, options) => codeVerification.verify(candidate, options), onCodeSkill: (outcome) => learningMetrics.observeCodeSkill(outcome),
@@ -5066,6 +5074,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       learningEvidence = new LearningEvidence({
       contextProvenance,
         lateFollowUpEnabled: config.learningLateFollowUpEnabled,
+        confirmedRedo: resultCorrections ? (project, run, use) => resultCorrections.confirmedRedo(project, run, use) : null,
         funnel: event => learningMetrics.observeFunnel(event),
         toolchainEnabled: config.learningToolchainRoutineEnabled,
         toolchainMinSimilarity: config.learningToolchainMinSimilarity,
@@ -5139,8 +5148,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // grading its own homework.
       internalAgent: async (agentId) => (await agentRegistry)?.get?.(agentId)?.visibility === "internal",
       audit: (event, detail) => securityAudit(config, event, "failed", detail),
-      // The routine's period is the transcript retention, so no peer is older than the transcript an induction reads. Its family is read from the
-      // feedback ledger (`learningEvidence.settle`), which holds only the runs of this researcher.
+      // The diagnostic period uses the retention duration. Routine settlement reads a rolling window from the owner's feedback ledger.
       routinePeriodDays: config.transcriptRetentionDays,
     });
     // What becomes of a published card goes back into learning (evidenceIncidents.mjs, flywheel F15): composed with its switch, the frontier whose change log it reads
@@ -9033,8 +9041,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * Enqueue one night's consolidation per project that has methods to consolidate.
    *
    * New methods without unresolved conflicts take effect during distillation (`LearningService`, `promotionVerdict`).
-   * This pass relates existing methods, rechecks promotion after revisions and proposes retirements; an empty library means
-   * no methods were produced upstream, not that methods are waiting for manual approval.
+   * This pass relates existing methods, rechecks promotion after revisions and proposes retirements.
    *
    * One pass per researcher per `learningConsolidationIntervalMs` (an hour),
    * plus the one distillation queues after every method it writes. It was

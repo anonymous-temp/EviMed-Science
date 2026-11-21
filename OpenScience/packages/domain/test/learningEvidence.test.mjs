@@ -114,3 +114,15 @@ test('late evidence preserves bounded version/input bindings inside the existing
   assert.ok(unbound);
   assert.equal(unbound.deliveries, undefined);
 });
+
+test("a completed export or share keeps a bounded version receipt on the existing used evidence kind", () => {
+  const artifact = { path: "report/final.md", sha256: "b".repeat(64) };
+  const resultUse = { source: "share", versionId: `rv_${"a".repeat(64)}` };
+  const held = cleanLearningEvidence({ evidence: "used", at, artifact, resultUse });
+  assert.deepEqual(held?.resultUse, resultUse);
+  assert.deepEqual(held?.artifact, artifact);
+  assert.equal(learningRunOutcome([held]), "clean");
+  assert.equal(cleanLearningEvidence({ evidence: "silent", at, artifact, resultUse })?.resultUse, undefined);
+  assert.equal(cleanLearningEvidence({ evidence: "used", at, resultUse })?.resultUse, undefined);
+  assert.equal(cleanLearningEvidence({ evidence: "used", at, artifact, resultUse: { ...resultUse, source: "preview" } })?.resultUse, undefined);
+});

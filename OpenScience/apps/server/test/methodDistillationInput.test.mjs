@@ -522,3 +522,25 @@ test("renaming an official procedure cannot copy it into the personal library", 
   assert.equal(result.skipped, "official_read_only");
   assert.equal(service.created.length, 0);
 });
+
+test("confirmed redo supplies just the version-bound correction context and rechecks it before applying", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-distill-redo-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { project, run } = await projectWith(root);
+  const proof = { replacementRunId: "redo", original: { versionId: "old", digest: "old-digest" },
+    replacement: { versionId: "new", digest: "new-digest" }, useEventId: "export-event", source: "export" };
+  let reads = 0;
+  const requests = [];
+  const distillation = new MethodDistillationRuns({ learning: { listMethods: async () => ({ items: [] }) },
+    readConfirmedRedo: async () => ++reads === 1 ? proof : null,
+    dispatch: async request => { requests.push(request); return { runId: "l_run", sessionId: "l_session" }; },
+    readResult: async () => ({ status: "succeeded", output: { candidate: { operation: "no_change" } } }),
+  });
+  await assert.rejects(distillation.execute({ project, run, job: { userId: "u1", projectId: "p", payload: {
+    runId: run.id, trigger: "correction", confirmedRedo: { replacementRunId: "redo", correctionEventId: "correction-event" },
+  } } }), { code: "distillation_run_unavailable" });
+  assert.equal(reads, 2);
+  assert.deepEqual(requests[0].input.confirmedRedo, proof);
+  assert.deepEqual(requests[0].input.peerRuns, []);
+  assert.match(requests[0].question, /Learn only the specific change grounded in that correction/);
+});

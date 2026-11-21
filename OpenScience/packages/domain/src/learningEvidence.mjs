@@ -85,6 +85,7 @@ const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, 
  *   sourceProjectId?: string, sourceRunIds?: string[], inputReceiptRefs?: string[],
  *   deliveries?: { path: string, sha256: string }[], artifact?: { path: string, sha256: string },
  *   lateFollowUp?: boolean, inputDigest?: string, relation?: string,
+ *   resultUse?: { source: string, versionId: string },
  *   sessionId: string | null, at: string, scope?: string, endedAt?: string, shape?: import('./artifactShape.mjs').ArtifactShape[], toolchain?: import('./toolchainShape.mjs').ToolchainFingerprint } | null}
  */
 export function cleanLearningEvidence(value) {
@@ -126,6 +127,9 @@ export function cleanLearningEvidence(value) {
     ? { path: item.path, sha256: item.sha256 } : null
   const deliveries = (Array.isArray(record.deliveries) ? record.deliveries : []).slice(0, 4).map(delivery).filter(Boolean)
   const artifact = delivery(record.artifact)
+  const resultUse = evidence === 'used' && artifact && ['export', 'share'].includes(record.resultUse?.source)
+    && /^rv_[a-f0-9]{64}$/.test(record.resultUse?.versionId ?? '')
+    ? { source: record.resultUse.source, versionId: record.resultUse.versionId } : null
   const detail = {
     evidence,
     verdict,
@@ -133,7 +137,8 @@ export function cleanLearningEvidence(value) {
     ...(record.lateFollowUp === true ? { lateFollowUp: true } : {}),
     ...(/^[a-f0-9]{64}$/.test(record.inputDigest ?? '') ? { inputDigest: record.inputDigest } : {}),
     ...(artifact ? { artifact } : {}),
-    ...(['build', 'convert', 'cite'].includes(record.relation) ? { relation: record.relation } : {}),
+    ...(resultUse ? { resultUse } : {}),
+    ...(['build', 'convert', 'cite', 'share'].includes(record.relation) ? { relation: record.relation } : {}),
     ...trace,
     ...(identifier(record.externalTarget?.id) && typeof record.externalTarget?.digest === 'string' && record.externalTarget.digest.length <= limits.digest
       ? { externalTarget: { id: record.externalTarget.id, digest: record.externalTarget.digest } } : {}),
@@ -158,7 +163,7 @@ export function cleanLearningEvidence(value) {
 /**
  * Whether an evidence event says the run was corrected: a result corrected in the page, or a steer or follow-up whose verdict is a
  * correction, a preference or a rejection (a steer nobody judged is a correction). Silence, a use, an acceptance, an adoption and a new
- * question are the run left alone.
+ * question carry no correction.
  * @param {{ evidence?: unknown, verdict?: unknown } | null | undefined} detail
  * @returns {boolean}
  */

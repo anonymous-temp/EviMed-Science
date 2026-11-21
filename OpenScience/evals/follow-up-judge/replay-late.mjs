@@ -13,7 +13,8 @@ export async function replayLate({ judge = ({ recorded }) => recorded.modelText,
   const { cases } = JSON.parse(await readFile(new URL('./cases.json', import.meta.url), 'utf8'));
   const { results } = JSON.parse(await readFile(new URL('./results/2026-10-25-bank-embedding.json', import.meta.url), 'utf8'));
   const rows = [];
-  const second = { path: 'report/earlier.md', sha256: 'b'.repeat(64) };
+  const notes = { path: 'report/speaker-notes.md', sha256: 'b'.repeat(64) };
+  const slides = { path: 'report/presentation.pptx', sha256: 'c'.repeat(64) };
   const correctionCase = cases.find(row => row.id === 'fj-003');
   const correctionOutput = results.find(row => row.id === 'fj-003').modelText;
   for (const id of LATE_CASE_IDS) {
@@ -25,7 +26,7 @@ export async function replayLate({ judge = ({ recorded }) => recorded.modelText,
       ...(id === 'fj-003' ? { age: 86_400_000 } : {}),
       ...(id === 'fj-066' ? { age: 86_400_001 } : {}),
       ...(id === 'fj-085' ? { files: [] } : {}),
-      ...(id === 'fj-069' ? { files: [second, DELIVERY] } : {}),
+      ...(id === 'fj-069' ? { files: [notes, slides] } : {}),
       ...(id === 'fj-073' ? { currentFiles: [] } : {}), // Deleted version, no revival.
       ...(id === 'fj-077' ? { refusal: 'before_reset' } : {}),
       ...(id === 'fj-091' ? { refusal: 'not_researcher_work' } : {}),
@@ -37,7 +38,8 @@ export async function replayLate({ judge = ({ recorded }) => recorded.modelText,
       const answer = await judge({ source, recorded, request });
       if (protocolFixtures && ['fj-062', 'fj-069'].includes(id) && JSON.parse(answer).verdict === 'accept') {
         // Exact words and version receipt supplied by deterministic fixtures, not present in the old judge result.
-        return boundAcceptance(source.message, DELIVERY).replace('"convert"', id === 'fj-069' ? '"cite"' : '"convert"');
+        return id === 'fj-069' ? boundAcceptance(source.message, slides).replace('"convert"', '"share"')
+          : boundAcceptance(source.message, DELIVERY);
       }
       return answer;
     } });

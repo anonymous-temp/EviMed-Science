@@ -195,6 +195,7 @@ function money(value, field, zero = false) {
  *       startedAt: string | null }>> } | null,
  *   orchestrator?: { setMonitoringAutomation?: (user: any, project: any, enabled: boolean) => Promise<any>, runStep?: (user: any, project: any, step: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
  *   selectedExporter?: any,
+ *   onPublicationConfirmed?: (user: any, geoId: string, receipt: any) => Promise<unknown>,
  *   signals?: import('./geoSignals.mjs').GeoSignals | null,
  *   signalResults?: import('./geoSignalResults.mjs').GeoSignalResults | null,
  *   exporter?: { export?: (user: any, project: any, kind: string) => Promise<{ accepted: true, runId: string | null, step: string | null }> } | null,
@@ -678,7 +679,11 @@ export function createGeoRoutes(dependencies) {
       const body = await bodyOf(req, maxJsonBytes, ["requestKey", "expectedRevision", "expectedResultVersionId", "expectedDigest", "resultVersionId", "digest", "publishedAt"]);
       const result = await service.confirmOwnedPublication(user, id, parts[3], body);
       await audit("geo.owned_link.version", "completed", { userId: user.id, code: id, detail: parts[3] });
-      return reply(result);
+      const sent = reply(result);
+      if (dependencies.onPublicationConfirmed && result.basis === "user_reported_update") {
+        void Promise.resolve().then(() => dependencies.onPublicationConfirmed(user, id, result)).catch(() => {});
+      }
+      return sent;
     }
     // What a source row stands for: the answers of the latest round that cite the site, one engine's when the page's filter names it.
     if (parts.length === 4 && method === "GET" && tab === "sources") {

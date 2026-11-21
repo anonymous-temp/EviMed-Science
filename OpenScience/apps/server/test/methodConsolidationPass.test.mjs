@@ -721,3 +721,21 @@ test("the counters have a closed vocabulary and appear on the scrape", () => {
   assert.deepEqual(Object.keys(family("open_science_learning_relations_total")).slice(0, 6), ["shared_part", "subset", "merge", "abstract_pattern", "conflicts_with", "supersedes"]);
   for (const code of ["superseded", "unproven_merge_expired", "library_cap"]) assert.ok(code in family("open_science_learning_method_retirements_total"), code);
 });
+
+test("a dangling method relation adds only a diagnostic count when link checking is enabled", async () => {
+  for (const linkCheckEnabled of [false, true]) {
+    const h = harness({ similarity: null, linkCheckEnabled });
+    const method = await h.make("with-broken-relation", "axis-a");
+    const payload = { ...method.payload, learning: { ...method.payload.learning,
+      relations: [{ type: "extends", target: "removed-method" }],
+    } };
+    const original = await h.documents.put("u1", method.kind, method.id, payload,
+      { expectedRevision: method.revision, projectId: "p1" });
+    const result = await h.sleep();
+    assert.equal(result.linkIssues?.relation_target_missing, linkCheckEnabled ? 1 : undefined);
+    const after = await h.learning.getMethod("u1", method.id);
+    assert.equal(after.revision, original.revision);
+    assert.deepEqual(after.payload, original.payload);
+    assert.equal(h.dispatched.length, 0);
+  }
+});

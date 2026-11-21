@@ -72,6 +72,11 @@ function setup({ enabled = true, similarity = createMethodSimilarity(), readTrac
       return { event, created: true };
     },
     async learningEvidenceOf(_owner, id) { return rows.filter(row => row.runId === id); },
+    async reserveRoutine(_owner, _window, runId, matching, enqueue) {
+      const used = new Set(lessons.flatMap(lesson => [lesson.payload.runId, ...lesson.payload.peers.map(peer => peer.runId)]));
+      if (used.has(runId)) return null;
+      return enqueue(matching.filter(peer => !used.has(peer.runId)));
+    },
     async cleanSettledRuns(_owner, { toolchainEnabled }) {
       return runs.flatMap(run => {
         const events = rows.filter(row => row.runId === run.id);

@@ -7,8 +7,7 @@
  * are not. The shape is a format plus a bounded list of structural labels (headings, slide titles, sheet names and header cells,
  * top-level definitions), read from the file by a reader on the server (`apps/server/src/artifactShapes.mjs`) and stored beside
  * the run; this module is only the closed vocabulary around it: how a label is cleaned and when two shapes match. Nothing here
- * reads a word of a document's text for meaning (principle 1), and a format with no structure (a PDF, an image) matches on its
- * format alone.
+ * reads a word of a document's text for meaning (principle 1). A bare format supplies too little evidence for a routine.
  *
  * Provisional numbers, chosen before there is a distribution to read: a label set of at least `ARTIFACT_SHAPE_MIN_LABELS` on both
  * sides must overlap by `ARTIFACT_SHAPE_MATCH_JACCARD`.
@@ -19,7 +18,7 @@
 /** How many labels one file's shape keeps, and how long a label may be. */
 export const ARTIFACT_SHAPE_LIMITS = Object.freeze({ labels: 16, labelChars: 40, files: 4 })
 
-/** Fewer labels than this on either side and two files of one format match on the format alone. */
+/** A primary file needs at least this much structure to support a match. */
 export const ARTIFACT_SHAPE_MIN_LABELS = 2
 
 /** The overlap (Jaccard) two label sets need to be the same shape. */
@@ -63,8 +62,7 @@ export function cleanArtifactShape(value) {
 }
 
 /**
- * A run's files as shapes, in a fixed order (by format, then labels) so two runs that made the same things in another order
- * compare equal. Files past the bound are left out.
+ * A run's files as shapes, ordered deterministically by primary status, format and labels. The bound keeps primary files first.
  * @param {unknown} shapes @returns {ArtifactShape[]}
  */
 export function cleanArtifactShapes(shapes) {
@@ -75,7 +73,7 @@ export function cleanArtifactShapes(shapes) {
     if (shape) cleaned.push(shape)
   }
   return cleaned
-    .sort((left, right) => left.format.localeCompare(right.format) || left.labels.join('\u0000').localeCompare(right.labels.join('\u0000')))
+    .sort((left, right) => Number(Boolean(left.scriptRelated)) - Number(Boolean(right.scriptRelated)) || left.format.localeCompare(right.format) || left.labels.join('\u0000').localeCompare(right.labels.join('\u0000')))
     .slice(0, ARTIFACT_SHAPE_LIMITS.files)
 }
 
@@ -90,35 +88,27 @@ function jaccard(left, right) {
 }
 
 /**
- * Whether two deliveries share a shape: matching formats and structural labels.
- * With an ambiguous inventory, a strict format superset may omit only extras
- * whose same-run script lineage was witnessed by the server. A run without
- * files matches nothing; unknown extras and mismatched shared structure fail.
+ * Require a one-to-one structural match for each primary file. With an ambiguous inventory, files with same-run
+ * script lineage may be unmatched on either side. At least one independently identified primary file must match.
  * @param {unknown} left @param {unknown} right @returns {boolean}
  */
 export function artifactShapesMatch(left, right) {
   const a = cleanArtifactShapes(left)
   const b = cleanArtifactShapes(right)
-  if (!a.length || !b.length) return false
-  if (a.map((shape) => shape.format).join(',') !== b.map((shape) => shape.format).join(',')) {
-    // A strict format superset may differ only by files linked to a script
-    // this run itself wrote and executed. Unknown extras remain significant.
-    const formatsA = new Set(a.map(shape => shape.format))
-    const formatsB = new Set(b.map(shape => shape.format))
-    const aContainsB = [...formatsB].every(format => formatsA.has(format))
-    const bContainsA = [...formatsA].every(format => formatsB.has(format))
-    if (aContainsB === bContainsA) return false
-    const larger = aContainsB ? a : b
-    const smaller = aContainsB ? formatsB : formatsA
-    if (larger.some(shape => !smaller.has(shape.format) && !shape.scriptRelated)) return false
+  if (!a.length || !b.length || [...a, ...b].every(shape => shape.scriptRelated)) return false
+  /** @param {ArtifactShape} file @param {ArtifactShape} candidate */
+  const agrees = (file, candidate) => file.format === candidate.format
+    && file.labels.length >= ARTIFACT_SHAPE_MIN_LABELS && candidate.labels.length >= ARTIFACT_SHAPE_MIN_LABELS
+    && jaccard(file.labels, candidate.labels) >= ARTIFACT_SHAPE_MATCH_JACCARD
+  // There are at most four files on either side. Try alternate pairings when a file has
+  // several compatible matches, so optional files cannot displace a required pairing.
+  /** @param {number} index @param {Set<number>} used @returns {boolean} */
+  const pair = (index, used) => {
+    if (index === a.length) return b.every((file, position) => file.scriptRelated || used.has(position))
+    const file = a[index]
+    if (file.scriptRelated && pair(index + 1, used)) return true
+    return b.some((candidate, position) => !used.has(position) && agrees(file, candidate)
+      && pair(index + 1, new Set([...used, position])))
   }
-  /** @param {ArtifactShape[]} shapes @param {string} format */
-  const labelsOf = (shapes, format) => [...new Set(shapes.filter((shape) => shape.format === format).flatMap((shape) => shape.labels))]
-  for (const format of new Set(a.map((shape) => shape.format).filter(candidate => b.some(shape => shape.format === candidate)))) {
-    const first = labelsOf(a, format)
-    const second = labelsOf(b, format)
-    if (first.length < ARTIFACT_SHAPE_MIN_LABELS || second.length < ARTIFACT_SHAPE_MIN_LABELS) continue
-    if (jaccard(first, second) < ARTIFACT_SHAPE_MATCH_JACCARD) return false
-  }
-  return true
+  return pair(0, new Set())
 }

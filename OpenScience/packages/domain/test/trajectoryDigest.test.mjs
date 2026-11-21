@@ -162,15 +162,15 @@ test("repaired says the deliverable was submitted more than once, from either re
   assert.equal(trajectoryDigest(transcript, run, { attempts: 1 }).outcome.repaired, false);
 });
 
-test("two files are the same shape when their format and structure agree, and a format with no structure matches on the format", () => {
+test("two files need structural support as well as the same format", () => {
   const weekly = [{ format: "docx", labels: ["Summary", "Findings", "Next steps"] }];
   assert.equal(artifactShapesMatch(weekly, [{ format: "docx", labels: ["summary", "findings", "next steps", "appendix"] }]), true);
   assert.equal(artifactShapesMatch(weekly, [{ format: "docx", labels: ["Budget", "Risks", "Timeline"] }]), false);
   assert.equal(artifactShapesMatch(weekly, [{ format: "xlsx", labels: ["Summary", "Findings", "Next steps"] }]), false, "another format");
-  assert.equal(artifactShapesMatch([{ format: "pdf", labels: [] }], [{ format: "pdf", labels: [] }]), true);
-  assert.equal(artifactShapesMatch(weekly, [{ format: "docx", labels: ["Only"] }]), true, "one label is too little structure to disagree");
+  assert.equal(artifactShapesMatch([{ format: "pdf", labels: [] }], [{ format: "pdf", labels: [] }]), false);
+  assert.equal(artifactShapesMatch(weekly, [{ format: "docx", labels: ["Only"] }]), false, "one label is too little structure to establish a match");
   assert.equal(artifactShapesMatch([], []), false, "a run with no file has no shape");
-  assert.equal(artifactShapesMatch([{ format: "md", labels: ["a", "b"] }, { format: "csv", labels: [] }], [{ format: "csv", labels: [] }, { format: "md", labels: ["a", "b"] }]), true, "the order the files were made in does not matter");
+  assert.equal(artifactShapesMatch([{ format: "md", labels: ["a", "b"] }, { format: "csv", labels: ["center", "events"] }], [{ format: "csv", labels: ["center", "events"] }, { format: "md", labels: ["a", "b"] }]), true, "the order the files were made in does not matter");
 });
 
 test("a shape is cleaned and bounded where it enters the ledger", () => {

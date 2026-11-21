@@ -255,6 +255,9 @@ export class LearningWorker {
       /** @type {any} */ (error).code = "distillation_run_unavailable";
       throw error;
     }
+    if (job.payload?.rollingEvidence && this.evidence && !await this.evidence.routineSourcesAllowed(project, run, job)) {
+      throw new HttpError(409, "distillation_run_unavailable", "A reserved learning source is no longer available as clean evidence.");
+    }
     return this.distillation.execute({ job, project, run, feedback: job.payload?.feedback ?? [] });
   }
 

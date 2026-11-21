@@ -337,3 +337,44 @@ test('a version-bound late reaction settles after the real settle job succeeded,
     assert.equal((await ledger.learningEvidenceOf(userId, state.run.id)).length, 0);
   } finally { await database.query('DELETE FROM evimed_control.users WHERE id=$1', [userId]); }
 });
+
+test("rolling reservations cross the old boundary and atomically consume each clean source once", options, async () => {
+  const scope = "rolling-reservation";
+  const day = 86_400_000, retention = 90 * day;
+  const boundary = Math.floor(Date.now() / retention) * retention;
+  const now = boundary + day;
+  const window = { scope, from: new Date(now - retention), to: new Date(now + 1), completedWithin: true };
+  const add = async (runId, finished) => record(runId, { evidence: "follow-up", verdict: "accept", shape, scope,
+    at: new Date(now).toISOString(), endedAt: new Date(finished).toISOString() });
+  const previous = ["rolling_a", "rolling_b"];
+  const anchors = ["rolling_c", "rolling_d"];
+  await add("rolling_too_old", now - retention - 1);
+  await add(previous[0], boundary - 2 * day);
+  await add(previous[1], boundary - day);
+  await add(anchors[0], now - 2_000);
+  await add(anchors[1], now - 1_000);
+  const family = await feedback.cleanSettledRuns(owner, window);
+  assert.deepEqual(family.map(member => member.runId), [...previous, ...anchors]);
+  const matching = family.filter(member => previous.includes(member.runId));
+  const reserve = (runId, peers = matching, fail = false) => feedback.reserveRoutine(owner, window, runId, peers, async (available, client) => {
+    if (available.length < 2) return null;
+    await jobs.enqueue(owner, "distill", { runId, trigger: "routine", peers: available.slice(0, 2).map(peer => ({ runId: peer.runId, projectId: PROJECT })) },
+      { idempotencyKey: `distill:${runId}:routine`, projectId: PROJECT, transactionClient: client });
+    if (fail) throw new Error("interrupted reservation");
+    return true;
+  });
+  await assert.rejects(reserve(anchors[0], matching, true), /interrupted reservation/);
+  const results = await Promise.all(anchors.map(runId => reserve(runId)));
+  assert.equal(results.filter(Boolean).length, 1);
+  assert.equal(await reserve(anchors[0]), null);
+  assert.equal(await reserve(anchors[1]), null);
+  assert.equal(await reserve(previous[0], family.filter(member => member.runId !== previous[0])), null);
+
+  await add("rolling_older_job", boundary - day);
+  await add("rolling_older_peer", boundary - day);
+  await jobs.enqueue(owner, "distill", { runId: "rolling_older_job", trigger: "routine", peerRunIds: ["rolling_older_peer"] },
+    { idempotencyKey: "distill:rolling_older_job:routine", projectId: PROJECT });
+  const legacyPeer = (await feedback.cleanSettledRuns(owner, window)).find(member => member.runId === "rolling_older_peer");
+  assert.equal(await reserve("rolling_older_peer", matching), null);
+  assert.equal(await reserve("rolling_older_job", [legacyPeer, ...matching]), null);
+});
