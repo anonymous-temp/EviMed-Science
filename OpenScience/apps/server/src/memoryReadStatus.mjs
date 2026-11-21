@@ -62,7 +62,7 @@ export function literalIndexMatch(query, labels) {
 export function literalAnchors(query) {
   const text = String(query ?? '').normalize('NFKC').slice(0, 2000);
   const anchors = new Set();
-  for (const match of text.matchAll(/"([^"\n]{1,120})"|“([^”\n]{1,120})”|「([^」\n]{1,120})」|《([^》\n]{1,120})》|‘([^’\n]{1,120})’/gu)) {
+  for (const match of text.matchAll(/"([^"\n]{1,120})"|“([^”\n]{1,120})”|「([^」\n]{1,120})」|《([^》\n]{1,120})》|‘([^’\n]{1,120})’|(?<![\p{L}\p{N}])'([^'\n]{1,120})'(?![\p{L}\p{N}])/gu)) {
     anchors.add(match.slice(1).find(Boolean).trim());
   }
   for (const match of text.matchAll(/\d{4}年\d{1,2}月(?:\d{1,2}日)?|[A-Za-z0-9]+(?:[-_.:/][A-Za-z0-9]+)*/gu)) {

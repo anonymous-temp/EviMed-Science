@@ -44,6 +44,7 @@ export function ConversationMenu({ conversation, onRenamed, className }: {
   const renameInput = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const [recallOffered, setRecallOffered] = useState(false);
   const [showRecall, setShowRecall] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState("");
@@ -55,7 +56,7 @@ export function ConversationMenu({ conversation, onRenamed, className }: {
 
   useEffect(() => {
     let live = true;
-    void fetchWebMe().then((me) => { if (live) setOperator(Boolean(me?.operator)); }).catch(() => {});
+    void fetchWebMe().then((me) => { if (live) { setOperator(Boolean(me?.operator)); setRecallOffered(me?.features?.memoryRecallRecords === true); } }).catch(() => {});
     return () => { live = false; };
   }, []);
 
@@ -152,7 +153,7 @@ export function ConversationMenu({ conversation, onRenamed, className }: {
   const items: MenuEntry[] = [
     ...(working.length ? [{ label: "停止", onSelect: () => setConfirming("stop") }] : []),
     { label: "重命名", onSelect: () => { setDraft(title); setRenaming(true); } },
-    { label: "记忆查找记录", onSelect: () => setShowRecall(true) },
+    ...(recallOffered ? [{ label: "记忆查找记录", onSelect: () => setShowRecall(true) }] : []),
     { label: "归档", onSelect: () => void archive() },
     { label: "删除", destructive: true, onSelect: () => setConfirming("delete") },
     ...(operator ? ["separator" as const, { label: "复制诊断信息", onSelect: () => void copyDiagnostics() }] : []),

@@ -5251,6 +5251,7 @@ export class AgentRunStore {
         const history = runPhaseHistory(events, run.id, prefix?.phases.get(run.id));
         if (run.deleted === true || deletedSources.has(run.sessionId)) {
           delete run.terminalOutcomes;
+          delete run.memoryRecall;
           return { ...run, deleted: true, question: null, title: 'Conversation removed',
             steers: [], goal: null, nativeWorkflow: null, deliverables: [], progress: undefined, qualityNotices: [], transcript: undefined };
         }
@@ -5867,7 +5868,7 @@ export class AgentRunStore {
     return withProjectStorageMutation(project, async () => {
       const { events, prefix } = await this.readLedger(project);
       const current = foldEvents(events, prefix?.runs).get(runId);
-      if (!current) return null;
+      if (!current || current.deleted && (patch.recallOperations || patch.recallTurn)) return null;
       const compaction = patch.appendCompaction
         ? [...(current.compaction ?? []), patch.appendCompaction]
         : patch.compaction;

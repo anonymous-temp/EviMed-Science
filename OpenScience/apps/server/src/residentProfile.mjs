@@ -209,7 +209,7 @@ export function nativeSessionResident({ residentProfiles, activeRuns, startedByP
       if (!block.due || !block.text || !block.digest) return null;
       return { text: block.text, digest: block.digest, blockHash: createHash("sha256").update(block.text).digest("hex"), memories: block.memories.map((/** @type {any} */ memo) => ({ id: memo.id, kind: memo.kind, scope: memo.scope,originalSources:memo.originalSources,sourcePrivacy:memo.sourcePrivacy,attribution:memo.attribution })) };
     },
-    /** @param {any} user @param {any} project @param {string} sessionId @param {{ digest: string, memories: { id: string, kind?: string, scope?: string }[] }} receipt */
+    /** @param {any} user @param {any} project @param {string} sessionId @param {{ digest: string, blockHash?: string, memories: { id: string, kind?: string, scope?: string }[] }} receipt */
     attached(user, project, sessionId, receipt) {
       return residentProfiles.acknowledge(user.id, { projectId: project.id, sessionId, ...receipt });
     },

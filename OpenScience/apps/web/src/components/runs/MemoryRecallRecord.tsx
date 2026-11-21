@@ -1,10 +1,37 @@
-import type { WebAgentRun } from "@/lib/apiClient";
+import { useState } from "react";
+import { getWebConversationHistory, getWebProjectId, type WebAgentRun } from "@/lib/apiClient";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { runTitle } from "@/lib/runPresentation";
 
 const states = { not_searched: "没有检索", empty: "检索未命中", hit: "检索有返回", incomplete: "检索记录不完整", unknown: "检索情况未知" };
 const sources: Record<string, string> = { "memory-file": "记忆文件", profile: "画像", history: "原始对话", capsule: "胶囊笔记" };
+
+function RecordedAnswer({ run }: { run: WebAgentRun }) {
+  const answer = run.memoryRecall?.turn?.answer;
+  const [text, setText] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (!answer) return null;
+  const read = async () => {
+    setBusy(true);
+    try {
+      const history = await getWebConversationHistory(run.sessionId, getWebProjectId(), run.id);
+      const message = history.messages.find(row => row.role === "assistant" && row.seq === answer.seq);
+      const bytes = new TextEncoder().encode(message?.text);
+      const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), byte => byte.toString(16).padStart(2, "0")).join("");
+      setText(message && digest === answer.contentHash ? message.text : "这份对话记录中没有与摘要相符的回答。");
+    } catch {
+      setText("暂时无法读取这条回答。");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <div>
+    <p className="break-all text-caption">回答记录 #{answer.seq} · SHA-256 {answer.contentHash}</p>
+    <Button variant="text" disabled={busy} onClick={() => void read()}>{busy ? "正在读取回答" : "查看对应回答"}</Button>
+    {text && <p className="whitespace-pre-wrap">{text}</p>}
+  </div>;
+}
 
 export function MemoryRecallRecord({ runs, onClose }: { runs: readonly WebAgentRun[]; onClose: () => void }) {
   const data = runs.map(run => ({ runId: run.id, question: run.question, receipt: run.memoryRecall ?? null }));
@@ -29,7 +56,7 @@ export function MemoryRecallRecord({ runs, onClose }: { runs: readonly WebAgentR
           return ref && <li key={index} className="break-all">{sources[ref.source] ?? ref.source} · {ref.uri}{op.entry.endsWith(".search") && (laterRead ? " · 后续显式读取" : " · 未记录后续显式读取")}<br />SHA-256 {ref.contentHash}</li>;
         })}</ul>
       </details>)}
-      {run.memoryRecall?.turn?.answer && <p className="break-all text-caption">回答记录 #{run.memoryRecall.turn.answer.seq} · SHA-256 {run.memoryRecall.turn.answer.contentHash}</p>}
+      <RecordedAnswer run={run} />
     </section>)}
   </Drawer>;
 }

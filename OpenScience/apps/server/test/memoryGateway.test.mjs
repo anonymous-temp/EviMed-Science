@@ -1846,11 +1846,11 @@ test('literal rescue displaces a full page of neighbours only for an absent expl
   f.stub.seedMemory(OV_USER, 'notes/ZX17.md', 'The sample was delayed.');
   f.stub.seedMemory(OV_USER, 'notes/neighbour.md', 'An adjacent discussion.');
   f.sessions.search = async () => ({ result: { memories: [{ uri: `${ROOT}/memories/notes/neighbour.md`, score: 1 }] } });
-  const search = async query => (await f.call('POST', '/api/v1/search/search', { query, limit: 1 })).json.result;
-  const rescued = await search('What happened to ZX17?');
+  const lookup = async query => (await f.call('POST', '/api/v1/search/search', { query, limit: 1 })).json.result;
+  const rescued = await lookup('What happened to ZX17?');
   assert.deepEqual(rescued.memories.map(hit => hit.uri), [`${ROOT}/memories/notes/ZX17.md`]);
   assert.equal(rescued.total, 1);
-  assert.equal((await search('what happened?')).readStatus.literalFallback, undefined);
+  assert.equal((await lookup('what happened?')).readStatus.literalFallback, undefined);
 });
 
 test('finished gateway responses record exact emitted history, profile and explicit file reads', async t => {
@@ -1888,5 +1888,25 @@ test('recorded observation and preference controls use the read-only switch and 
     assert.equal(result.status,200,item.qid);
     assert.equal(result.json.result.includes(item.quote),true,item.qid);
     assert.equal(result.json.result.startsWith('[seen once — observed choice, not a standing preference]'),item.kind==='once',item.qid);
+  }
+});
+
+test('history rescue promotes a verified literal excerpt and preserves a withdrawal notice', async t => {
+  const calls = [];
+  const excerpt = (uri, text) => ({ uri, sessionId: uri, messages: [{ sourceRole: 'user', text }] });
+  const f = await fixture(t, { config: { memoryLiteralFallbackEnabled: true, memoryHistorySearchEnabled: true },
+    historySearch: async request => {
+      calls.push(request.literalAnchors);
+      return request.literalAnchors
+        ? [excerpt('history:target', 'Shipment ZX18 arrived.'), excerpt('history:target', 'Shipment ZX18 arrived.')]
+        : [excerpt('history:nearby', 'Shipment ZX19 arrived.'), { withdrawn: true, messages: [] }];
+    } });
+  const lookup = async query => (await f.call('POST', '/api/v1/search/search', { query, limit: 1 })).json.result;
+  const rescued = await lookup('Which shipment was ZX18?');
+  assert.deepEqual(rescued.history.map(hit => hit.uri ?? hit.withdrawn), ['history:target', true]);
+  assert.deepEqual(calls.splice(0), [undefined, ['ZX18']]);
+  for (const query of ['Which shipment was ZX19?', 'which shipment arrived?']) {
+    await lookup(query);
+    assert.deepEqual(calls.splice(0), [undefined]);
   }
 });

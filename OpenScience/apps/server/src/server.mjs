@@ -5505,6 +5505,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         })().catch(() => SOURCE_SCOPE_UNAVAILABLE_CONTEXT);
         return [...(bound ? [bound] : []), ...fromCard, ...await sessionDispatchNotes({ memorySettings, capsules: capsuleService }, userId, projectId, sessionId).catch(() => [])];
       },
+      recordDelivery: (project, runId, operation) => agentRuns.recordLearning(project, runId, { recallOperations: [operation] }),
       recordRecall: (project, runId, items) => agentRuns.recordLearning(project, runId, {
         appendRecalledMemories: items.map((item) => (item.source === "capsule"
           ? { id: `capsule:${item.id}`, kind: item.factKind ?? "capsule", scope: "capsule" }
@@ -7360,6 +7361,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               geo: Boolean(geo) && geoAudienceAllows(config, user),
               vcr: Boolean(vcr) && vcrAudienceAllows(config, user),
               // 「记忆地图」 (the memory page's 地图 tab): with the memory subsystem and its own switch, as the map's routes decide (memoryMap.mjs).
+              memoryRecallRecords: config.memoryEnabled !== false,
               memoryMap: config.memoryEnabled !== false && config.memoryMapEnabled !== false,
               openList: openListConnector
                 ? await openListConnector.storageStatus({ allowStale: true }).then((status) => status.storage === "mounted", () => false)

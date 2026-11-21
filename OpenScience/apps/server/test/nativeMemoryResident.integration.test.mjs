@@ -3,6 +3,7 @@
 //  - the card read only the project's project-context file, under the headings it knew, while the engine may file a stated rule as one of
 //    the project's other standing files (a working fact, a decision), which the plugin's own start-of-session listing never names;
 //  - a turn typed in the kernel's own composer passes through no dispatch, so the block was never handed to it at all.
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -119,7 +120,11 @@ test("a turn typed in the kernel's composer is handed the block at its first ste
   assert.ok(first.memories.every((memo) => memo.sourcePrivacy?.schemaVersion === 1 && Array.isArray(memo.originalSources)), "and its receipts");
   // Not noted until the step has entered: asked again, handed again.
   assert.equal((await resident.forSession(user, project, "ses_native")).digest, first.digest);
-  await resident.attached(user, project, "ses_native", { digest: first.digest, memories: first.memories });
+  assert.equal(first.blockHash, createHash("sha256").update(first.text).digest("hex"));
+  await resident.attached(user, project, "ses_native", { digest: first.digest, memories: first.memories, blockHash: first.blockHash });
+  const acknowledged = await f.memorySettings.residentState(f.userId, A, "ses_native");
+  assert.equal(acknowledged.blockHash, first.blockHash);
+  assert.deepEqual(acknowledged.memos.map(item => item.id), first.memories.map(item => item.id));
   assert.equal(await resident.forSession(user, project, "ses_native"), null, "held: nothing at the next step");
   // The card moved: handed again, with a block of its own.
   f.seed("project_facts/格式.md", "- 参考文献用 Vancouver。", { type: "project_facts", tags: [`project=${A}`] });

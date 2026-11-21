@@ -984,7 +984,7 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
   // (openListReadiness.test.mjs covers the probe that turns it on); `capsuleShare` is true because sharing is on unless turned off
   // (2026-10-23). `evimedSearch` is false because this composition configures no Evimed account login and no account API (merge of the Gitee
   // main, 2026-10-31: `EvimedSearchService.enabled`, the flag the sidebar's 医学检索 entry reads).
-  assert.deepEqual((await me(off)).features, { frontier: false, review: false, evimedSearch: false, knowledgePages: false, capsuleShare: true, agentMemoryApi: false, zoneSubscription: false, geo: false, vcr: false, memoryMap: true, openList: false });
+  assert.deepEqual((await me(off)).features, { frontier: false, review: false, evimedSearch: false, knowledgePages: false, capsuleShare: true, agentMemoryApi: false, zoneSubscription: false, geo: false, vcr: false, memoryRecallRecords: true, memoryMap: true, openList: false });
   assert.equal(off.app.frontierWorker, null, "a deployment that did not switch it on composes no worker");
   const offStatus = await status(off);
   assert.equal(offStatus.status, 404);
@@ -1007,6 +1007,7 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
   const mapOff = await composedApp(t, { memoryMapEnabled: false });
   assert.equal((await me(mapOff)).features.memoryMap, false, "the map's own switch hides the tab");
   const memoryOff = await composedApp(t, { memoryEnabled: false });
+  assert.equal((await me(memoryOff)).features.memoryRecallRecords, false);
   assert.equal((await me(memoryOff)).features.memoryMap, false, "the map follows the memory subsystem's switch");
   const agentMemoryOn = await composedApp(t, { agentMemoryApiEnabled: true });
   assert.equal((await me(agentMemoryOn)).features.agentMemoryApi, true, "the account's key panel follows the external API's switch");

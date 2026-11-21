@@ -35,7 +35,7 @@ export function mergeRecallReceipt(current, operations = [], turn = null) {
     receipt.operations.push({ ...fields, refs: [...refs] });
   }
   const searches = receipt.operations.filter(op => op.entry.endsWith('.search'));
-  const missing = (receipt.turn?.searchCalls ?? 0) > searches.filter(op => op.entry === 'mcp.search').length;
+  const missing = (receipt.turn?.searchCalls ?? 0) > searches.filter(op => ['mcp.search', 'capsule.search'].includes(op.entry)).length;
   const state = receipt.partial || missing ? 'incomplete' : !searches.length ? receipt.turn?.complete ? 'not_searched' : 'unknown'
     : searches.some(op => op.refs.length) ? 'hit'
     : searches.some(op => Object.values(op.coverage).includes('unavailable') || !Object.values(op.coverage).includes('empty')) ? 'incomplete' : 'empty';
@@ -47,7 +47,7 @@ export function recallTurn(run, sessions, complete) {
   const root = selected.sessions.find(s => s.sessionId === run.sessionId)?.transcript.messages ?? [];
   const last = root.at(-1);
   const text = last?.parts?.filter(part => part.type === 'text').map(part => part.text).join('\n');
-  const calls = root.flatMap(m => m.parts ?? []).filter(part => part.type === 'tool' && part.tool === 'mcp__openviking__search');
+  const calls = root.flatMap(m => m.parts ?? []).filter(part => part.type === 'tool' && ['mcp__openviking__search', 'evimed_capsule_recall'].includes(part.tool));
   return { complete: complete && selected.scope.available && !selected.scope.partial,
     questionHash: run.question ? recallDigest(run.question) : null,
     searchCalls: calls.length, answer: last?.role === 'assistant' && !last.interrupted && text ? { seq: last.seq, contentHash: recallDigest(text) } : null };

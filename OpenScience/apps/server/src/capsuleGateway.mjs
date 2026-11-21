@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { recallOperation } from './memoryRecallReceipt.mjs';
+import { recordRecallNote } from './nativeMemoryMetrics.mjs';
 import { readStatus, withReadStatus } from './memoryReadStatus.mjs';
 import { CAPSULE_FACT_KINDS, SOURCE_SCOPE_UNAVAILABLE_CONTEXT, identifierShapesIn } from "@evimed/domain";
 import { recordRecallTool } from "./memoryMetrics.mjs";
@@ -105,6 +108,7 @@ export function createNativeCapsuleSearch({ service, subscriptions = null, conte
  *     state: (userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null }>,
  *     paused?: (userId: string, projectId: string, sessionId: string | null) => Promise<{ learning: boolean, recall: boolean, trial: boolean }>,
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
+ *     recordDelivery?: (project: any, runId: string, operation: any) => Promise<unknown>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null,
  *   resident?: { forSession: (user: any, project: any, sessionId: string) => Promise<{ text: string, digest: string, blockHash?: string, memories: { id: string, kind?: string, scope?: string }[] } | null>,
  *     attached: (user: any, project: any, sessionId: string, receipt: { digest: string, blockHash?: string, memories: { id: string, kind?: string, scope?: string }[] }) => Promise<unknown> } | null,
@@ -224,8 +228,15 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
           throw new HttpError(400, "capsule_payload_invalid", "Invalid memory limit.");
         }
         const limit = body.limit === undefined ? defaultLimit : Math.min(maxLimit, Math.trunc(Number(body.limit)));
+        const receiptOnFinish = (items, coverage) => {
+          if (!sessions?.recordDelivery || running.length !== 1) return;
+          const operation = recallOperation({ id: randomUUID(), entry: 'capsule.search', query: body.query,
+            items: items.filter(item => item.id).map(item => ({ uri: 'capsule:' + item.id, text: item.content, source: 'capsule' })), coverage });
+          res.once('finish', () => { void sessions.recordDelivery(project, running[0].id, operation).catch(() => recordRecallNote('receipt_failed')); });
+        };
         if (trialConversation) {
           recordRecallTool("trial");
+          receiptOnFinish([], { receivedCapsules: readStatus('skipped', 'trial') });
           sendJson(res, 200, { items: [], mode: "trial", contextOnly: true, sources: { memory: 0, capsule: 0 },
             notice: "这是一段试用别人胶囊的对话：只读这个胶囊，不读用户自己的记忆。" });
           return;
@@ -252,6 +263,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
         // is not mistaken for a tool that failed. A recall the researcher paused already carries its own notice, and says so.
         const answer = !pause?.recall && found.items.length === 0 && !found.notice ? { ...found, notice: NOTHING_ABOVE_THE_FLOOR } : found;
         recordRecallTool(pause?.recall ? "paused" : answer.items.length ? "hit" : "empty", answer.items.length);
+        receiptOnFinish(recalled.items, recalled.searchStatus ?? { receivedCapsules: readStatus(recalled.items.length ? 'searched' : 'empty') });
         sendJson(res, 200, answer);
       } else if (shared) {
         sendJson(res,200,{entry:null,reviewRequired:false,takesEffect:false,contextOnly:true,status:"not_kept",

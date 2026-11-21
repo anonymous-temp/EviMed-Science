@@ -600,7 +600,7 @@ export class MemoryHistory {
     const candidates = diversity ? diverseHistoryCandidates(found) : found;
     status.candidates = candidates.length;
     if (found.readStatus) status.channels = found.readStatus;
-    let visited = 0;
+    let visited = 0, excerptChars = 0;
     const redact = this.secretRedaction ? await this.secrets.filterFor(user.id) : text => text;
     const hits = [], originals = new Map(), seenMessages = new Map();
     const hydrate = async candidate => {
@@ -689,6 +689,11 @@ export class MemoryHistory {
           if (!hit.messages.length) continue;
         }
         if (literalAnchors && !hit.messages.some(message => containsAnchor(message.text, literalAnchors))) continue;
+        if (wide && !compact) {
+          const chars = historySearchText([hit], { semanticSecrets: this.secretRedaction }).length + 2;
+          if (excerptChars + chars > 48_000) continue;
+          excerptChars += chars;
+        }
         hits.push(hit);
       }
     }
