@@ -531,6 +531,7 @@ test('GEO selection survives normal draft edits but clears on cancellation, expl
 });
 
 test('native Date display uses Shanghai by default, honours an explicit zone and leaves UTC storage alone', () => {
+  /** @type {{result?: {displayed: string, inherited: string, midnight: string, explicit: string, stored: string}}} */
   const sandbox = {};
   vm.runInNewContext(`globalThis.target = { Date, Math };
     (${installRuntimeUiPolyfills.toString()})(target);
@@ -543,6 +544,7 @@ test('native Date display uses Shanghai by default, honours an explicit zone and
       explicit: at.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }),
       stored: at.toISOString(),
     };`, sandbox);
+  assert.ok(sandbox.result);
   assert.equal(sandbox.result.displayed, '09:23');
   assert.equal(sandbox.result.explicit, '01:23');
   assert.equal(sandbox.result.inherited, '09:23');
