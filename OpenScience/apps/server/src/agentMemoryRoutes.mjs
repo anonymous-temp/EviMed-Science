@@ -1,3 +1,5 @@
+import { ingestConversation, recordWorkSignal } from './agentMemoryHost.mjs';
+import { shareForAgent } from './agentMemorySharing.mjs';
 import { rememberSource, rememberAdmission } from './agentMemoryRemember.mjs';
 import { contextForAgent } from './agentMemoryContext.mjs';
 import { agentMemoryAvailable, agentMemoryDisabled } from './agentMemoryAvailability.mjs';
@@ -66,7 +68,7 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
 export const AGENT_MEMORY_ENDPOINTS = Object.freeze([
   "POST /recall", "POST /note", "GET /records", "POST /episodes",
   "POST /forget", "GET /forgotten", "GET /context", "POST /remember",
-  "POST /observations", "GET /dashboard", "PUT /settings",
+  "POST /conversations", "POST /work-events", "POST /sharing", "POST /observations", "GET /dashboard", "PUT /settings",
   "PATCH /records/{id}", "POST /records/{id}/confirm", "POST /records/{id}/forget", "POST /records/{id}/restore", "POST /records/{id}/undo",
   "GET /methods/{id}", "POST /methods/{id}/retire", "POST /methods/{id}/restore", "POST /methods/{id}/rollback",
   "POST /notes/{id}/confirm", "POST /notes/{id}/reject",
@@ -106,7 +108,7 @@ function fields(body, allowed) {
 /**
  * @param {{
  *   config: any, apiKeys: any, store: any, memorySettings: any, capsules: any,
- *   learning?: any, observations?: any, nativeMemory?: any, admission?: any, openingContext?: any, historySearch?: ((input: any) => Promise<any[]>) | null,
+ *   workEvidence?: any, shareServices?: any, learning?: any, observations?: any, nativeMemory?: any, admission?: any, openingContext?: any, historySearch?: ((input: any) => Promise<any[]>) | null,
  *   deleteSubject?: ((ownerId: string, subjectAccountId: string) => Promise<number>) | null,
  *   audit?: ((event: string, status: string, details: Record<string, unknown>) => unknown) | null,
  * }} dependencies
@@ -114,7 +116,7 @@ function fields(body, allowed) {
  */
 export function createAgentMemoryRoutes({
   config, apiKeys, store, memorySettings, capsules, learning = null,
-  observations = null, nativeMemory = null, admission = null, openingContext = null, historySearch = null, deleteSubject = null, audit = null,
+  workEvidence = () => null, shareServices = null, observations = null, nativeMemory = null, admission = null, openingContext = null, historySearch = null, deleteSubject = null, audit = null,
 }) {
   return async function agentMemoryRoutes(req, res) {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -253,6 +255,34 @@ export function createAgentMemoryRoutes({
       }
       return { id, act: match[2] ?? "" };
     };
+
+    if (['conversations', 'work-events'].includes(action) && method === 'POST') {
+      const ingest = action === 'conversations';
+      requireScope(ingest ? 'memory.ingest' : 'learning.signal');
+      const input = fields(body, ingest ? ['projectId', 'sessionId', 'messages', 'attended'] :
+        ['projectId', 'conversationId', 'messageIndex', 'saidAt', 'text', 'methodId', 'recordId', 'digest']);
+      const user = await accountFor({ create: false });
+      if (!user) throw new HttpError(404, 'memory_not_found', 'No memory account.');
+      const project = await store.requireProject(user, (await projectOf(user, input.projectId)) ?? 'default');
+      const native = await nativeFor(user);
+      const evidence = workEvidence();
+      if (!native?.externalRememberEnabled || !admission || (!ingest && !evidence)) throw new HttpError(503, 'memory_engine_unavailable', 'External host service unavailable.');
+      const params = { user, project, identity, input, billing: { keyId: identity.keyId, ownerId: keyAccount.id } };
+      const data = ingest ? await ingestConversation({ native, admission }, params)
+        : await recordWorkSignal({ native, admission, learning, ...evidence }, params);
+      await reply(ingest ? 202 : 200, { data });
+      return true;
+    }
+
+    if (action === 'sharing' && method === 'POST') {
+      requireScope('memory.share');
+      if (identity.projectId || subject) throw new HttpError(403, 'agent_key_project_denied', 'Sharing requires the account owner.');
+      if (!shareServices) throw new HttpError(404, 'capsule_share_not_enabled', 'Capsule sharing is unavailable.');
+      const result = await shareForAgent(shareServices, keyAccount, body);
+      await trail(`sharing.${body.action}`, keyAccount);
+      await reply(200, { data: result });
+      return true;
+    }
 
     if (action === 'remember' && method === 'POST') {
       requireScope('memory.remember');
@@ -590,9 +620,11 @@ export function createAgentMemoryRoutes({
             && !identity.projectId && identity.scopes.includes('memory.manage'), requiredScopes: ['memory.manage'], path: '/forget',
             ...(identity.projectId ? { reason: 'withdrawal_requires_account_scope' } : {}) },
           forgottenList: { available: nativeMemory?.configured === true && Boolean(nativeMemory?.memoryContexts) && typeof nativeMemory?.forgotten === 'function' && identity.scopes.includes('memory.read'), requiredScopes: ['memory.read'], path: '/forgotten' },
-          conversationIngest: { available: false, requiredScopes: ['memory.ingest'], internalOnly: true, reason: 'external_conversation_history_authority_unavailable' },
-          workSignals: { available: false, requiredScopes: ['learning.signal'], internalOnly: true, reason: 'external_run_evidence_unproven' },
-          capsuleSharing: { available: false },
+          conversationIngest: { available: Boolean(nativeMemory?.externalRememberEnabled && admission && identity.scopes.includes('memory.ingest')),
+            requiredScopes: ['memory.ingest'], internalOnly: false, path: '/conversations' },
+          workSignals: { available: Boolean(workEvidence() && nativeMemory?.externalRememberEnabled && admission && identity.scopes.includes('learning.signal')),
+            requiredScopes: ['learning.signal'], internalOnly: false, path: '/work-events' },
+          capsuleSharing: { available: Boolean(shareServices && !identity.projectId && !subject && identity.scopes.includes('memory.share')), requiredScopes: ['memory.share'], path: '/sharing' },
           selectedCapsuleOnly: { available: false },
         },
         projectId: identity.projectId,

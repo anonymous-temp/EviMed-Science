@@ -1,3 +1,4 @@
+import { SHARE_ACTIONS } from './agentMemorySharing.mjs';
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { AGENT_KEY_SCOPES, AGENT_SUBJECT_PATTERN } from "./agentApiKeys.mjs";
 import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES } from "./agentMemoryRecall.mjs";
@@ -73,15 +74,6 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       ].join("\n"),
     },
     servers: [{ url: basePath }],
-    'x-unavailable-operations': {
-      workSignals: { available: false, requiredScopes: ['learning.signal'], internalOnly: true, proposedPaths: ['POST /work-events'],
-        reason: 'external_run_evidence_unproven',
-        description: 'Reserved, not served or mintable. The learning chain requires a complete canonical run transcript and delivered file inventory; a minimal external ledger row cannot prove them. Hosts must report only human actions, never model self-reports. Silence remains unknown.' },
-      conversationIngest: { available: false, requiredScopes: ['memory.ingest'], internalOnly: true,
-        proposedPaths: ['POST /conversations/{externalSessionId}/turns', 'POST /conversations/{externalSessionId}/commit'],
-        reason: 'external_conversation_history_authority_unavailable',
-        description: 'Reserved, not served or mintable. Original history currently requires a canonical kernel conversation and run-ledger source. Engine-only ingestion would bypass the required recall and source-deletion contract. Episodes remain candidates.' },
-    },
     components: {
       parameters: {
         Subject: {
@@ -590,6 +582,23 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
           responses: { 200: { description: "The note, retired." }, 404: errorResponse("No such proposed note."), 409: errorResponse("It changed since it was read."), ...common },
         },
       },
+      "/conversations": { post: { summary: "Submit one complete, attended external session for native extraction. Repost the identical batch to read its receipt.",
+        security: [{agentApiKey:['memory.ingest']}], requestBody: jsonBody({type:'object', additionalProperties:false, required:['sessionId','attended','messages'],
+          properties:{projectId:{type:'string'}, sessionId:{type:'string',maxLength:120}, attended:{const:true}, messages:{type:'array', minItems:1,maxItems:200,
+            items:{type:'object',additionalProperties:false,required:['role','text','saidAt'],properties:{role:{enum:['user','assistant']},text:{type:'string',maxLength:12000},saidAt:{type:'string',format:'date-time'}}}}}}),
+        responses:{202:{description:"Conversation ID, extraction state and known record IDs."}, ...common} } },
+      "/work-events": { post: { summary: "Judge a human follow-up from a completed host transcript against a current method or memory.",
+        security:[{agentApiKey:['learning.signal']}], requestBody:jsonBody({type:'object',additionalProperties:false,required:['conversationId','messageIndex','saidAt','text'],
+          oneOf:[{required:['methodId','digest']},{required:['recordId']}],properties:{projectId:{type:'string'},conversationId:{type:'string'},messageIndex:{type:'integer',minimum:0},
+            saidAt:{type:'string',format:'date-time'},text:{type:'string',maxLength:2000},recordId:{type:'string'},methodId:{type:'string'},digest:{type:'string'}}}),
+        responses:{200:{description:"Evidence verdict or reason the signal was not recorded."}, ...common} } },
+      "/sharing": { post: { summary: "Share a versioned capsule or receive an offered snapshot with the web sharing permissions.",
+        security: [{ agentApiKey: ["memory.share"] }],
+        requestBody: jsonBody({ type: 'object', required: ['action'], properties: { action: { enum: SHARE_ACTIONS },
+          capsuleId: {type:'string'}, deliveryId: {type:'string'}, snapshotId: {type:'string'}, linkId:{type:'string'}, token:{type:'string'},
+          expectedDigest:{type:'string'}, recipients:{type:'array'}, scopes:{type:'array'}, card:{type:'object'}, title:{type:'string'},
+          ttlDays:{type:'integer'}, maxUses:{type:'integer'}, excludeEntryIds:{type:'array'}, includePrivateEntries:{type:'array'}, reason:{type:'string'} } }),
+        responses: { 200: { description: "The web sharing receipt for this action." }, ...common } } },
       "/subject": {
         delete: {
           summary: "Forget one person entirely",

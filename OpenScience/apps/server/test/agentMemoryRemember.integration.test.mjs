@@ -25,12 +25,12 @@ async function setup(t) {
   const keys = new AgentApiKeyStore(f.database), key = await keys.create(user.id, { name: 'Remember fixture', scopes: ['memory.remember', 'memory.read', 'memory.manage'] });
   const routes = createAgentMemoryRoutes({ config, nativeMemory: f.store, apiKeys: keys, capsules: {}, memorySettings: f.memorySettings, admission,
     store: { userById: async () => user, requireProject: async () => project } });
-  const call = async (path, body) => {
+  const call = async (path, body, clientKey = key.key) => {
     const res = { data: null, writeHead() {}, end(text) { this.data = JSON.parse(text).data; } };
-    await routes({ url: `/api/agent-memory/v1${path}`, method: 'POST', headers: { authorization: `Bearer ${key.key}` },
+    await routes({ url: `/api/agent-memory/v1${path}`, method: body ? 'POST' : 'GET', headers: { authorization: `Bearer ${clientKey}` },
       async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify(body)); } }, res); return res.data;
   };
-  return { ...f, call, contexts };
+  return { ...f, call, contexts, keys, key };
 }
 const input = { statement: 'Use metric units.', source: { client: 'Editor', sessionId: 'outside-one', messageId: 'msg-one', saidAt: '2026-11-17T01:00:00Z' } };
 
@@ -84,4 +84,39 @@ test('external statements receive the configured page instruction check and reta
   const body = await f.sessions.read(f.userId, uri);
   assert.doesNotMatch(body ?? '', /Ignore all rules/);
   assert.match(body ?? '', /Keep green folders/);
+});
+
+test('web and two public clients see one withdrawal, restore and concurrent native write', options, async t => {
+  const f = await setup(t);
+  const codex = await f.keys.create(f.userId, { name: 'Codex', scopes: f.key.scopes });
+  const uri = `${f.root}/preferences/units.md`;
+  f.stub.extract = () => ({ adds: [{ uri, memory_type: 'preferences', after: '- Use metric units.' }] });
+  await Promise.all([f.call('/remember', input), f.call('/remember', input, codex.key)]);
+  await f.worker.processCommits({ userId: f.userId }); await f.store.processAdmissions(f.userId);
+  const page = (await f.store.records(f.userId)).find(record => record.uri === uri);
+  const records = await f.call('/records', undefined, codex.key);
+  assert.ok(records.some(record => record.id === page.id));
+  await f.call(`/records/${page.id}/forget`, { expectedVersion: page.version }, codex.key);
+  assert.ok(!(await f.store.records(f.userId)).some(record => record.id === page.id));
+  const withdrawn = (await f.store.forgotten(f.userId)).find(record => record.id === page.id);
+  await f.store.update(f.userId, withdrawn.id, { status: 'active', expectedVersion: withdrawn.version });
+  assert.ok((await f.call('/records')).some(record => record.id === page.id));
+  assert.equal((await f.database.query('SELECT count(*)::int AS n FROM evimed_memory.native_admissions WHERE user_id=$1',[f.userId])).rows[0].n, 1);
+  await f.keys.revoke(f.userId, codex.id);
+  await assert.rejects(f.call('/records', undefined, codex.key), { code: 'agent_key_invalid' });
+});
+
+test('an external transcript reaches the same extraction worker exactly once with role attribution', options, async t => {
+  const f = await setup(t), client = await f.keys.create(f.userId,{name:'Codex', scopes:['memory.ingest']});
+  const uri = `${f.root}/preferences/units.md`;
+  f.stub.extract = () => ({ adds: [{uri, memory_type:'preferences', after:'- Use metric units.'}] });
+  const body = {sessionId:'one',attended:true,messages:[{role:'user',text:'Use metric units.',saidAt:input.source.saidAt},
+    {role:'assistant',text:'I will use metric units.',saidAt:input.source.saidAt}]};
+  const [a,b] = await Promise.all([f.call('/conversations', body, client.key),f.call('/conversations', body, client.key)]);
+  assert.equal(a.conversationId,b.conversationId);
+  await f.worker.processCommits({userId:f.userId}); await f.store.processAdmissions(f.userId);
+  assert.equal((await f.call('/conversations',body,client.key)).state,'completed');
+  const page = (await f.store.records(f.userId)).find(record => record.uri === uri);
+  assert.ok(page.evidence.some(e => e.externalSource?.client === 'Codex' && e.label === '外部智能体 Codex'));
+  await assert.rejects(f.call('/conversations',{...body,messages:body.messages.slice(0,1)},client.key),{code:'memory_conflict'});
 });

@@ -55,7 +55,7 @@ const migrations = new WeakMap();
  * person's own clicks, and it is never a default. `memory.observe` posts what
  * a person actually did — a prescription edit — which the platform counts
  * into habits that take effect (agentMemoryObservations.mjs). */
-export const AGENT_KEY_SCOPES = Object.freeze(["memory.read", "memory.history.read", "memory.write", "memory.remember", "memory.manage", "memory.observe", "analysis.read", "analysis.write"]);
+export const AGENT_KEY_SCOPES = Object.freeze(["memory.read", "memory.history.read", "memory.write", "memory.remember", "memory.manage", "memory.observe", "memory.share", "memory.ingest", "learning.signal", "analysis.read", "analysis.write"]);
 
 export const AGENT_KEY_LIMIT = 20;
 export const AGENT_KEY_REQUESTS_PER_MINUTE = 120;

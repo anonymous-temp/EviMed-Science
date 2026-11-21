@@ -390,6 +390,7 @@ test("the archive carries the account's own feedback ledger", async () => {
 /** The migration modules, read as the text they are. */
 const migrationSources = [
   "controlPlaneDatabase.mjs",
+  "agentApiKeys.mjs",
   "productPersistence.mjs",
   "notificationPersistence.mjs",
   "evidenceZonePersistence.mjs",

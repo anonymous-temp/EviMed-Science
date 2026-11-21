@@ -253,6 +253,7 @@ const BODIES_PER_ACCOUNT = 400;
  */
 /** The sessions the platform itself opens to write a memory, and what the drawer says of what they wrote: 「从其他 AI 导入」 and 「你在两次对话里都这样做」. */
 export const PLATFORM_SESSION_SOURCES = Object.freeze([
+  { prefix: "dsh-external_", sourceType: "external", label: "外部智能体" },
   { prefix: "evimed-stated-", sourceType: "external", label: "来自外部助手" },
   { prefix: "evimed-import-", sourceType: "import", label: "从其他 AI 导入" },
   { prefix: "evimed-promote-", sourceType: "repetition", label: "你在两次对话里都这样做" },
@@ -267,7 +268,7 @@ export const PLATFORM_SESSION_SOURCES = Object.freeze([
 function sessionEvidence({ engineSession, archiveUri, observedAt, fingerprint }, projectId) {
   const session = String(engineSession ?? "");
   const conversationId = platformSessionOf(session);
-  if (conversationId) {
+  if (conversationId && !/^external_[a-f0-9]{64}$/.test(conversationId)) {
     return {
       sourceType: "conversation", sourceRef: `sessions/${conversationId}/commits/${String(archiveUri ?? "").split("/").at(-1) || "archive"}`,
       quote: "", observedAt: observedAt ?? null, weight: 1, fingerprint, conversationId, ...(projectId ? { projectId } : {}),
@@ -642,7 +643,7 @@ export class NativeMemoryStore {
       const source = external.get(item.archiveUri);
       if (!source) return [];
       const { archiveUri: _archive, ...evidence } = item;
-      return [{ ...evidence, observedAt: source.saidAt, externalSource: { client: source.client, sessionId: source.sessionId,
+      return [{ ...evidence, ...(source.operation === 'ingest' ? { label: `外部智能体 ${source.client}` } : {}), observedAt: source.saidAt, externalSource: { client: source.client, sessionId: source.sessionId,
         ...(source.messageId ? { messageId: source.messageId } : {}), saidAt: source.saidAt } }];
     });
     for (const record of records) record.evidenceCount = record.evidence.length;
@@ -2295,6 +2296,7 @@ export class NativeMemoryStore {
     let row = typeof this.overlay.claimAdmission === "function"
       ? await this.overlay.claimAdmission(userId, admission.candidateId, admission.revision) : admission;
     if (!row) return receipt((await this.overlay.admission(userId, admission.candidateId, admission.revision)) ?? admission);
+    const conversation = row.externalSource?.operation === 'ingest' && row.text ? JSON.parse(row.text) : null;
     const save = async (/** @type {any} */ patch) => {
       row = await this.overlay.updateAdmission(userId, admission.candidateId, admission.revision, patch);
       return row;
@@ -2306,7 +2308,7 @@ export class NativeMemoryStore {
       if (policy.allowed) {
         if (row.externalSource && row.text) {
           const refused = await removalRefusals({ userId, overlay: this.overlay, projectId: row.projectId, judge: this.rejectionJudge,
-            candidates: memoryLines(row.text).map(text => ({ text, sources: [] })) });
+            candidates: (conversation ? conversation.flatMap(m => memoryLines(m.parts[0].text)) : memoryLines(row.text)).map(text => ({ text, sources: [] })) });
           if (refused.size) { await save({ state: 'cancelled', error: 'rejected_line', release: true }); return false; }
         }
         return true;
@@ -2332,35 +2334,50 @@ export class NativeMemoryStore {
             || !parsed.rest && parsed.userRoot === this.sessions.userRoot(userId) && parsed.session === row.engineSession))?.archiveUri;
           if (!archive) { await save({ state: "uncertain", error: "commit_archive_not_visible", release: true }); return receipt(row); }
           const commit = await this.overlay.recordCommit({ userId, archiveUri: archive, engineSession: row.engineSession, projectId: row.projectId, origin: row.externalSource ? "page" : "tool",
-            ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt, pendingText: row.text } : {}) });
+            ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt, pendingText: conversation ? null : row.text } : {}) });
           await save({ archiveUri: archive, taskId: commit.taskId, state: "pending" });
         } else {
           if (!status || !Number.isFinite(Number(status.message_count))) throw new HttpError(503, "memory_engine_unavailable", "The session state could not be inspected.");
           let messageCount = Number(status.message_count);
-          const projectLine = row.externalSource?.projectLine;
-          const expectedCount = projectLine ? 2 : 1;
-          if (projectLine && messageCount === 0) {
-            if (['context_submitting', 'message_submitting', 'commit_submitting'].includes(row.phase)) {
-              await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true }); return receipt(row);
+          if (conversation) {
+            if (messageCount > conversation.length || !Number.isInteger(messageCount)) throw new HttpError(409, 'memory_conflict', 'Unexpected external transcript length.');
+            while (messageCount < conversation.length) {
+              const phase = `turn:${messageCount}`;
+              if (row.phase === phase || row.phase === 'commit_submitting') {
+                await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true }); return receipt(row);
+              }
+              const previous = row.phase;
+              await save({ state: 'submitting', phase });
+              if (!await authorized(previous)) return receipt(row);
+              await this.sessions.addMessage(userId, row.engineSession, conversation[messageCount]);
+              messageCount++;
             }
-            const priorPhase = row.phase;
-            await save({ state: 'submitting', phase: 'context_submitting' });
-            if (!await authorized(priorPhase)) return receipt(row);
-            await this.sessions.addMessage(userId, row.engineSession, { role: 'assistant', parts: [{ type: 'text', text: projectLine }] });
-            messageCount++;
-          }
-          if (messageCount === expectedCount - 1) {
-            // A timed-out append may still finish; a short read cannot authorize resending it.
-            if (['message_submitting', 'commit_submitting'].includes(row.phase)) {
-              await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true }); return receipt(row);
+          } else {
+            const projectLine = row.externalSource?.projectLine;
+            const expectedCount = projectLine ? 2 : 1;
+            if (projectLine && messageCount === 0) {
+              if (['context_submitting', 'message_submitting', 'commit_submitting'].includes(row.phase)) {
+                await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true }); return receipt(row);
+              }
+              const priorPhase = row.phase;
+              await save({ state: 'submitting', phase: 'context_submitting' });
+              if (!await authorized(priorPhase)) return receipt(row);
+              await this.sessions.addMessage(userId, row.engineSession, { role: 'assistant', parts: [{ type: 'text', text: projectLine }] });
+              messageCount++;
             }
-            const priorPhase = row.phase;
-            await save({ state: 'submitting', phase: 'message_submitting', error: '' });
-            if (!await authorized(priorPhase)) return receipt(row);
-            await this.sessions.addMessage(userId, row.engineSession, { role: 'user', created_at: row.externalSource?.saidAt ?? row.createdAt,
-              parts: [{ type: 'text', text: row.externalSource ? `请记住：${row.text}` : maskIdentifiers(row.text) }] });
-          } else if (messageCount !== expectedCount) {
-            await save({ state: 'uncertain', error: 'unexpected_session_messages', release: true }); return receipt(row);
+            if (messageCount === expectedCount - 1) {
+              // A timed-out append may still finish; a short read cannot authorize resending it.
+              if (['message_submitting', 'commit_submitting'].includes(row.phase)) {
+                await save({ state: 'uncertain', error: 'submission_outcome_unknown', release: true }); return receipt(row);
+              }
+              const priorPhase = row.phase;
+              await save({ state: 'submitting', phase: 'message_submitting', error: '' });
+              if (!await authorized(priorPhase)) return receipt(row);
+              await this.sessions.addMessage(userId, row.engineSession, { role: 'user', created_at: row.externalSource?.saidAt ?? row.createdAt,
+                parts: [{ type: 'text', text: row.externalSource ? `请记住：${row.text}` : maskIdentifiers(row.text) }] });
+            } else if (messageCount !== expectedCount) {
+              await save({ state: 'uncertain', error: 'unexpected_session_messages', release: true }); return receipt(row);
+            }
           }
           const priorPhase = row.phase;
           await save({ state: "submitting", phase: "commit_submitting" });
@@ -2372,7 +2389,7 @@ export class NativeMemoryStore {
             throw new HttpError(403, 'memory_scope_denied', 'The archive does not belong to the submitted statement.');
           }
           const commit = await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: row.engineSession,
-            projectId: row.projectId, ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt } : {}), origin: row.externalSource ? "page" : "tool", pendingText: row.externalSource ? row.text : null, taskId: result.task_id ?? null });
+            projectId: row.projectId, ...(row.externalSource ? { projectCreatedAt: row.externalSource.projectCreatedAt } : {}), origin: row.externalSource ? "page" : "tool", pendingText: row.externalSource && !conversation ? row.text : null, taskId: result.task_id ?? null });
           await save({ state: "pending", archiveUri: commit.archiveUri, taskId: commit.taskId, error: "" });
           this.#touch(userId);
         }
@@ -2392,7 +2409,7 @@ export class NativeMemoryStore {
       return receipt(row);
     } catch (error) {
       if (/** @type {any} */ (error)?.code === "memory_admission_gone") throw error;
-      await save({ state: ["context_submitting","message_submitting","commit_submitting"].includes(row.phase) ? "uncertain" : "failed",
+      await save({ state: (row.phase.startsWith("turn:") || ["context_submitting","message_submitting","commit_submitting"].includes(row.phase)) ? "uncertain" : "failed",
         error: String(/** @type {any} */ (error)?.code ?? "memory_admission_failed").slice(0,200), release: true });
       return receipt(row);
     }

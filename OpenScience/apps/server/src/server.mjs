@@ -3597,6 +3597,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The external agent-memory API (`/api/agent-memory/v1`): reads and acts on an account's memory through the store the memory page
   // uses, and stages an episode as a pending candidate that the owner confirms (`agentMemoryRoutes.mjs`).
   const agentMemoryRoutes = createAgentMemoryRoutes({
+    workEvidence: () => learningEvidence?.judge?.available && feedbackEvents ? { judge: learningEvidence.judge, feedback: feedbackEvents } : null,
+    shareServices: capsuleSharing ? { service: capsuleService, sharing: capsuleSharing, transfers: capsuleTransferService, links: capsuleShareLinks } : null,
     openingContext: { resident: residentProfiles, opening: input => /** @type {any} */ (memoryGatewayHandler).opening(input), get sourceDeletion() { return sourceDeletion; } },
     admission: { admit: input => memoryAdmission.admit(input) },
     config, apiKeys: agentApiKeys, store, memorySettings, capsules: capsuleService,
@@ -5243,7 +5245,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   if (feedbackEvents && productDocuments) feedbackEvents.memoryForgetReader = productDocuments.memoryForgetReader;
   nativeMemoryOverlay.externalAdmissionPolicy = async (userId, row) => {
-    if (row.externalSource?.operation !== 'remember') return { allowed: false, state: 'cancelled', reason: 'external_operation_unknown' };
+    if (!['ingest', 'remember'].includes(row.externalSource?.operation)) return { allowed: false, state: 'cancelled', reason: 'external_operation_unknown' };
     try {
       const user = await store.userById(userId);
       if (!user) return { allowed: false, state: 'cancelled', reason: 'account_unavailable' };
