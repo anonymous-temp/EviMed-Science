@@ -101,3 +101,30 @@ test('a work signal is bound to an admitted human turn and account resource and 
   deps.native.history.ledger.rejected = async()=>true;
   await assert.rejects(recordWorkSignal(deps,args),{status:403});
 });
+
+test('feedback readers and export require the live host message, source and target version', async () => {
+  const { visibleWorkSignal, hostDigest } = await import('../src/agentMemoryHost.mjs');
+  const { createMemoryForgetReader } = await import('../src/memoryForgetPropagation.mjs');
+  const runId = 'external_' + 'a'.repeat(64), root = 'viking://user/account';
+  const engineSession = 'dsh-' + runId, archiveUri = root + '/sessions/' + engineSession + '/history/archive_001';
+  const text = 'Keep short captions.', at = '2026-11-12T00:00:00.000Z', inputDigest = hostDigest(['user',text,at]);
+  const live = { deleted:false, rejected:false, value:'A table', message:text };
+  const event = { trigger:'learning-evidence', runId, projectId:'p', detail:{sessionId:runId, inputDigest,
+    externalTarget:{ id:'nm_' + '1'.repeat(24), digest:hostDigest('A table') }, quote:'short captions'} };
+  const context = { kind:'owned', projectCreatedAt:'epoch', userRoot:root, sessions:{read:async () =>
+    JSON.stringify({role:'user', parts:[{type:'text',text:live.message}], created_at:at})} };
+  const native = {
+    overlay:{admission:async()=>({projectId:'p',engineSession,archiveUri,state:'completed',
+      externalSource:{operation:'ingest',projectCreatedAt:'epoch',messages:[inputDigest]}})},
+    sourceDeletion:{ledger:{get:async()=>live.deleted}}, memoryContexts:{forProject:async()=>context,forUri:async()=>context},
+    getRecord:async()=>({status:'active',scope:'user',value:live.value}),
+    history:{ledger:{rejected:async(_context,texts,archive)=>archive !== archiveUri || !texts.includes(text) || live.rejected}},
+  };
+  const visible = createMemoryForgetReader({externalSignalVisible:(user,event)=>visibleWorkSignal({native},user,event)});
+  assert.equal(await visible('owner',event),true);
+  for (const [key,value] of [['deleted',true],['rejected',true],['value','A different target'],['message','Another message']]) {
+    const saved = live[key]; live[key] = value;
+    assert.equal(await visible('owner',event),false,key);
+    live[key] = saved;
+  }
+});

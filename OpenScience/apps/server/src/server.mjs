@@ -232,6 +232,7 @@ import { DataAnalysisService, createDataAnalysisSession, assertNotDataAnalysisPr
 import { createDataAnalysisDispatchLock } from "./dataAnalysisAdmission.mjs";
 import { removeAnalysisSnapshots } from "./dataAnalysisArtifacts.mjs";
 import { createDataAnalysisRoutes } from "./dataAnalysisRoutes.mjs";
+import { visibleWorkSignal } from './agentMemoryHost.mjs';
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
 import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
 import { deleteSubjectAccounts, migrateAgentApiKeys } from "./agentApiKeys.mjs";
@@ -5320,6 +5321,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           'SELECT created_at::text AS stamp FROM evimed_control.projects WHERE user_id=$1 AND id=$2', [userId, projectId])).rows[0]?.stamp : null;
         return { ...owned, projectId, projectCreatedAt: stamp ?? null };
       },
+      externalSignalVisible: (userId, event) => visibleWorkSignal({ native:nativeMemory, learning:learningService }, userId, event),
       hasWithdrawals: memoryContext => historyLedger.hasWithdrawals(memoryContext),
       rejected: (memoryContext, texts) => historyLedger.rejected(memoryContext, texts),
       sourcesRejected: (memoryContext, refs) => historyLedger.derivedSourcesRejected(memoryContext, refs),
@@ -5474,6 +5476,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds, { userRoot: nativeRoot,cleanedRevisionId:row.cleanedRevisionId,projectCreatedAt:row.projectCreatedAt });
         }
       },{exclusive:true});
+      if (row.frozen.kind === 'host-admission') {
+        await productDatabase.query(`DELETE FROM evimed_product.feedback_events WHERE user_id=$1 AND project_id=$2
+          AND run_id=$3 AND trigger_kind='learning-evidence' AND detail ? 'externalTarget'`, [project.userId, project.id, row.rootSessionId]);
+      }
       const removedRuns = await agentRuns.removeConversationSource(project, row.sessionIds);
       for (const runId of removedRuns) preStopTranscripts.take(runId);
     },

@@ -74,6 +74,7 @@ export async function forgetAuthorityView(loadViews, loadOwned, bound = null) {
  * @template Context
  * @param {{
  *   context: (userId:string,projectId:string|null,value:unknown) => Promise<Context|null>,
+ *   externalSignalVisible?: (userId:string,event:any) => Promise<boolean>,
  *   rejected: (context:Context,texts:string[]) => Promise<boolean>,
  *   hasWithdrawals?: (context:Context) => Promise<boolean>,
  *   sourcesRejected: (context:Context,refs:SourceReferences) => Promise<boolean>,
@@ -94,6 +95,9 @@ export function createMemoryForgetReader(dependencies) {
     const check = async (candidate, scope, depth, inherited) => {
       if (depth > 16) return false;
       const row = forgetRecord(candidate), payload = forgetRecord(row.payload ?? candidate);
+      if (row.trigger === 'learning-evidence' && forgetRecord(row.detail).externalTarget) {
+        return dependencies.externalSignalVisible ? dependencies.externalSignalVisible(userId, row) : false;
+      }
       const provenance = forgetRecord(payload.provenance);
       const namedProject = provenance.sourceProjectId ?? payload.projectId ?? row.projectId ?? scope;
       const sourceProject = typeof namedProject === 'string' ? namedProject : null;
