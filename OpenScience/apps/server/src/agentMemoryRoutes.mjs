@@ -1,3 +1,4 @@
+import { readStatus, withReadStatus } from './memoryReadStatus.mjs';
 import { withMemoryPayer } from './agentMemoryBilling.mjs';
 import { ingestConversation, recordWorkSignal } from './agentMemoryHost.mjs';
 import { shareForAgent, sharingActions } from './agentMemorySharing.mjs';
@@ -420,8 +421,9 @@ export function createAgentMemoryRoutes({
           let timer;
           const history = user && project ? await Promise.race([
             historySearch({ user, project, query, accountScope: identity.projectId == null && input.projectId == null, limit: Math.min(20, Math.max(1, Math.trunc(Number(input.limit)) || 5)) }),
-            /** @type {Promise<any[]>} */ (new Promise(resolve => { timer = setTimeout(() => resolve([]), Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4000)); })),
-          ]).finally(() => clearTimeout(timer)) : [];
+            /** @type {Promise<any[]>} */ (new Promise(resolve => { timer = setTimeout(() => resolve(withReadStatus([], readStatus('unavailable', 'timeout'))), Math.max(250, Number(config.memoryGatewayTimeoutMs) || 4000)); })),
+          ]).finally(() => clearTimeout(timer)) : withReadStatus([], readStatus('skipped', 'no_account'));
+          result.searchStatus.earlierConversations = /** @type {any} */ (history).readStatus ?? readStatus(history.length ? 'searched' : 'empty');
           // Only the explicit diagnostic asks for the registered chunk and permission proof.
           const data = historyProof ? { ...result, history, historyAccess: {
             ownerHash: user ? createHash('sha256').update(user.id).digest('hex') : null,
