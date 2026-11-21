@@ -157,8 +157,9 @@ test('profile H1 is a visible editable row; forgetting the title preserves neigh
 });
 
 test('a profile H1 and its exact name bullet are one visible fact and forget and restore together', async () => {
-  for (const target of ['title', 'bullet']) {
+  for (const target of ['title', 'bullet', 'conversation']) {
     const { files, store } = engine({ count: 0, delay: 0 });
+    store.profileNameDedupeEnabled = true;
     const uri = `${ROOT}/profile.md`, rejected = [], revisions = [];
     const body = '# 林舟\n- 姓名：林舟 (as of 2026-11-17)\n- 喜欢游泳 (as of 2026-11-17)';
     store.overlay.addRevision = async row => { const revision = { ...row, id: `r${revisions.length}`, changedAt: '2026-11-17' }; revisions.push(revision); return revision; };
@@ -172,8 +173,9 @@ test('a profile H1 and its exact name bullet are one visible fact and forget and
     assert.deepEqual(records.map(row => row.value).sort(), ['喜欢游泳', '林舟'].sort());
     const id = target === 'title' ? records.find(row => row.value === '林舟').id
       : `${nativeFileId(uri)}_${lineFingerprint('姓名：林舟').slice(0, 12)}`;
-    const title = records.find(row => row.value === '林舟');
-    await store.remove('u1', id, { keepText: true });
+    if (target === 'conversation') {
+      await store.forgetLines('u1', (await store.files('u1'))[0], ['姓名：林舟']);
+    } else await store.remove('u1', id, { keepText: true });
     assert.equal(files.get(uri).body, '- 喜欢游泳 (as of 2026-11-17)');
     assert.ok(rejected.includes('林舟')); assert.ok(rejected.some(row => row.startsWith('姓名：林舟')));
     const forgotten = await store.forgotten('u1');
@@ -181,7 +183,19 @@ test('a profile H1 and its exact name bullet are one visible fact and forget and
     await store.update('u1', forgotten[0].id, { status: 'active', expectedVersion: forgotten[0].version });
     assert.equal(files.get(uri).body, body);
     assert.equal((await store.records('u1')).filter(row => row.value === '林舟').length, 1);
-    assert.ok(title);
+    assert.ok(revisions[0].undoneAt);
+  }
+});
+
+test('duplicate profile names are opt-in and ambiguous or structural titles keep independent rows', async () => {
+  const { store, files } = engine({ count: 0, delay: 0 }), uri = `${ROOT}/profile.md`;
+  files.set(uri, { body: '# 林舟\n- 姓名林舟\n- 昵称：小舟', modTime: '1' });
+  assert.deepEqual((await store.records('u1')).map(row => row.value), ['林舟', '姓名林舟', '昵称：小舟']);
+  store.profileNameDedupeEnabled = true;
+  assert.deepEqual((await store.records('u1')).map(row => row.value), ['林舟', '昵称：小舟']);
+  for (const title of ['# Profile', '# 林舟\n# 林川']) {
+    files.set(uri, { body: `${title}\n- 姓名林舟`, modTime: title });
+    assert.ok((await store.records('u1')).some(row => row.value === '姓名林舟'));
   }
 });
 

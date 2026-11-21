@@ -533,11 +533,12 @@ export class NativeMemoryWorker {
   async processCommits({ userId = null, limit = 50 } = {}) {
     let settled = 0;
     for (const commit of await this.overlay.openCommits({ userId, limit, now: this.commitClock ? this.commitClock() : null })) {
+      const lease = { exclusive: this.config.memoryProfileNameDedupeEnabled === true };
       try {
         if (commit.extraction.engineDeferred) {
-          if (this.engineDeferred) settled += await withNativeMemoryWrite(this.overlay.database, commit.userId, () => this.engineDeferred.process(commit)) ? 1 : 0;
-        } else if (commit.state === "pending") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#settle(commit)) ? 1 : 0;
-        else if (commit.state === "failed") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#replay(commit)) ? 1 : 0;
+          if (this.engineDeferred) settled += await withNativeMemoryWrite(this.overlay.database, commit.userId, () => this.engineDeferred.process(commit), lease) ? 1 : 0;
+        } else if (commit.state === "pending") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#settle(commit), lease) ? 1 : 0;
+        else if (commit.state === "failed") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#replay(commit), lease) ? 1 : 0;
       } catch (error) {
         this.report(`native memory commit: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
       }
@@ -1182,16 +1183,6 @@ export class NativeMemoryWorker {
     const sessions = memoryContext.sessions;
     let current = await sessions.read(userId, uri);
     if (current === null) return null;
-    if (type === 'profile') {
-      const deduplicated = withoutProfileNameDuplicates(current);
-      if (deduplicated !== current) {
-        await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.replace(userId, uri, deduplicated));
-        await this.overlay.addRevision({ userId, uri, memoryType: type, change: 'updated', actor: 'platform',
-          reason: 'duplicate profile name', before: current, after: deduplicated, projectId });
-        current = deduplicated;
-      }
-    }
-    // The checks below add no model call and no semantic keyword filter. The exact name duplication above is the only text cleanup.
     // Count fresh writes, not replayed settlement receipts. Sensitive is sticky until the person changes it.
     if (type === 'notes' && this.config.memoryTemplatesDirectory === 'memory-templates-extraction-v2') {
       const labels = checkMemoryNoteLabels(current);
@@ -1285,6 +1276,15 @@ export class NativeMemoryWorker {
         }
         await this.overlay.removeFile(userId, uri);
         return null;
+      }
+    }
+    if (this.config.memoryProfileNameDedupeEnabled === true && type === 'profile') {
+      const deduplicated = withoutProfileNameDuplicates(body);
+      if (deduplicated !== body) {
+        await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.replace(userId, uri, deduplicated));
+        await this.overlay.addRevision({ userId, uri, memoryType: type, change: 'updated', actor: 'platform',
+          reason: 'duplicate profile name', before: body, after: deduplicated, projectId });
+        body = deduplicated;
       }
     }
     if (filenameVariants.some(text => matches.has(lineFingerprint(text)))) {

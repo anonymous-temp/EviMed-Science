@@ -246,18 +246,6 @@ test("remember from the page goes through the engine as a conversation, shows as
   assert.ok(await sessions.read(userId, `${pending.pending.id}/messages.jsonl`) !== null);
 });
 
-test('the worker removes an extracted name bullet that exactly repeats the real profile H1', options, async t => {
-  const { userId, store, worker, sessions, root, commitConversation } = await fixture(t, {
-    extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/profile.md`, memory_type: 'profile',
-      after: '# 林舟\n- 姓名：林舟 (as of 2026-11-21)\n- 喜欢游泳 (as of 2026-11-21)' }] }),
-  });
-  await commitConversation('duplicate-profile-name', [{ role: 'user', text: '我叫林舟，喜欢游泳。' }]);
-  await worker.processCommits({ userId });
-  const uri = `${root}/profile.md`;
-  assert.equal(await sessions.read(userId, uri), '# 林舟\n- 喜欢游泳 (as of 2026-11-21)');
-  assert.deepEqual((await store.records(userId)).map(row => row.value).sort(), ['林舟', '喜欢游泳'].sort());
-});
-
 test('a judged cross-file preference update keeps only the newer value on the real worker path', options, async t => {
   const f = await fixture(t), { userId, store, overlay, sessions } = f;
   Object.assign(store, { preferenceReconcileEnabled: true,
