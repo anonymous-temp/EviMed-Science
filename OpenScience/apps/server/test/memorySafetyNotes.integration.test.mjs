@@ -194,6 +194,11 @@ for (const deferred of [false, true]) test('a targeted withdrawal retracts extra
   const resident = createLabResidentProfiles({ config: f.config, memorySettings: f.memorySettings, nativeMemory: f.store });
   for (const repeat of [false, true]) {
     if (repeat) {
+      // A delayed extraction claims the old words again, with no new user assertion.
+      f.stub.extract = () => ({ updates: [{ uri: engineUri, memory_type: 'safety_notes',
+        before: '# Owner\n- ' + fresh, after: '# Owner\n- ' + fresh + '\n- ' + statement }] });
+      await f.commitConversation('late-safety', [{ role: 'user', text: 'Please keep my new work schedule.' }], { projectId: 'first' });
+      await f.worker.processCommits({ userId: f.userId });
       await f.database.query("UPDATE evimed_memory.native_accounts SET safety_scan_at=clock_timestamp()-interval '301 seconds' WHERE user_id=$1", [f.userId]);
       await f.worker.migrateSafety(f.userId);
     }
