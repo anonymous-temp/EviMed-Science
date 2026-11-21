@@ -71,6 +71,19 @@ def parse_scores(text: str) -> dict | None:
             "issues": [str(i)[:200] for i in data.get("issues", [])][:8] if isinstance(data.get("issues"), list) else [], "rationale": str(data.get("rationale", ""))[:500]}
 
 
+def record_usage(data: dict, model: str) -> None:
+    """Optional measurement only: retain provider usage and ids, never a prompt, response text, header or key."""
+    log = os.environ.get("EVAL_JUDGE_USAGE_LOG")
+    if not log:
+        return
+    try:
+        with Path(log).open("a") as handle:
+            handle.write(json.dumps({"id": data.get("id") or f"judge-{time.time_ns()}", "model": model,
+                                     "resolvedModel": data.get("model"), "usage": data.get("usage") or {}}) + "\n")
+    except OSError:
+        pass  # Measurement cannot change a judgement or cause a second paid request.
+
+
 def chat(system: str, user: str, key: str, model: str, base: str = BASE_URL, attempts: int = 3) -> str:
     body = json.dumps({"model": model, "temperature": 0, "response_format": {"type": "json_object"},
                        **({"enable_thinking": False} if model.startswith("qwen") else {}),
@@ -80,7 +93,9 @@ def chat(system: str, user: str, key: str, model: str, base: str = BASE_URL, att
         request = urllib.request.Request(base.rstrip("/") + "/chat/completions", data=body, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(request, timeout=240) as response:
-                return json.loads(response.read())["choices"][0]["message"]["content"]
+                data = json.loads(response.read())
+                record_usage(data, model)
+                return data["choices"][0]["message"]["content"]
         except Exception as error:  # never echo the request: it carries the key in a header only, but errors may quote URLs
             last = type(error).__name__
             time.sleep(3 * (attempt + 1))
