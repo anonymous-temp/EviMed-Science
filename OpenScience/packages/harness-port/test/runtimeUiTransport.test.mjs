@@ -533,7 +533,7 @@ test('GEO selection survives normal draft edits but clears on cancellation, expl
 test('native Date display uses Shanghai by default, honours an explicit zone and leaves UTC storage alone', () => {
   const sandbox = {};
   vm.runInNewContext(`globalThis.target = { Date, Math };
-    (${installRuntimeUiPolyfills.toString()})(target, 'Asia/Shanghai');
+    (${installRuntimeUiPolyfills.toString()})(target);
     (${installRuntimeUiPolyfills.toString()})(target, 'Asia/Shanghai');
     const at = new target.Date('2026-11-21T01:23:00.000Z');
     globalThis.result = {

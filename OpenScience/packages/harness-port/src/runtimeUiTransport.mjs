@@ -455,7 +455,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
  * @param {any} target Browser global, injectable for the contract test.
  * @param {string} [timeZone] Display zone shared with the hosted pages.
  */
-export function installRuntimeUiPolyfills(target = globalThis, timeZone) {
+export function installRuntimeUiPolyfills(target = globalThis, timeZone = 'Asia/Shanghai') {
   const polyfill = 'if(typeof Math.sumPrecise!=="function"){Object.defineProperty(Math,"sumPrecise",{configurable:true,writable:true,value:function(values){let sum=0,c=0;for(const x of values){const y=Number(x)-c,t=sum+y;c=(t-sum)-y;sum=t}return sum}})}';
   if (typeof target.Math?.sumPrecise !== 'function') {
     Object.defineProperty(target.Math, 'sumPrecise', { configurable: true, writable: true, value: function sumPrecise(/** @type {Iterable<any>} */ values) {
