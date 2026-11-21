@@ -120,7 +120,7 @@ test('feedback readers and export require the live host message, source and targ
     getRecord:async()=>({status:'active',scope:'user',value:live.value}),
     history:{ledger:{rejected:async(_context,texts,archive)=>archive !== archiveUri || !texts.includes(text) || live.rejected}},
   };
-  const visible = createMemoryForgetReader({externalSignalVisible:(user,event)=>visibleWorkSignal({native},user,event)});
+  const visible = createMemoryForgetReader({externalSignalVisible:(user,row)=>visibleWorkSignal({native},user,row)});
   assert.equal(await visible('owner',event),true);
   for (const [key,value] of [['deleted',true],['rejected',true],['value','A different target'],['message','Another message']]) {
     const saved = live[key]; live[key] = value;
