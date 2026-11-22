@@ -42,23 +42,28 @@ export function bindStatementSources(content, candidates, messages) {
     // Syntactically marked material alone cannot attest a first-person statement.
     if (role === 'user' && row.kind !== 'pasted_material' && !independentQuote(m, row.quote)) continue;
     let adoption = 'unknown';
+    let responseLocator;
     if (role === 'assistant') {
       if (row.adoption === 'not_stated') adoption = 'not_stated';
       if (['adopted','rejected'].includes(row.adoption)) {
         const response = messages[row.response];
         if (Number.isInteger(row.response) && row.response > row.message && response?.role === 'user'
           && typeof row.responseQuote === 'string' && row.responseQuote.trim() && response.text.includes(row.responseQuote)
-          && independentQuote(response, row.responseQuote)) adoption = row.adoption;
+          && independentQuote(response, row.responseQuote)) {
+          adoption = row.adoption;
+          responseLocator = { message: row.response, quoteStart: response.text.indexOf(row.responseQuote), quoteLength: row.responseQuote.length };
+        }
       }
     }
     const { text } = candidates[row.line];
     const binding = row.presentationMatch === true && row.kind === 'user_statement' && row.subject === 'self'
       && row.conditions === 'preserved' ? presentationBinding(messages, row.message) : null;
-    const locator = { message: row.message, quoteStart: m.text.indexOf(row.quote), quoteLength: row.quote.length, ...(binding || row.presentationMatch === false ? { presentation: binding ?? false } : {}) };
-    // This is an offset in the admitted archive projection, never a public link.
-    if (adoption === 'adopted' || adoption === 'rejected') {
-      locator.response = { message: row.response, quoteStart: messages[row.response].text.indexOf(row.responseQuote), quoteLength: row.responseQuote.length };
-    }
+    // Offsets refer to the admitted archive projection.
+    const locator = {
+      message: row.message, quoteStart: m.text.indexOf(row.quote), quoteLength: row.quote.length,
+      ...(binding || row.presentationMatch === false ? { presentation: binding ?? false } : {}),
+      ...(responseLocator ? { response: responseLocator } : {}),
+    };
     // Persist positions only. Recover names strictly from the visible, digest-bound record.
     const layout = Array.isArray(row.layoutFields) ? row.layoutFields.slice(0, 20).flatMap(name => {
       if (typeof name !== 'string' || !name.trim() || name.length > 60) return [];

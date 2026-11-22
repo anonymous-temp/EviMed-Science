@@ -48,7 +48,8 @@ test('both protocols preserve tools, thinking and image bytes, and attach a chec
 
 test('a confirmed assertion needs its own source and preserved conditions; acceptance needs a later user quote', () => {
   const messages = [{role:'user',content:'I climbed one step only with assistance.'},
-    {role:'assistant',content:'I suggest another session.'},{role:'user',content:'Yes, I accept that session.'}].map(m => instructionSourceMessage(m));
+    {role:'assistant',content:'I suggest another session.'},{role:'user',content:'Yes, I accept that session.'},
+    {role:'user',content:'On reflection, I decline that session.'}].map(m => instructionSourceMessage(m));
   const bind = (row, text) => {
     const receipts = bindStatementSources(JSON.stringify({rows:[{line:0,...row}]}),[{text}],messages);
     return statementSource(text,{statementSource:receipts.get(0)});
@@ -59,6 +60,12 @@ test('a confirmed assertion needs its own source and preserved conditions; accep
   assert.equal(bind({...assertion,conditions:'missing'},'I can climb stairs.').personalFact,false);
   const advice = {kind:'assistant_statement',message:1,quote:messages[1].text,subject:'self',conditions:'preserved',adoption:'adopted',response:2,responseQuote:messages[2].text};
   assert.equal(bind(advice,messages[1].text).adoption,'adopted');
+  assert.deepEqual(bind(advice,messages[1].text).locator.response,
+    {message:2,quoteStart:0,quoteLength:messages[2].text.length});
+  const decline = bind({...advice,adoption:'rejected',response:3,responseQuote:'I decline'},messages[1].text);
+  assert.equal(decline.adoption,'rejected');
+  assert.deepEqual(decline.locator.response,{message:3,quoteStart:'On reflection, '.length,quoteLength:'I decline'.length});
+  assert.equal(Object.hasOwn(bind({...advice,response:1},messages[1].text).locator,'response'),false);
   assert.equal(bind({...advice,response:1},messages[1].text).adoption,'unknown');
   assert.equal(bind({...advice,adoption:'not_stated'},messages[1].text).personalFact,false);
   assert.equal(bind({...advice,kind:'user_statement'},messages[1].text),null);
