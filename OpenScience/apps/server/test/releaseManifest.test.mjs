@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { promisify } from "node:util";
 import {
   MAX_RELEASE_MANIFEST_INPUTS,
   digestDirectory,
@@ -17,6 +19,8 @@ import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.m
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const script = path.join(repoRoot, "scripts/ops/generate-release-manifest.mjs");
+const verifier = path.join(repoRoot, "scripts/ops/verify-release-images.mjs");
+const execute = promisify(execFile);
 
 const releaseEnv = {
   OPEN_SCIENCE_RELEASE_ID: "2026.07.10-release.1",
@@ -51,6 +55,38 @@ function runManifest(output, args = [], env = {}) {
   });
 }
 
+async function localImageFixture(dir, manifest) {
+  const images = Object.fromEntries([manifest.web, manifest.runtime, manifest.proxy, ...manifest.services].map((entry) => [
+    entry.image, { Id: entry.imageId, RepoDigests: entry.image.includes("@") ? [entry.image] : [] },
+  ]));
+  const file = path.join(dir, "local-images.json");
+  await writeFile(path.join(dir, "docker"), `#!${process.execPath}
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+if (args[0] === "info") {
+  process.stdout.write(process.env.FIXTURE_DOCKER_DRIVER_STATUS || "[]");
+} else if (args[0] === "image" && args[1] === "save") {
+  if (!process.env.FIXTURE_DOCKER_ARCHIVE || args[2] !== process.env.FIXTURE_MANIFEST_DIGEST) process.exit(1);
+  fs.createReadStream(process.env.FIXTURE_DOCKER_ARCHIVE).pipe(process.stdout);
+} else if (args[0] === "image" && args[1] === "inspect") {
+  const images = JSON.parse(fs.readFileSync(process.env.FIXTURE_LOCAL_IMAGES));
+  const info = images[args.at(-1)];
+  if (!info) { process.stderr.write("No such image"); process.exit(1); }
+  process.stdout.write(JSON.stringify(info));
+} else process.exit(1);
+`, { mode: 0o755 });
+  await writeFile(path.join(dir, "ctr"), `#!${process.execPath}
+const args = process.argv.slice(2);
+if (args.join(" ") !== "-n moby content get " + process.env.FIXTURE_MANIFEST_DIGEST || !process.env.FIXTURE_CTR_CONTENT) process.exit(1);
+process.stdout.write(process.env.FIXTURE_CTR_CONTENT);
+`, { mode: 0o755 });
+  const save = () => writeFile(file, JSON.stringify(images));
+  await save();
+  const env = { OPEN_SCIENCE_RUNTIME_CONTAINER_BIN: path.join(dir, "docker"), FIXTURE_LOCAL_IMAGES: file,
+    PATH: `${dir}${path.delimiter}${process.env.PATH}` };
+  return { images, env, save };
+}
+
 test("an enabled VCR release records its exact engine image and rejects a missing identity", async (t) => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "release-vcr-image-"));
   t.after(() => rm(tmp, { recursive: true, force: true }));
@@ -65,6 +101,54 @@ test("an enabled VCR release records its exact engine image and rejects a missin
   await runManifest(output, ["--check"], env);
   await assert.rejects(runManifest(output, ["--check"], { ...env, EVIMED_VCR_ENGINE_IMAGE: "evimed-vcr-engine:other" }));
   await assert.rejects(runManifest(output, [], { ...env, EVIMED_VCR_ENGINE_IMAGE: "" }));
+
+  const local = await localImageFixture(tmp, manifest);
+  const payload = JSON.stringify({ schemaVersion: 2, layers: [], config: { digest: env.OPEN_SCIENCE_VCR_ENGINE_IMAGE_ID } });
+  const hex = createHash("sha256").update(payload).digest("hex");
+  const target = `sha256:${hex}`;
+  const blob = `blobs/sha256/${hex}`;
+  const archive = path.join(tmp, "image.tar");
+  await mkdir(path.join(tmp, "blobs/sha256"), { recursive: true });
+  await writeFile(path.join(tmp, blob), payload);
+  await execute("tar", ["-cf", archive, "-C", tmp, blob]);
+  const verifyEnv = { ...env, ...local.env, FIXTURE_MANIFEST_DIGEST: target };
+
+  async function verifyBoth(imagesEnv, errorCode) {
+    const checks = [
+      () => runManifest(output, ["--check", "--verify-images"], imagesEnv),
+      () => execute(process.execPath, [verifier, `--manifest=${output}`], { env: { ...process.env, ...imagesEnv } }),
+    ];
+    for (const check of checks) {
+      if (errorCode) await assert.rejects(check, (error) => error.stderr.startsWith(`${errorCode}:`));
+      else await check();
+    }
+  }
+
+  local.images[env.EVIMED_VCR_ENGINE_IMAGE] = { Id: target, Descriptor: { digest: target } };
+  await local.save();
+  await verifyBoth({ ...verifyEnv, FIXTURE_DOCKER_ARCHIVE: archive });
+  await verifyBoth({ ...verifyEnv, FIXTURE_CTR_CONTENT: payload });
+  // A readable JSON blob with the wrong hash cannot stand in for the inspected manifest.
+  await verifyBoth({ ...verifyEnv, FIXTURE_CTR_CONTENT: `${payload}\n` }, "release_image_unverified");
+  await verifyBoth(verifyEnv, "release_image_unverified");
+
+  local.images[env.EVIMED_VCR_ENGINE_IMAGE] = { Id: target }; // Docker API < 1.48
+  await local.save();
+  await verifyBoth({ ...verifyEnv, FIXTURE_CTR_CONTENT: payload,
+    FIXTURE_DOCKER_DRIVER_STATUS: JSON.stringify([["driver-type", "io.containerd.snapshotter.v1"]]) });
+
+  const engine = manifest.services.find(({ name }) => name === "vcr-engine");
+  engine.imageId = `sha256:${"a".repeat(64)}`;
+  await writeFile(output, JSON.stringify(manifest));
+  await verifyBoth({ ...verifyEnv, FIXTURE_DOCKER_ARCHIVE: archive,
+    FIXTURE_DOCKER_DRIVER_STATUS: JSON.stringify([["driver-type", "io.containerd.snapshotter.v1"]]) }, "release_image_mismatch");
+
+  engine.imageId = target;
+  await writeFile(output, JSON.stringify(manifest));
+  await verifyBoth(verifyEnv);
+  delete local.images[env.EVIMED_VCR_ENGINE_IMAGE];
+  await local.save();
+  await verifyBoth(verifyEnv, "release_image_missing");
 });
 
 test("release manifest generator records exact images, tools, skills, and source inputs", async () => {
@@ -264,7 +348,8 @@ test("release manifest generator records exact images, tools, skills, and source
     });
     assert.equal(JSON.stringify(manifest).includes(tmp), false);
 
-    const checked = await runManifest(output, ["--check", "--verify-images", "--json"]);
+    const local = await localImageFixture(tmp, manifest);
+    const checked = await runManifest(output, ["--check", "--verify-images", "--json"], local.env);
     assert.equal(JSON.parse(checked.stdout).imagesVerified, true);
   } finally {
     await rm(tmp, { recursive: true, force: true });
@@ -460,8 +545,13 @@ test("configured aggregate replay binds its exact image independently of native 
     name: "result-replay", image: env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE, imageId: env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID,
   });
   assert.equal(manifest.services.some(value => value.name === "vcr-engine"), false);
-  await runManifest(output, ["--check", "--verify-images"], env);
-  await assert.rejects(runManifest(output, ["--check", "--verify-images"], { ...env, OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID: `sha256:${"b".repeat(64)}` }));
+  const local = await localImageFixture(tmp, manifest);
+  const differentId = `sha256:${"b".repeat(64)}`;
+  await runManifest(output, ["--check", "--verify-images"], { ...env, ...local.env, OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID: differentId });
+  local.images[env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE].Id = differentId;
+  await local.save();
+  await assert.rejects(runManifest(output, ["--check", "--verify-images"], { ...env, ...local.env }),
+    (error) => error.stderr.startsWith("release_image_mismatch:"));
   await assert.rejects(runManifest(output, ["--check"], { ...env, OPEN_SCIENCE_RESULT_ENGINE_URL: "" }));
   await assert.rejects(runManifest(output, [], { ...env, OPEN_SCIENCE_RESULT_REPLAY_IMAGE: "" }));
   await assert.rejects(runManifest(output, [], { ...env, OPEN_SCIENCE_RESULT_REPLAY_IMAGE: "evimed-result-replay:latest" }));
