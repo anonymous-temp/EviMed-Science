@@ -11,6 +11,16 @@ export interface ExtensionInstallation { id: string; revision: number; coordinat
 export interface ExtensionJob { id: string; status: string; attempts: number; createdAt: string; finishedAt: string | null }
 export interface ExtensionSelection { installationId: string; enabled: boolean; settings: Record<string, string | number | boolean>; connectionRefs: string[]; catalogueId?: string; coordinate?: ExtensionCoordinate; integrity?: string; effective?: boolean; phase?: string }
 export interface ProjectExtensions { revision: number; selections: ExtensionSelection[]; effectiveGeneration: string | null }
+export interface PatientMatchingStatus {
+  available: boolean;
+  revision: number;
+  state: string;
+  selected: { releaseId: string; enabled: boolean } | null;
+  effective: { releaseId: string; generation: string } | null;
+  failure: string | null;
+}
+export const projectPatientMatching = (projectId: string) =>
+  productRequest<PatientMatchingStatus>(`/patient-matching?${new URLSearchParams({ projectId })}`);
 export interface BuiltinPluginPolicy {
   revision: number;
   payload: { disabled: string[] };

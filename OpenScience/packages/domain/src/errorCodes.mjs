@@ -1680,6 +1680,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'patient_matching_priority_failed',
   'patient_matching_priority_input_limit',
   'patient_matching_priority_invalid',
+  'patient_matching_probe_failed',
   'patient_matching_protocol_empty',
   'patient_matching_rank_input_invalid',
   'patient_matching_recovery_failed',
@@ -1692,6 +1693,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'patient_matching_resource_unavailable',
   'patient_matching_result_not_found',
   'patient_matching_runtime_cancel_unconfirmed',
+  'patient_matching_runtime_image_changed',
   'patient_matching_scope_mismatch',
   'patient_matching_search_not_found',
   'patient_matching_selection_invalid',
@@ -3205,6 +3207,14 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   memory_topic_not_found: '这个主题已经不在了，刷新后再看。',
   memory_topic_invalid: '这个主题的修改不完整，请重新操作。',
   memory_topics_unavailable: '主题暂时整理不了；已有的记忆和其他视图不受影响。',
+
+  patient_matching_runtime_image_changed: '运行环境已更新，患者匹配需要适配新版本。',
+  patient_matching_release_unavailable: '当前环境未提供选定的患者匹配版本。',
+  patient_matching_worker_unavailable: '当前环境无法运行这个版本的患者匹配服务。',
+  patient_matching_probe_failed: '患者匹配工具未通过验证。',
+  patient_matching_release_invalid: '患者匹配版本与当前环境不兼容或文件校验失败。',
+  patient_matching_unavailable: '患者匹配所需的服务暂时不可用。',
+  patient_matching_apply_failed: '患者匹配设置未能应用。',
 
   // ——— Tool-boundary codes that have no family and would otherwise be bare ———
   tool_disabled: '这个部署没有开放这项工具，运行会绕开它继续。',

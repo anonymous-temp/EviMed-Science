@@ -17,7 +17,7 @@ afterAll(() => { globalThis.Request = NativeRequest; });
 // Existing authoring and deep-link journeys remain supported by the new catalogue.
 const skills = vi.hoisted(() => ({ listPlatformSkills: vi.fn(), projectPlatformSkills: vi.fn(), listPersonalSkills: vi.fn(), pendingPersonalSkillTransfers: vi.fn(),
   getPersonalSkill: vi.fn(), personalSkillHistory: vi.fn(), personalSkillDefaults: vi.fn(), projectSkills: vi.fn(), personalSkillSupply: vi.fn(), createPersonalSkill: vi.fn(), saveProjectSkills: vi.fn() }));
-const extensions = vi.hoisted(() => ({ inventory: vi.fn(), extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), projectExtensions: vi.fn(), projectBuiltinPlugins: vi.fn() }));
+const extensions = vi.hoisted(() => ({ projectPatientMatching: vi.fn(), inventory: vi.fn(), extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), projectExtensions: vi.fn(), projectBuiltinPlugins: vi.fn() }));
 const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), fetchWebMe: vi.fn() }));
 vi.mock("@/lib/skillLibraryClient", async original => ({ ...(await original<object>()), ...skills }));
 vi.mock("@/lib/extensionsClient", async original => ({ ...(await original<object>()), ...extensions }));
@@ -30,6 +30,7 @@ const platformList = { groups: ["科研分析", "长任务", "循证 GEO"], geoG
 const inventoryItem = (id: string, title: string, use: string, extra: object = {}) => ({ id, title, use, icon: "Wrench", state: "on", control: { kind: "none" }, opens: { kind: "drawer" }, does: `${title}做什么`, how: `${title}怎么用`, ...extra });
 beforeEach(() => {
   vi.resetAllMocks();
+  extensions.projectPatientMatching.mockResolvedValue({ available: false, selected: null });
   useProjectStore.setState({ currentId: "owned-project", projects: [{ id: "owned-project", name: "我的研究" }] });
   skills.listPlatformSkills.mockResolvedValue({ groups: [], geoGroup: "循证 GEO", loopxGroup: "长任务", items: [] });
   skills.projectPlatformSkills.mockResolvedValue({ id: "policy", revision: 1, payload: { disabled: [] }, items: [], activation: { phase: "effective", savedRevision: 1, effectiveRevision: 1, error: null } });
@@ -437,4 +438,18 @@ it("moves focus into the form when 创建技能 opens it, and back to 添加技�
   expect(await screen.findByRole("region", { name: "导入技能" })).toHaveFocus();
   await userEvent.click(screen.getByRole("button", { name: "返回技能列表" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "添加技能" })).toHaveFocus());
+});
+
+it.each([
+  ["stale", null, "需要更新以适配新版本"],
+  ["refreshing", null, "等待项目空闲后更新至新版本"],
+  ["retrying", "patient_matching_probe_failed", "更新未完成，稍后自动重试。患者匹配工具未通过验证。"],
+  ["refresh-failed", "patient_matching_release_invalid", "更新失败。患者匹配版本与当前环境不兼容或文件校验失败。"],
+])("shows the project's matching state %s on the installed plugins page", async (state, failure, label) => {
+  extensions.projectPatientMatching.mockResolvedValue({ available: true, selected: { enabled: true, releaseId: "r1" }, effective: null, revision: 2, state, failure });
+  open("/app/extensions/installed?type=plugins");
+  expect(await screen.findByText(label!)).toBeInTheDocument();
+  expect(screen.getByText("患者匹配")).toBeInTheDocument();
+  expect(screen.queryByText("已启用")).not.toBeInTheDocument();
+  expect(extensions.projectPatientMatching).toHaveBeenCalledWith("owned-project");
 });
