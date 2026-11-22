@@ -20,14 +20,16 @@ export function extensionAvailability(installation: ExtensionInstallation, selec
   return "未在当前项目启用";
 }
 
-export function patientMatchingStatusText({ state, effective, failure }: PatientMatchingStatus): string {
+export function patientMatchingStatusText({ state, selected, effective, failure }: PatientMatchingStatus): string {
   const reason = failure && knownErrorCodeMessage(failure);
   switch (state) {
     case "stale": return "需要更新以适配新版本";
     case "refreshing": return "等待项目空闲后更新至新版本";
     case "retrying": return `更新未完成，稍后自动重试。${reason ?? ""}`;
     case "refresh-failed": return `更新失败。${reason ?? ""}`;
-    case "effective": return effective ? "已启用" : "生效状态待确认";
+    case "effective":
+      if (!effective) return "生效状态待确认";
+      return selected?.upgradedFrom && selected.releaseId === effective.releaseId ? "已更新到新版本" : "已启用";
     case "waiting": return "等待当前任务结束后应用设置";
     case "disabled": return "已关闭";
     case "failed":

@@ -5839,10 +5839,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         || message.sourceRequestId && run.kernelRequestIds?.includes(message.sourceRequestId))),
     transcript:async (origin,options={}) => runtimeManager.sessionTranscript(await sourceProject(origin),origin.rootSessionId,{wake:false,...options}) });
   // A deployment owns the exact first-party release. An absent optional catalogue leaves generic work usable.
-  let patientMatchingCatalogue = [];
+  let patientMatchingCatalogue = null;
   try { patientMatchingCatalogue = overrides.patientMatchingCatalogue ?? loadPatientMatchingDeployment(config); }
   catch { process.stderr.write('patient matching: patient_matching_catalogue_unavailable\n'); }
-  const patientMatchingLifecycle = vcr && productDatabase && pluginService && patientMatchingCatalogue.length ? new PatientMatchingLifecycleService(productDatabase, {
+  const patientMatchingLifecycle = vcr && productDatabase && pluginService && patientMatchingCatalogue ? new PatientMatchingLifecycleService(productDatabase, {
     config, catalogue: patientMatchingCatalogue, runtime: runtimeManager, plugins: pluginService,
     access: (user, projectId, options) => extensionAccess.project(user, projectId, options),
     ledgerBusy: async project => (await agentRuns.list(project)).some(run => ['running','queued'].includes(run.status))
@@ -5855,7 +5855,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const patientMatchingInternal = (/** @type {any} */ project) => isInternalProjectOf(config, project.userId, project.id);
   const ensurePatientMatchingDefault = (/** @type {any} */ project) => patientMatchingLifecycle?.ensureDefault(project, { internal: patientMatchingInternal })
     .catch((/** @type {any} */ error) => { process.stderr.write(`patient matching: default install ${error?.code ?? 'failed'}\n`); return false; }) ?? Promise.resolve(false);
-  runtimeManager.patientMatchingGenerationResolver = patientMatchingLifecycle ? project => { void ensurePatientMatchingDefault(project); return patientMatchingLifecycle.selectForRuntime(project); } : null;
+  runtimeManager.patientMatchingGenerationResolver = patientMatchingLifecycle?.catalogue.size ? project => { void ensurePatientMatchingDefault(project); return patientMatchingLifecycle.selectForRuntime(project); } : null;
   /** @type {any} */ let patientMatchingAdapter = null;
   /** @type {PatientMatchingContinuation|null} */ let patientMatchingContinuation = null;
   const patientMatchingModels = createPatientMatchingModelPorts({config,usageLedger,

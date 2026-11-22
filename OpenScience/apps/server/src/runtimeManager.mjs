@@ -7548,7 +7548,15 @@ export class RuntimeManager {
     if (candidate) await this.preparePatientMatchingGeneration(project, candidate);
     if (await this.pluginRuntimeBusy(project)) throw new HttpError(409, 'plugin_runtime_busy', 'The runtime has active or queued native work.');
     const key = this.key(project); this.patientMatchingGenerationOverrides.set(key, candidate);
-    try { await this.startAdmitted(project, { replaceRuntime: async () => { if (this.runtimes.has(key)) await this.stop(project); } }); return { joined: true }; }
+    let replacedGeneration;
+    try {
+      const runtime = await this.startAdmitted(project, { replaceRuntime: async () => {
+        replacedGeneration = this.runtimeGeneration(project);
+        if (this.runtimes.has(key)) await this.stop(project);
+      } });
+      // A start joined in flight belongs to its caller. Only the generation this replacement created is ours to release.
+      return { joined: true, replacedGeneration, runtimeGeneration: replacedGeneration === undefined ? null : runtime?.modelGatewayTokenJti ?? null };
+    }
     finally { this.patientMatchingGenerationOverrides.delete(key); }
   }
   /** The kernel's web host answers before an enabled bundle has registered its route: on the pinned kernel the status route is 404 for

@@ -8,7 +8,7 @@ export function createPatientMatchingRoutes({store,lifecycle,access}){
     const projectId=url.searchParams.get('projectId');assertClientProject(projectId);const project=await access(user,projectId,{manage:req.method!=='GET'});
     if(req.method==='GET'){
       const state=lifecycle?await lifecycle.status(project):null;
-      sendJson(res,200,{data:{available:Boolean(lifecycle),revision:state?.revision??0,state:state?.payload.phase??'uninstalled',selected:state?.payload.selected??null,
+      sendJson(res,200,{data:{available:Boolean(lifecycle?.catalogue.size || state),revision:state?.revision??0,state:state?.payload.phase??'uninstalled',selected:state?.payload.selected??null,
         reason:state?.payload.reason??null,failure:state?.payload.failure??null,
         effective:state?.payload.effective?{releaseId:state.payload.effective.release.releaseId,generation:state.payload.effective.reference.generationHash}:null,
         releases:lifecycle?[...lifecycle.catalogue.values()].map(entry=>({releaseId:entry.releaseId,version:entry.packageVersion,reasoningModel:entry.modelProfile.reasoningModel})):[]}});return true;
