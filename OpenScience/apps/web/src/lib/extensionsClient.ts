@@ -15,7 +15,7 @@ export interface PatientMatchingStatus {
   available: boolean;
   revision: number;
   state: string;
-  selected: { releaseId: string; enabled: boolean } | null;
+  selected: { releaseId: string; enabled: boolean; upgradedFrom?: string } | null;
   effective: { releaseId: string; generation: string } | null;
   failure: string | null;
 }
