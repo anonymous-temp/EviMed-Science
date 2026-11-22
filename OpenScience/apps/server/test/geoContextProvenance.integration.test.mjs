@@ -180,7 +180,7 @@ test('all accepted actors survive derivation and unknown extra human-shaped inpu
 test('real feedback SQL scopes clean peers before the 200-row family limit',options,async t=>{
   const f=await fixture(t),{FeedbackEvents}=await import(process.env.N12_FEEDBACK_MODULE ?? '../src/feedbackEvents.mjs'),{LearningEvidence}=await import('../src/learningEvidence.mjs');
   await f.accounts.createProject(f.users.owner,'other','Other');
-  const feedback=new FeedbackEvents({database:f.db}),scope='geo-content',shape=[{format:'docx',structure:'report'}];
+  const feedback=new FeedbackEvents({database:f.db}),scope='geo-content',shape=[{format:'docx',labels:['summary','findings']}];
   const base=Date.parse('2026-10-25T00:00:00Z');
   // A clean peer is one the person kept (main, 2026-10-25: silence is unknown, not approval): settled with its shape, and its file used.
   for(let i=0;i<205;i++){
@@ -189,15 +189,20 @@ test('real feedback SQL scopes clean peers before the 200-row family limit',opti
     await feedback.recordLearningEvidence('owner',{runId:`peer-${i}`,projectId:i<2?f.project.id:'other',key:'used',
       detail:{evidence:'used',scope,sessionId:'root',at:new Date(base+i*1000+500).toISOString()}});
   }
+  // A newer, unaccepted report in the same project must not displace either clean peer.
+  await feedback.recordLearningEvidence('owner',{runId:'silent-peer',projectId:f.project.id,key:'settled',
+    detail:{evidence:'silent',scope,sessionId:'root',at:new Date(base+250000).toISOString(),shape}});
   const window={scope,from:new Date(base-1000),to:new Date(base+1000000)};
   assert.equal((await feedback.cleanSettledRuns('owner',window)).length,200);
   assert.deepEqual((await feedback.cleanSettledRuns('owner',{...window,projectId:f.project.id})).map(row=>row.runId),['peer-0','peer-1']);
+  assert.deepEqual((await feedback.cleanSettledRuns('owner',{...window,projectId:f.project.id,limit:2})).map(row=>row.runId),['peer-0','peer-1']);
   Object.assign(f.run,{status:'succeeded',effectiveAgentId:scope,finishedAt:new Date(base+300000).toISOString(),outputFiles:['report.docx']});
   await feedback.recordLearningEvidence('owner',{runId:f.run.id,projectId:f.project.id,key:'used',detail:{evidence:'used',scope,sessionId:'root',at:new Date(base+350000).toISOString()}});
-  let queued=0;
+  const queued=[];
   const evidence=new LearningEvidence({feedback,contextProvenance:f.provenance,resolveProject:async()=>f.project,agentRuns:{list:async()=>[f.run]},jobs:{},readShapes:async()=>({'report.docx':shape[0]}),
-    now:()=>new Date(base+400000),triggers:{refusalFor:async()=>null,resetInstantOf:async()=>null,guestInfluenced:async()=>false,queue:async()=>{queued++;return true;}}});
-  assert.equal((await evidence.settle({job:{userId:'owner',projectId:f.project.id,payload:{runId:f.run.id}}})).routine,true);assert.equal(queued,1);
+    now:()=>new Date(base+400000),triggers:{refusalFor:async()=>null,resetInstantOf:async()=>null,guestInfluenced:async()=>false,queue:async(_project,_run,lesson)=>{queued.push(lesson.payload.peers);return true;}}});
+  assert.equal((await evidence.settle({job:{userId:'owner',projectId:f.project.id,payload:{runId:f.run.id}}})).routine,true);
+  assert.deepEqual(queued,[[{runId:'peer-0',projectId:f.project.id},{runId:'peer-1',projectId:f.project.id}]]);
 });
 
 test('consumed shared follow-up keeps canonical input trace through real cleaner, correction lesson and distillation',options,async t=>{

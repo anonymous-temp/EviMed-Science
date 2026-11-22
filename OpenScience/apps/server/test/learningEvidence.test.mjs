@@ -730,3 +730,34 @@ test("routine settlement supplies a rolling horizon spanning the old epoch cut",
   assert.equal((await state.evidence.settle({ job: settleJob() })).routine, true);
   assert.deepEqual(state.lessons[0].payload.peers.map(peer => peer.runId), rows.map(row => row.runId));
 });
+
+test("shared routine settlement needs two scoped clean peers with matching report headings", async () => {
+  const report = { format: "docx", labels: ["summary", "findings"] };
+  const state = setup({ runs: [finished({ effectiveAgentId: "geo-content", outputFiles: ["report.docx"] })],
+    shapes: { "report.docx": report } });
+  state.evidence.contextProvenance = {
+    policyFor: async () => ({ kind: "geo-project", controlProjectId: project.id }),
+    observeRun: async () => ({ humanText: "Write the report." }),
+  };
+  const at = new Date(NOW).toISOString();
+  const recordPeer = async (runId, shape) => state.ledger.recordLearningEvidence(project.userId, {
+    runId, projectId: project.id, key: "accepted", detail: { evidence: "follow-up", verdict: "accept", scope: "geo-content", at, shape: [shape] },
+  });
+  const clean = state.ledger.cleanSettledRuns;
+  state.ledger.cleanSettledRuns = (owner, window) => {
+    assert.equal(window.projectId, project.id);
+    assert.equal(window.scope, "geo-content");
+    return clean(owner, window);
+  };
+  await state.ledger.recordLearningEvidence(project.userId, {
+    runId: "run_prev", projectId: project.id, key: "used", detail: { evidence: "used", scope: "geo-content", at },
+  });
+  await recordPeer("legacy", { format: "docx", structure: "report" });
+  await recordPeer("first", report);
+  assert.equal((await state.evidence.settle({ job: settleJob() })).routine, false);
+  await recordPeer("second", report);
+  assert.equal((await state.evidence.settle({ job: settleJob() })).routine, true);
+  assert.deepEqual(state.lessons.map(lesson => lesson.payload.peers), [[
+    { runId: "first", projectId: project.id }, { runId: "second", projectId: project.id },
+  ]]);
+});

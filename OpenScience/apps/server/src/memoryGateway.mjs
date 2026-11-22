@@ -1606,13 +1606,19 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             }
             return rows;
           })();
-          const names = personHintNames(personLabel(uri, original), original);
+          const label = personLabel(uri, original);
+          const names = personHintNames(label, original);
           const projectScope = personProjectScope(metadata?.projectId), files = await sourceFiles;
           const distinct = config.memoryPersonMergeEnabled === true ? await personEdges.dismissed(user.id) : new Set();
-          const siblings = (await people).filter(row => row.uri !== uri && !distinct.has(personPairId(uri, row.uri))
-            && personProjectScope(files.get(row.uri)?.projectId) === projectScope && personNamesSuggestPair(names, row.names)).slice(0, 8);
+          const sameScope = row => personProjectScope(files.get(row.uri)?.projectId) === projectScope;
+          const siblings = (await people).filter(row => {
+            if (row.uri === uri || distinct.has(personPairId(uri, row.uri))) return false;
+            if (sameScope(row)) return personNamesSuggestPair(names, row.names);
+            // Visible titles can suggest a portable read. Body-declared aliases and confirmation pairs stay project-scoped.
+            return !shared && config.memoryPeopleAcrossProjectsEnabled === true && personNamesSuggestPair([label], [row.label]);
+          }).slice(0, 8);
           if (!siblings.length) return text;
-          personHints?.set(uri, siblings.map(row => personPairId(uri, row.uri)));
+          personHints?.set(uri, siblings.filter(sameScope).map(row => personPairId(uri, row.uri)));
           const hint = `Related people files (possibly the same person — not confirmed; ask the user or report separately; never mix their facts):\n`
             + siblings.map(row => `- ${row.label}: ${row.uri}`).join('\n');
           return sourceUnit ? JSON.stringify({ ...sourceUnit, relatedPeopleHint: hint }) : `${text}\n\n${hint}`;
