@@ -4402,8 +4402,9 @@ async function main() {
       if (chat.openMs > CHAT_OPEN_CEILING_MS && !chat.retriedAfterNetworkChange) failures.push(`${current}: the prewarmed conversation took ${Math.round(chat.openMs / 1000)} s to open (ceiling ${CHAT_OPEN_CEILING_MS / 1000} s)`);
       // The composer's room, chips and statistics at both widths (R13 E-17, A20), read through the frame that just loaded.
       if (chat.loaded) await recordStep(report, failures, notices, "chat-composer", () => walkComposer(page, operator));
-      if (chat.loaded) await recordStep(report, failures, notices, "chat-schedules", () => walkSchedules(page, base));
+      // /app/autopilot returns to /app/chat with the schedules panel covering the conversation.
       if (chat.loaded) await recordStep(report, failures, notices, "chat-native-surface", () => walkNativeSurface(page, operator));
+      if (chat.loaded) await recordStep(report, failures, notices, "chat-schedules", () => walkSchedules(page, base));
       // A start the control plane refuses for a cleanup in progress, answered by the walk (R11); it starts nothing.
       const waitMs = process.env.OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS !== undefined ? Number(process.env.OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS) || 0 : CLEANUP_WALK_WAIT_MS;
       allowRuntimeStart = false;
