@@ -5061,9 +5061,10 @@ export class RuntimeManager {
         catch (error) {
           // A failed optional native bundle cannot take the ordinary assistant away. Explicit lifecycle applies
           // own their rollback and do not enter this fallback.
-          const matching = !this.patientMatchingGenerationOverrides.has(key) && this.patientMatchingGenerationResolver
-            ? await this.patientMatchingGenerationResolver(project).catch(() => null) : null;
-          if (!matching) throw error;
+          const optionalMatching = !this.patientMatchingGenerationOverrides.has(key) && this.patientMatchingGenerationResolver;
+          const matching = optionalMatching && await optionalMatching(project).catch(() => null);
+          // A retag between selection and controller admission makes the second lookup queue a refresh and return null.
+          if (!matching && !(optionalMatching && error.code === 'patient_matching_release_invalid')) throw error;
           this.noteStartFinding(project, 'patient_matching_start_failed', error);
           this.patientMatchingGenerationOverrides.set(key, null);
           try { runtime = await boot(); }
@@ -5295,7 +5296,13 @@ export class RuntimeManager {
     let patientMatchingGeneration = this.patientMatchingGenerationOverrides.get(key) ?? null;
     if (!contextGeneration && !this.patientMatchingGenerationOverrides.has(key) && this.patientMatchingGenerationResolver) {
       try { patientMatchingGeneration = await this.patientMatchingGenerationResolver(project); if (patientMatchingGeneration) await this.preparePatientMatchingGeneration(project, patientMatchingGeneration); }
-      catch (error) { this.noteStartFinding(project, "patient_matching_generation_unavailable", error); patientMatchingGeneration = null; }
+      catch (error) {
+        this.noteStartFinding(project, "patient_matching_generation_unavailable", error);
+        if (patientMatchingGeneration && error.code === 'patient_matching_release_invalid') {
+          await this.patientMatchingGenerationResolver(project).catch(() => null);
+        }
+        patientMatchingGeneration = null;
+      }
     }
     const plan = await observe("provider_prepare", () => this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration, extensionGeneration, patientMatchingGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration }));
 
