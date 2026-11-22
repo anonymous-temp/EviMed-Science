@@ -79,6 +79,7 @@ test('already-stored run-A rejection rows heal through the native fence without 
   const overlay = { removals: async () => removals, originsOf: async () => origins, removalOrigins: async () => [] };
   const authority = JSON.stringify(await overlay.removals());
   const ledger = new MemoryHistoryLedger({ overlay, database: { query: async (sql, values) => {
+    if (sql.includes('api_statement_forgets')) return { rows: [] };
     if (sql.includes('history_fences')) return { rows: runARows.history_fences };
     if (sql.includes('history_message_rejections')) return { rows: runARows.history_message_rejections
       .filter(row => row.message_hash === row.fingerprint && values[3].includes(row.archive_uri)) };

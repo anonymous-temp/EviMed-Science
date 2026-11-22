@@ -261,7 +261,12 @@ export class NativeMemoryWorker {
     let commits = 0;
     let accounts = 0;
     try {
-      if (this.history) { await this.history.drainForgetScans?.(); await this.history.drainDeletes(); await this.history.backfill(); }
+      if (this.history) {
+        await this.history.drainStatementForgets?.(this.nativeMemory);
+        await this.history.drainForgetScans?.();
+        await this.history.drainDeletes();
+        await this.history.backfill();
+      }
       // The offers of the page's import that nobody saved are not kept past their hour (a saved one a day: what was saved is the engine's).
       await this.overlay.deleteExpiredImports().catch(() => 0);
       for (const userId of await this.overlay.accounts()) {

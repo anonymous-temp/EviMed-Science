@@ -15,7 +15,7 @@ import { withMemorySummaryBatch, withMemorySummaryInvalidation, drainMemorySumma
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
-import { neutralMemoryUri, removalStatement, containsRemoved, similarity, removalRefusals, removalLines, removalText, lineDecisionKey } from './nativeMemoryRejections.mjs';
+import { neutralMemoryUri, removalStatement, exactRemovalStatement, removalContentMatch, containsRemoved, similarity, removalRefusals, removalLines, removalText, lineDecisionKey } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { labelEarlierPreferences, markPreferenceOverlaps, preferenceCandidates, preferenceJudgementKey, preferenceStatementTimes } from './nativeMemoryPreferences.mjs';
 import { createHash, randomUUID } from "node:crypto";
@@ -189,12 +189,14 @@ const FORGET_REASON = /^(?:forgotten|deleted)/iu;
 /**
  * A text without the statements the person forgot or deleted, the other lines as they were. Whether a statement is one of them is
  * `statementForgotten`'s: the fingerprint of its words, or a rejection's words contained in it.
- * @param {string} text @param {readonly { fingerprint: string, text: string | null }[]} forgotten
+ * @param {string} text @param {readonly { fingerprint: string, text: string | null, pending?:boolean }[]} forgotten
  */
 function withoutForgottenLines(text, forgotten) {
+  if (!forgotten.length) return text;
   return text.split("\n").filter((line) => {
     const statement = line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "");
-    return !statement || isLabelLine(line) || !statementForgotten(statement.replace(/^#{1,6}\s+/, ''), forgotten);
+    return !statement || isLabelLine(line) || (!statementForgotten(statement.replace(/^#{1,6}\s+/, ''), forgotten)
+      && !forgotten.some(row => row.pending && row.text && removalContentMatch(statement, row.text)));
   }).join("\n");
 }
 
@@ -675,9 +677,9 @@ export class NativeMemoryStore {
   /**
    * The account's memories as records (`publicRecord`'s shape plus `engine`, `nativeType`, `uri`, `contentHash` and, for a
    * profile line, `document`), newest change first.
-   * @param {string} userId @param {{ files?: any[], context?: any, changedPreferenceUris?: string[] | null }} [options]
+   * @param {string} userId @param {{ files?: any[], context?: any, changedPreferenceUris?: string[] | null, includeForgetBeforeImages?:boolean }} [options]
    */
-  async records(userId, { files = undefined, context = null, changedPreferenceUris = null } = {}) {
+  async records(userId, { files = undefined, context = null, changedPreferenceUris = null, includeForgetBeforeImages = true } = {}) {
     const held = files ?? await this.files(userId, { context });
     const revisions = await this.overlay.revisionsOfMany(userId, held.map((file) => file.uri));
     const sources = await this.overlay.sources(userId, held.map((file) => file.uri));
@@ -695,7 +697,8 @@ export class NativeMemoryStore {
     for (const file of held) {
       const history = (revisions.get(file.uri) ?? []).slice().reverse();
       const changed = sources.filter((source) => source.uri === file.uri && ["retracted", "changed", "expired", "removed"].includes(source.state));
-      const base = this.#fileRecord(file, history, changed, conversationEvidence(history, sessionProjects), forgotten.has(file.namespaceId ?? null) ? forgotten.get(file.namespaceId ?? null) : []);
+      const base = this.#fileRecord(file, history, changed, conversationEvidence(history, sessionProjects),
+        forgotten.has(file.namespaceId ?? null) ? forgotten.get(file.namespaceId ?? null) : [], includeForgetBeforeImages);
       if (file.type !== "profile") {
         records.push({ ...base, ...(this.sourceEnvelopeEnabled ? { statementSources: visibleStatementSources(base.value, origins.get(file.uri),
           { safetyProjection: Boolean(file.safetySource) }) } : {}), ...this.#attribution(file, history, origins.get(file.uri), attributionCommits) });
@@ -906,24 +909,31 @@ export class NativeMemoryStore {
    * answers `null` for its namespace: the page does not go down for it, but it does not list that namespace's earlier versions either, because
    * a version could show the words the person forgot and nothing here can tell which.
    * @param {string} userId @param {any[]} files
-   * @returns {Promise<Map<string | null, { fingerprint: string, text: string | null }[] | null>>}
+   * @returns {Promise<Map<string | null, { fingerprint: string, text: string | null, pending?:boolean }[] | null>>}
    */
   async #forgottenLines(userId, files) {
-    /** @type {Map<string | null, { fingerprint: string, text: string | null }[] | null>} */
+    /** @type {Map<string | null, { fingerprint: string, text: string | null, pending?:boolean }[] | null>} */
     const out = new Map();
     for (const namespace of new Set(files.map((file) => file.namespaceId ?? null))) {
       const types = (namespace === null ? OPENVIKING_KNOWN_MEMORY_TYPES : OPENVIKING_PROJECT_MEMORY_TYPES).map((type) => nativeMemoryRejectionType(type, namespace));
-      out.set(namespace, await Promise.resolve().then(() => this.overlay.forgottenLines(userId, types)).catch(() => null));
+      out.set(namespace, await Promise.resolve().then(async () => {
+        // Read provisional rows first so a concurrent promotion cannot fall between the two authority reads.
+        const pending = namespace === null && this.memoryContexts && this.history?.ledger.pendingStatements
+          ? await this.history.ledger.pendingStatements(await this.#ownedContext(userId)) : [];
+        return [...await this.overlay.forgottenLines(userId, types),
+          ...pending.map(text => ({ fingerprint: lineFingerprint(text), text, pending: true }))];
+      }).catch(() => null));
     }
     return out;
   }
 
   /**
    * @param {any} file @param {any[]} history oldest first @param {any[]} changed sources in a changed state @param {any[]} [evidence] the conversations that wrote it
-   * @param {{ fingerprint: string, text: string | null }[] | null} [forgotten] lines the person forgot or deleted: an earlier version of this file does not show them,
+   * @param {{ fingerprint: string, text: string | null, pending?:boolean }[] | null} [forgotten] lines the person forgot or deleted: an earlier version of this file does not show them,
    *   except the version a forget itself took them out of (the one its undo goes back to); `null` when they could not be read, and then no earlier version is listed
+   * @param {boolean} [includeForgetBeforeImages]
    */
-  #fileRecord(file, history, changed, evidence = [], forgotten = []) {
+  #fileRecord(file, history, changed, evidence = [], forgotten = [], includeForgetBeforeImages = true) {
     const first = history[0] ?? null;
     const last = history.at(-1) ?? null;
     const updatedAt = last?.changedAt ?? file.modTime ?? null;
@@ -958,7 +968,8 @@ export class NativeMemoryStore {
       // What the file said before each change, oldest first, as the page's 「以前的版本」 reads them.
       revisions: forgotten === null ? [] : history.filter((revision) => revision.before !== null).map((revision, index) => ({
         ...(this.sourceDeletion?{sourceRevisionId:revision.id,sourceEngineSession:revision.engineSession,sourceArchiveUri:revision.archiveUri,sourceProjectId:revision.sourceProjectId??revision.projectId,sourceProjectCreatedAt:revision.sourceProjectCreatedAt,sourceActor:revision.actor}:{}),
-        version: index + 1, value: forgotten.length && !FORGET_REASON.test(String(revision.reason ?? "")) ? withoutForgottenLines(String(revision.before ?? ""), forgotten) : String(revision.before ?? ""),
+        version: index + 1, value: withoutForgottenLines(String(revision.before ?? ""),
+          includeForgetBeforeImages && FORGET_REASON.test(String(revision.reason ?? "")) ? forgotten.filter(row => row.pending) : forgotten),
         summary: "", status: "active", changedAt: revision.changedAt,
         reason: revision.reason, by: revision.actor === "engine" ? "extraction" : revision.actor === "platform" ? "system" : "user",
       })),
@@ -1217,7 +1228,7 @@ export class NativeMemoryStore {
   async listRecords(userId, { scopes = [], statuses = [], kinds = [], scopeId = "", query = "", pageSize = 100, ownedOnly = false, allowRecord = () => true } = {}) {
     const words = String(query ?? "").trim().toLowerCase();
     const view = ownedOnly ? await this.#ownedContext(userId) : scopeId ? await this.#projectContext(userId, scopeId) : null;
-    return (await this.records(userId, { context: ownedOnly || view?.kind === 'geo-project' ? view : null }))
+    return (await this.records(userId, { context: ownedOnly || view?.kind === 'geo-project' ? view : null, includeForgetBeforeImages: !ownedOnly }))
       .filter(allowRecord)
       .filter((record) => !statuses.length || statuses.includes(record.status))
       .filter((record) => !scopes.length || scopes.includes(record.scope))
@@ -1553,6 +1564,9 @@ export class NativeMemoryStore {
       const file = files.get(revision.uri);
       if (!file?.contentHash) continue;
       const view = await this.#fileContext(userId, revision.uri);
+      const summaryBody = await fenceWithdrawnMemoryBody(this.overlay, userId, revision.uri, revision.after ?? '',
+        view.kind === 'geo-project' ? view.namespaceId : null);
+      if (summaryBody === null) continue;
       seen.add(revision.uri);
       const scopedProject = view.kind === 'geo-project' ? view.projectId : file.projectId;
       const projectScoped = (view.kind === 'geo-project' || PROJECT_MEMORY_TYPES.includes(revision.memoryType)) && Boolean(scopedProject);
@@ -1560,7 +1574,7 @@ export class NativeMemoryStore {
         id: nativeFileId(revision.uri), key: revision.uri.slice(revision.uri.indexOf("/memories/") + "/memories/".length),
         kind: /** @type {Record<string, string>} */ (PAGE_KIND_OF_TYPE)[revision.memoryType] ?? "project_fact",
         scope: projectScoped ? "project" : "user", scopeId: projectScoped ? scopedProject : "",
-        summary: String(revision.after ?? "").replace(/\s+/g, " ").trim().slice(0, 200), status: "active",
+        summary: summaryBody.replace(/\s+/g, " ").trim().slice(0, 200), status: "active",
         change: revision.change === "added" ? "created" : "updated", changedAt: revision.changedAt, version: versionOfHash(file.contentHash),
       });
       if (out.length >= Math.max(1, Math.min(50, Number(limit) || 20))) break;
@@ -2069,49 +2083,76 @@ export class NativeMemoryStore {
   }
 
   /** An unstored fact can still be withdrawn. The synthetic URI has no engine file, only undoable removal authority. */
-  async recordForgetIntent(userId, context, archiveUri, lines, { act = null, engineSession = null } = {}) {
+  async recordForgetIntent(userId, context, archiveUri, lines, { act = null, engineSession = null,
+    request = /** @type {import('./memoryHistoryPersistence.mjs').StatementForget|null} */ (null) } = {}) {
     lines = [...new Map(lines.map(text => removalText(text).replace(/\s+/g, ' ')).filter(text => normalisedStatement(text))
       .map(text => [lineFingerprint(text), text])).values()];
     if (!lines.length) throw new HttpError(400, 'memory_payload_invalid', 'statement must contain text after formatting is removed.');
     const sweeping = this.forgetTargetsEnabled && this.overlay.deferredSummaryRebuildEnabled === true && this.history;
     const uri = `${context.sessions.memoryRoot(userId)}/notes/forget-${contentHash(JSON.stringify([archiveUri, lines])).slice(0, 24)}.md`;
-    if (sweeping && !act) {
+    if ((request ? request.memory_sweep : sweeping) && !act) {
       const previous = (await this.overlay.revisionsOf?.(userId, uri, {limit:1}))?.[0];
-      act = previous && !previous.undoneAt ? actOf(previous.reason) ?? newAct() : newAct();
+      const existing = previous && !previous.undoneAt ? actOf(previous.reason) : null;
+      act = existing ?? request?.memory_sweep?.act ?? newAct();
     }
-    const memorySweep = sweeping && act ? { act, removed: lines.map(lineFingerprint), files: await this.#sweepInventory(userId, context.kind === 'geo-project' ? context.namespaceId : null, lines) } : null;
+    const memorySweep = request ? request.memory_sweep && { ...request.memory_sweep, act }
+      : sweeping && act ? { act, removed: lines.map(lineFingerprint), files: await this.#sweepInventory(userId, context.kind === 'geo-project' ? context.namespaceId : null, lines) } : null;
     const actual = await this.#fileContext(userId, uri);
     const activate = async () => {
-      const fresh = await this.overlay.claimForgetIntent(userId, this.#rejectionType(actual, 'notes'), uri, lines);
+      if (request && !await this.history.ledger.executeStatementForget(request)) throw new Error('Statement forget claim lost.');
+      const fresh = await this.overlay.claimForgetIntent(userId, this.#rejectionType(actual, 'notes'), uri, lines, request?.requested_at);
       if (fresh.length) await this.overlay.addRevision({ userId, uri, memoryType: 'notes', change: 'deleted', actor: 'conversation',
         reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, before: fresh.join('\n'), after: null, archiveUri, engineSession });
     };
     let pending = false;
     if (this.history) pending = (await this.history.rejectRemoved(actual, { uri, type: 'notes' }, lines, this.rejectionJudge,
-      { archiveUri, activate, allowDeferred: this.forgetTargetsEnabled, memorySweep })) === true;
+      { archiveUri, activate, allowDeferred: this.forgetTargetsEnabled, memorySweep, requestedAt: request?.requested_at })) === true;
     else await this.overlay.database.transaction(client => this.overlay.database.withTransactionClient(client, activate));
     this.#touch(userId);
-    if (memorySweep) await this.#exactSweep(userId, actual, lines, memorySweep.act);
+    if (memorySweep && !request) await this.#exactSweep(userId, actual, lines, memorySweep.act);
     return pending;
+  }
+
+  /** @param {import('./memoryHistoryPersistence.mjs').StatementForget} request */
+  async executeStatementForget(request) {
+    const userId = request.user_id;
+    await withNativeMemoryWrite(this.overlay.database, userId, async () => {
+      const context = await this.#fileContext(userId, `${request.user_root}/memories/notes/forget.md`);
+      if (context.kind !== 'owned' || context.ownerCreatedAt !== request.owner_created_at || context.namespaceId !== request.namespace_id)
+        throw new Error('Statement forget scope changed.');
+      await this.recordForgetIntent(userId, context, null, [request.statement], { request });
+    }, { exclusive: true });
+  }
+
+  /** @param {string} userId @param {string} requestId */
+  async statementForgetStatus(userId, requestId) {
+    return this.history?.ledger.statementForgetStatus(userId, requestId) ?? null;
+  }
+
+  /** @param {string} userId */
+  async pendingStatementTexts(userId) {
+    return this.history && this.memoryContexts ? this.history.ledger.pendingStatements(await this.#ownedContext(userId)) : [];
   }
 
   /** Freeze addresses and hashes, never text, before the withdrawal. A delayed search cannot delete later writes.
    * @param {string} userId @param {string|null} namespaceId @param {string[]} removed */
   async #sweepInventory(userId, namespaceId, removed, skipSafety = false) {
-    const prints = new Set(removed.map(removalStatement).filter(text => containsRemoved(text, text)).map(lineFingerprint));
+    const prints = new Set(removed.filter(text => containsRemoved(text, text)).map(exactRemovalStatement).map(lineFingerprint));
     return (await this.rawFiles(userId)).filter(file => (file.namespaceId ?? null) === namespaceId && !(skipSafety && file.type === 'safety_notes'))
       .map(file => ({uri:file.uri,hash:file.hash,afterExactHash:contentHash(file.body.split('\n')
-        .filter(line => !prints.has(lineFingerprint(removalStatement(line)))).join('\n'))}));
+        .filter(line => !prints.has(lineFingerprint(exactRemovalStatement(line)))).join('\n'))}));
   }
 
   /** Literal equality only: a longer safety statement containing these words is not the same fact.
-   * @param {string} userId @param {{namespaceId?:string,kind?:string}} context @param {string[]} removed @param {string} act */
-  async #exactSweep(userId, context, removed, act, skipSafety = false) {
-    const prints = new Set(removed.map(removalStatement).filter(text => containsRemoved(text, text)).map(lineFingerprint));
+   * @param {string} userId @param {{namespaceId?:string,kind?:string}} context @param {string[]} removed @param {string} act
+   * @param {boolean} [skipSafety] @param {import('./memoryHistoryPersistence.mjs').MemorySweep['files']} [inventory] */
+  async #exactSweep(userId, context, removed, act, skipSafety = false, inventory = undefined) {
+    const prints = new Set(removed.filter(text => containsRemoved(text, text)).map(exactRemovalStatement).map(lineFingerprint));
     const namespace = context.kind === 'geo-project' ? context.namespaceId : null;
     for (const file of await this.rawFiles(userId)) {
       if ((file.namespaceId ?? null) !== namespace || skipSafety && file.type === 'safety_notes') continue;
-      const lines = removalLines(file.body).filter(text => prints.has(lineFingerprint(removalStatement(text))));
+      if (inventory && !inventory.some(entry => entry.uri === file.uri && entry.hash === file.hash)) continue;
+      const lines = removalLines(file.body).filter(text => prints.has(lineFingerprint(exactRemovalStatement(text))));
       if (lines.length) await this.forgetLines(userId, file, lines, { act, sweep: false });
     }
   }
@@ -2127,6 +2168,14 @@ export class NativeMemoryStore {
     const context = await this.#fileContext(scan.owner_id, `${scan.user_root}/memories/notes/forget.md`);
     const authority = (await this.overlay.removals(scan.owner_id, context.kind === 'geo-project' ? context.namespaceId : null))
       .filter(row => sweep.removed.includes(row.fingerprint) && row.text);
+    if (sweep.exact) {
+      await withNativeMemoryWrite(this.overlay.database, scan.owner_id, async () => {
+        if (!await ledger.saveMemorySweep(scan, sweep)) return;
+        await this.#exactSweep(scan.owner_id, context, authority.map(row => row.text), sweep.act, false, sweep.files);
+        sweep.exact = false;
+        await ledger.saveMemorySweep(scan, sweep);
+      }, { exclusive: true });
+    }
     if (!sweep.candidates) {
       const hits = await context.sessions.find(scan.owner_id, authority.map(row => row.text).join('\n'),
         { target: context.sessions.memoryRoot(scan.owner_id), limit: 8 });
@@ -2332,9 +2381,9 @@ export class NativeMemoryStore {
   /**
    * The conversation's `forget` tool, through the memory gateway (`memoryTool.forget`): the same forget as the page's, by URI,
    * with its undo — what the person asked a conversation to forget they can bring back from the page.
-   * @param {any} user @param {any} project @param {string | null} uri @param {{ context?: any,lines?:string[],statement?:string,engineSession?:string|null }} [options]
+   * @param {any} user @param {any} project @param {string | null} uri @param {{ context?: any,lines?:string[],statement?:string,engineSession?:string|null,deferStatement?:boolean }} [options]
    */
-  async forget(user, project, uri, { context = null, engineSession = null, lines, statement } = {}) {
+  async forget(user, project, uri, { context = null, engineSession = null, lines, statement, deferStatement = false } = {}) {
     const targeted = lines !== undefined || statement !== undefined;
     const invalid = message => new HttpError(400, 'memory_payload_invalid', message);
     if (targeted && !this.forgetTargetsEnabled) throw invalid('lines and statement require targeted forgetting to be enabled.');
@@ -2360,6 +2409,16 @@ export class NativeMemoryStore {
     if (!uri) {
       if (heldLines.length) return { removed: true, removedLines: heldLines.length, historyRejected: true, ...heldScan };
       if (!this.history) throw new HttpError(503, 'memory_engine_unavailable', 'History rejection is unavailable.');
+      if (deferStatement) {
+        const text = removalText(statement).replace(/\s+/g, ' ');
+        if (!normalisedStatement(text)) throw invalid('statement must contain text after formatting is removed.');
+        const sweep = this.overlay.deferredSummaryRebuildEnabled === true ? {
+          act: newAct(), removed: [lineFingerprint(text)], exact: true, files: await this.#sweepInventory(String(user.id), null, [text]),
+        } : null;
+        const requestId = await this.history.ledger.requestStatementForget(actual, text, sweep);
+        if (!requestId) throw new HttpError(403, 'memory_scope_denied', 'The account has changed.');
+        return { removed: false, historyRejected: true, historyScanPending: true, forgetStatus: 'requested', requestId };
+      }
       const historyScanPending = await withNativeMemoryWrite(this.overlay.database, String(user.id), () =>
         this.recordForgetIntent(String(user.id), actual, null, [removalText(statement).replace(/\s+/g, ' ')], { engineSession }));
       return { removed: false, historyRejected: true, ...(historyScanPending ? { historyScanPending: true } : {}) };

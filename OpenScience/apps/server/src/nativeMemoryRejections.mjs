@@ -68,14 +68,17 @@ export function similarity(left, right) {
 export function containsRemoved(written, removed, { shortContainment = false, ignoreWhitespace = false } = {}) {
   const writtenHistory = memoryHistoryLine(written);
   const removedHistory = memoryHistoryLine(removed);
-  const haystack = compact(removalStatement(writtenHistory?.value ?? written));
-  const needle = compact(removalStatement(removedHistory?.value ?? removed));
+  const writtenStatement = removalStatement(writtenHistory?.value ?? written);
+  const removedStatement = removalStatement(removedHistory?.value ?? removed);
+  const haystack = compact(writtenStatement);
+  const needle = compact(removedStatement);
   // A bare date/year/count is not a fact. Even equality must contain content.
   if (!needle || !/[\p{L}]/u.test(needle) || /^(?:\d+[年月日次个]?)+$/u.test(needle)) return false;
-  if (!(haystack === needle || (shortContainment || [...needle].length >= MIN_CONTAINED) && haystack.includes(needle))) return false;
+  const exactPersonal = haystack === needle || compact(withoutRecurringSubject(writtenStatement))
+    === compact(withoutRecurringSubject(removedStatement));
+  if (!(exactPersonal || (shortContainment || [...needle].length >= MIN_CONTAINED) && haystack.includes(needle))) return false;
   // Compact containment must not turn T-92516 into a prefix match of T-92516-4.
-  return hardTokens(removalStatement(removedHistory?.value ?? removed)).every(token =>
-    tokenPresent(token, removalStatement(writtenHistory?.value ?? written), { ignoreWhitespace }));
+  return hardTokens(removedStatement).every(token => tokenPresent(token, writtenStatement, { ignoreWhitespace }));
 }
 
 /**
@@ -266,6 +269,16 @@ export function removalStatement(text) {
   body = body.replace(INLINE_DATE_NOTE, '').replace(CHINESE_DATE_NOTE, '').replace(SPEAKER_LABEL, '');
   return normalisedStatement(body);
 }
+
+/** Compare a complete recurring statement with its subject-omitted memory form.
+ * Do not use the result for containment: another person's schedule can include the same words.
+ * @param {string} text */
+export function exactRemovalStatement(text) {
+  return withoutRecurringSubject(removalStatement(text));
+}
+
+/** @param {string} text */
+const withoutRecurringSubject = text => text.replace(/^我\s*(?=每(?:天|日|周|星期|个月|月|年))/, '');
 
 /** Distinctive alphanumeric identifiers survive rewording without a subject-word gate.
  * Generic values still need their subject; provenance and dates alone never withdraw another fact.

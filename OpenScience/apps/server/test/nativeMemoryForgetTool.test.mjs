@@ -15,6 +15,7 @@ function fixture(enabled = true) {
   let historyFailure = false, historyWriteFailure = false, inTransaction = false, failScan = 1;
   const database = {
     query: async (sql, values) => {
+      if (sql.includes('api_statement_forgets')) return { rows: [] };
       assert.match(sql, /INSERT INTO evimed_memory.history_message_rejections/);
       const [owner, , , type, fingerprint] = values;
       // Model the deployed composite FK, including the parent owner and type.

@@ -6,10 +6,12 @@ import { lineFingerprint, normalisedStatement, nativeMemoryRejectionType } from 
 import { OPENVIKING_KNOWN_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from './openVikingLayout.mjs';
 import { removalContentMatch, removalAssertionKey } from './nativeMemoryRejections.mjs';
 
-/** @typedef {{act:string,removed:string[],files?:{uri:string,hash:string,afterExactHash?:string}[],candidates?:{uri:string,fingerprint:string,hash:string}[],done?:boolean}} MemorySweep */
+/** @typedef {{act:string,removed:string[],files?:{uri:string,hash:string,afterExactHash?:string}[],candidates?:{uri:string,fingerprint:string,hash:string}[],exact?:boolean,done?:boolean}} MemorySweep */
 /** @typedef {{id:string,owner_id:string,owner_created_at:string,namespace_id:string,user_root:string,
  * memory_type:string,fingerprint:string,text:string,cutoff:Date,archives:string[],cursor:number,claim:string,attempts:number,memory_sweep?:MemorySweep|null}} ForgetScan */
 /** @typedef {{archive_uri:string,message_hash:string,fingerprint?:string,source_session?:string|null}} SourceMessage */
+/** @typedef {{id:string,user_id:string,owner_created_at:string,namespace_id:string,user_root:string,
+ * statement:string,requested_at:Date,claim:string,memory_sweep:MemorySweep|null}} StatementForget */
 
 /** A cited source unit (one archive, or every archive of one conversation session) is withdrawn whole when it
  * has an exactly withdrawn human message and no recorded human message of it survives. Any withdrawn unit
@@ -58,6 +60,20 @@ ALTER TABLE evimed_memory.history_forget_scans ADD COLUMN IF NOT EXISTS memory_s
 -- A memory-file sweep alone owes no archive scan. Existing obligations keep their frozen source scope.
 ALTER TABLE evimed_memory.history_forget_scans ADD COLUMN IF NOT EXISTS history_scan boolean NOT NULL DEFAULT true;
 CREATE INDEX IF NOT EXISTS history_forget_scans_due ON evimed_memory.history_forget_scans(next_attempt_at) WHERE state='pending';
+-- The temporary read fence has no authority to mutate files or their sources.
+CREATE TABLE IF NOT EXISTS evimed_memory.api_statement_forgets (
+  id text PRIMARY KEY, user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  owner_created_at text NOT NULL, namespace_id text NOT NULL, user_root text NOT NULL,
+  fingerprint text NOT NULL, statement text, memory_sweep jsonb,
+  requested_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  state text NOT NULL DEFAULT 'requested' CHECK(state IN ('requested','executed','not_executed')),
+  failures integer NOT NULL DEFAULT 0, next_attempt_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  lease_until timestamptz, claim text
+);
+CREATE UNIQUE INDEX IF NOT EXISTS api_statement_forgets_requested
+  ON evimed_memory.api_statement_forgets(user_id,namespace_id,fingerprint) WHERE state='requested';
+CREATE INDEX IF NOT EXISTS api_statement_forgets_due
+  ON evimed_memory.api_statement_forgets(next_attempt_at) WHERE state='requested';
 CREATE TABLE IF NOT EXISTS evimed_memory.history_write_messages (
   owner_id text NOT NULL, owner_created_at text NOT NULL, namespace_id text NOT NULL,
   archive_uri text NOT NULL, message_hash text NOT NULL,
@@ -209,8 +225,9 @@ export class MemoryHistoryLedger {
    * rows. Keyset pages cover the complete namespace; overflow is unavailable,
    * never a truncated privacy list. No PostgreSQL character-class substitute.
    */
-  async rejected(context, texts, archiveUri = null, messages = []) {
+  async rejected(context, texts, archiveUri = null, messages = [], { includePending = false } = {}) {
     await this.migrate();
+    if (includePending && await this.pendingStatementRejects(context, texts)) return true;
     const types = (context.kind === 'geo-project' ? OPENVIKING_PROJECT_MEMORY_TYPES : OPENVIKING_KNOWN_MEMORY_TYPES)
       .map(type => nativeMemoryRejectionType(type, context.kind === 'geo-project' ? context.namespaceId : null));
     // A one-shot remember/page archive can duplicate a conversation capture.
@@ -331,6 +348,83 @@ export class MemoryHistoryLedger {
       (owner_id,owner_created_at,namespace_id,memory_type,fingerprint,archive_uri,message_hash)
       VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
       [context.ownerId,context.ownerCreatedAt,context.namespaceId,memoryType,fingerprint,message.archiveUri,message.messageHash??lineFingerprint(message.text)]);
+  }
+
+  /** @param {{ownerId:string,ownerCreatedAt:string,namespaceId:string,userRoot:string}} context
+   * @param {string} statement @param {MemorySweep|null} sweep */
+  async requestStatementForget(context, statement, sweep) {
+    return this.locked(context.ownerId, async c => {
+      const result = await c.query(`INSERT INTO evimed_memory.api_statement_forgets
+        (id,user_id,owner_created_at,namespace_id,user_root,fingerprint,statement,memory_sweep)
+        SELECT $1,id,$3,$4,$5,$6,$7,$8::jsonb FROM evimed_control.users WHERE id=$2 AND created_at::text=$3
+        ON CONFLICT(user_id,namespace_id,fingerprint) WHERE state='requested' DO UPDATE SET id=api_statement_forgets.id
+        RETURNING id`, [randomBytes(16).toString('hex'), context.ownerId, context.ownerCreatedAt, context.namespaceId,
+        context.userRoot, lineFingerprint(statement), statement, sweep && JSON.stringify(sweep)]);
+      return result.rows[0]?.id ?? null;
+    });
+  }
+
+  /** @param {{ownerId:string,ownerCreatedAt:string,kind:string,namespaceId:string}} context @returns {Promise<string[]>} */
+  async pendingStatements(context) {
+    if (context.kind === 'geo-project') return [];
+    await this.migrate();
+    const result = await this.database.query(`SELECT statement FROM evimed_memory.api_statement_forgets
+      WHERE user_id=$1 AND owner_created_at=$2 AND namespace_id=$3 AND state='requested'`,
+    [context.ownerId, context.ownerCreatedAt, context.namespaceId]);
+    return result.rows.map(row => row.statement);
+  }
+
+  async pendingStatementRejects(context, texts) {
+    if (!texts.length) return false;
+    return (await this.pendingStatements(context)).some(statement => texts.some(text =>
+      removalContentMatch(text, statement, { shortContainment: true })));
+  }
+
+  /** @returns {Promise<StatementForget|undefined>} */
+  async claimStatementForget() {
+    await this.migrate();
+    const result = await this.database.query(`UPDATE evimed_memory.api_statement_forgets SET
+      claim=$1,lease_until=clock_timestamp()+interval '10 minutes' WHERE id=(
+        SELECT id FROM evimed_memory.api_statement_forgets WHERE state='requested'
+          AND next_attempt_at<=clock_timestamp() AND (lease_until IS NULL OR lease_until<clock_timestamp())
+        ORDER BY next_attempt_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING *`, [randomBytes(16).toString('hex')]);
+    return result.rows[0];
+  }
+
+  /** Settle in the same transaction as the permanent rejection and its undo revision.
+   * @param {StatementForget} request */
+  async executeStatementForget(request) {
+    const result = await this.database.query(`UPDATE evimed_memory.api_statement_forgets
+      SET statement=NULL,memory_sweep=NULL,state='executed',claim=NULL,lease_until=NULL
+      WHERE id=$1 AND claim=$2 AND state='requested' RETURNING id`, [request.id, request.claim]);
+    return result.rows.length > 0;
+  }
+
+  /** @param {StatementForget} request @param {boolean} retryBusy */
+  async failStatementForget(request, retryBusy) {
+    await this.database.query(`UPDATE evimed_memory.api_statement_forgets SET
+      failures=failures+CASE WHEN $3 THEN 0 ELSE 1 END,claim=NULL,lease_until=NULL,
+      next_attempt_at=clock_timestamp()+interval '30 seconds',
+      state=CASE WHEN NOT $3 AND failures>=2 THEN 'not_executed' ELSE state END,
+      statement=CASE WHEN NOT $3 AND failures>=2 THEN NULL ELSE statement END,
+      memory_sweep=CASE WHEN NOT $3 AND failures>=2 THEN NULL ELSE memory_sweep END
+      WHERE id=$1 AND claim=$2 AND state='requested'`, [request.id, request.claim, retryBusy]);
+  }
+
+  /** @param {string} userId @param {string} requestId */
+  async statementForgetStatus(userId, requestId) {
+    await this.migrate();
+    const { rows: [row] } = await this.database.query(`SELECT r.state,r.failures, EXISTS(
+        SELECT 1 FROM evimed_memory.history_forget_scans s WHERE s.owner_id=r.user_id
+          AND s.owner_created_at=r.owner_created_at AND s.namespace_id=r.namespace_id
+          AND s.memory_type='notes' AND s.fingerprint=r.fingerprint AND s.state='pending'
+      ) AS scanning FROM evimed_memory.api_statement_forgets r JOIN evimed_control.users u
+        ON u.id=r.user_id AND u.created_at::text=r.owner_created_at WHERE r.user_id=$1 AND r.id=$2`, [userId, requestId]);
+    if (!row) return null;
+    if (row.state === 'not_executed') return { requestId, forgetStatus: 'not_executed', reason: 'statement_forget_failed' };
+    if ((row.state === 'requested' && row.failures > 0) || (row.state === 'executed' && row.scanning))
+      return { requestId, forgetStatus: 'pending_verification' };
+    return { requestId, forgetStatus: row.state };
   }
   /** @param {{ownerId:string,ownerCreatedAt:string,namespaceId:string,userRoot:string}} context
    * @param {string} memoryType @param {string} fingerprint @param {boolean} [historyScan] */
@@ -553,6 +647,7 @@ export class MemoryHistoryLedger {
   }
   async fence(ownerId, { ownerCreatedAt = null, projectId = '', projectCreatedAt = null, sessionId = '', permanent }) {
     await this.locked(ownerId, async c => {
+      if (!projectId && !sessionId) await c.query('DELETE FROM evimed_memory.api_statement_forgets WHERE user_id=$1', [ownerId]);
       const owners = ownerCreatedAt ? [ownerCreatedAt] : (await c.query(`SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1
         UNION SELECT owner_created_at AS stamp FROM evimed_memory.history_chunks WHERE owner_id=$1`, [ownerId])).rows.map(row => row.stamp);
       for (const stamp of owners) {
