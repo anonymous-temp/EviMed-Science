@@ -536,6 +536,47 @@ describe("native frame identity and readiness", () => {
       expect(mocks.create).toHaveBeenCalledTimes(2);
       expect(screen.queryByRole("alert")).toBeNull();
     });
+
+    it("lets readiness supersede a cleanup refusal and retries the same opening only on a fresh refusal", async () => {
+      vi.useFakeTimers();
+      mocks.start.mockRejectedValueOnce(new WebApiError("Maintenance in progress.", { status: 409, code: "memory_source_cleanup_busy" }));
+      const frameId = "frame-retry";
+      mocks.create.mockResolvedValueOnce(binding).mockResolvedValueOnce({
+        ...binding, frameId, frameUrl: `${mocks.profile.uiOrigin}/__evimed/f/${frameId}/`,
+      });
+      const { container } = mount(null, "/app/chat/session-a");
+      const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+      await advance(0);
+      expect(screen.getByText("正在整理记忆")).toBeVisible();
+      const first = container.querySelector("iframe")!;
+      const initial = vi.spyOn(first.contentWindow!, "postMessage");
+      emit(first, { type: "evimed.runtime-ui.ready" });
+      await advance(4_000);
+      expect(initial).toHaveBeenCalledTimes(1);
+      expect(mocks.create).toHaveBeenCalledTimes(1);
+      expect(mocks.start).toHaveBeenCalledTimes(1);
+
+      const { requestId, intent } = initial.mock.calls[0][0];
+      emit(first, { type: "evimed.runtime-ui.ack", seq: 2, requestId, ok: false, error: "memory_source_cleanup_busy" });
+      await advance(1_999);
+      expect(mocks.create).toHaveBeenCalledTimes(1);
+      await advance(1);
+      const second = container.querySelector("iframe")!;
+      expect(second).not.toBe(first);
+      const retried = vi.spyOn(second.contentWindow!, "postMessage");
+      emit(second, { type: "evimed.runtime-ui.ready", frameId });
+      expect(retried).toHaveBeenCalledTimes(1);
+      expect(retried.mock.calls[0][0]).toMatchObject({ requestId, intent });
+      emit(second, { type: "evimed.runtime-ui.ack", frameId, seq: 2, requestId, ok: true, sessionId: "session-a" });
+      await advance(0);
+      emit(second, { type: "evimed.runtime-ui.session", frameId, seq: 3, sessionId: "session-native" });
+      await advance(4_000);
+      expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-native");
+      expect(container.querySelector("iframe")).toBe(second);
+      expect(retried).toHaveBeenCalledTimes(1);
+      expect(mocks.create).toHaveBeenCalledTimes(2);
+      expect(mocks.start).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("a conversation opened while every research environment of the deployment is taken", () => {
