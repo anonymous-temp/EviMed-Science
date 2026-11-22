@@ -1521,11 +1521,17 @@ for (const portable of [false, true]) test(`people scores, floor and alias hints
   const { NativeMemoryOverlay } = await import('../src/nativeMemoryOverlay.mjs');
   const person = `${ROOT}/memories/people/王阿姨.md`, sibling = `${ROOT}/memories/people/小王阿姨.md`;
   const privateUri = `${ROOT}/memories/people/大王阿姨.md`;
+  const files = [person, sibling, privateUri].map(uri => ({
+    uri, memory_type: 'people', project_id: uri === person ? 'p1' : 'elsewhere', sensitive: uri === privateUri,
+  }));
   const overlay = new NativeMemoryOverlay({ database: { transaction: async () => {}, query: async sql => ({ rows:
     sql.includes('native_markers') ? [{}] : sql.includes('AND sensitive') ? [{ uri: privateUri }]
-      : sql.includes('memory_type=ANY') ? [sibling, privateUri].map(uri => ({ uri })) : [] }) } });
+      : sql.includes('memory_type=ANY') ? files.filter(row => row.project_id !== 'p1')
+      : sql === 'SELECT * FROM evimed_memory.native_files WHERE user_id=$1' ? files : [] }) } });
   const f = await fixture(t, { config: { memoryPeopleAcrossProjectsEnabled: portable,
-    memoryPersonAliasHintEnabled: true, memoryObservationInductionEnabled: true, memoryFileSearchMinScore: 0.895 }, overlay });
+    memoryPersonAliasHintEnabled: true, memoryPersonMergeEnabled: true, memoryObservationInductionEnabled: true, memoryFileSearchMinScore: 0.895 },
+    overlay, memoryTool: { people: async () => assert.fail('recall cannot merge people') }, personMessages: async () => [],
+    admission: fixedAdmission({ sessionId: 'current-conversation' }) });
   f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Likes walking.');
   f.stub.seedMemory(OV_USER, 'people/小王阿姨.md', '# 小王阿姨\n- Likes reading.');
   f.stub.seedMemory(OV_USER, 'people/大王阿姨.md', '# 大王阿姨\n- Private person.');
@@ -1541,6 +1547,15 @@ for (const portable of [false, true]) test(`people scores, floor and alias hints
   const context = await f.call('POST', '/api/v1/search/search', { query: '王阿姨', mode: 'context' });
   assert.equal(context.json.result.entries.find(entry => entry.uri === person).text.includes(sibling), portable);
   assert.ok(!context.json.result.rendered.includes(privateUri));
+  const read = await f.call('GET', '/api/v1/content/read?uri=' + encodeURIComponent(person));
+  const mcpRead = await f.mcp({ jsonrpc: '2.0', id: 911, method: 'tools/call', params: { name: 'read', arguments: { uris: [person] } } });
+  assert.equal(mcpRead.messages[0].result.content.at(-1).text, 'People confirmation pairs: []');
+  for (const body of [read.json.result, mcpRead.messages[0].result.content[0].text]) {
+    assert.match(body, /Likes walking/);
+    assert.equal(body.includes(sibling), portable);
+    assert.ok(!body.includes(privateUri));
+    assert.doesNotMatch(body, /Likes reading/);
+  }
 });
 
 test('alias hints and redirects use the deferred-forget fence on every recall surface', async t => {
