@@ -524,7 +524,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     setCoverDraft("");
   }), []);
   // A maintenance retry remounts the frame for the same opening.
-  const opening = useMemo<{ intent: RuntimeUiIntent; implicit: boolean } | null>(() => {
+  const opening = useMemo<{ intent: RuntimeUiIntent; implicit: boolean; mirroredAttempt?: number } | null>(() => {
     // A frame the reader is not looking at holds its document and its lease
     // and commands nothing: two cached projects must not both open a session.
     if (!active || suspended) return null;
@@ -533,11 +533,19 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     if (scope && sessionId !== scope.sessionId) return null;
     const pending = runtimeUiIntentMarkerFromState(location.state, projectId) ? null : pendingRuntimeUiIntent(projectId, sessionId, scope);
     if (pending) return { intent: pending, implicit: false };
-    return { implicit: true, intent: { kind: sessionId ? "open" : "create", projectId, requestId: crypto.randomUUID(), owner: sessionOwner(),
-      sessionId: sessionId ?? crypto.randomUUID(), ...(scope ? {scope} : {}) } satisfies RuntimeUiIntent };
-  }, [active, suspended, location, projectId, sessionId, scope]);
-  // An acknowledged URL reflects the frame's current session until a fresh frame needs to open it.
-  const intent = opening?.implicit && sessionId && mirroredSession.current?.sessionId === sessionId && mirroredSession.current?.attempt === attempt
+    // The frame may select or clear another session before the router commits its new address.
+    // An address that arrived as a mirror stays consumed for that frame attempt.
+    const mirror = mirroredSession.current;
+    return {
+      implicit: true,
+      mirroredAttempt: mirror?.sessionId === sessionId ? mirror.attempt : undefined,
+      intent: { kind: sessionId ? "open" : "create", projectId, requestId: crypto.randomUUID(), owner: sessionOwner(),
+        sessionId: sessionId ?? crypto.randomUUID(), ...(scope ? {scope} : {}) },
+    };
+  }, [active, suspended, location.state, projectId, sessionId, scope]);
+  // A pane can also acknowledge the opening in place, without a route change.
+  const intent = opening?.implicit && (opening.mirroredAttempt === attempt ||
+    (mirroredSession.current?.sessionId === sessionId && mirroredSession.current?.attempt === attempt))
     ? null : opening?.intent ?? null;
 
   useEffect(() => {
@@ -932,7 +940,11 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
       } else if (message.type === "evimed.runtime-ui.ready") {
         nativeReady.current = true;
         recoveryAttempted.current = false;
-        if (!intent) endPreparation();
+        // This document can take the opening now. A later refusal of that command can schedule its own retry.
+        if (intent) {
+          clearTimeout(preparingTimer.current);
+          preparingTimer.current = undefined;
+        } else endPreparation();
         endWait();
         setNativeError(null);
         incoming.current = message.seq; lastSent.current = ""; setReady(true);
