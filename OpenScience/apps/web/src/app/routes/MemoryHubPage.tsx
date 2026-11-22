@@ -288,7 +288,7 @@ function MemoryHub() {
     <List label={label}>
       {rows.map((fact) => (
         <MemoryListRow
-          key={fact.key} title={fact.text} summary={factRowSummary(fact)} onOpen={() => setOpenKey(fact.key)}
+          key={fact.key} title={named && fact.section === "safety" ? `安全事项 · ${fact.text}` : fact.text} summary={factRowSummary(fact)} onOpen={() => setOpenKey(fact.key)}
           end={named ? projectName(fact.projectId) ?? OTHER_PROJECT_LABEL : undefined}
         />
       ))}
@@ -399,6 +399,7 @@ function MemoryHub() {
           records={records}
           entries={data.mine?.forgotten ?? []}
           requests={data.profile?.forgetRequests}
+          conversations={data.profile?.conversations}
           projectName={projectName}
           onClose={() => setDrawer(null)}
           onChanged={reload}

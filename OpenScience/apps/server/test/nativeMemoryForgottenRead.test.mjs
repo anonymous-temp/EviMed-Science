@@ -46,3 +46,47 @@ test("a read of the forgotten lines that fails lists no earlier versions, and th
     assert.ok(!JSON.stringify(records).includes("Kidney International"), "no forgotten word anywhere in the records");
   }
 });
+
+test("archived statements recover their own sources before and after origin snapshots", async () => {
+  const archive = name => `viking://user/u1/sessions/${name}/history/archive_001`;
+  const tool = archive('mcp-store-note'), direct = archive('dsh-second');
+  const forgotten = { uri: URI, id: '45', before: `- ${FORGOTTEN}\n- ${KEPT}`, after: '', actor: 'conversation',
+    engineSession: 'dsh-forgetter', memoryType: 'preferences', reason: 'forgotten in a conversation', change: 'updated' };
+  const first = { uri: URI, id: '1', before: null, after: forgotten.before, actor: 'engine', archiveUri: tool };
+  const receipts = new Map([[tool, { projectId: 'p', engineSession: 'dsh-original', currentProject: true }],
+    [direct, { projectId: 'p', engineSession: 'dsh-second', currentProject: true }]]);
+  for (const saved of [true, false]) {
+    const fetched = [];
+    const memories = store({
+      forgottenRevisions: async () => [{ ...forgotten, ...(saved ? { forgottenOrigins: {
+        [lineFingerprint(FORGOTTEN)]: [tool], [lineFingerprint(KEPT)]: [direct],
+      } } : {}) }],
+      revisionsOf: async (_owner, _uri, { beforeId }) => {
+        fetched.push(beforeId);
+        return beforeId === '45' ? Array.from({ length: 32 }, (_, i) => ({ ...first,
+          id: String(44 - i), before: first.after, actor: 'user' })) : [first];
+      },
+      forgottenConversationBindings: async (_owner, archives) => new Map(archives.map(key => [key, receipts.get(key)])),
+    });
+    memories.conversationTitles = async () => ({});
+    const rows = await memories.forgotten('u1', { files: [], includeSources: true });
+    assert.deepEqual(fetched, saved ? [] : ['45', '13']);
+    assert.equal(rows.find(row => row.value === FORGOTTEN).evidence[0].conversationId, 'original');
+    assert.equal(rows.find(row => row.value === KEPT).evidence[0].conversationId, saved ? 'second' : 'original');
+    assert.ok(!JSON.stringify(rows).includes('dsh-forgetter'));
+  }
+});
+
+test("a manually reintroduced statement and a snapshot in another namespace cannot authorize deleting a conversation", async () => {
+  const archived = { uri: URI, id: '5', before: FORGOTTEN, after: null, actor: 'user', memoryType: 'preferences', change: 'deleted' };
+  const foreign = 'viking://user/other/sessions/dsh-foreign/history/archive_001';
+  for (const snapshot of [null, { [lineFingerprint(FORGOTTEN)]: [foreign] }]) {
+    let requested;
+    const memories = store({ forgottenRevisions: async () => [{ ...archived, forgottenOrigins: snapshot }],
+      revisionsOf: async () => [{ id: '4', before: '', after: FORGOTTEN, actor: 'user' },
+        { id: '1', before: '', after: FORGOTTEN, actor: 'engine', archiveUri: foreign }],
+      forgottenConversationBindings: async (_owner, archives) => { requested = archives; return new Map(); } });
+    assert.deepEqual((await memories.forgotten('u1', { files: [], includeSources: true }))[0].evidence, []);
+    assert.deepEqual(requested, []);
+  }
+});

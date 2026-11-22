@@ -503,6 +503,25 @@ describe("native frame identity and readiness", () => {
       expect(screen.queryByText("正在整理记忆")).toBeNull();
     });
 
+    it("keeps the draft across repeated maintenance refusals until the two-minute deadline", async () => {
+      vi.useFakeTimers();
+      const { container } = mount(null, "/app/chat");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      fireEvent.change(screen.getByRole("textbox", { name: "输入你想做的事" }), { target: { value: "继续写" } });
+      for (let attempt = 0; attempt < 7; attempt++) {
+        notice(container.querySelector("iframe")!, "memory_source_cleanup_busy");
+        expect(screen.getByText("正在整理记忆")).toBeVisible();
+        expect(screen.queryByRole("alert")).toBeNull();
+        await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+      }
+      expect(screen.getByRole("textbox", { name: "输入你想做的事" })).toHaveValue("继续写");
+      await act(async () => { await vi.advanceTimersByTimeAsync(105999); });
+      expect(screen.queryByRole("alert")).toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(screen.getByRole("alert")).toHaveTextContent("整理记忆超时");
+      expect(screen.getByRole("button", { name: "重试" })).toBeVisible();
+    });
+
     it("automatically retries after the native session call reports maintenance", async () => {
       vi.useFakeTimers();
       const { container } = mount(null, "/app/chat/session-a");

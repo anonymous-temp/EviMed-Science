@@ -261,8 +261,8 @@ test("documents, revisions and usage share one PostgreSQL snapshot while the acc
   await db.query(`INSERT INTO evimed_memory.native_commits(user_id,archive_uri,engine_session,origin,state,extraction)
     VALUES($1,$2,'dsh-snapshot','gateway','pending','{"forgetRequests":{"state":"pending","requests":[]}}')`,
   [f.owner, `${root}/sessions/dsh-snapshot/history/archive_001`]);
-  await db.query(`INSERT INTO evimed_memory.native_revisions(user_id,uri,memory_type,change,actor,reason,before,after)
-    VALUES($1,$2,'notes','updated','user','edited on the memory page','original edit','replacement edit')`,
+  await db.query(`INSERT INTO evimed_memory.native_revisions(user_id,uri,memory_type,change,actor,reason,before,after,forgotten_origins)
+    VALUES($1,$2,'notes','updated','user','edited on the memory page','original edit','replacement edit','{"internal-print":["private-archive-locator"]}')`,
   [f.owner, `${root}/memories/notes/snapshot.md`]);
   await db.query(`INSERT INTO evimed_memory.native_admissions(user_id,candidate_id,candidate_revision,engine_session,state,pending_text,account_created_at)
     SELECT id,'snapshot',1,'evimed-snapshot','queued','original pending input',created_at FROM evimed_control.users WHERE id=$1`, [f.owner]);
@@ -300,6 +300,7 @@ test("documents, revisions and usage share one PostgreSQL snapshot while the acc
   assert.equal(state.usage[0].actualCost, "0.25000000");
   assert.equal(state.nativeMemory.forgetRequests[0].state, "pending");
   assert.equal(state.nativeMemory.revisions[0].before, "original edit");
+  assert.doesNotMatch(JSON.stringify(state), /internal-print|private-archive-locator|forgotten_origins/);
   assert.equal(state.nativeMemory.admissions[0].text, "original pending input");
   assert.equal(state.nativeMemory.imports[0].statements[0].text, "original import");
   assert.equal((await f.documents.get(f.owner, "fact", "fact-one")).payload.content, "concurrently changed");

@@ -1,3 +1,4 @@
+import { isNeutralProfileHeading } from "@evimed/domain";
 import type { WebStructuredMemory } from "@/lib/apiClient";
 import { memoryExcerpt, readableMemory } from "@/lib/memoryText";
 
@@ -24,6 +25,16 @@ export function isProfileLine(record: Pick<WebStructuredMemory, "document">): bo
 export function fileTopic(record: Pick<WebStructuredMemory, "summary" | "value">): string {
   const named = record.summary.replace(/_+/g, " ").trim();
   return named || memoryExcerpt(record.value, 40);
+}
+
+/** A safety card names its subject separately from the history it describes. */
+export function safetyCardTitle(value: string): string {
+  const body = readableMemory(value);
+  const subject = /^# (.+)$/mu.exec(body)?.[1]?.trim();
+  const topic = /^#{2,6} (.+)$/mu.exec(body)?.[1]?.trim()
+    || body.split("\n").map(line => line.trim()).find(line => line && !/^#{1,6}\s/u.test(line))?.replace(/^[-*+]\s+/u, "");
+  const label = subject && !isNeutralProfileHeading(`# ${subject}`) ? [subject, topic].filter(Boolean).join(" · ") : topic;
+  return memoryExcerpt(label || "安全事项", 60);
 }
 
 /** The statements of a file, one per line, without the bullet or heading mark the file is dressed in. */

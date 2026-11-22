@@ -50,6 +50,21 @@ describe("forgotten memory wording", () => {
     expect(screen.queryByRole("button", { name: "恢复" })).toBeNull();
   });
 
+  it("keeps two original conversations separately selectable and confirms the chosen one", async () => {
+    vi.mocked(deleteConversationSource).mockClear();
+    const user = userEvent.setup();
+    const evidence = ["first", "second"].map(id => ({ sourceType: "conversation", sourceRef: `sessions/${id}/commits/archive_001`,
+      projectId: "p", quote: "", weight: 1, fingerprint: id, observedAt: null }));
+    const record = plainRecord({ status: "archived", evidence });
+    render(<ForgottenDrawer records={[record]} entries={[]} conversations={{ first: "日常记录", second: "轮班记录" }}
+      projectName={() => null} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: /删除来源对话 2（轮班记录）/ }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("轮班记录");
+    expect(deleteConversationSource).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(deleteConversationSource).not.toHaveBeenCalled();
+  });
+
   it("deletes only the proven source conversation after its own confirmation", async () => {
     const user = userEvent.setup();
     vi.mocked(deleteConversationSource).mockResolvedValue({ id: "deletion", sessionId: "session_original", sourceRemoved: true, cleanup: "complete", reason: null });

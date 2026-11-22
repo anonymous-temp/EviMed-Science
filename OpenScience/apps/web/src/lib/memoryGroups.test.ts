@@ -34,7 +34,7 @@ describe("where a fact belongs", () => {
     expect(selfSection("method_preference")).toBe("habit");
     expect(selfSection("correction")).toBe("correction");
     expect(selfSection("something_new")).toBe("other");
-    expect(SELF_SECTIONS.map((section) => section.key)).toEqual(["background", "preference", "habit", "correction", "people", "other"]);
+    expect(SELF_SECTIONS.map((section) => section.key)).toEqual(["background", "safety", "preference", "habit", "correction", "people", "other"]);
   });
 
   it("titles a drawer by the kind, in words a researcher uses", () => {

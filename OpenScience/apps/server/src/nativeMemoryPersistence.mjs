@@ -332,6 +332,7 @@ ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS project_create
 ALTER TABLE evimed_memory.native_sessions ADD COLUMN IF NOT EXISTS project_created_at text;
 ALTER TABLE evimed_memory.native_line_origins ADD COLUMN IF NOT EXISTS project_created_at text;
 ALTER TABLE evimed_memory.native_revisions ADD COLUMN IF NOT EXISTS source_project_id text;
+ALTER TABLE evimed_memory.native_revisions ADD COLUMN IF NOT EXISTS forgotten_origins jsonb;
 ALTER TABLE evimed_memory.native_revisions ADD COLUMN IF NOT EXISTS source_project_created_at text;
 `;
 

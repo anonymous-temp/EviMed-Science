@@ -523,21 +523,22 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     coverFollowUp.current = null;
     setCoverDraft("");
   }), []);
-  const intent = useMemo(() => {
+  // A maintenance retry remounts the frame for the same opening.
+  const opening = useMemo<{ intent: RuntimeUiIntent; implicit: boolean } | null>(() => {
     // A frame the reader is not looking at holds its document and its lease
     // and commands nothing: two cached projects must not both open a session.
     if (!active || suspended) return null;
     const explicit = runtimeUiIntentFromState(location.state, projectId);
-    if (explicit) return (!sessionId || explicit.sessionId === sessionId) && (scope ? explicit.scope?.geoProjectId === scope.geoProjectId && explicit.scope.sessionId === scope.sessionId : !explicit.scope) ? explicit : null;
+    if (explicit) return (!sessionId || explicit.sessionId === sessionId) && (scope ? explicit.scope?.geoProjectId === scope.geoProjectId && explicit.scope.sessionId === scope.sessionId : !explicit.scope) ? { intent: explicit, implicit: false } : null;
     if (scope && sessionId !== scope.sessionId) return null;
     const pending = runtimeUiIntentMarkerFromState(location.state, projectId) ? null : pendingRuntimeUiIntent(projectId, sessionId, scope);
-    if (pending) return pending;
-    // URL updates acknowledged by the native application do not command it
-    // to open itself again. Browser back/forward still yields a fresh intent.
-    if (sessionId && mirroredSession.current?.sessionId === sessionId && mirroredSession.current?.attempt === attempt) return null;
-    return { kind: sessionId ? "open" : "create", projectId, requestId: crypto.randomUUID(), owner: sessionOwner(),
-      sessionId: sessionId ?? crypto.randomUUID(), ...(scope ? {scope} : {}) } satisfies RuntimeUiIntent;
-  }, [active, suspended, location.state, projectId, sessionId, attempt, scope]);
+    if (pending) return { intent: pending, implicit: false };
+    return { implicit: true, intent: { kind: sessionId ? "open" : "create", projectId, requestId: crypto.randomUUID(), owner: sessionOwner(),
+      sessionId: sessionId ?? crypto.randomUUID(), ...(scope ? {scope} : {}) } satisfies RuntimeUiIntent };
+  }, [active, suspended, location, projectId, sessionId, scope]);
+  // An acknowledged URL reflects the frame's current session until a fresh frame needs to open it.
+  const intent = opening?.implicit && sessionId && mirroredSession.current?.sessionId === sessionId && mirroredSession.current?.attempt === attempt
+    ? null : opening?.intent ?? null;
 
   useEffect(() => {
     const explicit = runtimeUiIntentFromState(location.state, projectId);
@@ -559,7 +560,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     clearTimeout(preparingTimer.current);
     preparingTimer.current = undefined;
     preparingSince.current = null;
-    preparingRetries.current = exhausted ? PREPARING_RETRY_LIMIT : 0;
+    preparingRetries.current = exhausted ? Infinity : 0;
     setPreparing(null);
   }, []);
 
@@ -605,7 +606,8 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     if (preparingTimer.current !== undefined) return;
     const now = Date.now();
     preparingSince.current ??= now;
-    if (preparingRetries.current >= PREPARING_RETRY_LIMIT || now - preparingSince.current >= PREPARING_WAIT_MS) {
+    if (preparingRetries.current === Infinity || (code === "plugin_apply_in_progress" && preparingRetries.current >= PREPARING_RETRY_LIMIT)
+      || now - preparingSince.current >= PREPARING_WAIT_MS) {
       endPreparation(true);
       setError(preparationFailure(code));
       return;
@@ -843,7 +845,14 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = () => {
       void (scope ? geoConversationStatus(scope) : fetchWebRuntimeStatus())
-        .then((status) => { if (live) setStartStatus(status); })
+        .then((status) => {
+          if (!live) return;
+          setStartStatus(status);
+          if (status.startWait === "memory_source_cleanup_busy" && preparingRetries.current !== Infinity) {
+            preparingSince.current ??= Date.now();
+            setPreparing(status.startWait);
+          }
+        })
         .catch(() => {})
         .finally(() => { if (live) timer = setTimeout(poll, 1_500); });
     };

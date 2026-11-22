@@ -417,3 +417,31 @@ test('a stored paraphrase and its original fact share removal authority and undo
   assert.equal((await f.overlay.removals(f.userId)).length, 0);
   assert.equal((await f.store.forgotten(f.userId)).length, 0);
 });
+
+test('a forgotten one-shot remember can delete its bound conversation without a run title or source archive', options, async t => {
+  const f = await fixture(t, { conversationTitles: async () => ({}) });
+  const projectId = 'named-study';
+  await f.database.query('INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,$2,1048576)', [f.userId, projectId]);
+  const uri = `${f.root}/notes/shift.md`;
+  f.stub.extract = () => ({ adds: [{ uri, memory_type: 'notes', after: `- ${fact}` }] });
+  const tool = await f.commitConversation('tool', [{ role: 'user', text: fact }], { projectId, engineSession: 'mcp-store-note', origin: 'tool' });
+  const mismatched = await f.overlay.recordCommit({ userId: f.userId, projectId: 'other', archiveUri: tool.archive_uri,
+    engineSession: tool.session, origin: 'tool', sourceSession: 'dsh-other' });
+  assert.equal(mismatched.sourceSession, undefined);
+  const binding = await f.overlay.recordCommit({ userId: f.userId, projectId, archiveUri: tool.archive_uri,
+    engineSession: tool.session, origin: 'tool', sourceSession: 'dsh-original' });
+  await f.worker.processCommits({ userId: f.userId });
+  await f.store.forget({ id: f.userId }, { id: projectId, userId: f.userId }, uri, { engineSession: 'dsh-forgetter' });
+  assert.equal((await f.overlay.originsOf(f.userId, [uri])).size, 0);
+  const archived = async () => (await f.store.profile(f.userId)).records.find(row => row.status === 'archived');
+  const readSources = async () => (await archived()).evidence.map(row => [row.projectId, row.conversationId]);
+  assert.deepEqual(await readSources(), [[projectId, 'original']]);
+  const scope = await f.overlay.conversationSourceScope(f.userId, projectId, ['original'], f.sessions.userRoot(f.userId), binding.projectCreatedAt);
+  assert.ok(scope.archiveUris.includes(tool.archive_uri));
+  // The same immutable commit also resolves an old forget without a saved origin map.
+  await f.database.query('UPDATE evimed_memory.native_revisions SET forgotten_origins=NULL WHERE user_id=$1', [f.userId]);
+  assert.deepEqual(await readSources(), [[projectId, 'original']]);
+  // A replacement project under the same public id cannot offer this action.
+  await f.database.query("UPDATE evimed_control.projects SET created_at=created_at+interval '1 day' WHERE user_id=$1 AND id=$2", [f.userId, projectId]);
+  assert.deepEqual(await readSources(), []);
+});

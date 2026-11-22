@@ -1,9 +1,9 @@
 import type { WebStructuredMemory } from "@/lib/apiClient";
-import { entryGroup, recordGroup, recordProjectId, selfSection, type MemoryGroup, type SelfSection } from "@/lib/memoryGroups";
+import { displayMemoryKind, entryGroup, recordGroup, recordProjectId, selfSection, type MemoryGroup, type SelfSection } from "@/lib/memoryGroups";
 import type { OwnCapsuleEntry } from "@/lib/memoryClient";
 import { memoryExcerpt } from "@/lib/memoryText";
 import { methodTitle, type WebMethod } from "@/lib/methodsClient";
-import { fileSummary, fileTopic, isFileMemory } from "./memoryNative";
+import { fileSummary, fileTopic, isFileMemory, safetyCardTitle } from "./memoryNative";
 
 /**
  * What the memory page lists, as one shape per kind of row. Two stores hold a
@@ -52,8 +52,8 @@ export function factItems(
     ...shown
       .filter((record) => record.status !== "archived")
       .map((record): FactItem => ({
-        kind: "record", key: `record:${record.id}`, group: recordGroup(record), section: selfSection(record.kind), projectId: recordProjectId(record),
-        at: record.updatedAt ?? record.createdAt ?? "", text: isFileMemory(record) ? fileTopic(record)
+        kind: "record", key: `record:${record.id}`, group: recordGroup(record), section: selfSection(displayMemoryKind(record)), projectId: recordProjectId(record),
+        at: record.updatedAt ?? record.createdAt ?? "", text: record.nativeType === "safety_notes" ? safetyCardTitle(record.value) : isFileMemory(record) ? fileTopic(record)
           : memoryExcerpt(record.earlierValues?.length ? `早先值：${record.summary || record.value}` : record.summary || record.value),
         record,
       })),

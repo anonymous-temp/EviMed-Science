@@ -175,7 +175,7 @@ Unknown is not zero. Unread resource data is not a stopped runtime. Unmeasured s
 
 Show a numerical progress percentage only with a real measured denominator. Use observed stages and last update for unbounded work. Never manufacture countdowns or stage changes. Long duration is not failure; distinguish connection state from task outcome. Action-required badges count actions the current person can take. Automatic recovery belongs in status, not an unanswerable to-do.
 
-Conversation startup uses the cover's status for plugin application and memory maintenance. Retry these temporary refusals within a bounded wait, keep the same conversation intent and draft, and offer the reader a retry only after automatic recovery ends.
+Conversation startup uses the cover's status for plugin application and memory maintenance. Retry these temporary refusals within a bounded wait, keep the same conversation intent and draft, and offer the reader a retry only after automatic recovery ends. During memory cleanup, both the frame document and the cover show 正在整理记忆. Allow two minutes from the first maintenance signal, including repeated refusals.
 
 ## DS10 General conversation and long tasks
 
@@ -216,6 +216,8 @@ Office/PDF/code/table/scientific viewers must expose the same information hierar
 Scientific viewers need keyboard equivalents for pan/rotate/zoom and value inspection, readable instructions, and touch cancellation/lost-capture handling. Fixed scientific canvases may keep their palette, but their labels still meet contrast. Initialize size observation only when the drawing element exists; resize the actual coordinate system. No-features text cannot stand in for initial setup. Provide decoded values in a reachable structured alternative where appropriate.
 
 ## DS14 Memory and capsules
+
+In 关于你 a safety history is labelled 安全事项 and titled by the condition or statement. A matching name and form of address occupy one row. In the forgotten drawer each confirmed original conversation has its own deletion confirmation alongside the memory's restore action.
 
 Account settings offers external-agent keys only when `/api/me` explicitly offers
 `features.agentMemoryApi: true`. Otherwise the entire group is absent and makes no

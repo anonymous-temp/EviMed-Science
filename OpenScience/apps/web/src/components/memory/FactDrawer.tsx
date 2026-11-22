@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { deleteStructuredMemory, forgetReplacedStatement, updateStructuredMemory, webErrorMessage, type WebStructuredMemory } from "@/lib/apiClient";
 import { formatDateTime, formatDay } from "@/lib/format";
-import { kindTitle } from "@/lib/memoryGroups";
+import { displayMemoryKind, kindTitle } from "@/lib/memoryGroups";
 import { readerPath } from "@/lib/knowledgeNav";
 import {
   announceMemoryChanged, archiveMemoryRecord, fetchMemorySources, retireCapsuleEntry, undoCapsuleEntry, undoMemoryRecord, type OwnCapsuleEntry,
@@ -45,15 +45,16 @@ function failed(error: unknown) {
  * address the conversation opens at — so 「来源对话」 is a link back to the place
  * the memory was said, and not a claim the page cannot honour.
  */
-export function memorySource(record: WebStructuredMemory): { sessionId: string; at: string | null; projectId?: string; titleKey?: string } | null {
-  for (const item of record.evidence) {
+export function memorySources(record: WebStructuredMemory) {
+  return record.evidence.flatMap(item => {
     const sessionId = /^sessions\/([^/]+)\//.exec(item.sourceRef ?? "")?.[1];
-    // The project is named when the control plane knows it: a profile line of the native engine is the person's, whatever project
-    // its conversation was held in, and the link must open it there.
-    if (sessionId) return { sessionId, at: item.observedAt ?? record.createdAt, ...(item.projectId ? { projectId: item.projectId } : {}),
-      ...(item.conversationTitleKey ? { titleKey: item.conversationTitleKey } : {}) };
-  }
-  return null;
+    return sessionId ? [{ sessionId, at: item.observedAt ?? record.createdAt, projectId: item.projectId ?? undefined,
+      titleKey: item.conversationTitleKey }] : [];
+  });
+}
+
+export function memorySource(record: WebStructuredMemory) {
+  return memorySources(record)[0] ?? null;
 }
 
 /**
@@ -273,7 +274,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
     <>
       {editGuard.confirming && <ConfirmDialog title="放弃未保存的修改？" confirmLabel="放弃修改" onConfirm={editGuard.discard} onCancel={editGuard.keepEditing} />}
       <Drawer
-        title={record ? kindTitle(record.kind) : kindTitle(entry?.payload.factKind ?? "")}
+        title={record ? kindTitle(displayMemoryKind(record)) : kindTitle(entry?.payload.factKind ?? "")}
         description={[projectName, since, used].filter(Boolean).join(" · ")}
         onClose={onClose}
         dirty={editing && value !== editableText}

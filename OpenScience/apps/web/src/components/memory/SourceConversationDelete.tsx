@@ -16,7 +16,7 @@ import { conversationSourceStatus, deleteConversationSource, type ConversationSo
  * Responsive: wraps within the existing memory drawer.
  * Verification: SourceConversationDelete.test.tsx; native runtime acceptance is separate.
  */
-export function SourceConversationDelete({ projectId, sessionId, onChanged, afterForget = false }: { projectId: string; sessionId: string; onChanged: () => void; afterForget?: boolean }) {
+export function SourceConversationDelete({ projectId, sessionId, onChanged, afterForget = false, name, distinguish }: { projectId: string; sessionId: string; onChanged: () => void; afterForget?: boolean; name?: string; distinguish?: number }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<ConversationSourceDeletionStatus | null>(null);
@@ -29,12 +29,13 @@ export function SourceConversationDelete({ projectId, sessionId, onChanged, afte
     } catch(failure) { setError(productErrorMessage(failure)); }
     finally { setBusy(false); }
   }
+  const sourceLabel = distinguish ? `来源对话 ${distinguish}${name ? `（${name}）` : ""}` : name;
   const pendingText=status?.sourceRemoved?'对话原文已删除，相关记忆尚未清除。':status?.reason==='cleanup_unavailable'?'已隐藏来源对话，清除尚未完成，可稍后查看进度。':'已隐藏来源对话，等待当前工作结束后清除。';
   return <div className="flex flex-wrap items-center gap-2">
-    {!status && <Button size="sm" variant="secondary" destructive disabled={busy} onClick={() => setConfirming(true)}>删除来源对话</Button>}
+    {!status && <Button size="sm" variant="secondary" destructive disabled={busy} onClick={() => setConfirming(true)}>{distinguish ? `删除${sourceLabel}` : "删除来源对话"}</Button>}
     {status && <span role="status" className="text-ui text-text-2">{status.sourceRemoved && status.cleanup === 'complete' ? '来源对话已删除' : pendingText}</span>}
     {status?.cleanup === 'pending' && <Button size="sm" variant="secondary" loading={busy} onClick={() => void act(false)}>查看删除进度</Button>}
     {error && <span role="alert" className="text-ui text-danger">{error}</span>}
-    {confirming && <ConfirmDialog title="删除来源对话？" consequences={`${afterForget ? '忘记记忆后，原始对话仍然保留。' : ''}这会永久删除这段对话及其子任务的原文、仅来自它的记忆。已生成的文件保留，当前工作结束后完成清除。`} recovery="删除后无法恢复。" confirmLabel="永久删除" busy={busy} onCancel={() => { setConfirming(false); setError(null); }} onConfirm={() => void act(true)} />}
+    {confirming && <ConfirmDialog title={sourceLabel ? `删除“${sourceLabel}”？` : "删除来源对话？"} consequences={`${afterForget ? '忘记记忆后，原始对话仍然保留。' : ''}这会永久删除这段对话及其子任务的原文、仅来自它的记忆。已生成的文件保留，当前工作结束后完成清除。`} recovery="删除后无法恢复。" confirmLabel="永久删除" busy={busy} onCancel={() => { setConfirming(false); setError(null); }} onConfirm={() => void act(true)} />}
   </div>;
 }

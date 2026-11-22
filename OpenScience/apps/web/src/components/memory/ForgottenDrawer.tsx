@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Archive, RefreshCw, RotateCcw } from "lucide-react";
 import { updateStructuredMemory, type WebForgetRequest, type WebForgetStatus, type WebStructuredMemory } from "@/lib/apiClient";
 import { announceMemoryChanged, restoreCapsuleEntry, type OwnCapsuleEntry } from "@/lib/memoryClient";
-import { kindTitle, recordGroup, entryGroup } from "@/lib/memoryGroups";
+import { displayMemoryKind, kindTitle, recordGroup, entryGroup } from "@/lib/memoryGroups";
 import { memoryExcerpt } from "@/lib/memoryText";
 import { listAllMethods, methodTitle, rollbackMethod, type WebMethod } from "@/lib/methodsClient";
 import { productErrorMessage } from "@/lib/productClient";
@@ -14,7 +14,8 @@ import { useCapsuleData } from "@/components/capsule/useCapsuleData";
 import { Drawer } from "@/components/ui/Drawer";
 import { IconButton } from "@/components/ui/IconButton";
 import { List, ListRow } from "@/components/ui/ListRow";
-import { memorySource } from "./FactDrawer";
+import { formatDateTime } from "@/lib/format";
+import { memorySources } from "./FactDrawer";
 import { SourceConversationDelete } from "./SourceConversationDelete";
 
 const statusLabel: Record<WebForgetStatus, string> = {
@@ -31,7 +32,7 @@ interface ForgottenRow {
   /** What it was: where it sat on the page. */
   kind: string;
   status: WebForgetStatus;
-  source?: { projectId: string; sessionId: string };
+  sources?: { projectId: string; sessionId: string; name?: string }[];
   restore?: () => Promise<unknown>;
 }
 
@@ -50,10 +51,11 @@ interface ForgottenRow {
  * Requests carry their reviewed execution status. A restored item and a source
  * conversation use their own operations.
  */
-export function ForgottenDrawer({ records, entries, requests = [], projectName, onClose, onChanged }: {
+export function ForgottenDrawer({ records, entries, requests = [], conversations = {}, projectName, onClose, onChanged }: {
   records: readonly WebStructuredMemory[];
   entries: readonly OwnCapsuleEntry[];
   requests?: readonly WebForgetRequest[];
+  conversations?: Record<string, string>;
   projectName: (id: string | null) => string | null;
   onClose: () => void;
   onChanged: () => void;
@@ -66,12 +68,15 @@ export function ForgottenDrawer({ records, entries, requests = [], projectName, 
     .map((record): ForgottenRow => {
       const statement = memoryExcerpt(record.value || record.summary);
       const forgetIntent = record.nativeType === "notes" && record.summary.startsWith("forget-");
-      const source = memorySource(record);
+      const sources = memorySources(record).flatMap(source => source.projectId ? [{
+        projectId: source.projectId, sessionId: source.sessionId,
+        name: conversations[source.titleKey ?? source.sessionId] || (source.at ? formatDateTime(source.at) : undefined),
+      }] : []);
       return {
         key: `record:${record.id}`, text: forgetIntent ? `${statement}（未存为记忆，已阻止以后记住）` : statement,
-        kind: recordGroup(record) === "project" ? projectName(record.scope === "project" ? record.scopeId : null) ?? kindTitle(record.kind) : kindTitle(record.kind),
+        kind: recordGroup(record) === "project" ? projectName(record.scope === "project" ? record.scopeId : null) ?? kindTitle(displayMemoryKind(record)) : kindTitle(displayMemoryKind(record)),
         status: record.forgetStatus ?? "executed",
-        ...(source?.projectId ? { source: { projectId: source.projectId, sessionId: source.sessionId } } : {}),
+        sources,
         restore: () => updateStructuredMemory(record, { status: "active" }),
       };
     });
@@ -119,8 +124,10 @@ export function ForgottenDrawer({ records, entries, requests = [], projectName, 
                   muted
                   title={<span className="line-clamp-2 max-w-measure">{row.text}</span>}
                   meta={`${row.kind} · ${statusLabel[row.status]}`}
-                  actions={row.restore || row.source ? <div className="flex flex-wrap items-center justify-end gap-2">
-                    {row.source && <SourceConversationDelete {...row.source} onChanged={onChanged} afterForget />}
+                  actions={row.restore || row.sources?.length ? <div className="flex flex-wrap items-center justify-end gap-2">
+                    {row.sources?.map((source, index) => <SourceConversationDelete key={JSON.stringify([source.projectId, source.sessionId])}
+                      projectId={source.projectId} sessionId={source.sessionId} onChanged={onChanged} afterForget
+                      name={source.name} distinguish={(row.sources?.length ?? 0) > 1 ? index + 1 : undefined} />)}
                     {row.restore && <IconButton icon={RotateCcw} label="恢复" size="sm" disabled={busy !== null} onClick={() => void restore(row)} />}
                   </div> : undefined}
                 />
