@@ -83,6 +83,7 @@ const nativeQueries = [
     extraction->'sourceVerification' AS "sourceVerification"
     FROM evimed_memory.native_commits WHERE user_id=$1 AND (extraction ? 'forgetRequests' OR extraction ? 'sourceVerification')
       AND EXISTS(SELECT 1 FROM unnest($2::text[]) AS roots(root) WHERE starts_with(archive_uri,root||'/sessions/')) ORDER BY created_at,archive_uri`],
+  // forgotten_origins contains internal archive locators and statement fingerprints for source deletion.
   ["nativeRevisions", `SELECT id::text,uri,memory_type AS "memoryType",change,actor,reason,before,after,
     archive_uri AS "archiveUri",engine_session AS "engineSession",project_id AS "projectId",
     source_project_id AS "sourceProjectId",source_project_created_at AS "sourceProjectCreatedAt",undone_at AS "undoneAt",changed_at AS "changedAt"

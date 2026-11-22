@@ -183,6 +183,14 @@ function sourceStatements(uri, body) {
   return uri.endsWith('/memories/profile.md') ? profileStatements(body) : memoryLines(body).filter(line => !/^#{1,6}\s/.test(line));
 }
 
+/** Keep only archive references for the statements being forgotten. The live origin index is pruned on write. */
+function forgottenOrigins(file, origins, next = '') {
+  const remaining = new Set(sourceStatements(file.uri, next).map(lineFingerprint));
+  const removed = sourceStatements(file.uri, file.body).map(lineFingerprint).filter(print => !remaining.has(print));
+  return Object.fromEntries(removed.map(print => [print,
+    [...new Set(originalSources(origins.get(print)).map(source => source.archiveUri).filter(Boolean))]]));
+}
+
 /** The reasons of a revision that is itself a forget or a delete (`#write`, `forgetFile`): the version it took a line out of is what its undo goes back to. */
 const FORGET_REASON = /^(?:forgotten|deleted)/iu;
 
@@ -1015,14 +1023,15 @@ export class NativeMemoryStore {
     // every other reader leaves an archived memory out.
     const scans = this.history && this.forgetTargetsEnabled ? await this.history.ledger.pendingForgetScans(userId, { includeScope: true }) : [];
     const [archived, pending, forgetRequests] = await Promise.all([
-      this.forgotten(userId, { files, includeSources: Boolean(this.conversationTitles) }).catch(() => []),
+      this.forgotten(userId, { files, includeSources: true }).catch(() => []),
       this.pending(userId, { scans: scans.map(({ scope: _scope, ...scan }) => scan) }),
       this.forgetActivity(userId, scans.flatMap(scan => scan.scope ? [scan.scope] : [])),
     ]);
     const { titles, records } = await this.#withConversationTitles(userId, [...active, ...archived]);
     for (const record of records) {
       if (record.status !== 'archived') continue;
-      record.evidence = record.evidence.filter(item => titles[item.conversationTitleKey]);
+      record.evidence = record.evidence.filter(item => item.currentSourceProject || titles[item.conversationTitleKey])
+        .map(({ currentSourceProject: _verified, ...item }) => item);
       record.evidenceCount = record.evidence.length;
       record.forgetStatus = scans.some(({ scope }) => scope && record.uri.startsWith(`${scope.root}/memories/`)
         && (record.act && record.act === scope.act || removalLines(record.value).some(line => lineFingerprint(line) === scope.fingerprint)))
@@ -1728,7 +1737,8 @@ export class NativeMemoryStore {
     if (pathRemoved) file.uri = await neutralMemoryUri({ userId, overlay: this.overlay, uri: oldUri, projectId: file.projectId,
       namespaceId: context.kind === 'geo-project' ? context.namespaceId : null, judge: this.rejectionJudge });
     let revision;
-    const record = () => this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, engineSession, before: file.body, after: next, projectId: file.projectId,...source });
+    const record = () => this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, engineSession, before: file.body, after: next, projectId: file.projectId,...source,
+      ...(reason.startsWith('forgotten') ? { forgottenOrigins: forgottenOrigins(file, oldOrigins, next) } : {}) });
     const review = this.instructionWriteCheck && actor === 'user' ? async () => {
       revision = await record();
       next = await this.instructionWriteCheck(userId, file, next, context);
@@ -2326,7 +2336,8 @@ export class NativeMemoryStore {
     if (reject) await this.history?.retireWriteSessions(context,oldOrigins,statements(file.body));
     const removed = await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.remove(userId, file.uri)));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change: "deleted", actor: /** @type {any} */ (actor),
-      reason: reason || (keepText ? "forgotten on the memory page" : "deleted"), before: keepText ? file.body : null, after: null, engineSession, projectId: file.projectId,...await this.#bodySource(userId,file) });
+      reason: reason || (keepText ? "forgotten on the memory page" : "deleted"), before: keepText ? file.body : null, after: null, engineSession, projectId: file.projectId,...await this.#bodySource(userId,file),
+      ...(keepText ? { forgottenOrigins: forgottenOrigins(file, oldOrigins) } : {}) });
     if (!keepText) await this.overlay.forgetText(userId, file.uri);
     await this.overlay.removeFile(userId, file.uri);
     await this.history?.drainDeletes(userId);
@@ -2499,7 +2510,9 @@ export class NativeMemoryStore {
     const live = new Map((files ?? await this.files(userId)).map((file) => [file.uri, file]));
     /** @type {Map<string, any>} */
     const found = new Map();
+    const snapshots = new Map();
     for (const revision of await this.overlay.forgottenRevisions(userId)) {
+      if (revision.forgottenOrigins) snapshots.set(revision.id, revision.forgottenOrigins);
       let context;
       try { context = await this.#fileContext(userId, revision.uri); }
       catch (error) { if (/** @type {any} */ (error)?.code === 'memory_scope_denied') continue; throw error; }
@@ -2543,21 +2556,71 @@ export class NativeMemoryStore {
       }
     }
     const entries = [...found.values()].slice(0, 100);
-    if (includeSources && entries.length) {
-      const histories = await this.overlay.revisionsOfMany(userId, [...new Set(entries.map(entry => String(entry.uri)))]).catch(() => new Map());
-      const projects = await this.#sessionProjects(userId, histories);
-      for (const entry of entries) {
-        const history = (histories.get(entry.uri) ?? []).filter(revision => BigInt(revision.id) < BigInt(entry.forgottenRevision)).reverse();
-        // Only identify conversations whose engine revision actually introduced a removed line.
-        // The session that called forget may be a different conversation entirely.
-        const lines = memoryLines(entry.raw ?? entry.value);
-        const sources = lines.flatMap(line => conversationEvidence(history, projects, { line }))
-          .filter(item => item.sourceType === 'conversation' && item.projectId);
-        entry.evidence = [...new Map(sources.map(item => [`${item.projectId}\0${item.conversationId}`, item])).values()].slice(0, 8);
-        entry.evidenceCount = entry.evidence.length;
+    if (includeSources && entries.length) await this.#forgottenEvidence(userId, entries, snapshots)
+      .catch(() => this.report('forgotten memory source lookup unavailable'));
+    return entries.map(({ raw: _raw, ...entry }) => entry);
+  }
+
+  /** Read pre-receipt rows backwards to the write that introduced each still-present statement.
+   * A later edit, delete/recreation or manual reintroduction cannot borrow an older conversation. */
+  async #legacyForgottenOrigins(userId, uri, beforeId, prints) {
+    const origins = Object.create(null);
+    const pending = new Set(prints);
+    while (pending.size) {
+      const revisions = await this.overlay.revisionsOf(userId, uri, { beforeId, limit: 32 });
+      for (const revision of revisions) {
+        const after = new Set(sourceStatements(uri, revision.after).map(lineFingerprint));
+        const before = new Set(sourceStatements(uri, revision.before).map(lineFingerprint));
+        for (const print of pending) {
+          if (after.has(print) && before.has(print)) continue;
+          if (after.has(print) && revision.actor === 'engine' && revision.archiveUri) origins[print] = [revision.archiveUri];
+          pending.delete(print);
+        }
+      }
+      if (revisions.length < 32) break;
+      beforeId = revisions.at(-1).id;
+    }
+    return origins;
+  }
+
+  async #forgottenEvidence(userId, entries, snapshots) {
+    const byRevision = new Map();
+    for (const entry of entries) {
+      const group = byRevision.get(entry.forgottenRevision) ?? [];
+      group.push(entry);
+      byRevision.set(entry.forgottenRevision, group);
+    }
+    const printsOf = entry => sourceStatements(entry.uri, entry.raw ?? entry.value).map(lineFingerprint);
+    const candidates = new Map();
+    for (const [revisionId, group] of byRevision) {
+      const uri = group[0].uri;
+      const prints = group.flatMap(printsOf);
+      const saved = snapshots.get(revisionId) ?? {};
+      const missing = prints.filter(print => !Object.hasOwn(saved, print) || !saved[print].length);
+      const legacy = missing.length ? await this.#legacyForgottenOrigins(userId, uri, revisionId, missing) : {};
+      for (const entry of group) {
+        const archives = printsOf(entry).flatMap(print => saved[print]?.length ? saved[print] : legacy[print] ?? []);
+        candidates.set(entry, [...new Set(archives)].filter(archive => {
+          const source = parseArchiveUri(archive);
+          return source && !source.rest && uri.startsWith(source.userRoot + '/memories/');
+        }));
       }
     }
-    return entries.map(({ raw: _raw, ...entry }) => entry);
+    const bindings = await this.overlay.forgottenConversationBindings(userId, [...new Set([...candidates.values()].flat())]);
+    const fences = bindings.size && this.sourceDeletion ? await this.sourceDeletion.ledger.recordsForOwner(userId) : [];
+    for (const [entry, archives] of candidates) {
+      const evidence = new Map();
+      for (const archiveUri of archives) {
+        const source = bindings.get(archiveUri);
+        if (!source) continue;
+        const item = sessionEvidence({ engineSession: source.engineSession, archiveUri, observedAt: source.observedAt,
+          fingerprint: `revision:${entry.forgottenRevision}` }, source.projectId);
+        if (!item || !('conversationId' in item) || fences.some(fence => fence.projectId === source.projectId && fence.sessionIds.includes(item.conversationId))) continue;
+        evidence.set(JSON.stringify([source.projectId, item.conversationId]), { ...item, currentSourceProject: source.currentProject });
+      }
+      entry.evidence = [...evidence.values()];
+      entry.evidenceCount = evidence.size;
+    }
   }
 
   /**

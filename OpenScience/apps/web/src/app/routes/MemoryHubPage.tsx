@@ -399,6 +399,7 @@ function MemoryHub() {
           records={records}
           entries={data.mine?.forgotten ?? []}
           requests={data.profile?.forgetRequests}
+          conversations={data.profile?.conversations}
           projectName={projectName}
           onClose={() => setDrawer(null)}
           onChanged={reload}

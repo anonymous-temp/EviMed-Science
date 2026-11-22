@@ -217,6 +217,8 @@ Scientific viewers need keyboard equivalents for pan/rotate/zoom and value inspe
 
 ## DS14 Memory and capsules
 
+In 关于你 a safety history is labelled 安全事项 and titled by the condition or statement. A matching name and form of address occupy one row. In the forgotten drawer each confirmed original conversation has its own deletion confirmation alongside the memory's restore action.
+
 Account settings offers external-agent keys only when `/api/me` explicitly offers
 `features.agentMemoryApi: true`. Otherwise the entire group is absent and makes no
 key or OpenAPI request. A key-route `503 agent_memory_disabled` while the group is

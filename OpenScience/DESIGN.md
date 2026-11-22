@@ -1254,8 +1254,9 @@ edit, forget and undo controls. The extraction template's neutral unnamed headin
 recall fact, exported fact or line origin. Page counts equal visible active rows;
 a name the person supplies adds one row. Editing preserves its heading structure; forgetting
 removes the title text and records its withdrawal without deleting neighbouring
-facts. Other native files use their H1 as the displayed title when present. A filename-only topic is offered as an H1 in the existing editor, so it can be corrected with its body; opening the editor alone is not a dirty change. Editing
+facts. A distinct requested form of address has a separate row. In 安全事项 the row names the condition or statement and keeps a named subject visible. Other native files use their H1 as the displayed title when present. A filename-only topic is offered as an H1 in the existing editor, so it can be corrected with its body; opening the editor alone is not a dirty change. Editing
 that title also withdraws and neutralizes an old filename that still carries it.
 Directory summaries remain derived, never independently editable memories. The
 forgotten drawer is the explicit undo surface, not a recall source. No new panel,
 feature probe or layout column is introduced by this contract.
+Each confirmed source conversation in the forgotten drawer has a separate deletion confirmation.
