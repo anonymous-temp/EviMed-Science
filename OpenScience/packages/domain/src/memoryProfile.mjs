@@ -93,17 +93,16 @@ export function profileNameDuplicateLines(body) {
   const [title] = titles;
   if (titles.length !== 1 || title === undefined || isNeutralProfileHeading(`# ${title}`)) return [];
   return lines.map(line => line.trim()).filter(line => {
-    if (profileAddressFieldValue(line) !== null) return false;
-    const name = profileNameFieldValue(line);
+    const name = profileAddressFieldValue(line) ?? profileNameFieldValue(line);
     return name !== null && foldTitle(name) === foldTitle(title);
   });
 }
 
 /** Remove only the exact duplicate name rows, leaving the named H1 as the one editable fact.
- * @param {unknown} body */
-export function withoutProfileNameDuplicates(body) {
+ * @param {unknown} body @param {{addressOnly?: boolean}} options */
+export function withoutProfileNameDuplicates(body, { addressOnly = false } = {}) {
   const text = String(body ?? '');
-  const duplicates = new Set(profileNameDuplicateLines(text));
+  const duplicates = new Set(profileNameDuplicateLines(text).filter(line => !addressOnly || profileAddressFieldValue(line) !== null));
   return duplicates.size ? text.replace(/\r\n/gu, '\n').split('\n').filter(line => !duplicates.has(line.trim())).join('\n') : text;
 }
 

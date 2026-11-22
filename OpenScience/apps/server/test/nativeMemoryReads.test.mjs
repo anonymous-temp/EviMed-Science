@@ -200,15 +200,25 @@ test('duplicate profile names are opt-in and ambiguous or structural titles keep
   }
 });
 
-test('an address preference has an independent profile record even when it equals the name', async () => {
+test('only a distinct address preference has an independent profile record', async () => {
   const { store, files } = engine({ count: 0, delay: 0 }), uri = `${ROOT}/profile.md`;
   store.profileNameDedupeEnabled = true;
   files.set(uri, { body: '# 林舟\n- 姓名：林舟\n- 称呼：林舟\n- 希望被称呼为“小林” (as of 2026-11-21)', modTime: '1' });
   const records = await store.records('u1');
-  assert.deepEqual(records.map(row => row.value), ['林舟', '称呼：林舟', '希望被称呼为“小林”']);
-  assert.equal(new Set(records.map(row => row.id)).size, 3);
+  assert.deepEqual(records.map(row => row.value), ['林舟', '希望被称呼为“小林”']);
+  assert.equal(new Set(records.map(row => row.id)).size, 2);
   await store.forgetLines('u1', (await store.files('u1'))[0], ['称呼：林舟']);
   assert.equal(files.get(uri).body, '# 林舟\n- 姓名：林舟\n- 希望被称呼为“小林” (as of 2026-11-21)');
+});
+
+test('editing a distinct address to the actual name removes the redundant bullet from the document', async () => {
+  const { store, files } = engine({ count: 0, delay: 0 }), uri = `${ROOT}/profile.md`;
+  store.profileNameDedupeEnabled = true;
+  store.overlay.revisionsOf = async () => [];
+  files.set(uri, { body: '# 林舟\n- 希望被称呼为：小林\n- 喜欢游泳', modTime: '1' });
+  const address = (await store.records('u1')).find(row => row.value.includes('小林'));
+  await store.update('u1', address.id, { expectedVersion: address.version, value: '希望被称呼为：林舟' });
+  assert.equal(files.get(uri).body, '# 林舟\n- 喜欢游泳');
 });
 
 test('only an explicit address field matching the proposed title can preserve a known profile name', () => {

@@ -170,7 +170,7 @@ test('the worker removes an extracted name bullet that exactly repeats the real 
   const { userId, store, worker, sessions, root, commitConversation } = await fixture(t, {
     config: { memoryProfileNameDedupeEnabled: true },
     extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/profile.md`, memory_type: 'profile',
-      after: '# 林舟\n- 姓名：林舟 (as of 2026-11-21)\n- 喜欢游泳 (as of 2026-11-21)' }] }),
+      after: '# 林舟\n- 姓名：林舟 (as of 2026-11-21)\n- 希望被称呼为：林舟 (as of 2026-11-21)\n- 喜欢游泳 (as of 2026-11-21)' }] }),
   });
   await commitConversation('duplicate-profile-name', [{ role: 'user', text: '我叫林舟，喜欢游泳。' }]);
   await worker.processCommits({ userId });

@@ -71,6 +71,7 @@ test('the promoted rules distinguish a standalone reply choice from an explicit 
 
 test('the promoted rules separate the profile name from a preferred form of address; the controls do not', () => {
   const next = renderMemoryTemplates({ variant: 'next' })['profile.yaml'];
+  assert.match(next, /A self-introduction alone .* writes only the name in H1/);
   assert.match(next, /keep "# 林舟" and add "- 希望被称呼为：小林 \(as of 2026-11-21\)"/);
   assert.match(next, /Keep the existing name in the H1 unless the user explicitly corrects or changes their name/);
   assert.match(next, /use the fallback H1 and the separate bullet/);

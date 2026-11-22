@@ -8,7 +8,9 @@ const HISTORY_TYPES = new Set(["decisions.yaml", "entities.yaml", "follow_ups.ya
 const PASSING_TYPES = new Set(["notes.yaml", "people.yaml", "profile.yaml", "project_context.yaml"]);
 const HISTORY_FENCE = "  __HISTORY__\n\n  A forget request is not a new fact or event: do not add a note that restates the withdrawn\n  content or names it as deleted, including when the user refers to it only by a label.\n\n";
 const PROFILE_ADDRESS_RULE = `The H1 holds the user's stated name. A request about how to address them ("以后叫我小林", "Call me Jo")
-updates only the separate dated bullet "希望被称呼为：小林" or "Preferred form of address: Jo", in the user's language.
+may add a separate dated bullet only for an explicitly requested form of address different from their stated name.
+A self-introduction alone (e.g. "我叫林舟") writes only the name in H1. Never repeat it as a form of address.
+For a distinct requested name, write "希望被称呼为：小林" or "Preferred form of address: Jo", in the user's language.
 Keep the existing name in the H1 unless the user explicitly corrects or changes their name.
 For example, keep "# 林舟" and add "- 希望被称呼为：小林 (as of 2026-11-21)". If only an address preference
 is known, use the fallback H1 and the separate bullet. Do not duplicate the name as a bullet.`;

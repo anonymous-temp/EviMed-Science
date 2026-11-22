@@ -2,7 +2,7 @@ import { matchSafetyStatements, safetyStatements, withdrawSafetyProjection } fro
 import { statementSource, visibleStatementSources } from './memoryStatementSources.mjs';
 import { withMemoryPayer } from './agentMemoryBilling.mjs';
 import { filterCapturedMessage } from './memoryGateway.mjs';
-import { isNeutralProfileHeading, profileMemoryStatements, profileNameFieldValue, profileNameDuplicateLines, withoutProfileNameDuplicates, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
+import { isNeutralProfileHeading, profileMemoryStatements, profileAddressFieldValue, profileNameFieldValue, profileNameDuplicateLines, withoutProfileNameDuplicates, MEMORY_PROFILE_NEUTRAL_TITLES } from '@evimed/domain';
 import { readStatus } from './memoryReadStatus.mjs';
 import { mergePeopleFiles, undoPeopleMerge, redirectPeopleWrites } from './nativeMemoryPeopleStore.mjs';
 import { personConsentRefusal, personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
@@ -1613,6 +1613,10 @@ export class NativeMemoryStore {
     return update();
   }
 
+  #withoutRedundantAddress(type, text) {
+    return this.profileNameDedupeEnabled && type === 'profile' ? withoutProfileNameDuplicates(text, { addressOnly: true }) : text;
+  }
+
   #pairedProfileId(userId, id) {
     return this.profileNameDedupeEnabled && String(id).slice(0, 27) === nativeFileId(`${this.sessions.memoryRoot(userId)}/profile.md`);
   }
@@ -1657,6 +1661,7 @@ export class NativeMemoryStore {
       } else {
         next = text;
       }
+      next = this.#withoutRedundantAddress(file.type, next);
       await this.#write(userId, file, next, { actor: "user", reason: "edited on the memory page", origin: "edit" });
     }
     if (value !== undefined && this.preferenceReconcileEnabled && !file.namespaceId && ['profile', 'preferences'].includes(file.type)) {
@@ -1944,7 +1949,7 @@ export class NativeMemoryStore {
     const act = plan.size ? newAct() : null;
     if (line) {
       const duplicates = new Set(this.profileNameDedupeEnabled && file.type === 'profile' ? profileNameDuplicateLines(file.body) : []);
-      const paired = duplicates.size > 0 && (/^#\s/.test(line.raw.trim()) || duplicates.has(line.raw.trim()));
+      const paired = duplicates.size > 0 && (/^#\s/.test(line.raw.trim()) || duplicates.has(line.raw.trim()) && profileAddressFieldValue(line.raw) === null);
       const title = file.body.split("\n").find(row => /^#\s/.test(row.trim()));
       const raw = file.body.split("\n").filter((row, index) => index !== line.index && (!paired || row !== title && !duplicates.has(row.trim())));
       const next = raw.join("\n");
@@ -2045,7 +2050,7 @@ export class NativeMemoryStore {
     const prints = new Set(lines.map(removalText).map(lineFingerprint));
     if (this.profileNameDedupeEnabled && file.type === 'profile') {
       const duplicates = profileNameDuplicateLines(file.body), title = file.body.split('\n').find(row => /^#\s/.test(row.trim()));
-      if (title && prints.has(lineFingerprint(removalText(title))) || duplicates.some(row => prints.has(lineFingerprint(removalText(row))))) {
+      if (title && prints.has(lineFingerprint(removalText(title))) || duplicates.some(row => profileAddressFieldValue(row) === null && prints.has(lineFingerprint(removalText(row))))) {
         for (const row of [...duplicates, ...(title ? [title] : [])]) prints.add(lineFingerprint(removalText(row)));
       }
     }
@@ -2279,7 +2284,7 @@ export class NativeMemoryStore {
       if (this.profileNameDedupeEnabled && uri.endsWith('/memories/profile.md') && /^#\s/.test(text)) {
         const name = lineFingerprint(removalText(text));
         for (const body of [revision.before, revision.after]) for (const raw of String(body ?? '').split('\n')) {
-          const value = profileNameFieldValue(raw);
+          const value = profileAddressFieldValue(raw) ?? profileNameFieldValue(raw);
           if (value && lineFingerprint(value) === name) wordings.push(removalText(raw));
         }
       }
@@ -2435,7 +2440,7 @@ export class NativeMemoryStore {
       return { undone: "removed", record: null, restored: [] };
     }
     // An update: back to what it said, the lines the change brought rejected and the lines it took away the person's again.
-    const before = String(last.before);
+    const before = this.#withoutRedundantAddress(memoryType, String(last.before));
     const had = new Set(statements(before).map(lineFingerprint));
     await this.overlay.reject(userId, rejectionType, uri, statements(live.body).filter((text) => !had.has(lineFingerprint(text))));
     await this.overlay.unreject(userId, rejectionType, await this.#aliasRemovalLines(userId, { ...live, body: before }, removalLines(before)));
@@ -2466,6 +2471,7 @@ export class NativeMemoryStore {
    */
   async #restoreText(userId, { uri, text, memoryType, projectId = null, revisionId, reason, automatic = false }) {
     const context = await this.#fileContext(userId, uri);
+    text = this.#withoutRedundantAddress(memoryType, text);
     if (context.kind === 'geo-project') projectId = context.projectId;
     const review = !automatic && this.instructionWriteCheck ? async () => { text = await this.instructionWriteCheck(userId, { uri, body: '', type: memoryType, projectId }, text, context); } : null;
     await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, text), review));
@@ -2608,7 +2614,7 @@ export class NativeMemoryStore {
       const body = document.body.replace(/\s+$/, "");
       if (restoredLines.some(row => /^#\s/.test(row)) && /^#\s/m.test(body)) throw new HttpError(409, 'memory_conflict', 'The profile already has a title. Edit the current title instead.');
       const restored = restoredLines.some(row => /^#\s/.test(row)) ? `${restoredLines.join('\n')}\n${body}` : `${body}\n${restoredLines.join('\n')}`;
-      await this.#write(userId, document, restored, { actor: 'user', reason: 'restored from forgotten' });
+      await this.#write(userId, document, this.#withoutRedundantAddress(memoryType, restored), { actor: 'user', reason: 'restored from forgotten' });
       await this.overlay.unreject(userId, this.#rejectionType(await this.#fileContext(userId, document.uri), memoryType), paired ? restoredLines.map(removalText) : [entry.value]);
       // A judged request may remove several lines at once. Restoring one must leave the others available to restore too.
       const originallyKept = new Set(removalLines(revision.after ?? '').map(lineFingerprint));
