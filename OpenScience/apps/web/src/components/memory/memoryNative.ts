@@ -52,12 +52,14 @@ export function fileSummary(record: Pick<WebStructuredMemory, "value" | "earlier
 }
 
 /** Display labels never enter the editor or become stored memory text. */
+const EARLIER_LABEL = "早先值：";
+
 export function displayMemoryText(record: WebStructuredMemory): string {
   const text = memoryText(record);
   if (!record.earlierValues?.length) return text;
-  if (record.document) return isEarlierLine(text, record.earlierValues) ? `早先值：${text}` : text;
+  if (record.document) return isEarlierLine(text, record.earlierValues) ? EARLIER_LABEL + text : text;
   return text.replace(/\r\n/gu, "\n").split("\n").map((line) => isEarlierLine(line, record.earlierValues)
-    ? line.replace(/^(\s*(?:(?:[-*+]|\d+[.)])\s+)?)/u, "$1早先值：") : line).join("\n");
+    ? line.replace(/^(\s*(?:(?:[-*+]|\d+[.)])\s+)?)/u, (marker) => marker + EARLIER_LABEL) : line).join("\n");
 }
 
 /** The text a memory's drawer opens with and its edit starts from: a file's own text, else the sentence. */

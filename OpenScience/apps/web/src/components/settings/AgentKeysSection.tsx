@@ -140,7 +140,7 @@ function AgentKeysForm() {
             {keys.length === 0 && <PanelRow label="尚未创建 API 密钥" />}
             {keys.map(key => <PanelRow key={key.id} label={<span className="break-words">{key.name}</span>} description={<>
               <span className="block">{key.scopes.filter(supportedScope).map(scope => SCOPE_LABELS[scope]).join("、")}</span>
-              {usage[key.id] && <span className="block">已计用量 ¥{usage[key.id].costCny} · 待核实 {usage[key.id].uncertainCalls} 笔</span>}
+              {usage[key.id] && <span className="block">已计用量 {usage[key.id].costCny} 元 · 待核实 {usage[key.id].uncertainCalls} 笔</span>}
               <span className="block">创建于 {formatDate(key.createdAt)} · {key.lastUsedAt ? `最近使用于 ${formatDate(key.lastUsedAt)}` : "尚未使用"}</span>
             </>} control={key.revokedAt ? "已撤销" : <Button variant="secondary" destructive aria-label={`撤销密钥“${key.name}”`} loading={busy === key.id} disabled={busy !== null} onClick={() => void revoke(key)}>撤销</Button>} />)}
           </>}

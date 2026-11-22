@@ -20,7 +20,7 @@ import { SourceConversationDelete } from "./SourceConversationDelete";
 const statusLabel: Record<WebForgetStatus, string> = {
   requested: "已请求",
   executed: "已执行",
-  pending_verification: "待核验",
+  pending_verification: "待核对",
   not_executed: "未执行",
 };
 
