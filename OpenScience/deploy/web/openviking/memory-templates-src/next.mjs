@@ -1,6 +1,5 @@
-// Opt-in November 17 extraction candidate. Production sources remain the baseline.
-// Apply only changed rules to those sources; fail if an anchor drifts. Do not make
-// this variant the default before comparing attribution on the same sessions.
+// Shared user-authored extraction rules for the full and next template sets.
+// Exact replacements retain the pre-promotion lab control in the underlying YAML.
 import { MEMORY_PROFILE_HEADING_RULE } from '../../../../packages/domain/src/memoryProfile.mjs';
 
 export const HISTORY_RULE = 'When a value changes, keep the current value plus one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the stated date of the change (or the source date labelled as when it was said); if neither is known, label the date unknown, never invent one. Keep the current value first. At most the two latest earlier values per item; none for a value removed by a forget request.';

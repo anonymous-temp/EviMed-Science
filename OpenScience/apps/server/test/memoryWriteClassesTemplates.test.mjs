@@ -32,8 +32,9 @@ test('the optional variant still renders separately, with one history rule per s
 });
 
 
-test('production defaults do not contain the unapproved next rules', () => {
-  for (const body of Object.values(renderMemoryTemplates())) {
+test('the default renders the complete next set and the old lab control preserves the comparison', () => {
+  assert.deepEqual(renderMemoryTemplates(), renderMemoryTemplates({ variant: 'next' }));
+  for (const body of Object.values(renderMemoryTemplates({ variant: 'legacy' }))) {
     for (const rule of ['At most the two latest earlier values', 'do not add a note that restates the withdrawn',
       'An opinion about difficulty is not a stage', 'number, model name, cost, household detail or project status',
       'Do not add an exception, permission to ask, or scope the user never stated', 'exact fallback heading specified above']) {
@@ -50,24 +51,31 @@ test('every next type requires first-person evidence per clause, including the f
   }
 });
 
-test('only the candidate distinguishes a standalone reply choice from an explicit standing request', () => {
+test('the promoted rules distinguish a standalone reply choice from an explicit standing request; the controls do not', () => {
   const candidate = renderMemoryTemplates({ variant:'next' });
   assert.match(candidate['preferences.yaml'], /explicit ongoing presentation requirements on first mention/);
   const observation = candidate['observations.yaml'];
   assert.match(observation, /including a later request in the same conversation/);
   assert.match(observation, /never assistant echoes or material/);
   assert.match(observation, /append its exact Choice bullet/);
-  for (const options of [{}, {variant:'extraction-v2'}, {safetyNotes:true}]) {
+  // Promoted to the deployed default (and so to the safety release built on it) after the 11-21 lab check.
+  assert.equal(renderMemoryTemplates()['observations.yaml'], candidate['observations.yaml']);
+  // The safety release adds only its routing section on top of the promoted rules.
+  const safety = renderMemoryTemplates({safetyNotes:true})['observations.yaml'];
+  assert.ok(safety.startsWith(observation.slice(0, observation.indexOf('\ndirectory:'))));
+  assert.match(safety, /# Safety context that must survive into a later conversation/);
+  for (const options of [{variant:'extraction-v2'}, {variant:'legacy'}]) {
     assert.doesNotMatch(renderMemoryTemplates(options)['observations.yaml'], /"scope":"reply"/);
   }
 });
 
-test('only next separates the profile name from a preferred form of address', () => {
+test('the promoted rules separate the profile name from a preferred form of address; the controls do not', () => {
   const next = renderMemoryTemplates({ variant: 'next' })['profile.yaml'];
   assert.match(next, /keep "# 林舟" and add "- 希望被称呼为：小林 \(as of 2026-11-21\)"/);
   assert.match(next, /Keep the existing name in the H1 unless the user explicitly corrects or changes their name/);
   assert.match(next, /use the fallback H1 and the separate bullet/);
-  for (const options of [{}, { variant: 'extraction-v2' }, { safetyNotes: true }]) {
+  for (const options of [{}, { safetyNotes: true }]) assert.match(renderMemoryTemplates(options)['profile.yaml'], /Keep the existing name in the H1 unless/);
+  for (const options of [{ variant: 'extraction-v2' }, { variant: 'legacy' }]) {
     assert.doesNotMatch(renderMemoryTemplates(options)['profile.yaml'], /Preferred form of address: Jo/);
   }
 });

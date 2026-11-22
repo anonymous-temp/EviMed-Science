@@ -27,8 +27,8 @@ test('all three rendered template sets are pinned independently', () => {
   }
 });
 
-test('extraction-v2.1 is the default text plus the five additions, each in its types with exact labels', () => {
-  const defaults = renderMemoryTemplates();
+test('extraction-v2.1 is the historical default text plus the five additions, each in its types with exact labels', () => {
+  const defaults = renderMemoryTemplates({ variant: 'legacy' });
   const v2 = renderMemoryTemplates({ variant: 'extraction-v2' });
   assert.ok(MEMORY_DECIDE_EXTRACTION_V2_TEXT.startsWith(`${MEMORY_DECIDE_TEXT}\n`), 'the default decide text is carried unchanged');
   assert.equal(MEMORY_DECIDE_EXTRACTION_V2_TEXT, `${MEMORY_DECIDE_TEXT}\n${SHARED}`);
@@ -67,8 +67,8 @@ test('extraction-v2.1 is the default text plus the five additions, each in its t
   }
 });
 
-test('extraction-v2.1 removes the per-type "replace" rules that contradict a dated earlier value; the default keeps them', () => {
-  const defaults = renderMemoryTemplates();
+test('extraction-v2.1 removes the per-type "replace" rules that contradict a dated earlier value; the historical control keeps them', () => {
+  const defaults = renderMemoryTemplates({ variant: 'legacy' });
   const v2 = renderMemoryTemplates({ variant: 'extraction-v2' });
   /** @type {[string, RegExp][]} */
   const contradictions = [
@@ -97,7 +97,7 @@ test('extraction-v2.1 removes the per-type "replace" rules that contradict a dat
 });
 
 test('extraction-v2.1 stays small: at most 13 % more characters per type (15 % for observations and people) and 8 % in total', () => {
-  const defaults = renderMemoryTemplates();
+  const defaults = renderMemoryTemplates({ variant: 'legacy' });
   const v2 = renderMemoryTemplates({ variant: 'extraction-v2' });
   const length = (/** @type {string} */ text) => [...text].length;
   let before = 0, after = 0;

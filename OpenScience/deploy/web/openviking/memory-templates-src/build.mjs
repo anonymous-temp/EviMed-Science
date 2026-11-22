@@ -45,7 +45,7 @@ Before writing, look at what the memory already holds on the same subject. Updat
 Then check every line against the words of the conversation: each number, unit, date and name is copied as it was said, and a line you cannot point to in the conversation is not written.`;
 
 /** The decide blocks by name; `current` is what is deployed. */
-export const DECIDE_VARIANTS = Object.freeze({ current: MEMORY_DECIDE_TEXT, purpose: DECIDE_PURPOSE, "purpose-verify": DECIDE_PURPOSE_VERIFY });
+export const DECIDE_VARIANTS = Object.freeze({ current: nextDecision(MEMORY_DECIDE_TEXT), purpose: DECIDE_PURPOSE, "purpose-verify": DECIDE_PURPOSE_VERIFY });
 
 /** Lab-only attribution wording until development replay justifies adopting it in the type sources. */
 export const PASTED_RULE_V1 = `# Whose instruction is it?
@@ -61,24 +61,24 @@ const PASTED_RULE_TYPES = new Set(["preferences.yaml", "corrections.yaml", "prof
  * `decide` names the decide block (`DECIDE_VARIANTS`); anything but `current` is a lab variant.
  * `safetyNotes` adds the opt-in dedicated safety type and its routing guidance; the deployed files stay unchanged.
  * `pastedRule: "v1"` adds the lab attribution wording at the point of use in the three personal types.
- * @param {{ variant?: "full" | "short-never" | "extraction-v2" | "next", decide?: "current" | "purpose" | "purpose-verify", safetyNotes?: boolean, pastedRule?: "current" | "v1" }} [options]
+ * @param {{ variant?: "full" | "short-never" | "extraction-v2" | "next" | "legacy", decide?: "current" | "purpose" | "purpose-verify", safetyNotes?: boolean, pastedRule?: "current" | "v1" }} [options]
  */
 export function renderMemoryTemplates({ variant = "full", decide: decideName = "current", safetyNotes = false, pastedRule = "current" } = {}) {
-  if (!["full", "short-never", "extraction-v2", "next"].includes(variant)) throw new Error(`unknown variant ${variant}`);
-  if (["extraction-v2", "next"].includes(variant) && (decideName !== "current" || safetyNotes || pastedRule !== "current")) throw new Error(`${variant} is one complete variant; do not combine lab variants`);
+  if (!["full", "short-never", "extraction-v2", "next", "legacy"].includes(variant)) throw new Error(`unknown variant ${variant}`);
+  if (["extraction-v2", "next", "legacy"].includes(variant) && (decideName !== "current" || safetyNotes || pastedRule !== "current")) throw new Error(`${variant} is one complete variant; do not combine lab variants`);
   if (!Object.hasOwn(DECIDE_VARIANTS, decideName)) throw new Error(`unknown decide variant ${decideName}`);
   if (!["current", "v1"].includes(pastedRule)) throw new Error(`unknown pasted-rule variant ${pastedRule}`);
   const indented = (/** @type {string} */ text) => text.trimEnd().split("\n")
     .map((line, index) => (index === 0 ? line : `  ${line}`)).join("\n");
   const block = indented(MEMORY_NEVER_KEPT_TEXT);
   const reminder = indented(SHORT_NEVER_KEPT);
-  const decide = indented(variant === "extraction-v2" ? MEMORY_DECIDE_EXTRACTION_V2_TEXT : variant === "next" ? nextDecision(MEMORY_DECIDE_TEXT) : DECIDE_VARIANTS[decideName]);
+  const decide = indented(variant === "extraction-v2" ? MEMORY_DECIDE_EXTRACTION_V2_TEXT : variant === "legacy" ? MEMORY_DECIDE_TEXT : DECIDE_VARIANTS[decideName]);
   const language = indented(fs.readFileSync(path.join(src, "_language.txt"), "utf8"));
   /** @type {Record<string, string>} */
   const rendered = {};
   for (const name of fs.readdirSync(src).filter((file) => file.endsWith(".yaml")).sort()) {
     const source = fs.readFileSync(path.join(src, name), "utf8");
-    const text = variant === "extraction-v2" ? extractionV2Source(name, source) : variant === "next" ? nextSource(name, source) : source;
+    const text = variant === "extraction-v2" ? extractionV2Source(name, source) : variant === "legacy" ? source : nextSource(name, source);
     if (!text.includes("__NEVER_KEEP__")) throw new Error(`${name} does not carry the never-kept block`);
     if (!text.includes("__DECIDE__")) throw new Error(`${name} does not carry the decide block`);
     if (!text.includes("__LANGUAGE__")) throw new Error(`${name} does not carry the language block`);
@@ -106,6 +106,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   // `node build.mjs` renders what is deployed. A lab variant is rendered elsewhere, never over it:
   // `node build.mjs --variant short-never --out /tmp/templates-b`, `node build.mjs --decide purpose --out /tmp/templates-purpose`.
   // `node build.mjs --variant extraction-v2 --out deploy/web/openviking/memory-templates-extraction-v2` renders the selectable release.
+  // `node build.mjs --variant legacy --out <lab directory>` reproduces the pre-promotion control arm.
   // `node build.mjs --variant next --out deploy/web/openviking/memory-templates-next` renders the attribution candidate.
   // Add `--check` to compare without writing.
   // `node build.mjs --safety-notes --out deploy/web/openviking/memory-templates-safety` renders the selectable safety release.
@@ -116,12 +117,12 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const pastedRule = option("--pasted-rule") ?? "current";
   const target = option("--out");
   const safetyNotes = arguments_.includes("--safety-notes");
-  if (!["full", "short-never", "extraction-v2", "next"].includes(variant)) throw new Error(`unknown variant ${variant}`);
+  if (!["full", "short-never", "extraction-v2", "next", "legacy"].includes(variant)) throw new Error(`unknown variant ${variant}`);
   if (!Object.hasOwn(DECIDE_VARIANTS, decide)) throw new Error(`unknown decide variant ${decide}`);
   if (!["current", "v1"].includes(pastedRule)) throw new Error(`unknown pasted-rule variant ${pastedRule}`);
   if ((variant !== "full" || decide !== "current" || safetyNotes || pastedRule !== "current") && (!target || path.resolve(target) === out)) throw new Error("a lab variant is rendered with --out <directory>, never over the deployed templates");
   const directory = target ? path.resolve(target) : out;
-  const rendered = renderMemoryTemplates({ variant: /** @type {"full" | "short-never" | "extraction-v2" | "next"} */ (variant), decide: /** @type {"current" | "purpose" | "purpose-verify"} */ (decide), safetyNotes, pastedRule: /** @type {"current" | "v1"} */ (pastedRule) });
+  const rendered = renderMemoryTemplates({ variant: /** @type {"full" | "short-never" | "extraction-v2" | "next" | "legacy"} */ (variant), decide: /** @type {"current" | "purpose" | "purpose-verify"} */ (decide), safetyNotes, pastedRule: /** @type {"current" | "v1"} */ (pastedRule) });
   if (arguments_.includes("--check")) {
     const names = fs.readdirSync(directory).filter(name => name.endsWith(".yaml")).sort();
     if (JSON.stringify(names) !== JSON.stringify(Object.keys(rendered).sort())) throw new Error("rendered template file set differs");

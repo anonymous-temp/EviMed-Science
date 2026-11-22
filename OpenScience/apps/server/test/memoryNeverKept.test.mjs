@@ -9,7 +9,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { MEMORY_DECIDE_TEXT, MEMORY_NEVER_KEPT_TEXT } from "@evimed/domain";
-import { renderMemoryTemplates } from "../../../deploy/web/openviking/memory-templates-src/build.mjs";
+import { DECIDE_VARIANTS, renderMemoryTemplates } from "../../../deploy/web/openviking/memory-templates-src/build.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -17,7 +17,7 @@ const indent = (text) => text.trimEnd().split("\n").map((line, index) => (index 
 
 test("the engine's templates carry the never-kept text and the decide text, line for line, as the deployed files and as rendered", async () => {
   const never = indent(MEMORY_NEVER_KEPT_TEXT);
-  const decide = indent(MEMORY_DECIDE_TEXT);
+  const decide = indent(DECIDE_VARIANTS.current);
   const directory = path.join(root, "deploy/web/openviking/memory-templates");
   const files = (await readdir(directory)).filter((name) => name.endsWith(".yaml"));
   assert.equal(files.length, 12);
@@ -65,7 +65,7 @@ test("the templates say where a memory belongs: corrections under preferences, n
   assert.doesNotMatch(preferences, /Signals: 以后/);
   assert.match(preferences, /examples of how people say it, not a list to match/);
   assert.match(preferences, /scoped to the kind of thing it was said\s+about/);
-  assert.match(preferences, /update the\s+existing file so that it states only the current choice/, "an upgrade replaces: the later choice, not both");
+  assert.match(preferences, /update the\s+existing file so that it states the current choice first, followed by bounded dated earlier values/, "an upgrade preserves dated history");
   // A reminder is the scheduler's: the first example of the follow-ups template used to promise one.
   const followUps = await text("follow_ups");
   assert.match(followUps, /is a scheduled task, not a memory: do not write it here/);
@@ -86,7 +86,7 @@ test("the lab variant says the never-kept block once, in the profile, and is nev
   const full = renderMemoryTemplates();
   const lab = renderMemoryTemplates({ variant: "short-never" });
   const never = indent(MEMORY_NEVER_KEPT_TEXT);
-  const decide = indent(MEMORY_DECIDE_TEXT);
+  const decide = indent(DECIDE_VARIANTS.current);
   assert.deepEqual(Object.keys(lab).sort(), Object.keys(full).sort());
   assert.ok(lab["profile.yaml"].includes(never), "the profile carries the whole block");
   for (const [name, text] of Object.entries(lab)) {
@@ -107,9 +107,8 @@ test("the lab variant says the never-kept block once, in the profile, and is nev
 });
 
 test("the decide block has three lab wordings; only the deployed one is rendered by default and a lab one never over what is deployed", async () => {
-  const { DECIDE_VARIANTS } = await import("../../../deploy/web/openviking/memory-templates-src/build.mjs");
   assert.deepEqual(Object.keys(DECIDE_VARIANTS), ["current", "purpose", "purpose-verify"]);
-  assert.equal(DECIDE_VARIANTS.current, MEMORY_DECIDE_TEXT);
+  assert.match(DECIDE_VARIANTS.current, /exact words in a user message that support each clause/);
   const full = renderMemoryTemplates();
   assert.deepEqual(renderMemoryTemplates({ decide: "current" }), full, "the default is the deployed wording, byte for byte");
   const purpose = renderMemoryTemplates({ decide: "purpose" });
@@ -117,7 +116,7 @@ test("the decide block has three lab wordings; only the deployed one is rendered
   assert.deepEqual(Object.keys(purpose).sort(), Object.keys(full).sort());
   for (const [name, text] of Object.entries(purpose)) {
     assert.ok(text.includes(indent(MEMORY_NEVER_KEPT_TEXT)), `${name}: the hard boundaries are not part of the comparison`);
-    assert.ok(text.includes(indent(DECIDE_VARIANTS.purpose)) && !text.includes(indent(MEMORY_DECIDE_TEXT)), `${name} carries the purpose wording alone`);
+    assert.ok(text.includes(indent(DECIDE_VARIANTS.purpose)) && !text.includes(indent(DECIDE_VARIANTS.current)), `${name} carries the purpose wording alone`);
     assert.ok(verify[name].includes(indent(DECIDE_VARIANTS["purpose-verify"])), `${name} carries the purpose wording and the two checks`);
     assert.ok(verify[name].length > text.length);
   }

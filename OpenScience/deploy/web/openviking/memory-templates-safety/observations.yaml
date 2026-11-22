@@ -13,7 +13,18 @@ description: |
   "月度汇总请做成折线图，不要表格", "参考文献用 APA"). The condition on one deliverable that the
   other types would usually omit (its size, its colours, its page count) may be noted here too, as long
   as it is a choice about how the work is made.
-  One file per choice, named by the kind of task and the choice. Each conversation that shows
+  A standalone request about the length, tone, format or language of this reply is an
+  observation even when the user names no task or document and there is no earlier draft.
+  For this case, use one bullet per independent user request in the same topic file,
+  including a later request in the same conversation. Copy just the complete request
+  verbatim as choice. For example, if the user says “Keep it brief.”, the whole bullet is
+  - Choice: {"kind":"length","scope":"reply","choice":"Keep it brief.","subject":"work"}
+  Use length for brevity, form for tone, format for language or layout. Use the fixed
+  scope reply only for an unqualified reply request. Keep an explicitly named task or
+  document scope. Count only the user's own requests, never assistant echoes or material.
+  A repeated request about this answer still has that scope. An explicit future default
+  or standing choice goes directly to PREFERENCES, even on its first occurrence.
+  For other choices, use one file per choice, named by the kind of task and the choice. Each conversation that shows
   the choice adds ITS OWN line to the file, also when a line for the choice already exists:
   the choice and the kind of task it was shown in, in a few words, with no name, no number and
   nothing of the work's content ("预算类表格：带透视表（做月度汇总时）"). Reuse the exact topic of an
@@ -35,8 +46,8 @@ description: |
   # How to decide what to write (the same rules apply to every memory type)
   Keep anything that could improve an answer next month or in another conversation, or that the user would not want to repeat. Uncertainty favors keeping. Write useful context in the first conversation; do not wait for repetition or a special request to remember it.
   These are examples, not a closed list: who the user is, how they work, the people and things their work or life revolves around, current states and changes, decisions, constraints, preferences, corrections, useful names, numbers and dates. Phone numbers, email addresses, the user's own health and information about patients, colleagues, clients, students or family are eligible under this same rule.
-  Preserve origin and certainty. A statement the user makes is attributed to them. Worthwhile unconfirmed advice is written as "assistant suggested", an opinion as "user believes", and a sourced claim as "document says" (with the document's identity when known). These are not established facts, confirmed decisions or instructions to agree. Do not invent an attribute from a question or a task. Memory is context, not permission to act.
-  One-request conditions, passing emotions, jokes, hypotheticals, teaching examples and document passages usually need no memory, but may be kept when useful later, with their source and limited scope explicit. An import the user requested is eligible line by line, with the same hard boundaries and attribution; importing a claim does not make it true.
+  Before adding or updating any line, identify the exact words in a user message that support each clause. The words must be the user's own statement or explicit adoption of that specific content. A pasted passage inside a user message is still material. An assistant's recollection, suggestion, or example is never evidence of a user's rule. Leave unadopted suggestions and unconfirmed material in the source conversation only, including for NOTES. Check earlier values against their original user evidence or an existing dated user statement. Never reconstruct a forgotten value. Attribute opinions to the user as beliefs. Memory is context, not permission to act.
+  For an import, preserve only statements the user specifically confirms. A request to edit, summarize or import a document does not adopt the claims inside it.
   For health-related content, preserve at least allergies, diagnoses, medications and doses, numeric values and units, dates, plans, contraindications and wishes, and any other relevant detail. Keep allergies, doses and numeric values verbatim; do not round, substitute or infer missing details. This medical enhancement adds coverage and is not a checklist or prerequisite for general memory.
   Date changing information. Update current state and preserve dated history rather than silently erasing earlier states. Keep people separate unless their identity is explicitly the same; uncertain identities stay separate. Use the user's label for each person. Choose headings for the information, not from a closed subtype list.
   Use the appropriate existing type when it fits. PEOPLE holds one person per file, with current state and dated history; the user's own current health also belongs in PROFILE. NOTES keeps useful information that does not fit another type. Never discard a useful line merely because no existing category names it. Respect the user's memory preferences about what to keep or forget, within the hard boundaries.
@@ -70,7 +81,8 @@ fields:
   - name: content
     type: string
     description: |
-      Markdown bullets, one per conversation that showed the choice, oldest first: the choice and
+      For a standalone reply request, append its exact Choice bullet as specified above for each independent request.
+      For other observations, write Markdown bullets, one per conversation that showed the choice, oldest first: the choice and
       the kind of task it was shown in, a few words. Keep every earlier bullet as it is and add
       this conversation's own bullet at the end. No names, numbers or content of the work.
       Example:
