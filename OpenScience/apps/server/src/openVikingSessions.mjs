@@ -405,7 +405,9 @@ export class OpenVikingSessions {
       await this.client.request({ method: 'POST', path: '/api/v1/fs/mkdir', userId,
         body: { uri: `${this.memoryRoot(userId)}/${type}` }, timeoutMs: this.timeoutMs });
     } catch (error) {
-      if (/** @type {any} */ (error)?.upstreamCode !== 'ALREADY_EXISTS') throw error;
+      // The engine (v0.5.3) answers an existing directory with 409 CONFLICT; older builds said ALREADY_EXISTS.
+      const code = /** @type {any} */ (error)?.upstreamCode;
+      if (code !== 'ALREADY_EXISTS' && code !== 'CONFLICT') throw error;
     }
   }
 

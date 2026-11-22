@@ -144,7 +144,8 @@ export class OpenVikingStub {
 
     if (path === '/api/v1/fs/mkdir' && req.method === 'POST') {
       if (!within(body.uri)) return send(403, fail('PERMISSION_DENIED', 'Access denied'));
-      if (this.directories.has(body.uri)) return send(409, fail('ALREADY_EXISTS', 'Directory exists'));
+      // Recorded from the real v0.5.3 engine: an existing directory is a 409 CONFLICT.
+      if (this.directories.has(body.uri)) return send(409, fail('CONFLICT', `already exists: ${body.uri}`));
       this.directories.add(body.uri);
       return send(200, ok({ uri: body.uri }));
     }

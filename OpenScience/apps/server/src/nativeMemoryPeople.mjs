@@ -34,9 +34,21 @@ function singlePairQuestion(left, right, question) {
     return `(?:${name}|“${name}”|「${name}」|『${name}』|"${name}")`;
   };
   const a = named(left), b = named(right);
-  const chinese = new RegExp(`^(?:(?:请确认(?:一下)?|我想确认(?:一下)?)[：:]\\s*)?${a}\\s*(?:和|与|、)\\s*${b}\\s*(?:(?:是|指的是|指)同一(?:个)?人吗|是不是同一(?:个)?人|是否为同一(?:个)?人)[?？](?:\\s*(?:请)?回复\\s*是\\s*[/／]\\s*不是[。.]?)?$`, 'u');
+  const chinese = new RegExp(`^(?:(?:请确认(?:一下)?|我想确认(?:一下)?|请问|想跟你确认(?:一下)?)[：:，,]?\\s*)?${a}\\s*(?:和|与|、)\\s*${b}\\s*(?:(?:是|指的是|指)同一(?:个)?人吗|是不是同一(?:个)?人|是否为同一(?:个)?人)[?？](?:\\s*(?:请)?回复\\s*是\\s*[/／]\\s*不是[。.]?)?$`, 'u');
   const english = new RegExp(`^Are ${a} and ${b} the same person\\?(?:\\s*(?:Please )?[Rr]eply yes\\s*/\\s*no\\.?)?$`, 'u');
   return chinese.test(question) || english.test(question);
+}
+
+/**
+ * The one same-person question in an assistant message. A natural reply may show both cards first and ask at the
+ * end; a bare "是" can confirm only when that is the message's only question, asked as its own sentence.
+ * @param {string} message
+ */
+function onlySamePersonQuestion(message) {
+  const sentences = String(message ?? '').split(/\n+|(?<=[。.!！?？])\s*/u).map(sentence => sentence.trim()).filter(Boolean);
+  // Any second question (another pair, "合并别的吗？") makes a bare reply ambiguous.
+  const questions = sentences.filter(sentence => /[?？]/u.test(sentence));
+  return questions.length === 1 && /同一(?:个)?人|the same person/iu.test(questions[0]) ? questions[0] : '';
 }
 
 /** A typed consent receipt names both current cards and the operation. Free text is never parsed for intent. */
@@ -49,7 +61,7 @@ export function personConsentRefusal(left, right, distinct, confirmation, questi
     const asks = [`“${a}”和“${b}”是同一个人吗？`, `Are ${a} and ${b} the same person?`];
     const answers = distinct ? ['不是', '不是同一个人', 'no'] : ['是', '是的', '是同一个人', 'yes'];
     if (asks.includes(previous) && answers.includes(answer.toLowerCase())) return null;
-    if (!distinct && hinted && [...answers, '对', '没错'].includes(answer.toLowerCase()) && singlePairQuestion(a, b, previous)) return null;
+    if (!distinct && hinted && [...answers, '对', '没错'].includes(answer.toLowerCase()) && (singlePairQuestion(a, b, previous) || singlePairQuestion(a, b, onlySamePersonQuestion(previous)))) return null;
     const sentence = `${a}和${b}${relation}`;
     const english = `${a} and ${b} are ${distinct ? 'different people' : 'the same person'}`;
     const forms = [sentence, `${sentence}，请${action}`, `更正一下，${sentence}，请${action}`, english];

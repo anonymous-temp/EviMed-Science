@@ -61,3 +61,18 @@ test('a delivered hint permits single-pair questions and exact affirmative repli
   assert.ok(decide('是', example, false));
   assert.ok(decide('是', example, true, true));
 });
+
+test('a natural reply that shows both cards and ends with one same-person question takes a bare yes; two questions do not', () => {
+  const decide = (answer, question) => personConsentRefusal('小明', '王小明医生', false, answer, question, true);
+  const natural = '我查了一下两张卡片：\n- 「小明」：骨干，负责门诊排班。\n- 「王小明医生」：全名王小明，心内科。\n请问「小明」和「王小明医生」是同一个人吗？';
+  for (const answer of ['是', '对', '没错']) assert.equal(decide(answer, natural), null);
+  const twoPairs = natural + '\n另外，「林舟」和「林洲」是同一个人吗？';
+  assert.ok(decide('是', twoPairs));
+  assert.ok(decide('可能是吧', natural));
+  assert.ok(personConsentRefusal('小明', '王小明医生', false, '是', natural, false));
+});
+
+test('a natural reply with one same-person question and another question keeps asking for the full decision', () => {
+  const natural = '两张卡片如下：\n- 「小明」：骨干。\n- 「王小明医生」：心内科。\n请问「小明」和「王小明医生」是同一个人吗？要不要顺便把别的也合并？';
+  assert.ok(personConsentRefusal('小明', '王小明医生', false, '是', natural, true));
+});
