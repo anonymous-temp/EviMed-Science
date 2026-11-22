@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createAgentMemoryRoutes } from '../src/agentMemoryRoutes.mjs';
 import { createMemoryAdmission } from '../src/memoryAdmission.mjs';
+import { MemoryHistory } from '../src/memoryHistory.mjs';
+import { removalContentMatch } from '../src/nativeMemoryRejections.mjs';
 const id = `nm_${'a'.repeat(24)}`;
+const requestId = 'a'.repeat(32);
 function fixture() {
   const state = { scopes: ['memory.read', 'memory.manage'], bound: null, shared: false, trial: false, paused: false, allowed: true,
     record: { id, uri: 'viking://user/u/memories/preferences/units.md', value: 'Use metric units.', kind: 'preference', scope: 'user', scopeId: '', version: 9 },
@@ -18,7 +21,9 @@ function fixture() {
   const native = { configured: true, forgetTargetsEnabled: true, memoryContexts: contexts,
     getRecord: async () => { if (!state.record) throw Object.assign(new Error('missing'), { code: 'memory_not_found' }); return state.record; },
     forgotten: async () => state.forgotten,
+    pendingStatementTexts: async () => state.pendingStatements ?? [],
     forget: async (...args) => { state.calls.push(args); return state.outcome; },
+    statementForgetStatus: async (_userId, id) => id === requestId ? state.request ?? null : null,
     update: async (...args) => { state.calls.push(args); return { ...state.forgotten[0], status: 'active' }; },
   };
   const routes = createAgentMemoryRoutes({ config,
@@ -26,7 +31,7 @@ function fixture() {
     store: { userById: async () => state.allowed ? user : { id: 'excluded' }, requireProject: async (_user, projectId) => {
       if (projectId === 'foreign') throw Object.assign(new Error('not found'), { status: 404 });
       return { id: projectId, userId: 'u' };
-    } }, memorySettings: settings, capsules: {}, nativeMemory: native, admission });
+    } }, memorySettings: settings, capsules: { recall: async () => ({ items: state.capsuleItems ?? [] }) }, nativeMemory: native, admission });
   const call = async (path, body) => {
     const req = { url: `/api/agent-memory/v1${path}`, method: body === undefined ? 'GET' : 'POST', headers: { authorization: 'Bearer fixture' },
       async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify(body)); } };
@@ -38,13 +43,64 @@ function fixture() {
 
 test('statement forgetting reports only the native confirmation, including a pending history scan', async () => {
   const { state, call } = fixture();
-  assert.deepEqual(await call('/forget', { statement: 'Use metric units.' }), { removed: false, historyRejected: true });
+  assert.deepEqual(await call('/forget', { statement: 'Use metric units.' }), { removed: false, historyRejected: true, forgetStatus: 'executed' });
   assert.equal(state.calls[0][2], null);
-  assert.deepEqual(state.calls[0][3], { statement: 'Use metric units.', context: { kind: 'owned', ownerId: 'u', projectId: 'default' } });
+  assert.deepEqual(state.calls[0][3], { statement: 'Use metric units.', deferStatement: true, context: { kind: 'owned', ownerId: 'u', projectId: 'default' } });
   state.outcome = { removed: false, historyRejected: true, historyScanPending: true };
-  assert.deepEqual(await call('/forget', { statement: 'Use metric units.' }), state.outcome);
+  assert.deepEqual(await call('/forget', { statement: 'Use metric units.' }), { ...state.outcome, forgetStatus: 'pending_verification' });
   state.outcome = { removed: false };
-  assert.deepEqual(await call('/forget', { recordId: id }), { removed: false });
+  assert.deepEqual(await call('/forget', { recordId: id }), { removed: false, forgetStatus: 'not_executed' });
+});
+
+test('statement receipts preserve existing flags and can only be polled with account manage authority', async () => {
+  const { state, call } = fixture();
+  state.outcome = { removed: false, historyRejected: true, historyScanPending: true, forgetStatus: 'requested', requestId };
+  assert.deepEqual(await call('/forget', { statement: 'Use metric units.' }), state.outcome);
+  const path = `/forgotten?requestId=${requestId}`;
+  state.request = { requestId, forgetStatus: 'not_executed', reason: 'statement_forget_failed' };
+  assert.deepEqual(await call(path), { request: state.request });
+  await assert.rejects(call('/forgotten?requestId=bad'), error => error.status === 400);
+  await assert.rejects(call(`/forgotten?requestId=${'b'.repeat(32)}`), error => error.status === 404);
+  state.bound = 'default';
+  await assert.rejects(call(path), error => error.code === 'agent_key_project_denied');
+  state.bound = null; state.scopes = ['memory.read'];
+  await assert.rejects(call(path), error => error.code === 'agent_key_scope_denied');
+  assert.deepEqual(await call('/forgotten'), { items: [] });
+});
+
+test('pending body fence withholds the subject-omitted statement and preserves same-date neighbours', async () => {
+  const statement = '我每周五下午去打羽毛球。';
+  const stored = '- 每周五下午去打羽毛球。 （用户 2026-11-21 说明）';
+  const neighbour = '- 每周五下午去游泳。 （用户 2026-11-21 说明）';
+  const body = `${stored}\n${neighbour}`;
+  assert.equal(removalContentMatch(stored, statement), true);
+  for (const other of [neighbour, '我每周六下午去打羽毛球。', '我每周五下午不去打羽毛球。', '我女儿每周五下午去打羽毛球。']) {
+    assert.equal(removalContentMatch(other, statement), false);
+  }
+  let pending = [statement];
+  const history = new MemoryHistory({ config: {}, ledger: {
+    overlay: { removals: async () => [] }, pendingStatements: async context => context.kind === 'owned' ? pending : [],
+  } });
+  const own = { kind: 'owned', ownerId: 'u' };
+  assert.equal(await history.fenceNativeBody(own, 'profile.md', body), neighbour);
+  assert.equal(await history.fenceNativeBody(own, 'profile.md', stored), null);
+  assert.equal(await history.fenceNativeBody({ ...own, kind: 'geo-project' }, 'profile.md', body), body);
+  pending = [];
+  assert.equal(await history.fenceNativeBody(own, 'profile.md', body), body);
+});
+
+test('an accepted statement also withholds matching capsule recall without changing stored capsule facts', async () => {
+  const { state, call } = fixture();
+  state.pendingStatements = ['我每周五下午去打羽毛球。'];
+  state.capsuleItems = [
+    { id: 'target', text: '每周五下午去打羽毛球。 （用户 2026-11-21 说明）' },
+    { id: 'neighbour', text: '每周五下午去游泳。 （用户 2026-11-21 说明）' },
+  ];
+  const recall = () => call('/recall', { query: '每周五下午', scope: 'capsule', methods: 'none' });
+  assert.deepEqual((await recall()).items.map(item => item.id), ['neighbour']);
+  assert.equal((await recall()).sources.capsule, 1);
+  state.pendingStatements = [];
+  assert.deepEqual((await recall()).items.map(item => item.id), ['target', 'neighbour']);
 });
 test('record forgetting resolves the owned record and preserves exact line selection', async () => {
   const { state, call } = fixture();

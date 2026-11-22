@@ -11,6 +11,7 @@ import { filterCapturedMessage } from './memoryGateway.mjs';
 import { OpenVikingResources } from './openVikingResources.mjs';
 import { diverseHistoryCandidates, historyTokens, historyLexicalScorer, compactHistoryMessages } from './memoryHistoryRetrieval.mjs';
 import { parseArchiveUri, platformSessionOf } from './openVikingSessions.mjs';
+import { HttpError } from './security.mjs';
 export { MemoryHistoryLedger } from './memoryHistoryPersistence.mjs';
 
 const hash = value => createHash('sha256').update(String(value)).digest('hex');
@@ -164,6 +165,13 @@ export class MemoryHistory {
     if (body === null) return null;
     const overlay = this.ledger.overlay;
     const namespaceId = context.kind === 'geo-project' ? context.namespaceId : null;
+    const pending = await this.ledger.pendingStatements?.(context) ?? [];
+    if (pending.length) {
+      const lines = body.split('\n');
+      const kept = lines.filter(line => !pending.some(statement => removalContentMatch(line, statement)));
+      if (kept.length !== lines.length) body = kept.some(line => removalText(line)) ? kept.join('\n') : null;
+      if (body === null) return null;
+    }
     const authority = await overlay.removals(context.ownerId, namespaceId);
     if (!authority.length) return body;
     const origins = (await overlay.originsOf(context.ownerId, [uri])).get(uri) ?? new Map();
@@ -196,6 +204,20 @@ export class MemoryHistory {
     return kept.some(line => removalText(line)) ? kept.join('\n') : null;
   }
 
+  /** @param {import('./nativeMemoryStore.mjs').NativeMemoryStore|null} [store] */
+  async drainStatementForgets(store = null) {
+    if (!store) return;
+    for (let batch = 0; batch < 4; batch++) {
+      const request = await this.ledger.claimStatementForget();
+      if (!request) return;
+      try {
+        await store.executeStatementForget(request);
+      } catch (error) {
+        await this.ledger.failStatementForget(request, error instanceof HttpError && error.code === 'memory_source_cleanup_busy');
+      }
+    }
+  }
+
   /** Populate missing legacy source hashes before acknowledging destructive work.
    * Progress commits before a retry; no source text is stored in PostgreSQL. */
   async ensureSourceCopies(context) {
@@ -223,7 +245,9 @@ export class MemoryHistory {
    * message hashes commit together, satisfying the deployed foreign key without
    * holding a database transaction across engine reads or model calls.
    * Undo lifts the fence, and a repeated forget reinstates it. */
-  async rejectRemoved(context, file, removed, judge, { archiveUri: requestArchive = null, activate = async () => {}, allowDeferred = false, memorySweep = /** @type {import('./memoryHistoryPersistence.mjs').MemorySweep|null} */ (null) } = {}) {
+  async rejectRemoved(context, file, removed, judge, { archiveUri: requestArchive = null, activate = async () => {}, allowDeferred = false,
+    requestedAt = /** @type {Date|null} */ (null),
+    memorySweep = /** @type {import('./memoryHistoryPersistence.mjs').MemorySweep|null} */ (null) } = {}) {
     if (!removed.length) { await activate(); return; }
     if (!context.ownerCreatedAt) context = {...context,ownerCreatedAt:(await this.ledger.database.query(
       'SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[context.ownerId])).rows[0]?.stamp};
@@ -275,7 +299,9 @@ export class MemoryHistory {
           const copies=discovered.filter(message=>messages.some(source=>lineFingerprint(source.text)===lineFingerprint(message.text)));
           messages.push(...(copies.length?copies:discovered));
         }
-        const unique=[...new Map(messages.map(message=>[JSON.stringify([message.archiveUri,message.messageHash??lineFingerprint(message.text)]),message])).values()];
+        const inScope = requestedAt ? messages.filter(message =>
+          !(Date.parse(message.created_at ?? '') > requestedAt.getTime())) : messages;
+        const unique=[...new Map(inScope.map(message=>[JSON.stringify([message.archiveUri,message.messageHash??lineFingerprint(message.text)]),message])).values()];
         const matched = [...unique.filter(message => direct.has(message.archiveUri)),
           ...await this.matchRemoved(context, text, unique.filter(message => !direct.has(message.archiveUri)), judge, tokens)];
         prepared.push({ fingerprint, messages: [...obligations, ...matched] });
@@ -691,15 +717,16 @@ export class MemoryHistory {
           .some(chunk=>chunk.messages.some(part=>part.text.includes(redact(message.text))));
       });
       if (!proven) return null;
+      const withdrawalCheck = { includePending: !forRemoval };
       if (!forRemoval && await this.ledger.rejected(context,originalTexts,meta.archive_uri,
-        touched.map(message=>({role:message.role,text:messageText(message,this.secretRedaction)??'',created_at:message.created_at})))) return null;
+        touched.map(message=>({role:message.role,text:messageText(message,this.secretRedaction)??'',created_at:message.created_at})), withdrawalCheck)) return null;
       let title = historyTitle(verified.projectMessage ? messages[0].text : verified.conversationTitle,'Conversation',this.secretRedaction);
       let projectTitle = historyTitle(verified.projectTitle ?? verified.project?.name,'Project',this.secretRedaction);
       // Titles are generated from the whole source, including passages absent from this chunk.
       // Checking only their truncated wording loses paraphrased or partially quoted withdrawals.
-      if (await this.ledger.rejected(context, original.filter(Boolean).map(message => messageText(message, this.secretRedaction)).filter(Boolean), meta.archive_uri)
-        || await this.ledger.rejected(context,[title])) title='Conversation';
-      if (await this.ledger.rejected(context,[projectTitle])) projectTitle='Project';
+      if (await this.ledger.rejected(context, original.filter(Boolean).map(message => messageText(message, this.secretRedaction)).filter(Boolean), meta.archive_uri, [], withdrawalCheck)
+        || await this.ledger.rejected(context,[title], null, [], withdrawalCheck)) title='Conversation';
+      if (await this.ledger.rejected(context,[projectTitle], null, [], withdrawalCheck)) projectTitle='Project';
       if (!await this.ledger.lookup(user.id,context.ownerCreatedAt,context.namespaceId,verified.projectId,verified.projectCreatedAt,candidate.uri)) return null;
       // The index can contain legacy mid-sentence fragments. Rehydrate only the exact admitted
       // message indices, after all archive, removal and redaction checks above.

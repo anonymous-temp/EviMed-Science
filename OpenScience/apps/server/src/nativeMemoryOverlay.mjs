@@ -1509,19 +1509,19 @@ export class NativeMemoryOverlay {
   /** Claim only new intent fingerprints inside the caller's rejection/history transaction.
    * The unique key serializes concurrent tool/settlement calls without holding locks during scans.
    * Existing removals retain their date and undo authority; RETURNING owns the revision's before-image.
-   * @param {string} userId @param {string} memoryType @param {string} uri @param {readonly string[]} lines */
-  async claimForgetIntent(userId, memoryType, uri, lines) {
+   * @param {string} userId @param {string} memoryType @param {string} uri @param {readonly string[]} lines @param {Date|null} [requestedAt] */
+  async claimForgetIntent(userId, memoryType, uri, lines, requestedAt = null) {
     const unique = new Map(lines.map(line => [lineFingerprint(line), line]));
     const prints = [...unique.keys()].sort();
     if (!prints.length) return [];
-    const result = await this.#query(`WITH removed AS (INSERT INTO evimed_memory.native_rejections (user_id,memory_type,fingerprint,uri,text,origin)
-      SELECT $1,$2,print,$3,text,'forget' FROM unnest($4::text[],$5::text[]) AS rejected(print,text)
+    const result = await this.#query(`WITH removed AS (INSERT INTO evimed_memory.native_rejections (user_id,memory_type,fingerprint,uri,text,origin,rejected_at)
+      SELECT $1,$2,print,$3,text,'forget',COALESCE($6::timestamptz,clock_timestamp()) FROM unnest($4::text[],$5::text[]) AS rejected(print,text)
       ON CONFLICT (user_id,memory_type,fingerprint) DO UPDATE SET origin='forget', uri=EXCLUDED.uri,
-        text=EXCLUDED.text, rejected_at=clock_timestamp()
+        text=EXCLUDED.text, rejected_at=EXCLUDED.rejected_at
       WHERE evimed_memory.native_rejections.origin='edit' RETURNING fingerprint),
       fence AS (UPDATE evimed_control.users SET recall_withdrawn_at=greatest(recall_withdrawn_at,clock_timestamp())
         WHERE id=$1 AND EXISTS (SELECT 1 FROM removed)) SELECT fingerprint FROM removed`,
-    [owner(userId), String(memoryType), uri, prints, prints.map(print => normalisedStatement(unique.get(print)))]);
+    [owner(userId), String(memoryType), uri, prints, prints.map(print => normalisedStatement(unique.get(print))), requestedAt]);
     const inserted = new Set(result.rows.map(row => row.fingerprint));
     return [...unique].filter(([print]) => inserted.has(print)).map(([, line]) => line);
   }

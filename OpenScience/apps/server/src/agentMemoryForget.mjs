@@ -1,6 +1,17 @@
 import { privateByDefault } from '@evimed/domain';
 import { NATIVE_RECORD_ID } from './nativeMemoryStore.mjs';
 import { HttpError } from './security.mjs';
+import { forgetToolStatus } from './memoryForgetStatus.mjs';
+import { forgetDependencies } from './memoryForgetPropagation.mjs';
+import { removalContentMatch } from './nativeMemoryRejections.mjs';
+
+/** Read-only protection for public capsule and method projections, which do not read native files. */
+export async function pendingForgetFilter(native, user) {
+  const pending = user ? await native?.pendingStatementTexts?.(user.id) ?? [] : [];
+  if (!pending.length) return null;
+  return (/** @type {unknown} */ value) => forgetDependencies(value).texts.some(text =>
+    text.split('\n').some(line => pending.some(statement => removalContentMatch(line, statement))));
+}
 
 /** The public adapter selects owned records; the native tool owns every deletion and withdrawal. */
 export async function forgetForAgent({ config, native, admission }, { user, project, boundProject, input }) {
@@ -24,8 +35,8 @@ export async function forgetForAgent({ config, native, admission }, { user, proj
   }
   // A bare statement has account-wide rejection authority, not a project-labelled file.
   if (statement && project.id !== 'default') throw new HttpError(403, 'agent_key_project_denied', 'Statement withdrawal uses the ordinary account namespace; omit projectId.');
-  /** @type {{statement?: string, lines?: string[]}} */
-  let options = statement ? { statement: input.statement } : {};
+  /** @type {{statement?: string, lines?: string[], deferStatement?:boolean}} */
+  let options = statement ? { statement: input.statement, deferStatement: true } : {};
   let uri = null, profileLine = false;
   if (!statement) {
     const record = await native.getRecord(user.id, input.recordId);
@@ -45,7 +56,8 @@ export async function forgetForAgent({ config, native, admission }, { user, proj
   }
   // Carry the verified context into the native live-context check. Re-resolving
   // without it could adopt a project whose namespace changed during admission.
-  const outcome = await native.forget(user, project, uri, { ...options, context });
+  const result = await native.forget(user, project, uri, { ...options, context });
+  const outcome = { ...result, forgetStatus: ('forgetStatus' in result ? result.forgetStatus : undefined) ?? forgetToolStatus(result) };
   // A stale line selection may not reveal the rest of its profile as retry hints.
   if (profileLine && outcome.availableLines) {
     const { availableLines: _available, ...confirmed } = outcome;

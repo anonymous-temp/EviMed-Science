@@ -29,6 +29,8 @@ const ERROR = {
     },
   },
 };
+const FORGET_STATUS = { type: 'string', enum: ['requested', 'executed', 'pending_verification', 'not_executed'] };
+const FORGET_REQUEST_ID = { type: 'string', pattern: '^[a-f0-9]{32}$' };
 
 /** @param {string} description */
 function errorResponse(description) {
@@ -71,7 +73,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
         "",
         "1. memory.write only proposes candidates. A separate memory.remember scope admits a directly stated memory through the page write path with an external source. An episode stays a pending candidate, and a note an unconfirmed one, until the account owner confirms it — on their memory page, or through the dashboard operations with a key carrying `memory.manage`, which a key holds only when its requests come from that person's own clicks. The explicit-remember host must send the person's verbatim words, with their source reference; do not send a model's paraphrase.",
         "2. A key's scope is a property of the key. A key bound to a project cannot read or write outside it, and no request field widens that. An integration key (minted with `subjects: true`) may name the person a request is for in the `X-Subject` header — a doctor behind a hospital's HIS — and every read and write is then that person's own memory and nobody else's; without the header it is the key's own account, the institution. A subject is given its memory the first time something is written for it; reading one that has none answers as an empty memory.",
-        "3. An account's memory is the memory engine's own files. `/recall`, `/records` and `/dashboard` read them, a forget removes the file from the engine (an undo brings it back with the `version` the forget answered with), an edit replaces its text, and `/episodes` stages a pending candidate without extraction or activation; explicit confirmation admits that exact revision through a durable native session. Active files have no pending state or usage counts, and `restore` uses the page status update with the forgotten-list version. A deployment that cannot reach the engine answers `503 memory_engine_unavailable`.",
+        "3. An account's memory is the memory engine's own files. `/recall`, `/records` and `/dashboard` read them. A record forget can remove a file or its selected lines, and a statement forget reports the state of its withdrawal separately. An edit replaces the record text. `/episodes` stages a candidate for explicit confirmation, which admits that exact revision through a durable native session. Active files have no pending state or usage counts, and `restore` uses the page status update with the forgotten-list version. A deployment that cannot reach the engine answers `503 memory_engine_unavailable`.",
         "",
         "Memory is context, never permission: nothing recalled here loosens a contract, relaxes a safety rule, or reaches a host the platform's gateways would not.",
       ].join("\n"),
@@ -381,23 +383,29 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       '/forget': {
         post: {
           summary: 'Withdraw a statement or exact record lines',
-          description: 'Requires targeted forgetting and an account-scoped key. Reuses the kernel forget service; shared namespaces and private records are refused. Pausing does not block withdrawal. A missing line returns missingLines and availableLines without claiming removal; historyScanPending means earlier conversations and copies are still being checked.',
+          description: 'Requires targeted forgetting and an account-scoped key. Pausing does not block withdrawal. An accepted statement is withheld from ordinary memory and history reads before background execution. Poll GET /forgotten?requestId=… with the returned requestId. Requested means queued, executed means the authorized withdrawal was applied, pending_verification means checks or retries remain, and not_executed means no withdrawal was applied. If statement execution fails, its temporary read restriction is lifted. Paraphrase coverage is bounded. A missing exact line returns missingLines and may return availableLines.',
           security: [{ agentApiKey: ['memory.manage'] }],
           requestBody: jsonBody({ $ref: '#/components/schemas/ForgetRequest' }),
-          responses: { 200: { description: 'The native store confirmation only: removed, removedLines, fileRemoved, missingLines, availableLines, historyRejected, historyScanPending as applicable.', content: { 'application/json': { schema: { type: 'object', properties: { data: { type: 'object', properties: {
+          responses: { 200: { description: 'Execution state with the existing native confirmation fields.', content: { 'application/json': { schema: { type: 'object', properties: { data: { type: 'object', required: ['forgetStatus'], properties: {
             removed: { type: 'boolean' }, removedLines: { type: 'integer' }, fileRemoved: { type: 'boolean' },
             missingLines: { type: 'array', items: { type: 'string' } }, availableLines: { type: 'array', items: { type: 'string' } },
             historyRejected: { type: 'boolean' }, historyScanPending: { type: 'boolean' },
+            forgetStatus: FORGET_STATUS, requestId: FORGET_REQUEST_ID,
           } } } } } } }, 400: errorResponse('Invalid target or lines.'), 404: errorResponse('No such memory.'), ...common },
         },
       },
       '/forgotten': {
         get: {
           summary: 'Read withdrawn original text and restore actions',
-          description: 'An explicit management view of native forgotten revisions, never recalled context. Private and shared entries are excluded. The restore action is present only with memory.manage and an unbound key; use its expectedVersion.',
-          security: [{ agentApiKey: ['memory.read'] }],
-          parameters: [{ name: 'projectId', in: 'query', schema: { type: 'string' } }],
-          responses: { 200: { description: 'data.items: id, text, version, forgottenAt, and optional restore {path, expectedVersion}; no internal URI.' }, ...common },
+          description: 'With requestId, an account-scoped key with memory.manage reads only the status receipt. Omit projectId when polling. Without requestId, memory.read lists withdrawn original text and omits private and shared entries. The restore action requires memory.manage and an unbound key; use its expectedVersion.',
+          security: [{ agentApiKey: ['memory.read'] }, { agentApiKey: ['memory.manage'] }],
+          parameters: [{ name: 'projectId', in: 'query', schema: { type: 'string' } },
+            { name: 'requestId', in: 'query', schema: FORGET_REQUEST_ID }],
+          responses: { 200: { description: 'Without requestId, data.items contains id, text, version, forgottenAt and optional restore {path, expectedVersion}. With requestId, data.request contains requestId, forgetStatus and an optional failure reason.', content: { 'application/json': { schema: { type: 'object', properties: { data: { oneOf: [
+            { type: 'object', required: ['items'], properties: { items: { type: 'array', items: { type: 'object' } } } },
+            { type: 'object', required: ['request'], properties: { request: { type: 'object',
+              required: ['requestId', 'forgetStatus'], properties: { requestId: FORGET_REQUEST_ID, forgetStatus: FORGET_STATUS, reason: { type: 'string' } } } } },
+          ] } } } } } }, 400: errorResponse('Malformed status query.'), 404: errorResponse('No such withdrawal request.'), ...common },
         },
       },
       "/note": {

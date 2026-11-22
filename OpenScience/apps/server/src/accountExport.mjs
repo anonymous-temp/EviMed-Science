@@ -204,6 +204,7 @@ export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
   "evimed_memory.native_instruction_checks": "content-hash attribution verdicts, source identities and pending line fingerprints; derived retry receipts without conversation or memory text",
   "evimed_memory.native_writer_leases": "short-lived ownership leases preventing concurrent engine writes and erasure; operational locking state that cannot transfer to another deployment",
   "evimed_memory.history_forget_scans": "undo-bound history/memory paraphrase scans, frozen file hashes and archive cursors; operational privacy state without raw message bodies, erased with the rejection or account",
+  "evimed_memory.api_statement_forgets": "private pending withdrawal text and retry/frozen sweep authority; completed requests keep only their operational status, and account deletion cascades",
   "evimed_memory.history_message_rejections": "message hashes linked to removal fingerprints so rejected source text stays unavailable; derived privacy enforcement state, not raw conversation content",
   "evimed_memory.history_write_messages": "whole-message hashes used to recognize synthetic copies of original conversations; derived attribution evidence without message text",
   "evimed_memory.history_write_session_deletes": "durable exact-address engine session cleanup obligations, retained after account deletion until the worker acknowledges removal; operational outbox state",

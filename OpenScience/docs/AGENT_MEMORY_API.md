@@ -192,15 +192,28 @@ withdrawal follows copies across that namespace, so project-bound keys cannot
 safely authorize it. Shared namespaces, private records and trial contexts are
 refused; learning/recall pause does **not** prevent the owner withdrawing text.
 
-The response is the native store's confirmation, without a synthetic success
-message: `removed`, `removedLines`, `fileRemoved`, `historyRejected`, and
-`historyScanPending` when present. A statement may record history rejection
-without removing a file. Pending means paraphrases/copies may still be recalled.
-Missing exact lines return `missingLines`; available-line hints are omitted for
-profile-line records so neighbouring profile text cannot leak. Errors leave no
-claim that forgetting completed. Clinical/automated admission does not prohibit
-withdrawal (the kernel has the same deletion rule); these are write-learning
-refusals, not reasons to deny the person's deletion request.
+The response preserves `removed`, `removedLines`, `fileRemoved`,
+`historyRejected`, and `historyScanPending` when applicable, and adds
+`data.forgetStatus`.
+
+| Status | Meaning |
+|---|---|
+| `requested` | The statement was accepted and its matching text is already withheld from ordinary reads, including `/recall`, `/context`, and `/records`. Background execution is queued. |
+| `pending_verification` | Verification or retry is in progress. The matching text remains withheld. |
+| `executed` | The authorized withdrawal was applied. Copy and paraphrase detection is bounded. |
+| `not_executed` | The operation found no eligible target or could not apply the withdrawal. A failed statement request lifts its temporary read restriction. |
+
+For a queued statement, `removed: false` means no file deletion is being
+reported, and `historyRejected: true` confirms the read restriction. Poll
+`GET /forgotten?requestId=<data.requestId>` with an account-scoped
+`memory.manage` key for `data.request`. The receipt omits the original text
+and gives `reason: "statement_forget_failed"` for terminal execution failure.
+An independent withdrawal can still keep the same statement hidden. The
+original conversation remains stored and can be deleted separately.
+
+Missing exact lines return `missingLines`. Profile-line responses omit
+`availableLines` to protect neighbouring text. Clinical and automated
+learning restrictions do not prohibit withdrawal.
 
 `GET /forgotten` (`memory.read`) returns `data.items` with original `text`, `id`,
 `version`, `forgottenAt` and an optional `restore: {path, expectedVersion}`.

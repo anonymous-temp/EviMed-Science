@@ -14,7 +14,7 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
 import { AGENT_ACCOUNT_REQUESTS_PER_MINUTE, AGENT_KEY_REQUESTS_PER_MINUTE as RATE_LIMIT_PER_MINUTE, assertAgentSubject, subjectAccountId } from "./agentApiKeys.mjs";
 import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
 import { isPlatformAccount } from "./platformAccount.mjs";
-import { forgetForAgent, forgottenForAgent } from './agentMemoryForget.mjs';
+import { forgetForAgent, forgottenForAgent, pendingForgetFilter } from './agentMemoryForget.mjs';
 
 /**
  * The memory API an agent that is not ours calls.
@@ -332,7 +332,17 @@ export function createAgentMemoryRoutes({
         const projectId = await projectOf(user, url.searchParams.get('projectId'));
         const project = await store.requireProject(user, projectId ?? 'default');
         const native = await nativeFor(user);
+        const withdrawn = await pendingForgetFilter(native, user);
         const result = await contextForAgent({ config, native, admission, ...openingContext }, { user, project });
+        if (withdrawn) {
+          const visible = (/** @type {string} */ text) => text.split('\n').filter(line => !withdrawn(line)).join('\n');
+          result.platformText = visible(result.platformText);
+          result.layers = result.layers.map(layer => {
+            if (!('text' in layer) || !layer.text) return layer;
+            const text = visible(layer.text);
+            return text.trim() ? { ...layer, text } : { name: layer.name, present: false, reason: 'empty_or_filtered' };
+          });
+        }
         await reply(200, { data: result });
         return true;
       }
@@ -352,6 +362,19 @@ export function createAgentMemoryRoutes({
       }
 
       if (action === 'forgotten' && method === 'GET') {
+        const requestId = url.searchParams.get('requestId');
+        if (requestId !== null) {
+          requireScope('memory.manage');
+          if (identity.projectId) throw new HttpError(403, 'agent_key_project_denied', 'Statement withdrawal status requires an account-scoped key.');
+          if (!/^[a-f0-9]{32}$/.test(requestId) || url.searchParams.has('projectId'))
+            throw new HttpError(400, 'agent_memory_payload_invalid', 'Supply a statement withdrawal requestId without projectId.');
+          const user = await accountFor({ create: false });
+          const native = await nativeFor(user);
+          const request = user && await native.statementForgetStatus(user.id, requestId);
+          if (!request) throw new HttpError(404, 'memory_not_found', 'No such withdrawal request.');
+          await reply(200, { data: { request } });
+          return true;
+        }
         requireScope('memory.read');
         const user = await accountFor({ create: false });
         const projectId = await projectOf(user, url.searchParams.get('projectId'));
@@ -402,6 +425,7 @@ export function createAgentMemoryRoutes({
         // A subject never seen has no memory and no methods of its own; it may
         // still read its institution's named capsules.
         const projectId = await projectOf(user, input.projectId);
+        const withdrawn = await pendingForgetFilter(native, user);
         await meter?.admit(payer);
         const result = await recallForAgent({ capsules, memory: native ? nativeRecallSource(native, { recallEnabled: config.memoryRecallEnabled !== false, sourceBound: config.memorySourceEnvelopeEnabled === true }) : null, learning },
           { user, institution: subject ? keyAccount : null }, {
@@ -414,6 +438,14 @@ export function createAgentMemoryRoutes({
             ...(input.capsuleIds ? { capsuleIds: input.capsuleIds } : {}),
             methods: input.methods ?? "all",
           });
+        if (withdrawn) {
+          result.items = result.items.filter(item => {
+            if (item.source !== 'capsule' || !withdrawn(item)) return true;
+            result.sources.capsule = Math.max(0, result.sources.capsule - 1);
+            return false;
+          });
+          result.methods = result.methods.filter(item => !withdrawn(item));
+        }
         if (withHistory) {
           // The same history reader used by the gateway owns archive review, source
           // revalidation, withdrawals and shared-namespace refusal. No raw archive fallback.
@@ -526,7 +558,12 @@ export function createAgentMemoryRoutes({
         const user = await accountFor({ create: false });
         const native = await nativeFor(user);
         if (identity.projectId) await projectOf(user, identity.projectId);
+        const withdrawn = await pendingForgetFilter(native, user);
         const board = await memoryBoard({ memorySettings, learning, capsules, observations, nativeMemory: native, projectId: identity.projectId }, user);
+        if (withdrawn) {
+          board.pending = board.pending.filter(item => !withdrawn(item));
+          board.habits = board.habits.filter(item => !withdrawn(item));
+        }
         await reply(200, { data: board });
         return true;
       }
@@ -606,7 +643,10 @@ export function createAgentMemoryRoutes({
         requireScope("memory.read");
         const user = await accountFor({ create: false });
         if (!user) throw new HttpError(404, "method_not_found", "The method is unavailable.");
-        await reply(200, { data: await methodDetail({ learning }, user, habit.id) });
+        const withdrawn = await pendingForgetFilter(nativeMemory, user);
+        const data = await methodDetail({ learning }, user, habit.id);
+        if (withdrawn?.(data)) throw new HttpError(404, 'method_not_found', 'The method is unavailable.');
+        await reply(200, { data });
         return true;
       }
       if (habit && method === "POST" && ["retire", "restore", "rollback"].includes(habit.act)) {

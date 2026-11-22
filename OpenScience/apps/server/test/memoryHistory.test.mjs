@@ -347,6 +347,7 @@ function historyRowsDatabase({ fenced = [], recorded = [], deleted = [], removal
   const scoped = (/** @type {any[]} */ rows, /** @type {any[]} */ values) => rows.filter(row => values[3].includes(row.archive_uri)
     || values[4].includes(sessionOf(row.archive_uri)) || values[4].includes(row.source_session));
   return { query: async (/** @type {string} */ sql, /** @type {any[]} */ values) => {
+    if (sql.includes('api_statement_forgets')) return { rows: [] };
     if (sql.includes('FROM evimed_memory.history_message_rejections h')) return { rows: scoped(fenced, values) };
     if (sql.includes('FROM evimed_memory.history_write_messages w')) return { rows: scoped(recorded, values) };
     if (sql.includes('FROM evimed_memory.history_fences f')) return { rows: deleted };
