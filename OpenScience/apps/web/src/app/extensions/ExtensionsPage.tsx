@@ -12,7 +12,7 @@ import { Menu } from "@/components/ui/Menu";
 import { Note } from "@/components/ui/Note";
 import { Switch } from "@/components/ui/Switch";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { extensionCatalogue, extensionInstallations, inventory as loadInventoryOf, projectExtensions, projectBuiltinPlugins, sameExtensionCoordinate, saveProjectBuiltinPlugins, saveProjectExtensions, type BuiltinPluginPolicy, type Inventory } from "@/lib/extensionsClient";
+import { extensionCatalogue, extensionInstallations, inventory as loadInventoryOf, projectExtensions, projectPatientMatching, projectBuiltinPlugins, sameExtensionCoordinate, saveProjectBuiltinPlugins, saveProjectExtensions, type BuiltinPluginPolicy, type Inventory } from "@/lib/extensionsClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
 import { subscribeSessionBoundary } from "@/lib/sessionLifecycle";
@@ -21,7 +21,7 @@ import { useModeFocus } from "@/lib/useModeFocus";
 import { toast } from "@/lib/toast";
 import { createPersonalSkill, listPersonalSkills, listPlatformSkills, projectPlatformSkills, projectSkills, saveProjectPlatformSkills, saveProjectSkills, type PendingSkillTransfer, type PersonalSkill, type PlatformSkill, type SkillWrite } from "@/lib/skillLibraryClient";
 import { CatalogueView, type CatalogueEntry } from "./CatalogueView";
-import { ACTIVATION_GAVE_UP_TEXT, SHARED_PROJECT_TEXT, allInstalledExtensions, catalogueOrigins, extensionAvailability, nextDisabled, platformSkillReadOnly, projectChoicesNotApplicable, skillActivationText, skillDisplayName, skillAdapted, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
+import { ACTIVATION_GAVE_UP_TEXT, SHARED_PROJECT_TEXT, allInstalledExtensions, catalogueOrigins, extensionAvailability, nextDisabled, patientMatchingStatusText, platformSkillReadOnly, projectChoicesNotApplicable, skillActivationText, skillDisplayName, skillAdapted, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
 import { SKILL_LOOPX_ICON, SKILL_PACK_ICON } from "./extensionCopy";
 import { inventoryIcon } from "./inventoryIcons";
 import { ExtensionDrawer } from "./ExtensionDrawer";
@@ -89,6 +89,8 @@ function Extensions({ tab, itemId, projectId, projectSwitched }: { tab: string; 
   const projectPlugins = useLoad(useCallback(() => projectExtensions(projectId), [projectId]));
   const builtinPlugins = useLoad(useCallback(() => projectBuiltinPlugins(projectId), [projectId]));
   const inventory = useLoad(useCallback(() => loadInventoryOf(projectId), [projectId]));
+  const matching = useLoad(useCallback(() => projectPatientMatching(projectId), [projectId]));
+  const matchingStatus = matching.state.status === "ready" ? matching.state.data : null;
   const citation = useCitationPlugin(projectId);
   const [more, setMore] = useState<{ items: PersonalSkill[]; cursor: string | null } | null>(null), [loadingMore, setLoadingMore] = useState(false);
   const personalRows = personal.state.status === "ready" ? [...personal.state.data.items, ...(more?.items ?? [])] : [];
@@ -244,6 +246,10 @@ function Extensions({ tab, itemId, projectId, projectSwitched }: { tab: string; 
         disabled={!!busy || (isCitation ? citation.busy || !citation.plugin?.desired : !selected?.available)}
         onChange={next => { if (isCitation) void citation.save({ enabled: next }); else void switchBuiltin(setting, next); }} /> : undefined });
   }
+  if (matchingStatus?.available && matchingStatus.selected) {
+    entries.push({ id: "patient-matching", title: "患者匹配", description: "按试验条件核对患者资料。", publisher: "EviMed Science",
+      type: "plugins", group: "插件", origin: "first-party", state: patientMatchingStatusText(matchingStatus) });
+  }
   const groups = [...new Set(entries.filter(entry => type === "all" || entry.type === type).map(entry => entry.group))];
   const filtered = entries.filter(entry => (type === "all" || entry.type === type) && (group === "all" || entry.group === group) && (origin === "all" || entry.origin === origin)
     && searchMatches(query, [entry.title, entry.description, entry.publisher, entry.group]));
@@ -260,20 +266,24 @@ function Extensions({ tab, itemId, projectId, projectSwitched }: { tab: string; 
   });
   // Poll only an apply under way on a running runtime, with growing waits and a stop; a project with nothing running reads
   // 「下次对话生效」 and is not polled. Ready catalogues are never periodically reloaded.
-  const pending = currentPolicy?.activation.phase === "waiting" || currentPersonal?.activation?.phase === "waiting" || currentBuiltin?.activation.phase === "waiting"
+  const matchingPending = !!matchingStatus && ["waiting", "stale", "refreshing", "retrying"].includes(matchingStatus.state);
+  const otherPending = currentPolicy?.activation.phase === "waiting" || currentPersonal?.activation?.phase === "waiting" || currentBuiltin?.activation.phase === "waiting"
     || !!currentPlugins?.selections.some(item => item.phase === "waiting" || item.phase === "applying");
   const refreshPolicy = policy.reload, refreshPersonalSelection = selection.reload, refreshPlugins = projectPlugins.reload, refreshBuiltin = builtinPlugins.reload;
-  const refreshPending = useCallback(() => { refreshPolicy(true); refreshPersonalSelection(true); refreshPlugins(true); refreshBuiltin(true); },
-    [refreshPolicy, refreshPersonalSelection, refreshPlugins, refreshBuiltin]);
-  const observedActivation = useMemo(() => [currentPolicy, currentPersonal, currentPlugins, currentBuiltin], [currentPolicy, currentPersonal, currentPlugins, currentBuiltin]);
-  const activationPoll = useActivationPoll(pending, refreshPending, observedActivation,
-    `${currentPolicy?.revision ?? 0}:${currentPersonal?.revision ?? 0}:${currentPlugins?.revision ?? 0}:${currentBuiltin?.revision ?? 0}`);
+  const refreshMatching = matching.reload;
+  const refreshPending = useCallback(() => {
+    if (otherPending) { refreshPolicy(true); refreshPersonalSelection(true); refreshPlugins(true); refreshBuiltin(true); }
+    if (matchingPending) refreshMatching(true);
+  }, [otherPending, refreshPolicy, refreshPersonalSelection, refreshPlugins, refreshBuiltin, matchingPending, refreshMatching]);
+  const observedActivation = useMemo(() => [currentPolicy, currentPersonal, currentPlugins, currentBuiltin, matchingStatus], [currentPolicy, currentPersonal, currentPlugins, currentBuiltin, matchingStatus]);
+  const activationPoll = useActivationPoll(otherPending || matchingPending, refreshPending, observedActivation,
+    `${currentPolicy?.revision ?? 0}:${currentPersonal?.revision ?? 0}:${currentPlugins?.revision ?? 0}:${currentBuiltin?.revision ?? 0}:${matchingStatus?.revision ?? 0}`);
   const loading = platform.state.status === "loading" && catalogue.state.status === "loading" && installed.state.status === "loading";
   const failures = [
     { load: platform, label: "重试技能目录" }, { load: policy, label: "重试项目技能设置" },
     { load: personal, label: "重试我的技能" }, { load: selection, label: "重试个人技能设置" },
     { load: catalogue, label: "重试插件目录" }, { load: installed, label: "重试已添加插件" },
-    { load: projectPlugins, label: "重试项目插件设置" }, { load: builtinPlugins, label: "重试内置插件设置" }, { load: inventory, label: "重试平台能力" },
+    { load: matching, label: "重试患者匹配状态" }, { load: projectPlugins, label: "重试项目插件设置" }, { load: builtinPlugins, label: "重试内置插件设置" }, { load: inventory, label: "重试平台能力" },
   ];
   const authoring = open?.kind === "create" || open?.kind === "import" || personalEditing;
   // The page's one primary action is the header's (DESIGN.md 「页面结构」 rule 3): 添加技能 opens 导入 / 创建, on every view and at every width.

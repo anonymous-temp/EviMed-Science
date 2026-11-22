@@ -9,7 +9,7 @@ export interface CatalogueEntry {
   id: string; title: string; description: string; publisher: string;
   type: "skills" | "plugins"; group: string;
   origin: CatalogueOrigin; repository?: string | null; icon?: LucideIcon;
-  state?: string; action?: ReactNode; open: () => void;
+  state?: string; action?: ReactNode; open?: () => void;
   /** An in-app page the entry is (memory is its own page): its title is a link there, not a drawer. */
   to?: string;
 }

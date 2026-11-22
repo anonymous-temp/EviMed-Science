@@ -6,7 +6,7 @@ import { useProjectStore } from "@/lib/projects";
 import { ExtensionsPage } from "./ExtensionsPage";
 
 const skills = vi.hoisted(() => ({ listPlatformSkills: vi.fn(), projectPlatformSkills: vi.fn(), saveProjectPlatformSkills: vi.fn(), listPersonalSkills: vi.fn(), projectSkills: vi.fn(), pendingPersonalSkillTransfers: vi.fn(), readPlatformSkill: vi.fn() }));
-const plugins = vi.hoisted(() => ({ inventory: vi.fn(), extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), projectExtensions: vi.fn(), projectBuiltinPlugins: vi.fn(), saveProjectBuiltinPlugins: vi.fn(), saveProjectExtensions: vi.fn(), extensionInstallation: vi.fn(), extensionHistory: vi.fn(), extensionConnections: vi.fn() }));
+const plugins = vi.hoisted(() => ({ projectPatientMatching: vi.fn(), inventory: vi.fn(), extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), projectExtensions: vi.fn(), projectBuiltinPlugins: vi.fn(), saveProjectBuiltinPlugins: vi.fn(), saveProjectExtensions: vi.fn(), extensionInstallation: vi.fn(), extensionHistory: vi.fn(), extensionConnections: vi.fn() }));
 const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), saveWebPlugin: vi.fn() }));
 vi.mock("@/lib/skillLibraryClient", async original => ({ ...(await original<object>()), ...skills }));
 vi.mock("@/lib/extensionsClient", async original => ({ ...(await original<object>()), ...plugins }));
@@ -21,6 +21,7 @@ function open(url = "/app/extensions/installed") {
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  plugins.projectPatientMatching.mockResolvedValue({ available: false, selected: null });
   useProjectStore.setState({ currentId: "one", projects: [{ id: "one", name: "项目一" }, { id: "two", name: "项目二" }] });
   skills.listPlatformSkills.mockResolvedValue({ groups: [skill.group], geoGroup: "循证 GEO", loopxGroup: "长任务", items: [skill] });
   skills.projectPlatformSkills.mockResolvedValue(project);

@@ -1,5 +1,6 @@
+import { knownErrorCodeMessage } from "@evimed/domain";
 import { geoSkillDisplayTitle, skillDisplay } from "@evimed/domain/skill-display";
-import type { ExtensionInstallation, ExtensionSelection } from "@/lib/extensionsClient";
+import type { ExtensionInstallation, ExtensionSelection, PatientMatchingStatus } from "@/lib/extensionsClient";
 import type { PlatformSkill, SkillActivation } from "@/lib/skillLibraryClient";
 
 /** Account installation and project activation are independent records. */
@@ -17,6 +18,22 @@ export function extensionAvailability(installation: ExtensionInstallation, selec
   if (installation.phase === "preparing") return "正在准备";
   if (installation.phase === "removed") return "已从个人库移除";
   return "未在当前项目启用";
+}
+
+export function patientMatchingStatusText({ state, effective, failure }: PatientMatchingStatus): string {
+  const reason = failure && knownErrorCodeMessage(failure);
+  switch (state) {
+    case "stale": return "需要更新以适配新版本";
+    case "refreshing": return "等待项目空闲后更新至新版本";
+    case "retrying": return `更新未完成，稍后自动重试。${reason ?? ""}`;
+    case "refresh-failed": return `更新失败。${reason ?? ""}`;
+    case "effective": return effective ? "已启用" : "生效状态待确认";
+    case "waiting": return "等待当前任务结束后应用设置";
+    case "disabled": return "已关闭";
+    case "failed":
+    case "rolled-back": return `更改未生效。${reason ?? ""}`;
+    default: return "生效状态待确认";
+  }
 }
 
 /** What a 循证 GEO project's rows say in place of a switch: its shared settings carry none of the project's own choices. */
