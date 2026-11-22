@@ -310,6 +310,8 @@ Owner **H** for shared host mutations; **B** when persistence or runtime activat
 
 A transport timeout after submission may have an unknown server outcome. Do not blindly roll back, resubmit or invent a sixth UI success: retain the submitted intent under `failed-kept` with an explicit unknown-outcome marker, then reconcile by request/version identity. Late earlier responses cannot overwrite newer user intent. Read lifecycle and mutation lifecycle are different state machines.
 
+For patient matching, the installed plugins list shows when a release requires an update and reports any retry or failure until the current runtime version is verified.
+
 An immediate reversible Switch may move optimistically once, then locks at that requested position while pending; it does not keep moving with retries. A confirmed failure reverts it. Scope, invariant label and error remain visible. Configuration that takes effect only in a later runtime/session is a labelled switch for the saved choice with its persisted/effective status beside it (「已保存，下次对话生效」), so nothing implies immediate activation (integration review 2026-10-26).
 
 ### DS21.3 Undo and unsaved work

@@ -6,7 +6,7 @@
 import { canonicalJson } from '@evimed/domain';
 import { randomUUID } from 'node:crypto';
 import { ProductDocuments, ProductJobs } from './productStore.mjs';
-import { productInteger } from './productPersistence.mjs';
+import { migrateProductStore, productInteger } from './productPersistence.mjs';
 import { HttpError } from './security.mjs';
 import { patientMatchingCatalogue, preparePatientMatchingGeneration, verifyPatientMatchingGeneration, PATIENT_MATCHING_TOOLS } from './patientMatchingLifecycleArtifacts.mjs';
 
@@ -21,6 +21,19 @@ const statePointer = manifest => { if (!manifest) return null; const { files: _f
 const stateId = project => `patient-matching:state:${project.id}`;
 const unavailable = () => new HttpError(503, 'patient_matching_unavailable', 'Patient matching is temporarily unavailable.');
 const same = (a, b) => canonicalJson(a ?? null) === canonicalJson(b ?? null);
+
+const REFRESH_ATTEMPTS = 3;
+const refreshDelay = attempt => 30_000 * 2 ** (attempt - 1);
+const lockState = (client, project) => client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+  [`patient-matching-state:${project.userId}:${project.id}`]);
+function needsRefresh(payload, imageId) {
+  if (!imageId || !payload?.selected?.enabled || payload.phase === 'waiting') return false;
+  const boundImage = payload.refresh?.imageId ?? payload.effective?.runtimeImageDigest;
+  return Boolean(payload.refresh || payload.effective) && boundImage !== imageId;
+}
+function ownsState(job, state) {
+  return job.payload.action === 'refresh' ? state?.payload.refresh?.jobId === job.id : state?.revision === job.payload.stateRevision;
+}
 
 export class PatientMatchingLifecycleService {
   /** `catalogue` is read from deployment configuration, never a request or product document.
@@ -67,7 +80,7 @@ export class PatientMatchingLifecycleService {
     productInteger(input.expectedRevision, 0, 2147483646);
     return this.database.transaction(client => this.database.withTransactionClient(client, async () => {
       const project = await this.access(user, projectId, { manage: true, client }), scope = await this.scope(project, client);
-      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`patient-matching-state:${project.userId}:${project.id}`]);
+      await lockState(client, project);
       const prior = await this.current(project);
       if ((prior?.revision ?? 0) !== input.expectedRevision) throw new HttpError(409, 'product_revision_conflict', 'Patient matching settings changed.');
       let selected = prior?.payload.selected ?? null;
@@ -91,13 +104,88 @@ export class PatientMatchingLifecycleService {
       return row;
     }));
   }
+  /** Both discovery paths borrow the owner's existing choice. Re-read its revision under the
+   * same lock as HTTP actions, and commit the queue entry and its state pointer together. */
+  async queueRefresh(project, revision, imageId) {
+    return this.database.transaction(client => this.database.withTransactionClient(client, async () => {
+      const ownedProject = await this.access({ id: project.userId }, project.id, { manage: true, client });
+      if (ownedProject.userId !== project.userId) return;
+      const scope = await this.scope(ownedProject, client);
+      await lockState(client, ownedProject);
+      const state = await this.current(ownedProject);
+      if (!state || state.revision !== revision || !same(scope, state.payload.scope) || !needsRefresh(state.payload, imageId)) return;
+      const job = await this.jobs.enqueue(ownedProject.userId, PATIENT_MATCHING_LIFECYCLE_JOB, {
+        action: 'refresh', scope, actorId: ownedProject.userId, actorMembershipEpoch: ownedProject.extensionMembershipEpoch ?? null,
+      }, { projectId: ownedProject.id, idempotencyKey: `patient-matching-apply:${ownedProject.id}:${revision + 1}`, maxAttempts: REFRESH_ATTEMPTS, transactionClient: client });
+      await this.documents.put(ownedProject.userId, KIND, state.id, { ...state.payload, phase: 'refreshing', failure: null, refresh: { imageId, jobId: job.id } },
+        { expectedRevision: revision, projectId: ownedProject.id, transactionClient: client });
+    }));
+  }
+
+  /** A keyset walk over saved choices, including opt-ins on internal projects. Two concurrent admissions,
+   * one ordinary lifecycle worker for the expensive preparation and runtime replacement. */
+  async refreshAfterStartup() {
+    await migrateProductStore(this.database);
+    const imageId = (await this.runtime.inspectRuntimeImage())?.imageId;
+    if (!imageId) return;
+    let user = '', id = '', firstError = null;
+    for (;;) {
+      const { rows } = await this.database.query(`SELECT user_id,id,project_id,revision,payload FROM evimed_product.documents
+        WHERE kind=$1 AND deleted_at IS NULL AND id='patient-matching:state:' || project_id
+          AND payload @> '{"selected":{"enabled":true}}' AND (user_id,id)>($2,$3)
+        ORDER BY user_id,id LIMIT 32`, [KIND, user, id]);
+      if (!rows.length) break;
+      const stale = rows.filter(row => needsRefresh(row.payload, imageId));
+      for (let index = 0; index < stale.length; index += 2) {
+        const results = await Promise.allSettled(stale.slice(index, index + 2).map(row =>
+          this.queueRefresh({ userId: row.user_id, id: row.project_id }, row.revision, imageId)));
+        for (const result of results) if (result.status === 'rejected') firstError ??= result.reason;
+      }
+      ({ user_id: user, id } = rows.at(-1));
+    }
+    if (firstError) throw firstError;
+  }
+
+  /** GET is observational, including before the startup sweep or while an owner action is pending. */
+  async status(project) {
+    const row = await this.current(project);
+    if (!row) return null;
+    const { payload } = row;
+    let { effective, phase, failure } = payload;
+    if (effective || payload.refresh) {
+      const image = await this.runtime.inspectRuntimeImage().catch(() => null);
+      if (!image?.imageId) {
+        effective = null;
+      } else {
+        if (effective?.runtimeImageDigest !== image.imageId) effective = null;
+        if (needsRefresh(payload, image.imageId)) { phase = 'stale'; failure = null; }
+      }
+      // The final lease can expire in a process crash before the worker can publish its failure.
+      if (payload.refresh && ['refreshing', 'retrying'].includes(phase)) {
+        const job = await this.jobs.get(project.userId, payload.refresh.jobId);
+        if (job?.status === 'failed') { phase = 'refresh-failed'; failure = job.error?.code ?? 'patient_matching_apply_failed'; }
+      }
+    }
+    if (phase === 'effective' && !effective) phase = 'unconfirmed';
+    let reason = failure ?? null;
+    if (phase === 'stale' || phase === 'refreshing') reason = 'patient_matching_runtime_image_changed';
+    if (phase === 'unconfirmed') reason = 'patient_matching_generation_unavailable';
+    return { ...row, payload: { ...payload, effective, phase, failure, reason } };
+  }
+
   /** New runtimes mount only a previously proven selection. A broken optional release keeps general work available.
    * An explicit disable/remove is effective on the next runtime; an active turn retains its captured generation.
    * @param {any} project */
   async selectForRuntime(project) {
     const state = await this.current(project), manifest = state?.payload.effective;
-    if (!manifest || state.payload.selected?.enabled !== true || state.payload.selected.releaseId !== manifest.release.releaseId) return null;
+    if (!state?.payload.selected?.enabled || (!manifest && !state.payload.refresh)) return null;
     try {
+      const imageId = (await this.runtime.inspectRuntimeImage())?.imageId;
+      if (needsRefresh(state.payload, imageId)) {
+        await this.queueRefresh(project, state.revision, imageId);
+        return null;
+      }
+      if (!imageId || !manifest || manifest.runtimeImageDigest !== imageId || state.payload.selected.releaseId !== manifest.release.releaseId) return null;
       const entry = this.catalogue.get(manifest.release.releaseId), { artifactPath: _path, ...release } = entry ?? {};
       if (!entry || !same(release, manifest.release) || !same(await this.scope(project), manifest.scope) || await this.workerImageIdentity() !== entry.workerImageDigest) return null;
       return await verifyPatientMatchingGeneration(this.config, project, manifest.reference);
@@ -128,10 +216,11 @@ export class PatientMatchingLifecycleWorker {
   constructor({ service, workerId = `patient-matching-lifecycle-${randomUUID()}`, leaseMs = 300000, pollMs = 1000 }) {
     this.service = service; this.database = service.database; this.jobs = service.jobs; this.runtime = service.runtime;
     this.workerId = workerId; this.leaseMs = leaseMs; this.pollMs = pollMs;
-    this.running = null; this.timer = null; this.lastError = null;
+    this.running = null; this.timer = null; this.lastError = null; this.scanDue = Infinity; this.scanAttempts = 0;
   }
   start() {
     if (this.timer) return;
+    this.scanDue = 0; this.scanAttempts = 0;
     this.timer = setInterval(() => { void this.tick(); }, this.pollMs); this.timer.unref(); void this.tick();
   }
   async close() { clearInterval(this.timer); this.timer = null; await this.running; }
@@ -140,7 +229,19 @@ export class PatientMatchingLifecycleWorker {
     this.running = this.run().catch(error => { this.lastError = error?.code ?? 'patient_matching_apply_failed'; return null; }).finally(() => { this.running = null; });
     return this.running;
   }
-  async run() { const job = await this.jobs.claim([PATIENT_MATCHING_LIFECYCLE_JOB], this.workerId, { leaseMs: this.leaseMs }); return job ? this.runClaimed(job) : null; }
+  async run() {
+    if (Date.now() >= this.scanDue) {
+      this.scanDue = Infinity;
+      try { await this.service.refreshAfterStartup(); }
+      catch (error) {
+        this.lastError = error.code ?? 'patient_matching_apply_failed';
+        process.stderr.write(`patient matching: startup refresh ${this.lastError}\n`);
+        if (++this.scanAttempts < REFRESH_ATTEMPTS) this.scanDue = Date.now() + refreshDelay(this.scanAttempts);
+      }
+    }
+    const job = await this.jobs.claim([PATIENT_MATCHING_LIFECYCLE_JOB], this.workerId, { leaseMs: this.leaseMs });
+    return job ? this.runClaimed(job) : null;
+  }
   /** @param {any} job */
   async runClaimed(job) {
     if (job.kind !== PATIENT_MATCHING_LIFECYCLE_JOB) throw unavailable();
@@ -156,7 +257,7 @@ export class PatientMatchingLifecycleWorker {
         if (project.userId !== job.userId || !same(await this.service.scope(project, client), job.payload.scope)
           || (project.extensionMembershipEpoch ?? null) !== job.payload.actorMembershipEpoch) throw unavailable();
         const state = await this.service.current(project);
-        if (!state || state.revision !== job.payload.stateRevision) return this.jobs.finish(job.userId, job.id, job.leaseToken, { superseded: true });
+        if (!ownsState(job, state)) return this.jobs.finish(job.userId, job.id, job.leaseToken, { superseded: true });
         const busy = async () => {
           const values = await Promise.all([this.runtime.pluginRuntimeBusy(project), this.service.ledgerBusy(project), this.service.plugins.hasPendingPrompts(project)]);
           return values.some(value => value !== false);
@@ -165,7 +266,9 @@ export class PatientMatchingLifecycleWorker {
         const selected = state.payload.selected, previous = state.payload.effective;
         let candidate = null;
         if (selected?.enabled) {
-          const entry = this.service.catalogue.get(selected.releaseId); if (!entry || await this.service.workerImageIdentity() !== entry.workerImageDigest) throw unavailable();
+          const entry = this.service.catalogue.get(selected.releaseId);
+          if (!entry) throw new HttpError(503, 'patient_matching_release_unavailable', 'The selected patient matching release is unavailable.');
+          if (await this.service.workerImageIdentity() !== entry.workerImageDigest) throw new HttpError(503, 'patient_matching_worker_unavailable', 'The patient matching worker image does not match the release.');
           candidate = await preparePatientMatchingGeneration(this.service.config, project, state.payload.scope, entry, (await this.runtime.inspectRuntimeImage())?.imageId);
           const id = `patient-matching:generation:${candidate.reference.generationHash}`, existing = await this.service.documents.get(project.userId, KIND, id);
           if (existing && !same(existing.payload, candidate)) throw unavailable();
@@ -185,6 +288,7 @@ export class PatientMatchingLifecycleWorker {
           await guard(); proof = await this.runtime.probePatientMatchingGeneration(project, candidate); await guard();
         } catch (error) {
           if (lost || error.code === 'product_job_lease_lost') throw error;
+          if (job.payload.action === 'refresh' && error.code === 'plugin_runtime_busy') return defer();
           failure = error.code ?? 'patient_matching_apply_failed';
           // Restore only the exact previous admitted code; fall back to the ordinary assistant when it cannot load.
           let restore = previous;
@@ -208,8 +312,11 @@ export class PatientMatchingLifecycleWorker {
           candidate = restore; phase = 'rolled-back';
         }
         if (!proof || proof.runtimeGeneration !== this.runtime.runtimeGeneration(project) || !same(proof.reference, candidate?.reference)) throw unavailable();
+        if (failure && job.payload.action === 'refresh') {
+          return this.failRefresh(job, project, state, statePointer(candidate), proof.runtimeGeneration, failure, client);
+        }
         return this.jobs.finishWithLease(job.userId, job.id, job.leaseToken, { phase, reference: candidate?.reference ?? null, failure }, async transactionClient => {
-          await guard(); await this.service.documents.put(project.userId, KIND, state.id, { ...state.payload, phase, effective: statePointer(candidate),
+          await guard(); await this.service.documents.put(project.userId, KIND, state.id, { ...state.payload, phase, refresh: null, effective: statePointer(candidate),
             lastGood: phase === 'effective' ? previous ?? statePointer(candidate) : state.payload.lastGood, runtimeGeneration: proof.runtimeGeneration, failure },
           { expectedRevision: state.revision, projectId: project.id, transactionClient });
         });
@@ -217,11 +324,17 @@ export class PatientMatchingLifecycleWorker {
     } catch (error) {
       if (lost || error.code === 'product_job_lease_lost') return null;
       return this.jobs.withLease(job.userId, job.id, job.leaseToken, client => this.database.withTransactionClient(client, async () => {
-        const project = await this.service.access({ id: job.payload.actorId }, job.projectId, { manage: true, client });
+        // Only record failure against the original owner, scope and still-current job.
+        const project = job.payload.action === 'refresh' ? { userId: job.userId, id: job.projectId }
+          : await this.service.access({ id: job.payload.actorId }, job.projectId, { manage: true, client });
         const state = await this.service.current(project);
-        if (state?.revision === job.payload.stateRevision && same(await this.service.scope(project, client), job.payload.scope)) {
+        if (ownsState(job, state) && same(await this.service.scope(project, client), job.payload.scope)) {
           const actual = this.runtime.currentPatientMatchingGeneration(project);
           const retained = same(actual?.reference, state.payload.effective?.reference) ? state.payload.effective : null;
+          if (job.payload.action === 'refresh') {
+            return this.failRefresh(job, project, state, retained, retained ? this.runtime.runtimeGeneration(project) : null,
+              error.code ?? 'patient_matching_apply_failed', client);
+          }
           await this.service.documents.put(project.userId, KIND, state.id, { ...state.payload, phase: 'failed', effective: retained,
             runtimeGeneration: retained ? this.runtime.runtimeGeneration(project) : null, failure: error.code ?? 'patient_matching_apply_failed' },
           { expectedRevision: state.revision, projectId: project.id, transactionClient: client });
@@ -229,5 +342,14 @@ export class PatientMatchingLifecycleWorker {
         return this.jobs.fail(job.userId, job.id, job.leaseToken, { code: error.code ?? 'patient_matching_apply_failed', message: 'Patient matching was not applied.' }, { retry: false });
       }));
     } finally { clearInterval(timer); await renewal; }
+  }
+  /** Retry the same lease-backed job. A new owner decision clears its pointer and supersedes every remaining attempt. */
+  async failRefresh(job, project, state, effective, runtimeGeneration, failure, client) {
+    const retry = job.attempts < job.maxAttempts;
+    const phase = retry ? 'retrying' : 'refresh-failed';
+    await this.service.documents.put(project.userId, KIND, state.id, { ...state.payload, effective, runtimeGeneration, phase, failure },
+      { expectedRevision: state.revision, projectId: project.id, transactionClient: client });
+    return this.jobs.fail(job.userId, job.id, job.leaseToken, { code: failure, message: 'Patient matching could not be updated.' },
+      { retry, delayMs: retry ? refreshDelay(job.attempts) : 0 });
   }
 }

@@ -4643,6 +4643,25 @@ for (const changed of ["runtime", "generation", "guard"]) test(`a pending cold s
   manager.runtimes.clear();
 });
 
+test("an image change at controller admission still boots ordinary work when the second lookup finds the stale release", async () => {
+  const manager = new RuntimeManager({ runtimeMode: "kernel" });
+  const key = manager.key(project);
+  let lookups = 0, boots = 0;
+  manager.patientMatchingGenerationResolver = async () => { lookups++; return null; };
+  manager.startKernel = async () => {
+    boots++;
+    if (boots === 1) throw Object.assign(new Error("Runtime image changed"), { code: "patient_matching_release_invalid" });
+    assert.equal(manager.patientMatchingGenerationOverrides.get(key), null);
+    return fakeRuntime(project.id);
+  };
+  const ordinary = await manager.start(project);
+  assert.equal(boots, 2);
+  assert.equal(lookups, 1);
+  assert.ok(ordinary);
+  assert.equal(manager.patientMatchingGenerationOverrides.has(key), false);
+  manager.runtimes.clear();
+});
+
 test("an internal cold replacement stop never waits for its own startup", { timeout: 2000 }, async () => {
   const manager = new RuntimeManager({ runtimeMode: "kernel" });
   manager.contextTransactionHeld = () => true;
