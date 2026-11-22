@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { resultReplayDeployment } from "./result-replay-deployment.mjs";
+import { verifyReleaseImages } from "./verify-release-images.mjs";
 import { spawnSync } from "node:child_process";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -453,23 +454,7 @@ async function checkManifest(manifest, { images = false } = {}) {
     fail("release_manifest_skill_mismatch", "Release manifest skill digests do not match the configured source packs.");
   }
 
-  if (images) {
-    if (dockerImageId(manifest.web.image, "OPEN_SCIENCE_WEB_IMAGE_ID") !== manifest.web.imageId) {
-      fail("release_manifest_web_image_mismatch", "Web image id does not match the release manifest.");
-    }
-    if (dockerImageId(manifest.runtime.image, "OPEN_SCIENCE_RUNTIME_IMAGE_ID") !== manifest.runtime.imageId) {
-      fail("release_manifest_runtime_image_mismatch", "Runtime image id does not match the release manifest.");
-    }
-    if (dockerImageId(manifest.proxy.image, "OPEN_SCIENCE_CADDY_IMAGE_ID") !== manifest.proxy.imageId) {
-      fail("release_manifest_proxy_image_mismatch", "Caddy image id does not match the release manifest.");
-    }
-    for (const service of manifest.services) {
-      const expected = expectedServices.get(service.name);
-      if (!expected || dockerImageId(service.image, expected.envName) !== service.imageId) {
-        fail("release_manifest_service_image_mismatch", `${service.name} image id does not match the release manifest.`);
-      }
-    }
-  }
+  if (images) verifyReleaseImages(manifest);
 }
 
 async function main() {

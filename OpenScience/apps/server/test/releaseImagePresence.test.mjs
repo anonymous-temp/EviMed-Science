@@ -68,6 +68,69 @@ test("a digest-addressed inspect can use a descriptor or a daemon without RepoDi
   }
 });
 
+test("a classic image can also match a manifest digest reported by Docker", () => {
+  const local = images();
+  const pinned = manifest.services[0];
+  const release = { ...manifest, services: [{ ...pinned, imageId: manifestDigest }] };
+  verifyReleaseImages(release, (ref) => local[ref], assert.fail);
+});
+
+test("containerd accepts the local manifest ID or its config digest", () => {
+  const local = images();
+  const target = id("a");
+  local[manifest.runtime.image] = { Id: target, Descriptor: { digest: target } };
+  const release = { ...manifest, runtime: { ...manifest.runtime, imageId: target } };
+  verifyReleaseImages(release, (ref) => local[ref], assert.fail);
+  verifyReleaseImages(manifest, (ref) => local[ref], (digest, imageId) => {
+    assert.equal(digest, target);
+    assert.equal(imageId, target);
+    return { schemaVersion: 2, layers: [], config: { digest: manifest.runtime.imageId } };
+  });
+});
+
+test("a config digest cannot override a conflicting pinned reference", () => {
+  const local = images();
+  const pinned = manifest.services[0];
+  const target = id("a");
+  local[pinned.image] = { Id: target, Descriptor: { digest: target } };
+  assert.throws(() => verifyReleaseImages(manifest, (ref) => local[ref], assert.fail),
+    { code: "release_image_digest_mismatch" });
+});
+
+test("an image index only uses the manifest for the platform Docker inspected", () => {
+  const local = images();
+  const index = id("a");
+  const selected = id("b");
+  const other = id("c");
+  local[manifest.runtime.image] = { Id: index, Descriptor: { digest: index }, Os: "linux", Architecture: "amd64" };
+  const readManifest = (digest, imageId) => {
+    assert.equal(imageId, index);
+    if (digest === index) return { manifests: [
+      { digest: other, platform: { os: "linux", architecture: "arm64" } },
+      { digest: selected, platform: { os: "linux", architecture: "amd64" } },
+    ] };
+    assert.equal(digest, selected);
+    return { schemaVersion: 2, layers: [], config: { digest: manifest.runtime.imageId } };
+  };
+  verifyReleaseImages(manifest, (ref) => local[ref], readManifest);
+  const release = { ...manifest, runtime: { ...manifest.runtime, imageId: selected } };
+  verifyReleaseImages(release, (ref) => local[ref], readManifest);
+  release.runtime.imageId = other;
+  assert.throws(() => verifyReleaseImages(release, (ref) => local[ref], readManifest), { code: "release_image_mismatch" });
+});
+
+test("a resolved different config is a mismatch and an unavailable config is unverified", () => {
+  const local = images();
+  const target = id("a");
+  const different = id("b");
+  local[manifest.runtime.image] = { Id: target, containerdStore: true };
+  assert.throws(() => verifyReleaseImages(manifest, (ref) => local[ref], () => undefined),
+    { code: "release_image_unverified", message: /Could not verify runtime local image/ });
+  assert.throws(() => verifyReleaseImages(manifest, (ref) => local[ref], () => ({
+    schemaVersion: 2, layers: [], config: { digest: different },
+  })), { code: "release_image_mismatch", message: new RegExp(`found ${target} \\(config ${different}\\)`) });
+});
+
 test("an unavailable Docker daemon is reported as an inspect failure", () => {
   assert.throws(() => verifyReleaseImages(manifest, () => { throw new Error("daemon unavailable"); }),
     (error) => error.code === "release_image_inspect_failed" && error.message.includes(manifest.web.image));
