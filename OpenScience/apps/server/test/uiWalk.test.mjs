@@ -629,6 +629,10 @@ test("a row whose title is a link to an outside address in a new tab declares wh
  */
 const FAKE_PLAYWRIGHT = String.raw`
 const fs = require("fs");
+// The schedules timeout cases must exercise the poll without waiting out its full minute.
+const realNow = Date.now;
+let schedulesElapsed = 0;
+if (process.env.FAKE_SCHEDULES) Date.now = () => realNow() + schedulesElapsed;
 const log = (entry) => fs.appendFileSync(process.env.FAKE_PLAYWRIGHT_LOG, JSON.stringify(entry) + "\n");
 const json = (status, body) => ({ status: () => status, ok: () => status < 400, json: async () => body });
 let loggedIn = false;
@@ -731,6 +735,7 @@ function context() {
   let loadAttempts = 0;
   const newPage = async () => {
     let url = "";
+    let schedulesOpen = false;
     let poisoned = false;
     let routeSettled = false;
     let dialogOpen = false;
@@ -789,7 +794,8 @@ function context() {
       keyboard: { press: async (key) => log({ key, at: target().pathname }) },
       mouse: { move: async () => {} },
       on(event, handler) { if (event === "requestfailed") failed.push(handler); if (event === "console") consoles.push(handler); }, off() {},
-      async setViewportSize(size) { phone = size.width < 600; log({ viewport: size.width + "x" + size.height }); }, async close() {}, async waitForTimeout() {},
+      async setViewportSize(size) { phone = size.width < 600; log({ viewport: size.width + "x" + size.height }); }, async close() {},
+      async waitForTimeout(ms) { if (schedulesOpen && process.env.FAKE_SCHEDULES) schedulesElapsed += ms; },
       async screenshot(options) { if (options && options.path) log({ screenshot: options.path.split("/").pop(), type: options.type, quality: options.quality }); },
       async goBack() { dialogOpen = false; log({ goBack: true }); if (previousUrl) { url = previousUrl; previousUrl = null; } },
       async route(pattern, handler) { pageRoutes.push([pattern, handler]); log({ route: String(pattern) }); },
@@ -812,7 +818,11 @@ function context() {
             return { headings: mode === "blank" ? [] : [mode === "heading" ? "自动化" : "定时任务"], newButton: mode !== "button" && mode !== "blank" };
           }
           // The native surfaces the chat step reads: the developer-tools preference, the composer's model seat, the viewer chunk.
-          if (typeof fn === "function" && fn.name === "nativeSurfaceProbe") return { developerTools: true, effort: process.env.FAKE_OPERATOR ? "选择模型，当前 deepseek-flash" : "思考强度，当前：高", documentChunk: { status: 200, type: "text/javascript; charset=utf-8" } };
+          if (typeof fn === "function" && fn.name === "nativeSurfaceProbe") {
+            const effort = schedulesOpen || process.env.FAKE_MISSING_EFFORT
+              ? null : process.env.FAKE_OPERATOR ? "选择模型，当前 deepseek-flash" : "思考强度，当前：高";
+            return { developerTools: true, effort, documentChunk: { status: 200, type: "text/javascript; charset=utf-8" } };
+          }
           return { composer: !chatFailing(), stats: [] };
         },
       }],
@@ -838,6 +848,8 @@ function context() {
           poisoned = true;
           throw Error("page.goto: net::ERR_NETWORK_CHANGED");
         }
+        // 定时任务 replaces the visible composer inside the frame even after the shell returns to /app/chat.
+        schedulesOpen = target.endsWith("/app/autopilot");
         url = target.endsWith("/app/autopilot") && process.env.FAKE_SCHEDULES !== "stay" ? new URL("/app/chat?project=default", target).href : target.endsWith("/app/home") ? new URL(process.env.FAKE_HOME_REDIRECT === "stuck" ? "/app/home" : "/app/chat" + (process.env.FAKE_HOME_SESSION ? "/ses_new" : "") + "?project=" + (process.env.FAKE_HOME_PROJECT || "default"), target).href : target; routeSettled = false; dialogOpen = false; axeInjected = false; log({ goto: target });
         if (process.env.FAKE_ROUTE_LOAD && phone && target.endsWith("/std_a/comparator")) {
           loadAttempts++;
@@ -2516,6 +2528,16 @@ test("with the chat asked for, the walk opens /app/autopilot, reads the kernel's
     assert.equal(bad.code, 1, mode);
     assert.ok(bad.report.failures.includes(sentence), `${mode}: ${bad.report.failures.join("\n")}`);
   }
+});
+
+test("the walk reads the researcher's thinking strength on the conversation before opening 定时任务", async () => {
+  const ok = await walk({ OPEN_SCIENCE_WALK_CHAT: "1" });
+  assert.equal(ok.report.steps["chat-native-surface"].effort, "思考强度，当前：高");
+  assert.equal(ok.report.steps["chat-schedules"].newButton, true);
+  assert.equal(ok.code, 0, ok.stdout + ok.stderr);
+  const missing = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_MISSING_EFFORT: "1" });
+  assert.equal(missing.code, 1);
+  assert.deepEqual(missing.report.failures, ["chat@desktop: the composer draws no thinking-strength control"]);
 });
 
 test("with the chat asked for, the walk reads the composer at both widths, restores the window, and fails nothing", async () => {
