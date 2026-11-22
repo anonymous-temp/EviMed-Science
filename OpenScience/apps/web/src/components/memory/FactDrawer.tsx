@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { deleteStructuredMemory, forgetReplacedStatement, updateStructuredMemory, webErrorMessage, type WebStructuredMemory } from "@/lib/apiClient";
 import { formatDateTime, formatDay } from "@/lib/format";
-import { kindTitle } from "@/lib/memoryGroups";
+import { displayMemoryKind, kindTitle } from "@/lib/memoryGroups";
 import { readerPath } from "@/lib/knowledgeNav";
 import {
   announceMemoryChanged, archiveMemoryRecord, fetchMemorySources, retireCapsuleEntry, undoCapsuleEntry, undoMemoryRecord, type OwnCapsuleEntry,
@@ -273,7 +273,7 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
     <>
       {editGuard.confirming && <ConfirmDialog title="放弃未保存的修改？" confirmLabel="放弃修改" onConfirm={editGuard.discard} onCancel={editGuard.keepEditing} />}
       <Drawer
-        title={record ? kindTitle(record.kind) : kindTitle(entry?.payload.factKind ?? "")}
+        title={record ? kindTitle(displayMemoryKind(record)) : kindTitle(entry?.payload.factKind ?? "")}
         description={[projectName, since, used].filter(Boolean).join(" · ")}
         onClose={onClose}
         dirty={editing && value !== editableText}

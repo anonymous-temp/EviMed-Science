@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { factItems, factRowSummary } from "./memoryItems";
-import { displayMemoryText, fileStatements, fileSummary, fileTopic, isFileMemory, isProfileLine, memoryText } from "./memoryNative";
+import { displayMemoryText, fileStatements, fileSummary, fileTopic, isFileMemory, isProfileLine, memoryText, safetyCardTitle } from "./memoryNative";
 import { nativeFile, nativeProfile, nativeProfileLine } from "./__fixtures__/memoryProfiles";
 
 describe("a memory kept as a file", () => {
@@ -9,6 +9,12 @@ describe("a memory kept as a file", () => {
     expect(isProfileLine(nativeFile("回答结构", "- x"))).toBe(false);
     expect(isProfileLine(nativeProfileLine("临床药师"))).toBe(true);
     expect(isFileMemory(nativeProfileLine("临床药师"))).toBe(false);
+  });
+
+  it("uses a section or statement for safety history and keeps a named family member visible", () => {
+    expect(safetyCardTitle("# 用户\n## 过敏\n- 对青霉素过敏")).toBe("过敏");
+    expect(safetyCardTitle("# User\n- Reported reaction")).toBe("Reported reaction");
+    expect(safetyCardTitle("# 父亲\n## 过敏\n- 对青霉素过敏")).toBe("父亲 · 过敏");
   });
 
   it("names its topic in words and says its statements without bullets or heading marks", () => {

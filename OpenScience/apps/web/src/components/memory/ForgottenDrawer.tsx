@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Archive, RefreshCw, RotateCcw } from "lucide-react";
 import { updateStructuredMemory, type WebForgetRequest, type WebForgetStatus, type WebStructuredMemory } from "@/lib/apiClient";
 import { announceMemoryChanged, restoreCapsuleEntry, type OwnCapsuleEntry } from "@/lib/memoryClient";
-import { kindTitle, recordGroup, entryGroup } from "@/lib/memoryGroups";
+import { displayMemoryKind, kindTitle, recordGroup, entryGroup } from "@/lib/memoryGroups";
 import { memoryExcerpt } from "@/lib/memoryText";
 import { listAllMethods, methodTitle, rollbackMethod, type WebMethod } from "@/lib/methodsClient";
 import { productErrorMessage } from "@/lib/productClient";
@@ -69,7 +69,7 @@ export function ForgottenDrawer({ records, entries, requests = [], projectName, 
       const source = memorySource(record);
       return {
         key: `record:${record.id}`, text: forgetIntent ? `${statement}（未存为记忆，已阻止以后记住）` : statement,
-        kind: recordGroup(record) === "project" ? projectName(record.scope === "project" ? record.scopeId : null) ?? kindTitle(record.kind) : kindTitle(record.kind),
+        kind: recordGroup(record) === "project" ? projectName(record.scope === "project" ? record.scopeId : null) ?? kindTitle(displayMemoryKind(record)) : kindTitle(displayMemoryKind(record)),
         status: record.forgetStatus ?? "executed",
         ...(source?.projectId ? { source: { projectId: source.projectId, sessionId: source.sessionId } } : {}),
         restore: () => updateStructuredMemory(record, { status: "active" }),

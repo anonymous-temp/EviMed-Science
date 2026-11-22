@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
-import { nativeProfile, nativeSettings } from "@/components/memory/__fixtures__/memoryProfiles";
+import { nativeFile, nativeProfile, nativeProfileLine, nativeSettings } from "@/components/memory/__fixtures__/memoryProfiles";
 import { MemoryWorkspaceNav } from "@/components/memory/MemoryWorkspaceNav";
 import { MemoryHubPage } from "./MemoryHubPage";
 
@@ -59,6 +59,18 @@ describe("the memory page of an account whose memory is kept as files", () => {
     const row = within(preferences).getByText("回答结构").closest("li")!;
     expect(row).toHaveTextContent("先给结论，再给依据；表格不超过五列");
     expect(within(preferences).getByText("meta analysis method")).toBeInTheDocument();
+  });
+
+  it("labels a safety history separately from the background and names the condition", async () => {
+    const safety = nativeFile("用户", "# 用户\n## 过敏\n- 用户自述对青霉素过敏", { nativeType: "safety_notes", kind: "note" });
+    api.fetchMemoryProfile.mockResolvedValue({ ...nativeProfile, records: [nativeProfileLine("对青霉素过敏"), safety] });
+    open();
+    const list = await screen.findByRole("list", { name: "安全事项" });
+    expect(within(list).getByText("过敏")).toBeVisible();
+    expect(within(list).queryByText("用户")).toBeNull();
+    expect(within(screen.getByRole("list", { name: "背景" })).getByText("对青霉素过敏")).toBeVisible();
+    await userEvent.click(within(list).getByText("过敏"));
+    expect(await screen.findByRole("dialog", { name: "安全事项" })).toBeVisible();
   });
 
   it("lists the project's files as the last group of 关于你, each row naming its project in plain text", async () => {
