@@ -2313,6 +2313,14 @@ test("a notice page says what stopped the conversation in the shell's own words,
   const capped = await fetch(`${f.base}/`, { headers: { cookie: f.cookie } });
   assert.equal(capped.status, 429);
   const cappedPage = await capped.text();
+  f.manager.proxy = async () => { throw new HttpError(409, "memory_source_cleanup_busy", "Maintenance in progress."); };
+  const maintenance = await fetch(`${f.base}/`, { headers: { cookie: f.cookie } });
+  assert.equal(maintenance.status, 409);
+  assert.equal(maintenance.headers.get("retry-after"), null);
+  const waiting = await maintenance.text();
+  assert.match(waiting, /正在整理记忆/);
+  assert.match(waiting, /"memory_source_cleanup_busy"/);
+  assert.doesNotMatch(waiting, /对话暂时打不开|稍后重试/);
   assert.ok(cappedPage.includes("你同时进行的研究已达上限，先结束一个再试。"), cappedPage);
   assert.ok(cappedPage.includes('"runtime_limit_exceeded"'), "the shell is told the code");
   // The deployment's full house is a different sentence and a different code: the shell waits it out by itself.

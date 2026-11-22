@@ -793,7 +793,7 @@ keep a footprint fixed.
 For a conversation opening, reuse the existing cover status slot during plugin
 application or memory maintenance. Keep the same conversation request and draft
 across bounded automatic retries. Show the existing retry action when the wait
-expires.
+expires. During memory cleanup, both the frame document and the cover show 正在整理记忆. Allow two minutes from the first maintenance signal, including repeated refusals.
 
 **Motion**: three durations — `duration-fast` 120 ms for a state change, `duration-base` 200 ms
 for a container, `duration-slow` 320 ms for a page-sized change — one easing in

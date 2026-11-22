@@ -1149,6 +1149,10 @@ export function createRuntimeUiServer({ config, pasteRangeIndex = null, store, r
         res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
         res.end(payload); return;
       }
+      if (code === "memory_source_cleanup_busy") {
+        sendNotice(res, status, "正在整理记忆", "", { code, shellOrigin });
+        return;
+      }
       if (code === "runtime_reserved_for_autopilot") {
         sendNotice(res, status, "项目正忙，请稍后再试", "", { code, shellOrigin });
         return;
