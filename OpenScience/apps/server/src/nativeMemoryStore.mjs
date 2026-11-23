@@ -1970,7 +1970,11 @@ export class NativeMemoryStore {
     const { file, line } = await this.#target(userId, id);
     // What else says the same is found first, so that the act the revisions share is named in the first of them.
     const plan = await this.#duplicatesPlan(userId, line ? [removalText(line.raw)] : removalLines(file.body), file);
-    const act = plan.size ? newAct() : null;
+    const before = await this.#withheldBefore(userId, file.namespaceId ?? null);
+    // A forget can be undone, so its first revision names the act that brings the newly withheld copies back with it; a delete keeps no text.
+    const act = plan.size || before && keepText ? newAct() : null;
+    // What the served reader newly withholds afterwards goes too, with the same forget/delete semantics.
+    const withdrawFenced = async () => this.#forgetDuplicates(userId, await this.#fencedPlan(userId, file.namespaceId ?? null, before), { act: act ?? newAct(), keepText, actor });
     if (line) {
       const duplicates = new Set(this.profileNameDedupeEnabled && file.type === 'profile' ? profileNameDuplicateLines(file.body) : []);
       const paired = duplicates.size > 0 && (/^#\s/.test(line.raw.trim()) || duplicates.has(line.raw.trim()) && profileAddressFieldValue(line.raw) === null);
@@ -1984,12 +1988,12 @@ export class NativeMemoryStore {
         const wordings = await Promise.all(rows.map(row => this.#wordingsOf(userId, file.uri, row.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, ""))));
         await this.overlay.scrubLines(userId, file.uri, wordings.flat());
       }
-      const also = await this.#forgetDuplicates(userId, keepText ? plan : withoutJudged(plan), { act, keepText, actor });
+      const also = await this.#forgetDuplicates(userId, keepText ? plan : withoutJudged(plan), { act, keepText, actor }) + await withdrawFenced();
       return { removed: true, uri: file.uri, hash: contentHash(next), ...(also ? { alsoForgot: also } : {}) };
     }
     const forgotten = await this.forgetFile(userId, file, { keepText, actor, reason: act ? `${keepText ? "forgotten on the memory page" : "deleted"}${actSuffix(act)}` : "" });
     // A delete takes only what code decided says the same; a forget, which can be undone, also what the judge did (`withoutJudged`).
-    const also = await this.#forgetDuplicates(userId, keepText ? plan : withoutJudged(plan), { act, keepText, actor });
+    const also = await this.#forgetDuplicates(userId, keepText ? plan : withoutJudged(plan), { act, keepText, actor }) + await withdrawFenced();
     return { ...forgotten, ...(also ? { alsoForgot: also } : {}) };
   }
 
@@ -2089,11 +2093,13 @@ export class NativeMemoryStore {
       || ['people', 'profile'].includes(file.type) && this.sessions.memoryTypes?.includes('safety_notes'));
     const memorySweep = sweeping && act ? { act, removed: removed.map(lineFingerprint),
       files: await this.#sweepInventory(userId, file.namespaceId ?? null, removed, scopedSafety) } : null;
+    const before = memorySweep ? await this.#withheldBefore(userId, file.namespaceId ?? null) : null;
     const next = file.body.split('\n').filter(line => !prints.has(lineFingerprint(removalText(line)))).join('\n');
     if (!removalLines(next).length) await this.forgetFile(userId, file, { keepText: true, actor: 'conversation', reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, engineSession, memorySweep });
     else await this.#write(userId, file, next, { actor: 'conversation', reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, neutralizeRemovedPath: true, engineSession, memorySweep });
     if (aliasPlan.size) await this.#forgetDuplicates(userId, aliasPlan, { act, keepText: true, actor: 'conversation' });
     if (memorySweep) await this.#exactSweep(userId, await this.#fileContext(userId, file.uri), removed, memorySweep.act, scopedSafety);
+    if (memorySweep) await this.#forgetDuplicates(userId, await this.#fencedPlan(userId, file.namespaceId ?? null, before), { act: memorySweep.act, keepText: true, actor: 'conversation' });
     return removed.length;
   }
 
@@ -2453,10 +2459,73 @@ export class NativeMemoryStore {
       return { removed: removedLines > 0, removedLines, ...heldScan, ...(this.history && this.overlay.deferredSummaryRebuildEnabled === true ? {historyScanPending:true} : {}), fileRemoved: liveRemoved === availableLines.length };
     }
     const plan = await this.#duplicatesPlan(String(user.id), statements(file.body), file);
-    const act = plan.size ? newAct() : null;
+    const before = await this.#withheldBefore(String(user.id), file.namespaceId ?? null);
+    const act = plan.size || before ? newAct() : null;
     await this.forgetFile(String(user.id), file, { keepText: true, actor: "conversation", reason: `forgotten in a conversation${actSuffix(act)}`, engineSession });
     await this.#forgetDuplicates(String(user.id), plan, { act, keepText: true, actor: "conversation" });
+    await this.#forgetDuplicates(String(user.id), await this.#fencedPlan(String(user.id), file.namespaceId ?? null, before), { act, keepText: true, actor: "conversation" });
     return { removed: true };
+  }
+
+  /** Whether a forget also takes out of the engine what the served reader withholds after it (`#fencedPlan`): the same switches
+   * as the deferred sweep, under which the served reader fences withdrawn lines. */
+  #withdrawsFenced() {
+    return Boolean(this.forgetTargetsEnabled && this.overlay.deferredSummaryRebuildEnabled === true && this.history);
+  }
+
+  /**
+   * What the served reader (`files()` → `fenceWithdrawnMemoryBody`) withholds of the namespace's memories, by file: the lines that are
+   * still stored but no longer shown. Safety notes keep their own subject-aware withdrawal and are not read here.
+   * @param {string} userId @param {string|null} namespaceId @returns {Promise<Map<string, string[]>>} by file URI
+   */
+  async #withheld(userId, namespaceId) {
+    /** @type {Map<string, string[]>} */
+    const held = new Map();
+    for (const file of await this.rawFiles(userId)) {
+      if ((file.namespaceId ?? null) !== namespaceId || file.type === 'safety_notes') continue;
+      const served = await fenceWithdrawnMemoryBody(this.overlay, userId, file.uri, file.body, file.namespaceId);
+      const visible = new Set(statements(served ?? '').map(lineFingerprint));
+      const lines = statements(file.body).filter(line => !visible.has(lineFingerprint(line)));
+      if (lines.length) held.set(file.uri, lines);
+    }
+    return held;
+  }
+
+  /**
+   * The lines a forget newly withholds in other memories (withheld now, not before it). They are taken out of the engine too, as
+   * revisions of the forget's act (an undo brings them back), so no copy survives in an engine file, its vectors or the overlay body
+   * that only the fence hides — a later forget of such a file would otherwise answer "not found" while its words stay stored. The
+   * served reader decides; this adds no matching rule or model call. What an older forget left withheld is not attributed to this one.
+   * @param {string} userId @param {string|null} namespaceId @param {Map<string, string[]> | null} before `#withheld` before the forget
+   * @returns {Promise<Map<string, string[]>>} by file URI
+   */
+  async #fencedPlan(userId, namespaceId, before) {
+    if (!before) return new Map();
+    try {
+      /** @type {Map<string, string[]>} */
+      const plan = new Map();
+      for (const [uri, lines] of await this.#withheld(userId, namespaceId)) {
+        const earlier = new Set((before.get(uri) ?? []).map(lineFingerprint));
+        const fresh = lines.filter(line => !earlier.has(lineFingerprint(line)));
+        if (fresh.length) plan.set(uri, fresh);
+      }
+      return plan;
+    } catch (error) {
+      // The forget itself has landed and the fence still hides these lines; a failed cleanup is reported, never a failed forget.
+      this.report(`native memory forget fenced copies: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
+      return new Map();
+    }
+  }
+
+  /** `#withheld` before a forget when the forget will clean what it newly fences, else null. A failed read only skips the cleanup.
+   * @param {string} userId @param {string|null} namespaceId */
+  async #withheldBefore(userId, namespaceId) {
+    if (!this.#withdrawsFenced()) return null;
+    try { return await this.#withheld(userId, namespaceId); }
+    catch (error) {
+      this.report(`native memory forget fenced copies: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
+      return null;
+    }
   }
 
   /**

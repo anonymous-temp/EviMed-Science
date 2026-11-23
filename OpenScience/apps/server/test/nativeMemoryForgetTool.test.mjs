@@ -437,6 +437,70 @@ test('AL8 a repeated statement keeps its undo act and a delayed sweep never sele
 });
 
 
+// G4 g4-0143 (freeze 1121): the served reader hid a second card that carried the forgotten identifier, but the card stayed in the
+// engine, so a later forget of it answered "not found" while its words stayed stored. A stand-in for the production fence: a line is
+// withheld when it carries an identifier of a removed line.
+function fencedFixture() {
+  const f = fixture();
+  f.store.overlay.deferredSummaryRebuildEnabled = true;
+  f.ledger.queueMemorySweep = async () => {};
+  f.store.rawFiles = f.store.files;
+  delete f.store.files;
+  f.store.overlay.memoryForgetBody = async (_owner, _target, text) => {
+    const ids = (await f.store.overlay.removals()).flatMap(row => row.text.match(/[A-Z]-\d+/g) ?? []);
+    const kept = String(text).split('\n').filter(line => !ids.some(id => line.includes(id)));
+    return kept.some(line => line.trim()) ? kept.join('\n') : null;
+  };
+  // The duplicate judge calls nothing the same: only the fence relates the two cards.
+  f.store.rejectionJudge = { same: async () => ({ same: new Set() }) };
+  return f;
+}
+
+test('G4 a whole-file forget takes out of the engine the copies the served reader newly withholds, under the same act', async () => {
+  const f = fencedFixture();
+  const locker = `${root}/memories/notes/locker.md`;
+  f.files.set(uri, '- Locker code B-15555.');
+  f.files.set(locker, '- Locker B-15555 is next to court 3.\n- Bring a towel.');
+  assert.deepEqual(await f.store.forget(user, project, uri), { removed: true });
+  assert.equal(f.files.has(uri), false);
+  assert.equal(f.files.get(locker), '- Bring a towel.');
+  const acts = new Set(f.revisions.map(row => /\[act:(\w+)\]/.exec(row.reason)?.[1] ?? null));
+  assert.equal(acts.size, 1);
+  assert.ok([...acts][0], 'the forget and its withheld copy share one undoable act');
+  assert.ok(f.rejections.some(row => row.uri === locker && row.lines.some(line => line.includes('B-15555'))));
+});
+
+test('G4 a card the fence hides entirely is deleted, so a later forget of it truly finds nothing stored', async () => {
+  const f = fencedFixture();
+  const locker = `${root}/memories/notes/locker.md`;
+  f.files.set(uri, '- Locker code B-15555.');
+  f.files.set(locker, '- Locker B-15555 is next to court 3.');
+  await f.store.forget(user, project, uri);
+  assert.equal(f.files.has(locker), false);
+  assert.deepEqual(await f.store.forget(user, project, locker), { removed: false });
+});
+
+test('G4 a line an older forget left withheld is not attributed to a new forget', async () => {
+  const f = fencedFixture();
+  const shelf = `${root}/memories/notes/shelf.md`;
+  f.rejections.push({ owner: user.id, type: 'notes', uri: `${root}/memories/notes/old.md`, lines: ['Shelf Z-777.'] });
+  f.files.set(uri, '- Locker code B-15555.');
+  f.files.set(shelf, '- Z-777 is the top shelf.\n- Keep me.');
+  await f.store.forget(user, project, uri);
+  assert.equal(f.files.get(shelf), '- Z-777 is the top shelf.\n- Keep me.');
+});
+
+test('G4 without the deferred-sweep switches a forget changes nothing beyond its own file', async () => {
+  const f = fencedFixture();
+  f.store.overlay.deferredSummaryRebuildEnabled = false;
+  const locker = `${root}/memories/notes/locker.md`;
+  f.files.set(uri, '- Locker code B-15555.');
+  f.files.set(locker, '- Locker B-15555 is next to court 3.');
+  await f.store.forget(user, project, uri);
+  assert.equal(f.files.get(locker), '- Locker B-15555 is next to court 3.');
+  assert.ok(f.revisions.every(row => !/\[act:/.test(row.reason)));
+});
+
 test('undo of an absent file checks the version of its kept before-image before writing', async () => {
   const f = fixture();
   f.files.clear();

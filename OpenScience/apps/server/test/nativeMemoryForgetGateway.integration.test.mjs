@@ -664,6 +664,30 @@ for (const aliases of [false, true]) test(`MG6 withdrawal readers compose HTTP, 
   assert.equal(restored.blocks.join('\n').includes('小王阿姨'), aliases, 'undo restores an alias title through the same authority');
 });
 
+// G4 g4-0143 (freeze 1121): the engine wrote one remark into two cards sharing an identifier. Forgetting the first card fenced
+// the second in every reader (the identifier is a hard-token match) while the duplicate cleanup, which needs the whole statement or
+// the judge, left it stored; the next forget of the second card answered "not found". The forget now takes out of the engine what
+// the production reader newly withholds, under the same act, and an undo brings both back.
+test('G4 a forgotten identifier leaves no fenced card behind in the engine, and an undo restores both cards', options, async t => {
+  const f = await setup(t, { memoryDeferredSummaryRebuildEnabled: true });
+  f.store.rejectionJudge = { same: async () => ({ same: new Set() }) };
+  f.overlay.memoryForgetBody = (owner, fileUri, body) => f.history.fenceNativeBody(f.context, fileUri, body);
+  const locker = f.seed('notes/球场储物柜.md', '- 球场储物柜号码是 B-15555', { type: 'notes' });
+  const band = f.seed('notes/球场护腕.md', '- 下次去球场带上护腕，放进 B-15555 号柜子', { type: 'notes' });
+  const kept = f.seed('notes/毛巾.md', '- 打球记得带毛巾', { type: 'notes' });
+  const first = await f.memory.callTool('forget', { uri: locker });
+  assert.equal(first.isError, false, first.blocks.join('\n'));
+  assert.equal(await f.sessions.read(f.userId, locker), null);
+  assert.equal(await f.sessions.read(f.userId, band), null, 'the fenced card is gone from the engine, not only hidden');
+  assert.equal(await f.sessions.read(f.userId, kept), '- 打球记得带毛巾');
+  assert.doesNotMatch(JSON.stringify((await f.overlay.file(f.userId, band))?.body ?? ''), /B-15555/);
+  const undone = await f.store.undo(f.userId, nativeFileId(locker));
+  assert.equal(undone.undone, 'restored');
+  const restored = (await f.store.files(f.userId)).map(file => file.body).join('\n');
+  assert.match(restored, /球场储物柜号码是 B-15555/);
+  assert.match(restored, /护腕/);
+});
+
 // FT12: the recorded p6c product path (.lane/p6c). One human message stated four facts and two passing remarks; one
 // `remember` call stored the four facts. A lines forget took the swimming line; two statement forgets withdrew the two
 // unstored remarks. Every reader must still show the three kept lines, the penicillin allergy among them, and none of
