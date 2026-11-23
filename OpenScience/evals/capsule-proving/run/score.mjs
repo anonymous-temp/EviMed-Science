@@ -507,8 +507,10 @@ async function metadataTree(root) {
   }
   return [root, ...['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].map(key => String(info[key]))];
 }
-function assertDevelopment(data, run) {
-  if (/sealed|confirmation/.test(run.split) || data.split(path.sep).some(p => /sealed|confirmation/i.test(p))) throw new Error('sealed_data_forbidden');
+/** The sealed split is scored only by the one freeze run that the plan allows (`--sealed-freeze`, never a default). */
+function assertDevelopment(data, run, sealedFreeze = false) {
+  const forbidden = sealedFreeze ? /confirmation/ : /sealed|confirmation/;
+  if (forbidden.test(run.split) || data.split(path.sep).some(p => (sealedFreeze ? /confirmation/i : /sealed|confirmation/i).test(p))) throw new Error('sealed_data_forbidden');
   if (!SUPPORTED_SETS.includes(run.set)) throw new Error(`unknown_set:${run.set}`);
   if (!poolName(run.split)) throw new Error(`unknown_split:${run.split}`);
 }
@@ -561,7 +563,7 @@ async function scoreRuns(options) {
   const first = manifests[0];
   if (new Set(dirs).size !== dirs.length || new Set(manifests.map(r => r.runId)).size !== manifests.length) throw new Error('duplicate_run');
   for (const run of manifests) {
-    assertDevelopment(path.resolve(data), run);
+    assertDevelopment(path.resolve(data), run, options.sealedFreeze === true);
     if (['set', 'split', 'arm'].some(k => run[k] !== first[k])) throw new Error('runs_set_split_arm_mismatch');
     if ((run.options?.language ?? run.options?.variant ?? null) !== (first.options?.language ?? first.options?.variant ?? null)) throw new Error('runs_language_mismatch');
   }
@@ -592,10 +594,11 @@ async function scoreRuns(options) {
 
 /** @param {object} options */
 export async function scoreRun({ run: runDir, data, control: controlDir, judgeKeyFile, noJudge = false, out,
-  fetchImpl, sources, pools, judgeConcurrency = 6, judgeBatchSize = 6, variant, runs, retryDelayMs = 250, shard = false, rubric = 'approximate' } = {}) {
+  fetchImpl, sources, pools, judgeConcurrency = 6, judgeBatchSize = 6, variant, runs, retryDelayMs = 250, shard = false, rubric = 'approximate',
+  sealedFreeze = false, casesFromRun = false } = {}) {
   if (!['approximate', 'official'].includes(rubric)) throw new Error('rubric_invalid');
   if (runs && runDir) throw new Error('run_and_runs_exclusive');
-  if (runs) return scoreRuns({ runs, data, control: controlDir, judgeKeyFile, noJudge, out, fetchImpl, sources, pools, judgeConcurrency, judgeBatchSize, variant, retryDelayMs, rubric });
+  if (runs) return scoreRuns({ runs, data, control: controlDir, judgeKeyFile, noJudge, out, fetchImpl, sources, pools, judgeConcurrency, judgeBatchSize, variant, retryDelayMs, rubric, sealedFreeze, casesFromRun });
   if (variant !== undefined && !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(variant)) throw new Error('variant_invalid');
   if (!runDir || !data) throw new Error('run_and_data_required');
   if (!Number.isSafeInteger(judgeConcurrency) || judgeConcurrency < 1) throw new Error('judge_concurrency_invalid');
@@ -606,16 +609,17 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
   if (!run.runId) throw new Error('run_id_missing');
   // Inspect metadata only for reuse; changed bytes invalidate via inode/size/mtime/ctime.
   // No traversal of a parent data directory: only this set's development/public inputs.
-  assertDevelopment(data, run);
+  assertDevelopment(data, run, sealedFreeze);
   const goldKey = await goldCacheKey(data, run, { sources, pools });
   const cacheFile = path.join(out, 'score-cache.json');
   const cache = await optional(() => json(cacheFile), null);
   const goldHit = cache?.goldKey === goldKey;
-  let entries = goldHit ? cache.entries : await loadGold(data, run, { sources, pools });
+  let entries = goldHit ? cache.entries : await loadGold(data, run, { sources, pools, allowSealed: sealedFreeze });
   const allEntries = entries;
   if (!entries.length) throw new Error('gold_cases_empty');
-  const only = run.options?.only;
-  const ids = (shard && !run.options?.caseIds && !run.caseIds && !only ? (await list(path.join(runDir, 'cases'))).filter(d => d.isDirectory()).map(d => d.name) : null) ?? run.options?.caseIds ?? run.caseIds ?? (typeof only === 'string' ? only.split(',').map(v => v.trim()).filter(Boolean) : only);
+  // A run directory filled by several `--only` resumes records only the first list: `--cases-from-run` takes its case directories.
+  const only = casesFromRun ? null : run.options?.only;
+  const ids = ((shard || casesFromRun) && !run.options?.caseIds && !run.caseIds && !only ? (await list(path.join(runDir, 'cases'))).filter(d => d.isDirectory()).map(d => d.name) : null) ?? run.options?.caseIds ?? run.caseIds ?? (typeof only === 'string' ? only.split(',').map(v => v.trim()).filter(Boolean) : only);
   if (shard && Array.isArray(ids) && !ids.length) throw new Error('run_cases_empty');
   if (ids && (!Array.isArray(ids) || ids.length)) {
     if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string') || ids.some(id => !entries.some(e => e.caseId === id || e.itemId === id))) throw new Error('run_case_selection_invalid');
@@ -836,8 +840,10 @@ export function parseArgs(args) {
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--list-redlines') { options.listRedlines = true; continue; }
     if (args[i] === '--no-judge') { options.noJudge = true; continue; }
+    if (args[i] === '--sealed-freeze') { options.sealedFreeze = true; continue; }
+    if (args[i] === '--cases-from-run') { options.casesFromRun = true; continue; }
     const name = names[args[i]], value = args[++i];
-    if (!name || !value || value.startsWith('--') || options[name] !== undefined) throw new Error('Usage: score.mjs --run DIR --data DIR [--variant NAME] [--control DIR] [--judge-key-file FILE] [--judge-concurrency N] [--no-judge] [--list-redlines] [--out DIR]; or --runs DIR1,DIR2 --data DIR --out DIR');
+    if (!name || !value || value.startsWith('--') || options[name] !== undefined) throw new Error('Usage: score.mjs --run DIR --data DIR [--variant NAME] [--control DIR] [--judge-key-file FILE] [--judge-concurrency N] [--no-judge] [--list-redlines] [--sealed-freeze] [--cases-from-run] [--out DIR]; or --runs DIR1,DIR2 --data DIR --out DIR');
     options[name] = ['judgeConcurrency', 'judgeBatchSize'].includes(name) ? Number(value) : value;
     if (name === 'judgeBatchSize' && (!Number.isSafeInteger(options[name]) || options[name] < 1 || options[name] > 12)) throw new Error('judge_batch_invalid');
     if (name === 'judgeConcurrency' && (!Number.isSafeInteger(options[name]) || options[name] < 1)) throw new Error('judge_concurrency_invalid');

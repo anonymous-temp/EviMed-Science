@@ -40,6 +40,7 @@ import { nativeMemoryCounters } from "../../../apps/server/src/nativeMemoryMetri
 import { NativeMemoryOverlay } from "../../../apps/server/src/nativeMemoryOverlay.mjs";
 import { createRejectionJudge } from "../../../apps/server/src/nativeMemoryRejections.mjs";
 import { createPastedInstructionJudge } from "../../../apps/server/src/nativeMemoryPastedInstructions.mjs";
+import { createPreferenceJudge } from "../../../apps/server/src/nativeMemoryPreferences.mjs";
 import { NativeMemoryStore } from "../../../apps/server/src/nativeMemoryStore.mjs";
 import { NativeMemoryWorker } from "../../../apps/server/src/nativeMemoryWorker.mjs";
 import { withNativeMemoryWrite } from "../../../apps/server/src/nativeMemoryWriteFence.mjs";
@@ -570,17 +571,23 @@ export async function openLab({
       admitMessage: async (memoryContext, source, message) => (await admission.admit({ user: { id: memoryContext.ownerId }, project: source.project,
         engineSessionId: `dsh-${source.sessionId}`, at: isoOk(message?.created_at) ? Date.parse(message.created_at) : null })).learn,
     });
+    // The same store switches server.mjs passes (freeze 1121 found the four people/profile/preference ones missing here).
     const storeOptions = selected => ({
       sourceEnvelopeEnabled: selected.memorySourceEnvelopeEnabled === true,
       standingInstructionsEnabled: selected.memoryStandingInstructionsEnabled === true,
       peopleAcrossProjectsEnabled: selected.memoryPeopleAcrossProjectsEnabled === true,
+      personMergeEnabled: selected.memoryPersonMergeEnabled === true,
+      personAliasHintEnabled: selected.memoryPersonAliasHintEnabled === true,
+      profileNameDedupeEnabled: selected.memoryProfileNameDedupeEnabled === true,
+      preferenceReconcileEnabled: selected.memoryPreferenceReconcileEnabled === true,
     });
+    const preferenceJudge = createPreferenceJudge({ config });
     const readStores = new Map();
     const storeFor = selected => {
       const options = storeOptions(selected);
       const key = JSON.stringify(options);
       if (!readStores.has(key)) {
-        const readStore = new NativeMemoryStore({ ...options, forgetTargetsEnabled: config.memoryForgetTargetsEnabled,
+        const readStore = new NativeMemoryStore({ ...options, preferenceJudge, forgetTargetsEnabled: config.memoryForgetTargetsEnabled,
           sessions, overlay, memoryContexts: contexts, rejectionJudge: productRejectionJudge, ...(now ? { now } : {}), report: say });
         readStore.history = history;
         readStores.set(key, readStore);

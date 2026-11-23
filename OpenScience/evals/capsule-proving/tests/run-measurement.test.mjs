@@ -73,4 +73,9 @@ test('an unsupported empty-reply judgement cannot overturn passing store checks;
   const supported = { ...result, reason: 'The memory assigns the wife medicine to the user.', failureStep: 'misused',
     storeEvidence: { storedLine: 'User takes aspirin.', plantedSentence: 'My wife takes aspirin.', difference: 'attribution' } };
   assert.equal(mergeJudgeResults([row], [packet], [supported])[0].verdict, 'fail');
+  // Freeze 1121: a packet line without text crashed the merge; it is simply no proof.
+  const textless = { ...packet, memoryLines: [{ file: 'profile.md' }, ...(packet.memoryLines ?? [])] };
+  assert.equal(mergeJudgeResults([row], [textless], [{ ...supported, id: textless.id, hash: textless.hash }])[0].verdict, 'fail');
+  const onlyTextless = { ...packet, memoryLines: [{ file: 'profile.md' }] };
+  assert.equal(mergeJudgeResults([row], [onlyTextless], [{ ...supported, id: onlyTextless.id, hash: onlyTextless.hash }])[0].verdict, 'unobserved');
 });

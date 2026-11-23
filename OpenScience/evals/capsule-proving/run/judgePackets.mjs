@@ -213,7 +213,7 @@ export function mergeJudgeResults(rows, packets, results) {
       const source = [...(packet.transcriptEvidence ?? []).map(e => e.text), ...(packet.gold?.plantedSentences ?? []), packet.gold?.plantedSentence].filter(v => typeof v === 'string');
       const grounded = proof && ['meaning', 'attribution'].includes(proof.difference) && typeof proof.storedLine === 'string' && proof.storedLine.trim()
         && typeof proof.plantedSentence === 'string' && proof.plantedSentence.trim()
-        && (packet.memoryLines ?? []).some(l => l.text.includes(proof.storedLine)) && source.some(text => text.includes(proof.plantedSentence));
+        && (packet.memoryLines ?? []).some(l => (l.text ?? '').includes(proof.storedLine)) && source.some(text => text.includes(proof.plantedSentence));
       if (!grounded) return { ...row, verdict: 'unobserved', missingRecords: ['store-judge-mismatch-evidence'], judgeRejected: { verdict: result.verdict, reason: result.reason }, needsJudge: true };
     }
     return { ...row, verdict: { correct: 'pass', incorrect: 'fail', gold_disputed: 'unknown' }[result.verdict],

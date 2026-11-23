@@ -373,6 +373,19 @@ test('run case selection, generator membership and early checkpoint isolation ar
   assert.equal(r.summary.overall.n, 1);
 });
 
+test('the sealed split is refused unless the freeze run names it, and a resumed run can take its users from its case folders', async t => {
+  assert.deepEqual(parseArgs(['--run', 'r', '--data', 'd', '--sealed-freeze', '--cases-from-run']),
+    { run: 'r', data: 'd', sealedFreeze: true, casesFromRun: true, judgeConcurrency: 6 });
+  const root = await mkdtemp(path.join(os.tmpdir(), 'capsule-score-freeze-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const runDir = path.join(root, 'run'), data = path.join(root, 'data');
+  await mkdir(path.join(runDir, 'cases'), { recursive: true }); await mkdir(data, { recursive: true });
+  await writeFile(path.join(runDir, 'run.json'), json({ runId: 'freeze-fixture', set: 'synthetic-users', split: 'sealed', arm: 'product' }));
+  await assert.rejects(scoreRun({ run: runDir, data, noJudge: true }), /sealed_data_forbidden/);
+  // Past the guard the (empty, invented) data fails on its own terms, never on the sealed guard.
+  await assert.rejects(scoreRun({ run: runDir, data, noJudge: true, sealedFreeze: true }), error => !/sealed_data_forbidden/.test(String(error?.message)));
+});
+
 test('CLI parsing, unknown sets, duplicate answers and Wilson intervals fail or count clearly', async t => {
   assert.deepEqual(parseArgs(['--run', 'r', '--data', 'd', '--no-judge']), { run: 'r', data: 'd', noJudge: true, judgeConcurrency: 6 });
   assert.throws(() => parseArgs(['--run', '--data', 'd']), /Usage/);
