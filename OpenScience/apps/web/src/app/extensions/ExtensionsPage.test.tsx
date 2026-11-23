@@ -453,3 +453,10 @@ it.each([
   expect(screen.queryByText("已启用")).not.toBeInTheDocument();
   expect(extensions.projectPatientMatching).toHaveBeenCalledWith("owned-project");
 });
+
+it("shows a completed automatic version update on the installed plugin", async () => {
+  extensions.projectPatientMatching.mockResolvedValue({ available: true, selected: { enabled: true, releaseId: "r2", upgradedFrom: "r1" },
+    effective: { releaseId: "r2", generation: "verified" }, revision: 3, state: "effective", failure: null });
+  open("/app/extensions/installed?type=plugins");
+  expect(await screen.findByText("已更新到新版本")).toBeInTheDocument();
+});

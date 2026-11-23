@@ -71,21 +71,29 @@ test('archives cannot link to host code or escape their fixed package root', asy
   await assert.rejects(preparePatientMatchingGeneration(config, project, scope, { ...entry, artifactPath: link }, image));
 });
 
-async function serviceFixture(t, postgres = null) {
+async function serviceFixture(t, postgres = null, { warm = true } = {}) {
   const { config, entry } = await fixture(t);
   const rows = new Map(), queued = [], events = [];
   const client = { query: async () => ({ rows: [{ acquired: true }] }) };
   const database = postgres ?? { query: client.query, transaction: async operation => operation(client), withTransactionClient: async (_client, operation) => operation() };
-  let epoch = 'runtime-0', busy = false, rejectNext = false, runtimeImage = image;
+  let epoch = 'runtime-0', busy = false, stopping = false, rejectNext = false, runtimeImage = image;
   const runtime = {
     config: { ...config, runtimeSandboxMode: 'docker' }, key: () => project.id, runtimes: new Map(),
-    runtimeGeneration: () => epoch, currentPatientMatchingGeneration: RuntimeManager.prototype.currentPatientMatchingGeneration,
-    inspectRuntimeImage: async () => ({ imageId: runtimeImage }), pluginRuntimeBusy: async () => busy,
+    runtimeGeneration: () => runtime.runtimes.has(project.id) ? epoch : null, currentPatientMatchingGeneration: RuntimeManager.prototype.currentPatientMatchingGeneration,
+    idleVerdict: async () => 'idle', activeProxyCountForProject: () => 0,
+    stopIdleRuntime: async (target, { guard }) => {
+      stopping = true;
+      try { return await guard() && runtime.runtimes.delete(target.id); }
+      finally { stopping = false; }
+    },
+    inspectRuntimeImage: async () => ({ imageId: runtimeImage }), pluginRuntimeBusy: async (_project, { ignoreStopping = false } = {}) => busy || (stopping && !ignoreStopping),
     preparePatientMatchingGeneration: RuntimeManager.prototype.preparePatientMatchingGeneration,
     replacePatientMatchingGeneration: async (target, candidate) => {
       if (candidate) await runtime.preparePatientMatchingGeneration(target, candidate);
+      const replacedGeneration = runtime.runtimeGeneration();
       runtime.runtimes.set(target.id, { patientMatchingGeneration: candidate, patientMatchingProven: false });
       epoch = `runtime-${events.length + 1}`; events.push(['replace', candidate?.release.releaseId ?? null]);
+      return { runtimeGeneration: epoch, replacedGeneration };
     },
     patientMatchingStatus: async () => {
       const tools = rejectNext ? [] : [...PATIENT_MATCHING_TOOLS]; rejectNext = false;
@@ -96,6 +104,7 @@ async function serviceFixture(t, postgres = null) {
       return RuntimeManager.prototype.probePatientMatchingGeneration.call(runtime, target, candidate);
     },
   };
+  if (warm) runtime.runtimes.set(project.id, { patientMatchingGeneration: null });
   const service = new PatientMatchingLifecycleService(database, { config, catalogue: [entry], access: async (user, id) => { if (user.id !== project.userId || id !== project.id) throw Object.assign(new Error('forbidden'), { status: 403 }); return project; }, runtime,
     workerImageIdentity: async () => image, plugins: { scope: async (_owner, _project, queryable) => { if (typeof queryable?.query !== 'function') throw new TypeError('PluginService.scope reads through a client'); return { accountCreatedAt: scope.ownerAccountCreatedAt, projectCreatedAt: scope.projectCreatedAt }; }, hasPendingPrompts: async () => false }, ledgerBusy: async () => false });
   if (!postgres) service.documents = { get: async (_owner, _kind, id) => rows.get(id) ?? null,
@@ -310,26 +319,29 @@ test('preparation failures keep the selected release and ordinary startup availa
   await f.reconcile('enable'); await f.worker.runClaimed(f.queued[0]);
   f.setImage(nextImage); await f.service.selectForRuntime(project);
   await f.runtime.replacePatientMatchingGeneration(project, null);
-  f.service.catalogue.clear();
+  await writeFile(f.entry.artifactPath, Buffer.from('corrupt'));
   const job = f.queued[1];
   const failure = await f.worker.runClaimed(job);
   assert.equal(failure.retry, true); assert.equal(failure.delayMs, 30000);
   const status = await statusFromRoute(f.service);
-  assert.equal(status.selected.releaseId, 'r1'); assert.equal(status.reason, 'patient_matching_release_unavailable');
+  assert.equal(status.selected.releaseId, 'r1'); assert.equal(status.reason, 'patient_matching_release_invalid');
   assert.equal(status.effective, null); assert.equal(status.state, 'retrying');
   assert.equal(await f.service.selectForRuntime(project), null);
   assert.equal(f.queued.length, 2);
 });
 
 const pgUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
-test('startup refreshes dormant projects and races cold admission idempotently on PostgreSQL', { skip: !pgUrl && 'An isolated local PostgreSQL is required' }, async t => {
+async function postgresFixture(t, options) {
   const isolated = await createGeoTestDatabase(pgUrl, 'matchingrefresh');
   const db = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 6, databaseConnectionTimeoutMs: 5000 });
   t.after(async () => { await db.close(); await isolated.drop(); });
   await migrateProductStore(db);
   await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Owner','development')", [project.userId]);
   await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ($1,$2,'Project',10000000)", [project.userId, project.id]);
-  const f = await serviceFixture(t, db);
+  return { db, f: await serviceFixture(t, db, options) };
+}
+test('startup refreshes dormant projects and races cold admission idempotently on PostgreSQL', { skip: !pgUrl && 'An isolated local PostgreSQL is required' }, async t => {
+  const { db, f } = await postgresFixture(t);
   await f.reconcile('enable'); await f.worker.tick();
   f.setImage(nextImage); f.busy(true);
   f.worker.start();
@@ -356,4 +368,177 @@ test('startup refreshes dormant projects and races cold admission idempotently o
   assert.equal((await statusFromRoute(f.service)).state, 'effective');
   assert.ok(await f.service.resolveTool(project, 'match_assess'));
   await f.service.refreshAfterStartup(); assert.equal(await count(), 2);
+});
+
+test('runtime replacement identifies its own boot even when another start can be joined', async () => {
+  const manager = {
+    key: () => project.id, runtimes: new Map([[project.id, 'previous']]), patientMatchingGenerationOverrides: new Map(),
+    stop: async () => manager.runtimes.delete(project.id), runtimeGeneration: () => manager.runtimes.get(project.id) ?? null, pluginRuntimeBusy: async () => false,
+    startAdmitted: async (_project, options) => {
+      await options.replaceRuntime();
+      return { modelGatewayTokenJti: 'booted' };
+    },
+  };
+  const replace = () => RuntimeManager.prototype.replacePatientMatchingGeneration.call(manager, project, null);
+  const created = await replace();
+  assert.equal(created.replacedGeneration, 'previous');
+  assert.equal(created.runtimeGeneration, 'booted');
+  manager.startAdmitted = async () => ({ modelGatewayTokenJti: 'joined' });
+  assert.equal((await replace()).runtimeGeneration, null);
+  assert.equal(manager.patientMatchingGenerationOverrides.size, 0);
+});
+
+test('proof releases a cold project on success, rollback or failure and preserves a warm project', async t => {
+  for (const [warm, outcome] of [[false, 'effective'], [false, 'rolled-back'], [false, 'failed'], [true, 'effective']]) {
+    const f = await serviceFixture(t, null, { warm });
+    await f.reconcile('install');
+    if (outcome === 'rolled-back') f.rejectNext();
+    if (outcome === 'failed') f.runtime.probePatientMatchingGeneration = async () => { throw new Error('probe unavailable'); };
+    await f.worker.runClaimed(f.queued[0]);
+    assert.equal((await statusFromRoute(f.service)).state, outcome);
+    assert.equal(f.runtime.runtimes.has(project.id), warm, outcome);
+    if (outcome === 'effective') assert.equal((await f.service.selectForRuntime(project)).release.releaseId, f.entry.releaseId);
+  }
+});
+
+test('work arriving during proof or a changed runtime keeps the project running', async t => {
+  for (const fact of ['running', 'native', 'ledger', 'prompt', 'connection', 'replacement', 'prompt-at-stop']) {
+    const f = await serviceFixture(t, null, { warm: false });
+    const probe = f.runtime.probePatientMatchingGeneration;
+    f.runtime.probePatientMatchingGeneration = async (...args) => {
+      const result = await probe(...args);
+      if (fact === 'running') f.runtime.idleVerdict = async () => 'working';
+      if (fact === 'native') f.busy(true);
+      if (fact === 'ledger') f.service.ledgerBusy = async () => true;
+      if (fact === 'prompt') f.service.plugins.hasPendingPrompts = async () => true;
+      if (fact === 'connection') f.runtime.activeProxyCountForProject = () => 1;
+      return result;
+    };
+    if (fact === 'prompt-at-stop') {
+      const stop = f.runtime.stopIdleRuntime;
+      f.runtime.stopIdleRuntime = (...args) => {
+        f.service.plugins.hasPendingPrompts = async () => true;
+        return stop(...args);
+      };
+    }
+    if (fact === 'replacement') {
+      const finish = f.worker.jobs.finishWithLease;
+      f.worker.jobs.finishWithLease = async (...args) => {
+        const result = await finish(...args);
+        await f.runtime.replacePatientMatchingGeneration(project, null);
+        return result;
+      };
+    }
+    await f.reconcile('enable');
+    assert.equal((await f.worker.runClaimed(f.queued[0])).phase, 'effective', fact);
+    assert.ok(f.runtime.runtimeGeneration(project), fact);
+  }
+});
+
+test('a failed proof-runtime stop leaves the proved selection and successful job intact', async t => {
+  const f = await serviceFixture(t, null, { warm: false });
+  let stops = 0;
+  f.runtime.stopIdleRuntime = async () => { stops++; throw new Error('stop failed'); };
+  await f.reconcile('install');
+  assert.equal((await f.worker.runClaimed(f.queued[0])).phase, 'effective');
+  assert.equal(stops, 1);
+  assert.equal((await statusFromRoute(f.service)).failure, null);
+  assert.ok(await f.service.selectForRuntime(project));
+});
+
+function withdrawRelease(f, defaultReleaseId = 'r2') {
+  f.service.catalogue.delete(f.entry.releaseId);
+  f.service.catalogue.set('r2', { ...f.entry, releaseId: 'r2' });
+  f.service.defaultReleaseId = defaultReleaseId;
+}
+
+test('cold admission migrates a withdrawn release on the same image and proves the default at idle', async t => {
+  const f = await serviceFixture(t, null, { warm: false });
+  await f.reconcile('enable'); await f.worker.runClaimed(f.queued[0]);
+  withdrawRelease(f);
+  const stale = await statusFromRoute(f.service);
+  assert.equal(stale.state, 'stale');
+  assert.equal(stale.effective, null);
+  assert.equal(stale.reason, 'patient_matching_release_unavailable');
+  assert.equal(await f.service.selectForRuntime(project), null);
+  const pending = await statusFromRoute(f.service);
+  assert.deepEqual(pending.selected, { releaseId: 'r2', enabled: true, upgradedFrom: 'r1' });
+  assert.equal(pending.state, 'refreshing');
+  assert.equal(pending.effective, null);
+  f.busy(true);
+  assert.equal((await f.worker.runClaimed(f.queued[1])).refundAttempt, true);
+  f.busy(false); f.rejectNext();
+  assert.equal((await f.worker.runClaimed(f.queued[1])).delayMs, 30000);
+  assert.equal((await statusFromRoute(f.service)).state, 'retrying');
+  assert.equal(f.runtime.runtimeGeneration(project), null, 'ordinary rollback also releases the proof slot');
+  f.queued[1].attempts++;
+  await f.worker.runClaimed(f.queued[1]);
+  const status = await statusFromRoute(f.service);
+  assert.equal(status.state, 'effective');
+  assert.equal(status.effective.releaseId, 'r2');
+  assert.equal(status.selected.upgradedFrom, 'r1');
+  assert.equal(f.runtime.runtimeGeneration(project), null);
+  assert.equal((await f.service.selectForRuntime(project)).release.releaseId, 'r2');
+  assert.equal(f.queued.length, 2);
+});
+
+test('a withdrawn release without an available default stays failed across images without requeueing', async t => {
+  for (const catalogueEmpty of [true, false]) {
+    const f = await serviceFixture(t);
+    await f.reconcile('enable'); await f.worker.runClaimed(f.queued[0]);
+    f.setImage(nextImage); await f.service.selectForRuntime(project);
+    withdrawRelease(f, null);
+    if (catalogueEmpty) f.service.catalogue.clear();
+    assert.equal((await f.worker.runClaimed(f.queued[1])).retry, false);
+    f.setImage(image);
+    for (let i = 0; i < 2; i++) assert.equal(await f.service.selectForRuntime(project), null);
+    const status = await statusFromRoute(f.service);
+    assert.equal(status.state, 'refresh-failed');
+    assert.equal(status.reason, 'patient_matching_release_unavailable');
+    assert.equal(status.effective, null);
+    assert.equal(f.queued.length, 2);
+  }
+});
+
+test('withdrawal preserves explicit disable and uninstall', async t => {
+  for (const action of ['disable', 'uninstall']) {
+    const f = await serviceFixture(t);
+    await f.reconcile('enable'); await f.worker.runClaimed(f.queued[0]);
+    await f.reconcile(action); await f.worker.runClaimed(f.queued[1]);
+    const before = await f.service.current(project);
+    withdrawRelease(f);
+    assert.equal(await f.service.selectForRuntime(project), null);
+    assert.deepEqual(await f.service.current(project), before);
+    assert.equal(f.queued.length, 2);
+  }
+});
+
+test('startup migrates an exhausted withdrawn selection once, including concurrent discovery', { skip: !pgUrl }, async t => {
+  const { db, f } = await postgresFixture(t, { warm: false });
+  await f.reconcile('enable'); await f.worker.tick();
+  const row = await f.service.current(project);
+  withdrawRelease(f);
+  const failed = { ...row.payload, phase: 'refresh-failed', effective: null,
+    refresh: { imageId: image, jobId: 'exhausted' }, failure: 'patient_matching_release_unavailable' };
+  const seed = revision => f.service.documents.put(project.userId, 'patient-matching-lifecycle', row.id, failed,
+    { projectId: project.id, expectedRevision: revision });
+  await seed(row.revision);
+  await f.service.refreshAfterStartup();
+  assert.equal((await statusFromRoute(f.service)).selected.upgradedFrom, 'r1');
+  await f.worker.tick();
+  const restored = await statusFromRoute(f.service);
+  assert.equal(restored.state, 'effective');
+  assert.equal(f.runtime.runtimeGeneration(project), null);
+  await seed(restored.revision);
+  await Promise.all([f.service.refreshAfterStartup(), f.service.selectForRuntime(project), f.service.selectForRuntime(project)]);
+  assert.equal((await db.query("SELECT count(*) FROM evimed_product.jobs WHERE payload->>'action'='refresh'")).rows[0].count, '2');
+  await f.worker.tick();
+  const effective = await statusFromRoute(f.service);
+  assert.equal(effective.effective.releaseId, 'r2');
+  await seed(effective.revision);
+  f.service.defaultReleaseId = null;
+  f.setImage(nextImage);
+  await Promise.all([f.service.refreshAfterStartup(), f.service.selectForRuntime(project)]);
+  assert.equal((await statusFromRoute(f.service)).state, 'refresh-failed');
+  assert.equal((await f.service.current(project)).revision, effective.revision + 1);
 });
