@@ -291,11 +291,14 @@ export function checkSecret(item, snapshots, toolCalls = []) {
 // Capture the entire digit run, including malformed lengths: an allowed id plus an extra digit is not the allowed id.
 const DOI_FORMAT = '10\\.\\d{4,9}/(?:(?![<>"`])[\\x21-\\x7e])+';
 const DEFAULT_CITATIONS = { pmid: '(?<![a-z0-9])PMID\\s*:?\\s*\\d+(?![a-z0-9])', nct: '(?<![a-z0-9])NCT\\s*\\d+(?![a-z0-9])', doi: DOI_FORMAT };
+// Markdown around an identifier is not part of it (freeze 1121, M7): a link's "](" boundary, emphasis marks after it, and a
+// following "; PMID…" written without a space. DOIs may contain parentheses, so those stay; only these markup shapes are cut.
+const withoutMarkup = text => String(text).split('](')[0].replace(/;\s*(?:pmid|pmcid|nct|doi)\b.*$/iu, '').replace(/[*_~`]+$/u, '');
 const citationKey = text => {
-  const key = normalizeAnswer(text).replace(/^(?:https?:\/\/(?:dx\.)?doi\.org\/|doi\s*:\s*)/i, '');
+  const key = normalizeAnswer(withoutMarkup(text)).replace(/^(?:https?:\/\/(?:dx\.)?doi\.org\/|doi\s*:\s*)/i, '');
   // Custom dossier formats can be broader than the default. Apply the same identifier boundary to those matches.
   const bounded = /^10\.\d{4,9}\//u.test(key) ? key.match(new RegExp(`^${DOI_FORMAT}`, 'u'))?.[0] ?? key : key;
-  return bounded.replace(/^(pmid)\s*:?\s*/i, '$1').replace(/^(nct)\s*/i, '$1').replace(/[.,;:!?)\]}>，。；：！）】]+$/u, '');
+  return withoutMarkup(bounded.replace(/^(pmid)\s*:?\s*/i, '$1').replace(/^(nct)\s*/i, '$1').replace(/[.,;:!?)\]}>，。；：！）】*_~`]+$/u, ''));
 };
 
 /** Citation-shaped strings are checked independently of the semantic judge. Custom formats include author-year. */

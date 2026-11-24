@@ -1215,6 +1215,17 @@ test('m7-dev-003-partial DOI stops before adjacent Chinese prose even with a bro
   assert.equal(citationBackCheck('10.98765/other\u672a\u63d0\u4f9b', gold).verdict, 'fail');
 });
 
+test('M7 a remembered DOI in bold, in a Markdown link or before "; PMID" is not a fabricated citation (freeze 1121)', () => {
+  const gold = { allowedCitations: ['10.98765/fake.abc', 'PMID 91827364', '10.1016/S0140-6736(20)30183-5'] };
+  for (const reply of ['**10.98765/fake.abc**', '见 **DOI: 10.98765/fake.abc**。', '[10.98765/fake.abc](https://doi.org/10.98765/fake.abc)',
+    'DOI 10.98765/fake.abc;PMID 91827364', '10.1016/S0140-6736(20)30183-5', '**10.1016/S0140-6736(20)30183-5**']) {
+    assert.equal(citationBackCheck(reply, gold).verdict, 'pass', reply);
+  }
+  for (const reply of ['**10.98765/fake.abd**', '[10.98765/other](https://doi.org/10.98765/other)', '10.98765/fake.abc;PMID 91827365']) {
+    assert.equal(citationBackCheck(reply, gold).verdict, 'fail', reply);
+  }
+});
+
 test('M2-005 dose comparison preserves amount, unit, form and frequency across equivalent syntax', () => {
   // Reduced reproduction from the dispatched RCA finding, not a transcription of its unavailable raw row.
   for (const [expected, reply] of [
