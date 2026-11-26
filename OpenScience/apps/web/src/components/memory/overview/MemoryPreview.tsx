@@ -95,7 +95,7 @@ export function MemoryPreview({ node, doc, methods, projectName, onSelect, onOpe
             </section>
           )}
         </div>
-      ) : <p className="mt-8 text-ui text-text-3">选择星图中的内容。</p>}
+      ) : <p className="mt-8 text-ui text-text-3">选择星环中的内容。</p>}
     </aside>
   );
 }

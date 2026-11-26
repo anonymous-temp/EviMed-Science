@@ -8,7 +8,7 @@ import { useCapsuleData } from "@/components/capsule/useCapsuleData";
 import { dayIn } from "@/components/charts/map/zone";
 import { MapDrawer } from "@/components/memory/map/MapDrawer";
 import { derivedTopics, narrowMap } from "@/components/memory/map/mapModel";
-import { useStarAllowed } from "@/components/memory/map/star/starSupport";
+import { useRingAllowed } from "@/components/charts/ring/ringSupport";
 import { useMemoryMap } from "@/components/memory/map/useMemoryMap";
 import { MemoryFrame } from "@/components/memory/MemoryFrame";
 import { memoryTabAddress } from "@/components/memory/memoryTabs";
@@ -50,7 +50,7 @@ const RECEIVED = memoryTabAddress("received");
 /**
  * 「总览」: the capsule as one data page (DESIGN.md template T4), where `/app/memory` lands. In the band,
  * one toolbar row — the range, only what needs a look, and the search — that narrows everything below it together; then one sentence whose numbers
- * each open the list they count; 「记忆星图」, the page's one brand moment, wherever a real GPU and a wide screen can hold it; a selected mark's preview beside it where it fits; four entries that each open a list (关于你, 做法, 收到的, and 知识 in the knowledge base); 「最近变化」 and the chart of what the
+ * each open the list they count; 「记忆星环」, the page's one brand moment, wherever a real GPU and a wide screen can hold it; a selected mark's preview beside it where it fits; four entries that each open a list (关于你, 做法, 收到的, and 知识 in the knowledge base); 「最近变化」 and the chart of what the
  * capsule gained and lost over time; and 「关系与主题」 when there is enough to see. The change rows open the
  * same drawers the marks do. There is no 项目 tile since 2026-10-28: a project is a label on a memory, and its memories are counted in 关于你.
  *
@@ -92,7 +92,7 @@ function Overview() {
   const phone = useNarrow();
   const layout = useRef<HTMLDivElement>(null);
   const compact = useContainerNarrow(layout, 960);
-  const starAllowed = useStarAllowed();
+  const starAllowed = useRingAllowed();
   const [starLost, setStarLost] = useState(false);
   const navigate = useNavigate();
   useMemoryWritePrompt();

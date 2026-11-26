@@ -1,10 +1,27 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { type ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type RingCanvas from "@/components/charts/ring/RingCanvas";
 import type { RunStreamEvent } from "@/lib/runEvents";
 import { elapsedClock, ResearchObservatory } from "./ResearchObservatory";
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), subscribe: vi.fn() }));
+const ring = vi.hoisted(() => ({
+  allowed: false,
+  props: null as ComponentProps<typeof RingCanvas> | null,
+  pulse: vi.fn(),
+}));
+vi.mock("@/components/charts/ring/ringSupport", () => ({ useRingAllowed: () => ring.allowed }));
+vi.mock("@/components/charts/ring/RingCanvas", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+  function StandIn(props: ComponentProps<typeof RingCanvas>) {
+    ring.props = props;
+    React.useImperativeHandle(props.handle, () => ({ replay: () => false, stopReplay: () => {}, peek: () => {}, pulse: ring.pulse }), []);
+    return React.createElement("div", { role: "img", "aria-label": props.label, "data-testid": "research-ring" });
+  }
+  return { default: StandIn };
+});
 vi.mock("@/lib/apiClient", () => ({ listWebAgentRuns: mocks.list }));
 vi.mock("@/lib/runEvents", () => ({ subscribeRunEvents: mocks.subscribe }));
 const frame = (seq: number, type: string, fields: Record<string, unknown> = {}): RunStreamEvent => ({ seq, type, time: `2026-10-28T01:${String(seq).padStart(2, "0")}:00Z`, ...fields });
@@ -15,6 +32,7 @@ let connection: (connected: boolean) => void = () => {};
 describe("research observatory", () => {
   beforeEach(() => {
     vi.useRealTimers();
+    ring.allowed = false; ring.props = null; ring.pulse.mockClear();
     mocks.list.mockReset(); mocks.subscribe.mockReset();
     mocks.subscribe.mockImplementation((_runId: string, onEvent: (event: RunStreamEvent) => void, options: { onConnection?: (connected: boolean) => void }) => {
       emit = (frames) => frames.forEach(onEvent); connection = options.onConnection ?? (() => {});
@@ -98,6 +116,57 @@ describe("research observatory", () => {
     expect(within(feed).getByText("文献检索")).toBeInTheDocument();
     expect(within(feed).queryByText("写入文件")).not.toBeInTheDocument();
   });
+  it("selects operations and filters members through the research ring, then falls back on context loss", async () => {
+    ring.allowed = true;
+    mocks.list.mockResolvedValue([record("one", "研究", { status: "running", finishedAt: null, durationMs: null })]);
+    render(<ResearchObservatory runId="one" />);
+    await screen.findByTestId("research-ring");
+    expect(screen.queryByLabelText(/研究流程图/)).not.toBeInTheDocument();
+    expect(ring.pulse).not.toHaveBeenCalled();
+
+    await flush([
+      frame(1, "run/state", { state: "running" }),
+      frame(2, "run/event", { sessionId: "root", event: { type: "subagent/started", childSessionId: "c1", parentSessionId: "root", label: "证据分析" } }),
+      frame(3, "run/event", { sessionId: "root", event: { type: "tool/call", callId: "a", tool: "write", input: { path: "analysis/run.py" } } }),
+      frame(4, "run/event", { sessionId: "c1", child: true, event: { type: "tool/call", callId: "b", tool: "mcp__evimed__literature_search" } }),
+    ]);
+    expect(ring.props?.moving).toBe(true);
+    expect(ring.pulse.mock.calls).toEqual(expect.arrayContaining([["root:a", "centre"], ["c1:b", "c1"]]));
+    expect(ring.pulse).toHaveBeenCalledTimes(2);
+
+    const feed = screen.getByRole("region", { name: "实时动态" });
+    const inspector = screen.getByRole("region", { name: "操作详情" });
+    act(() => ring.props?.onOpen({ kind: "cluster", id: "c1" }));
+    const filters = within(feed).getByRole("group", { name: "按成员查看" });
+    expect(within(filters).getByRole("button", { name: /证据分析/, pressed: true })).toBeInTheDocument();
+    expect(within(inspector).getByText("文献检索")).toBeInTheDocument();
+
+    act(() => ring.props?.onOpen({ kind: "cell", id: "root:a" }));
+    expect(within(feed).getByRole("button", { name: /写入文件/, pressed: true })).toBeInTheDocument();
+    expect(within(inspector).getByText("写入文件")).toBeInTheDocument();
+    expect(within(inspector).getByText(/analysis\/run.py/)).toBeInTheDocument();
+    expect(ring.props?.describe({ kind: "cell", id: "root:a" })?.facts).toEqual(["撰写", "主研究员", expect.any(String), "—"]);
+
+    await flush([
+      frame(5, "run/event", { sessionId: "root", event: { type: "tool/result", callId: "a", tool: "write", status: "completed" } }),
+      frame(6, "run/state", { state: "succeeded" }),
+    ]);
+    expect(ring.props?.moving).toBe(false);
+    expect(ring.pulse).toHaveBeenCalledTimes(2);
+    act(() => ring.props?.onLost());
+    expect(screen.queryByTestId("research-ring")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/研究流程图/)).toBeInTheDocument();
+    expect(within(inspector).getByText("写入文件")).toBeInTheDocument();
+  });
+
+  it("shows a stationary research ring in standby when the renderer is available", async () => {
+    ring.allowed = true;
+    render(<ResearchObservatory runId={null} />);
+    expect(await screen.findByTestId("research-ring")).toHaveAccessibleName("研究流程：等待第一个操作");
+    expect(ring.props?.moving).toBe(false);
+    expect(screen.queryByLabelText(/研究流程图/)).not.toBeInTheDocument();
+  });
+
   it("keeps the goal machinery out of the feed and out of the thinking line", async () => {
     mocks.list.mockResolvedValue([record("one", "研究", { status: "running", finishedAt: null, durationMs: null })]);
     render(<ResearchObservatory runId="one" />);

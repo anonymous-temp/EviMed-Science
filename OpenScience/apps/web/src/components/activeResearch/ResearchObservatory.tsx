@@ -2,19 +2,18 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { workStateLabel } from "@evimed/domain";
 import "./ResearchObservatory.css";
 import { EVIMED_MARK_PATH } from "@/components/brand/EviMedMark";
+import { useRingAllowed } from "@/components/charts/ring/ringSupport";
 import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
 import { safeWorkspacePath } from "@/lib/claimCitations";
 import { formatApproxCount, formatClock, formatDuration, formatLingdou } from "@/lib/format";
 import { DELIVERABLE_STATUS_LABEL } from "@/lib/runProgress";
 import type { ObservedRun } from "./researchRunState";
-import { emptyObservation, ROOT_AGENT, rootStage, STAGES, stageCounts, useResearchObservation, type ObservedAgent, type ObservedCall, type Observation, type StageKey } from "@/lib/researchObservation";
+import { ResearchRing } from "./ResearchRing";
+import { AGENT_WORD, callStateWord } from "./researchRing";
+import { emptyObservation, ROOT_AGENT, rootStage, STAGES, stageCounts, useResearchObservation, type ObservedCall, type Observation, type StageKey } from "@/lib/researchObservation";
 
 const RUN_WORD: Record<string, string> = {
   running: workStateLabel("running"), succeeded: workStateLabel("done"), failed: workStateLabel("failed"), canceled: workStateLabel("stopped"), cancelled: workStateLabel("stopped"),
-};
-/** 「待命」 is a member waiting for its next call, not a state of work; the rest are the work-state words. */
-const AGENT_WORD: Record<ObservedAgent["state"], string> = {
-  running: workStateLabel("running"), idle: "待命", done: workStateLabel("done"), failed: workStateLabel("failed"), canceled: workStateLabel("stopped"), unknown: "待命",
 };
 const SAFE_RUN = /^[A-Za-z0-9_-]{1,160}$/;
 /** How long a run that is going, with nothing under way, may be silent before the observatory stops calling it live. */
@@ -54,8 +53,8 @@ async function readRun(runId: string): Promise<WebAgentRun | null> {
 }
 
 /**
- * Anatomy: the research observatory — a status line, six live counters, the research line (seven stages, the
- * orchestrator above it and every delegated session below it, each standing at the stage of its last call), the
+ * Anatomy: the research observatory — a status line, six live counters, the research ring or line (seven stages and all
+ * observed members standing at the stage of their last call), the
  * live operations feed with the selected operation's input and output, and what the run has handed over.
  * Variants: no selection; a run that is starting, running or ended.
  * States: connecting, live, reconnecting, ended; a count nothing has reported reads “—”, never 0.
@@ -82,7 +81,7 @@ export function ResearchObservatory({ runId, title, onOpenFile, onObserved, stan
 }
 
 /**
- * No run to watch: the console stands by with its research line dark, so the page still shows what will happen here. With no research
+ * No run to watch: the console stands by with the picture still, so the page still shows what will happen here. With no research
  * in the project yet (`actions`) the scene is also the page's recipe: what happens and the ways to begin.
  */
 function StandbyObservatory({ actions }: { actions?: ReactNode }) {
@@ -91,12 +90,14 @@ function StandbyObservatory({ actions }: { actions?: ReactNode }) {
     <header className="obs-head"><div className="obs-head-main"><span className="obs-live"><i aria-hidden="true" />STANDBY</span>
       <div className="min-w-0"><p className="obs-kicker">研究观测舱</p><h2 className="obs-title">等待研究启动</h2></div></div>
       <span className="obs-clock" aria-hidden="true">{elapsedClock(null)}</span></header>
-    <ResearchLine model={idle} counts={stageCounts(idle)} live={false} />
+    <ResearchPicture model={idle} counts={stageCounts(idle)} live={false} />
     {actions && <div className="obs-recipe"><p className="obs-recipe-line">写下研究目标，AI 会自己检索、阅读、分析、撰写，一轮轮推进直到完成。</p><div className="obs-recipe-actions">{actions}</div></div>}
   </section>;
 }
 
 function ObservatoryRun({ runId, title, onOpenFile, onObserved }: { runId: string; title?: string; onOpenFile?: (path: string, runId: string) => void; onObserved?: (observed: ObservedRun | null) => void }) {
+  const [agent, setAgent] = useState("all");
+  const [selected, setSelected] = useState<string | null>(null);
   const [run, setRun] = useState<WebAgentRun | null>(null);
   const [recordRead, setRecordRead] = useState<"loading" | "loaded" | "unavailable">("loading");
   const { model, connected } = useResearchObservation(runId, run?.progress ?? null);
@@ -149,6 +150,14 @@ function ObservatoryRun({ runId, title, onOpenFile, onObserved }: { runId: strin
   const status = live ? (connected ? (waitingOnModel ? "等待模型响应" : "实时") : "重新连接") : state ? RUN_WORD[state] ?? "已结束" : recordRead === "loading" || !connected ? "连接中" : "等待开始";
   const heading = title || run?.title || run?.question || "这次研究";
 
+  const selectMember = (id: string) => { setAgent(id); setSelected(null); };
+  const selectRingCall = (id: string) => {
+    const call = model.calls.find(item => item.id === id);
+    if (!call) return;
+    if (agent !== "all" && agent !== call.agent) setAgent("all");
+    setSelected(id);
+  };
+
   return <section aria-label="研究观测" className="obs" data-observatory={live ? "live" : ended ? "ended" : "waiting"}>
     <header className="obs-head">
       <div className="obs-head-main">
@@ -165,14 +174,25 @@ function ObservatoryRun({ runId, title, onOpenFile, onObserved }: { runId: strin
       <Metric label="结论核对" value={claims ? `${claims.verified}/${claims.total}` : "—"} sub={claims ? "条已核对" : ""} />
       <Metric label="消耗" value={cost === null ? "—" : (formatLingdou(cost) || "—").replace(" 灵豆", "")} sub={cost === null ? "" : "灵豆"} />
     </dl>
-    <ResearchLine model={model} counts={counts} live={live} />
+    <ResearchPicture model={model} counts={counts} live={live} onSelectCall={selectRingCall} onSelectMember={selectMember} />
     {model.thought && live && <p className="obs-thought" aria-live="off"><span className="obs-thought-tag">思考</span><span className="obs-thought-text">{model.thought}</span><i aria-hidden="true" /></p>}
     {progress && progress.deliverables.length > 0 && <ul className="obs-tasks" aria-label="研究任务">{progress.deliverables.map(item => <li key={item.id} className={`t-${item.status}`}><span className="min-w-0 truncate">{item.title}</span><b>{DELIVERABLE_STATUS_LABEL[item.status]}</b></li>)}</ul>}
-    <OperationsFeed model={model} live={live} />
+    <OperationsFeed model={model} live={live} agent={agent} selected={selected} onSelectMember={selectMember} onSelectCall={setSelected} />
     {files.length > 0 && <div className="obs-files"><p className="obs-section-label">产出 · {files.length}</p><ul aria-label="研究产出">{files.map(file => <li key={file}>
-      {onOpenFile ? <button type="button" className="obs-file" onClick={() => onOpenFile(file, runId)}>{file.split("/").pop() || file}</button> : <span className="obs-file">{file.split("/").pop() || file}</span>}
+      {onOpenFile ? <button type="button" className="obs-file" data-text-action="view" onClick={() => onOpenFile(file, runId)}>{file.split("/").pop() || file}</button> : <span className="obs-file">{file.split("/").pop() || file}</span>}
     </li>)}</ul></div>}
   </section>;
+}
+
+function ResearchPicture({ model, counts, live, onSelectCall, onSelectMember }: {
+  model: Observation; counts: Record<StageKey, number>; live: boolean;
+  onSelectCall?: (id: string) => void; onSelectMember?: (id: string) => void;
+}) {
+  const allowed = useRingAllowed();
+  const [lost, setLost] = useState(false);
+  return allowed && !lost
+    ? <ResearchRing model={model} counts={counts} live={live} onSelectCall={onSelectCall} onSelectMember={onSelectMember} onLost={() => setLost(true)} />
+    : <ResearchLine model={model} counts={counts} live={live} />;
 }
 
 function Metric({ label, value, sub }: { label: string; value: string; sub: string }) {
@@ -258,27 +278,31 @@ function ResearchLine({ model, counts, live }: { model: Observation; counts: Rec
   </div>;
 }
 
-function OperationsFeed({ model, live }: { model: Observation; live: boolean }) {
-  const [agent, setAgent] = useState<string>("all");
-  const [selected, setSelected] = useState<string | null>(null);
+function OperationsFeed({ model, live, agent, selected, onSelectMember, onSelectCall }: {
+  model: Observation; live: boolean; agent: string; selected: string | null;
+  onSelectMember: (id: string) => void; onSelectCall: (id: string) => void;
+}) {
   const members = [...model.agents.values()].filter(item => !item.root);
   const visible = model.calls.filter(call => agent === "all" || call.agent === agent);
   const chosen = visible.find(call => call.id === selected) ?? visible[0] ?? null;
+  // Keep a cell selected from the ring visible even when it is older than the feed's usual window.
+  const rows = visible.slice(0, 40);
+  if (chosen && !rows.includes(chosen)) rows[rows.length - 1] = chosen;
   const memberName = (id: string) => id === ROOT_AGENT ? "主研究员" : model.agents.get(id)?.label || "协作成员";
   return <div className="obs-feed-grid">
     <section aria-label="实时动态" className="obs-panel">
       <div className="obs-panel-head">
         <p className="obs-section-label">实时动态{live && <span className="obs-blink" aria-hidden="true">▍</span>}</p>
         <div className="obs-chips" role="group" aria-label="按成员查看">
-          <button type="button" aria-pressed={agent === "all"} onClick={() => { setAgent("all"); setSelected(null); }}>全部</button>
-          <button type="button" aria-pressed={agent === ROOT_AGENT} onClick={() => { setAgent(ROOT_AGENT); setSelected(null); }}>主研究员</button>
-          {members.map(member => <button key={member.id} type="button" aria-pressed={agent === member.id} onClick={() => { setAgent(member.id); setSelected(null); }} aria-label={`${member.label || "协作成员"} · ${AGENT_WORD[member.state]}`}>
+          <button type="button" data-text-action="filter" aria-pressed={agent === "all"} onClick={() => onSelectMember("all")}>全部</button>
+          <button type="button" data-text-action="filter" aria-pressed={agent === ROOT_AGENT} onClick={() => onSelectMember(ROOT_AGENT)}>主研究员</button>
+          {members.map(member => <button key={member.id} type="button" data-text-action="filter" aria-pressed={agent === member.id} onClick={() => onSelectMember(member.id)} aria-label={`${member.label || "协作成员"} · ${AGENT_WORD[member.state]}`}>
             <i className={`obs-dot s-${member.state}`} aria-hidden="true" />{(member.label || "协作成员").slice(0, 10)}
           </button>)}
         </div>
       </div>
-      {visible.length ? <ol className="obs-log">{visible.slice(0, 40).map(call => <li key={call.id}>
-        <button type="button" className={`obs-line c-${call.state}`} aria-pressed={chosen?.id === call.id} onClick={() => setSelected(call.id)}>
+      {visible.length ? <ol className="obs-log">{rows.map(call => <li key={call.id}>
+        <button type="button" className={`obs-line c-${call.state}`} data-text-action="view" aria-pressed={chosen?.id === call.id} onClick={() => onSelectCall(call.id)}>
           <time className="obs-line-time">{formatClock(call.at) || "--:--"}</time>
           <span className={`obs-tag g-${call.stage ?? "none"}`}>{call.stage ? STAGES.find(stage => stage.key === call.stage)?.label : "操作"}</span>
           <span className="obs-line-text"><b>{call.label}</b>{call.detail && <span> {call.detail}</span>}</span>
@@ -297,7 +321,7 @@ function Inspector({ call, who }: { call: ObservedCall | null; who: string }) {
   return <section aria-label="操作详情" className="obs-panel obs-inspector">
     <p className="obs-section-label">操作详情</p>
     <p className="obs-inspect-title">{call.label}</p>
-    <p className="obs-inspect-meta">{who} · {call.state === "running" ? workStateLabel("running") : call.state === "error" ? workStateLabel("failed") : workStateLabel("done")}{call.durationMs !== undefined ? ` · ${formatDuration(call.durationMs)}` : ""}</p>
+    <p className="obs-inspect-meta">{who} · {callStateWord(call.state)}{call.durationMs !== undefined ? ` · ${formatDuration(call.durationMs)}` : ""}</p>
     <Payload title="输入" text={input} pending="—" />
     <Payload title="结果" text={output} pending={call.state === "running" ? "等待结果" : "—"} />
   </section>;

@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resetWebglReady, starAllowed, webglReady } from "./starSupport";
+import { resetWebglReady, ringAllowed, webglReady } from "./ringSupport";
 
 afterEach(() => { resetWebglReady(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-describe("who gets the star map", () => {
+describe("who gets a ring", () => {
   it("asks for a real GPU, a wide screen and no wish for less motion", () => {
-    expect(starAllowed({ webgl: true, reducedMotion: false, narrow: false })).toBe(true);
-    expect(starAllowed({ webgl: false, reducedMotion: false, narrow: false })).toBe(false);
-    expect(starAllowed({ webgl: true, reducedMotion: true, narrow: false })).toBe(false);
-    expect(starAllowed({ webgl: true, reducedMotion: false, narrow: true })).toBe(false);
+    expect(ringAllowed({ webgl: true, reducedMotion: false, narrow: false })).toBe(true);
+    expect(ringAllowed({ webgl: false, reducedMotion: false, narrow: false })).toBe(false);
+    expect(ringAllowed({ webgl: true, reducedMotion: true, narrow: false })).toBe(false);
+    expect(ringAllowed({ webgl: true, reducedMotion: false, narrow: true })).toBe(false);
   });
 
   it("a browser with no WebGL2 answers no without asking for a context", () => {

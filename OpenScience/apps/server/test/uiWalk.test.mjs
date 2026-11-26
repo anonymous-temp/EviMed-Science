@@ -2973,7 +2973,7 @@ test("the memory page's lists stack one shape of section, and 记忆地图 is he
   // 项目 is not a view of the walk any more: a project is a label on a memory, and its memories are a group of 关于你.
   assert.ok(!ROUTES.some(([name]) => name === "memory-project"), "the 项目 tab is not walked");
   assert.equal(PAGE_PROBES["memory-project"], undefined);
-  // 总览 is held to the data-page budget of controls plus the one the 记忆星图's view switch spends (owner, 2026-10-31): eleven, and a reading page keeps its eight.
+  // 总览 is held to the data-page budget of controls plus the one the 记忆星环's view switch spends (owner, 2026-10-31): eleven, and a reading page keeps its eight.
   assert.equal(budgetKey("memory-overview"), "memory-overview");
   assert.equal(BUDGET_BY_PAGE["memory-overview"].controls, 11);
   assert.deepEqual(pageFindings("memory-overview", "desktop", clean({ controlKinds: 11, colorKinds: 6 }), []).failures, []);
@@ -2983,7 +2983,7 @@ test("the memory page's lists stack one shape of section, and 记忆地图 is he
 
 test("总览 is a data page, walked at both widths: the five tiles are read by the page, the first row of its table and its drawer are checked", () => {
   assert.equal(budgetKey("memory-overview"), "memory-overview");
-  // Three kinds of section, since the 记忆星图 (owner, 2026-10-31) is a card of its own at the head: the tiles, the cards of charts, the sky.
+  // Three kinds of section, since the 记忆星环 (owner, 2026-10-31) is a card of its own at the head: the tiles, the cards of charts, the sky.
   assert.equal(SECTION_SHAPES_BY_PAGE["memory-overview"], 3);
   // What the night window spends and nothing else may: 11 kinds of control, 8 text colours, 7 kinds of border, 6 size × weight pairs; one more of any is a finding.
   const sky = { controlKinds: 11, colorKinds: 8, borderKinds: 7, sectionShapes: ["section>div+ul", "section>div", "section>header+div"], sizeWeightPairs: ["12px/400", "14px/400", "18px/600", "20px/400", "24px/600", "32px/600"] };

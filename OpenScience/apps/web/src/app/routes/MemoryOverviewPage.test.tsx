@@ -289,7 +289,7 @@ describe("the relations and topics", () => {
     open("?preview=memory%3Amissing");
     await ready();
     const preview = await screen.findByRole("complementary", { name: "记忆预览" });
-    expect(within(preview).getByText("选择星图中的内容。")).toBeInTheDocument();
+    expect(within(preview).getByText("选择星环中的内容。")).toBeInTheDocument();
     expect(within(preview).queryByRole("button", { name: "查看详情" })).toBeNull();
   });
 

@@ -49,6 +49,10 @@ const NOT_UTILITIES: Readonly<Record<string, string>> = {
   "max-tokens": "a kernel turn-end kind (lib/researchObservation.ts)",
   "self-adapting": "a word of an authored example label in vcrScenarioHelp.mjs that components/vcr/vcrMethodChoiceText.ts uses as a lookup key; the reader sees the Chinese label",
   "width:max-content": "CSS text written into a rendered Office document",
+  "line-relates": "a --star-* colour token name a ring's link carries, read as a CSS variable by components/charts/ring/ringScene.ts",
+  "line-replaces": "a --star-* colour token name a ring's link carries, read as a CSS variable by components/charts/ring/ringScene.ts",
+  "line-conflicts": "a --star-* colour token name a ring's link carries, read as a CSS variable by components/charts/ring/ringScene.ts",
+  "line-rests": "a --star-* colour token name a ring's link carries, read as a CSS variable by components/charts/ring/ringScene.ts",
 };
 
 /** A class the shell must never ship: the tokens are `var()` colours, so Tailwind emits nothing for an opacity modifier on one. */

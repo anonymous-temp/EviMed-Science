@@ -373,7 +373,7 @@ export const CHART_COLORS = Object.freeze({
    */
   missing: '#bac2ca',
   /**
-   * 记忆星图 (`/app/memory/overview`, DESIGN.md 「记忆星图」): the page's one brand moment, a night window in either scheme, the one place a mark's
+   * 记忆星环 (`/app/memory/overview`, DESIGN.md 「记忆星环」): the page's one brand moment, a night window in either scheme, the one place a mark's
    * kind has a hue of its own. Every value is read against `ground`; a dim mark is the same hue at a lower brightness and never a second colour.
    */
   star: Object.freeze({

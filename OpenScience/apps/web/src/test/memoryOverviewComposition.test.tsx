@@ -214,7 +214,7 @@ describe.each(ACCOUNTS)("总览 of %s", (_name, arrange, tablists, toolbars) => 
     const { container } = draw();
     await loaded();
     const shapes = sectionShapes(container);
-    // jsdom has no GPU, so this is the flat page; the night window of 记忆星图 (owner, 2026-10-31) is the third kind the table allows.
+    // jsdom has no GPU, so this is the flat page; the night window of 记忆星环 (owner, 2026-10-31 and 2026-11-26) is the third kind the table allows.
     expect(entry.shapes).toBe(3);
     expect(shapes.length, shapes.join(", ")).toBeLessThanOrEqual(2);
   });
