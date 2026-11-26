@@ -90,6 +90,9 @@
 @media (max-width: 520px) { .obs-hud { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 .obs-ringbox { position: relative; z-index: 1; margin-top: 8px; height: 440px; }
+/* Match the observatory's metric values and section labels. */
+.obs-ringbox .ring-label, .obs-ringbox .ring-label-count { color: var(--obs-text); }
+.obs-ringbox .ring-label-code { color: var(--obs-cyan); }
 .obs-scene { position: relative; z-index: 1; margin: 8px -20px 0; height: clamp(240px, 32vw, 390px); }
 .obs-floor {
   position: absolute; left: -10%; right: -10%; bottom: -30%; height: 75%;
