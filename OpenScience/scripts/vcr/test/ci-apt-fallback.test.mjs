@@ -63,6 +63,31 @@ for (const format of ['list', 'sources']) test(`GitHub mirror+file ${format} pre
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+for (const format of ['list', 'sources']) test(`unused Noble Microsoft repository is excluded only from the CI ${format} copy`, () => {
+  const root = mkdtempSync(join(tmpdir(), 'ci-apt-microsoft-test-'));
+  try {
+    const source = join(root, 'original');
+    mkdirSync(join(source, 'sources.list.d'), { recursive: true });
+    const original = join(source, `sources.list.d/runner.${format}`);
+    const uri = 'https://packages.microsoft.com/ubuntu/24.04/prod';
+    const key = '/usr/share/keyrings/ubuntu-archive-keyring.gpg';
+    const microsoft = format === 'list'
+      ? `deb [arch=amd64] ${uri} noble main\n`
+      : `Types: deb\nURIs: ${uri}\nSuites: noble\nComponents: main\n\n`;
+    const ubuntu = format === 'list'
+      ? `deb [signed-by=${key}] https://archive.ubuntu.com/ubuntu/ noble main\n`
+      : `Types: deb\nURIs: https://archive.ubuntu.com/ubuntu/\nSuites: noble\nComponents: main\nSigned-By: ${key}\n\n`;
+    const mixed = format === 'list'
+      ? `deb ${uri}-other noble main\n`
+      : `Types: deb\nURIs: ${uri}\n https://other.example/ubuntu/\nSuites: noble\nComponents: main\n`;
+    writeFileSync(original, microsoft + ubuntu + mixed);
+    const copy = join(root, 'copy');
+    assert.equal(spawnSync('python3', [helper, source, copy]).status, 0);
+    assert.equal(readFileSync(original, 'utf8'), microsoft + ubuntu + mixed);
+    assert.equal(readFileSync(join(copy, `sources.list.d/runner.${format}`), 'utf8').trim(), (ubuntu + mixed).trim());
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 for (const uri of ['mirror+file:/tmp/apt-mirrors.txt', 'mirror+file:/etc/apt/../apt-mirrors.txt', 'mirror+file:/etc/apt/apt-mirrors.txt.evil']) test(`untrusted mirror reference untouched: ${uri}`, () => {
   const root = mkdtempSync(join(tmpdir(), 'ci-apt-outside-test-'));
   try {

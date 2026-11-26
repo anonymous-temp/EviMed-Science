@@ -14,7 +14,7 @@ prepare_fallback() {
     return 1
   fi
   apt_sources=(-o "Dir::Etc::sourcelist=$apt_fallback_dir/apt/sources.list" -o "Dir::Etc::sourceparts=$apt_fallback_dir/apt/sources.list.d")
-  echo "ci-system-deps: retrying with isolated official Ubuntu HTTPS sources" >&2
+  echo "ci-system-deps: using isolated runner APT sources" >&2
 }
 attempt() {
   local try
@@ -34,5 +34,5 @@ attempt() {
   return 1
 }
 
-# Known runner mirror failures justify preparing the isolated copy upfront.
+# Known GitHub runner source failures justify preparing the isolated copy upfront.
 prepare_fallback || true

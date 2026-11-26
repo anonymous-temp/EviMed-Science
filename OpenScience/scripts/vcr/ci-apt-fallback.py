@@ -1,8 +1,25 @@
-"""Copy APT sources, changing only the exact GitHub Ubuntu Azure mirror."""
+"""Prepare an isolated copy of the GitHub runner's APT sources."""
 import pathlib
 import re
 import shutil
 import sys
+
+
+def without_unused_microsoft_source(text, deb822):
+    # CI takes its packages from Ubuntu. Microsoft's preinstalled Noble
+    # repository can return 403 and make the entire APT update fail.
+    uri = r'https://packages\.microsoft\.com/ubuntu/24\.04/prod/?'
+    if not deb822:
+        return re.sub(rf'(?m)^deb(?:-src)?[ \t]+(?:\[[^\n]*\][ \t]+)?{uri}[ \t]+noble[ \t]+[^\n]+(?:\n|$)', '', text)
+
+    parts = re.split(r'(\n[ \t]*\n)', text)
+    for index in range(0, len(parts), 2):
+        stanza = parts[index]
+        if (re.search(rf'(?m)^URIs:[ \t]+{uri}[ \t]*$(?!\n[ \t]+\S)', stanza)
+                and re.search(r'(?m)^Suites:[ \t]+noble[ \t]*$', stanza)):
+            parts[index] = ''
+    return ''.join(parts)
+
 
 source, destination = map(pathlib.Path, sys.argv[1:])
 # Copy only source declarations, never arbitrary APT state or symlink targets.
@@ -42,6 +59,7 @@ for path in [destination / 'sources.list', *(destination / 'sources.list.d').glo
     text = re.sub(r'(?<!\S)mirror\+file:/etc/apt/(apt-mirrors(?:-security)?\.txt)(?=\s|$)', mirror_copy, text)
     updated = re.sub(r'(?<!\S)https?://azure\.archive\.ubuntu\.com/ubuntu/?(?=\s|$)',
                      'https://archive.ubuntu.com/ubuntu/', text)
+    updated = without_unused_microsoft_source(updated, path.suffix == '.sources')
     if original_text != updated:
         path.write_text(updated)
         changed = True
