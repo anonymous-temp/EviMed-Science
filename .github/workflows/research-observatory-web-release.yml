@@ -1,0 +1,60 @@
+name: Research observatory Web release
+
+on:
+  push:
+    branches: [ops/web-release-1126b]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  web:
+    if: github.repository == 'anonymous-temp/EviMed-Science'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      PRODUCT_REVISION: 633b5b1e6ba2658d93f96e95d40055e105797ac7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Select the exact product source
+        shell: bash
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$(git rev-parse HEAD^)" = "$PRODUCT_REVISION"
+          cp -a .github/ops/r1126b-web "$RUNNER_TEMP/r1126b-web"
+          git checkout --detach "$PRODUCT_REVISION"
+          test -z "$(git status --porcelain)"
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: OpenScience/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+          cache-dependency-path: OpenScience/pnpm-lock.yaml
+      - name: Install pinned dependencies
+        working-directory: OpenScience
+        run: pnpm install --frozen-lockfile
+      - name: Run the full frontend suite
+        working-directory: OpenScience
+        run: CI=true pnpm --filter @ai4s/web test
+      - name: Build the release assets
+        working-directory: OpenScience
+        env:
+          VITE_OPEN_SCIENCE_API_URL: /api
+        run: pnpm --filter @ai4s/web build
+      - name: Build and smoke the Web delta from the qualified image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash "$RUNNER_TEMP/r1126b-web/build-web.sh"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evimed-web-delta-${{ env.PRODUCT_REVISION }}
+          path: ${{ runner.temp }}/evimed-web-delta/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
