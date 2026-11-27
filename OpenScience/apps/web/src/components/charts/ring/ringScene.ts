@@ -59,8 +59,7 @@ const PICK_PX = 14;
 const SPARK_S = 1.5;
 const MAX_SPARKS = 48;
 const NO_FRAME: RingFrame = { left: 0, right: 0, top: 0, bottom: 0 };
-/** Host surfaces can override the ring's default label colours. */
-const LABEL = "ring-label pointer-events-none whitespace-nowrap text-caption text-text";
+const LABEL = "pointer-events-none whitespace-nowrap text-caption text-text";
 const HIT_LABEL = "pointer-events-none max-w-56 truncate rounded border border-faint bg-star-panel px-2 py-0.5 text-caption text-text";
 
 /** How many characters of a segment's word stand by the ring: a long project name is cut, and said whole in its tooltip. */
@@ -336,15 +335,18 @@ export class RingScene {
       if (segment) {
         const element = document.createElement("div");
         element.className = LABEL;
+        element.dataset.ringLabel = "name";
         if (segment.code) {
           code = document.createElement("span");
-          code.className = "ring-label-code mr-1.5 font-mono text-text-3";
+          code.className = "mr-1.5 font-mono text-text-3";
+          code.dataset.ringLabel = "code";
           code.textContent = segment.code;
           element.appendChild(code);
         }
         element.appendChild(document.createTextNode(shortLabel(segment.label)));
         const count = document.createElement("span");
-        count.className = "ring-label-count ml-1.5 tabular-nums text-text-2";
+        count.className = "ml-1.5 tabular-nums text-text-2";
+        count.dataset.ringLabel = "count";
         count.textContent = number;
         element.appendChild(count);
         label = new CSS2DObject(element);
@@ -391,6 +393,7 @@ export class RingScene {
       if (cluster.label) {
         const element = document.createElement("div");
         element.className = LABEL;
+        element.dataset.ringLabel = "name";
         element.textContent = cluster.label;
         const label = new CSS2DObject(element);
         label.position.set(at[0], at[1] - 0.075, 0);
