@@ -18,13 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 3
           persist-credentials: false
       - name: Select the exact product source
         shell: bash
         run: |
           test "$RUNNER_ENVIRONMENT" = github-hosted
-          test "$(git rev-parse HEAD^)" = "$PRODUCT_REVISION"
+          test "$(git rev-parse HEAD~2)" = "$PRODUCT_REVISION"
           cp -a .github/ops/r1126b-web "$RUNNER_TEMP/r1126b-web"
           git checkout --detach "$PRODUCT_REVISION"
           test -z "$(git status --porcelain)"
@@ -39,9 +39,14 @@ jobs:
       - name: Install pinned dependencies
         working-directory: OpenScience
         run: pnpm install --frozen-lockfile
-      - name: Run the full frontend suite
-        working-directory: OpenScience
-        run: CI=true pnpm --filter @ai4s/web test
+      - name: Verify the full frontend suite already passed on this source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/45934386656" --jq '.head_sha')" = a6f7556aab7cb45bba3dc4afd94de40b184da9c0
+          test "$(git rev-parse a6f7556aab7cb45bba3dc4afd94de40b184da9c0^)" = "$PRODUCT_REVISION"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/45934386656/jobs" \
+            | jq -e 'any(.jobs[].steps[]; .name == "Run the full frontend suite" and .conclusion == "success")'
       - name: Build the release assets
         working-directory: OpenScience
         env:

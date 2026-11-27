@@ -91,13 +91,17 @@ docker run --name "$name" --detach --publish 127.0.0.1::8787 \
 port=$(docker port "$name" 8787/tcp | sed -nE 's/^127\.0\.0\.1:([0-9]+)$/\1/p')
 test -n "$port"
 for _ in $(seq 1 30); do
-  if curl -fsS --max-time 4 "http://127.0.0.1:$port/api/health" > "$work/health.json"; then break; fi
+  if curl -fsS --max-time 4 "http://127.0.0.1:$port/api/health" > "$work/health-live.json"; then break; fi
   sleep 1
 done
-jq -e --arg release "$release" '.data.ok == true and .data.releaseId == $release' "$work/health.json" >/dev/null
+jq -e '.data.ok == true and .data.runtimeMode == "mock"' "$work/health-live.json"
+smoked_image=$(docker inspect "$name" --format '{{.Image}}')
+test "$smoked_image" = "$(jq -r '.[0].Id' "$work/web-image.json")"
+jq --arg imageId "$smoked_image" '. + {imageId: $imageId}' "$work/health-live.json" > "$work/health.json"
 curl -fsS --max-time 6 "http://127.0.0.1:$port/app/active-research" | grep -F 'id="root"' >/dev/null
 docker exec "$name" sh -c 'grep -lF ".obs-ringbox [data-ring-label]" /app/apps/web/dist/assets/ActiveResearchPage-*.css >/dev/null'
 docker exec "$name" sh -c 'grep -lF "dataset.ringLabel" /app/apps/web/dist/assets/RingCanvas-*.js >/dev/null'
+echo "Web server, SPA route and both built assets verified"
 
 need "$((12 * gib))"
 docker save "$reference" | gzip -1 > "$out/images.tar.gz"

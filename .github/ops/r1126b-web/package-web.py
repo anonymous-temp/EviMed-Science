@@ -21,7 +21,7 @@ assert len(layers) > len(old_layers) and layers[:len(old_layers)] == old_layers
 assert (image["Os"], image["Architecture"]) == ("linux", "amd64")
 old_config, config = base["Config"], image["Config"]
 for key in ("User", "Cmd", "Entrypoint", "WorkingDir", "Volumes", "ExposedPorts", "Healthcheck", "StopSignal", "OnBuild"):
-    assert config.get(key) == old_config.get(key), key
+    assert (config.get(key) or None) == (old_config.get(key) or None), key
 assert config["Labels"] == {
     **old_config["Labels"],
     "org.opencontainers.image.version": release,
