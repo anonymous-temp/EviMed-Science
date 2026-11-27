@@ -62,6 +62,13 @@ const NO_FRAME: RingFrame = { left: 0, right: 0, top: 0, bottom: 0 };
 const LABEL = "pointer-events-none whitespace-nowrap text-caption text-text";
 const HIT_LABEL = "pointer-events-none max-w-56 truncate rounded border border-faint bg-star-panel px-2 py-0.5 text-caption text-text";
 
+function ringNameElement() {
+  const element = document.createElement("div");
+  element.className = LABEL;
+  element.dataset.ringLabel = "name";
+  return element;
+}
+
 /** How many characters of a segment's word stand by the ring: a long project name is cut, and said whole in its tooltip. */
 const LABEL_CHARS = 10;
 const shortLabel = (text: string) => ([...text].length > LABEL_CHARS ? `${[...text].slice(0, LABEL_CHARS - 1).join("")}…` : text);
@@ -333,9 +340,7 @@ export class RingScene {
       const held = segment?.count ?? counts.get(placed.id) ?? 0;
       const number = held > 0 ? String(held) : "—";
       if (segment) {
-        const element = document.createElement("div");
-        element.className = LABEL;
-        element.dataset.ringLabel = "name";
+        const element = ringNameElement();
         if (segment.code) {
           code = document.createElement("span");
           code.className = "mr-1.5 font-mono text-text-3";
@@ -391,9 +396,7 @@ export class RingScene {
         });
       }
       if (cluster.label) {
-        const element = document.createElement("div");
-        element.className = LABEL;
-        element.dataset.ringLabel = "name";
+        const element = ringNameElement();
         element.textContent = cluster.label;
         const label = new CSS2DObject(element);
         label.position.set(at[0], at[1] - 0.075, 0);
@@ -442,8 +445,7 @@ export class RingScene {
     });
     this.#coreHalo = this.#points(this.#core.length + 1);
     if (spec.centre.label) {
-      const element = document.createElement("div");
-      element.className = LABEL;
+      const element = ringNameElement();
       element.textContent = spec.centre.label;
       const label = new CSS2DObject(element);
       label.position.set(0, -RING.core - 0.06, 0);
