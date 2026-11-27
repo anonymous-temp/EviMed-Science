@@ -295,7 +295,7 @@ it("yields a newly selected detail when another draft opens in the same session"
   await user.click(screen.getByRole("button", { name: "Second claim" }));
   expect(screen.getByRole("dialog")).toHaveTextContent("claim_2");
   await user.click(draft());
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(screen.getByLabelText("Committed location")).toHaveTextContent("session=ses_1");
   await user.click(screen.getByRole("link", { name: "收起对话" }));
   expect(screen.getByRole("dialog")).toHaveTextContent("claim_2");
