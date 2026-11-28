@@ -8,6 +8,7 @@ import { safeWorkspacePath } from "@/lib/claimCitations";
 import { formatApproxCount, formatClock, formatDuration, formatLingdou } from "@/lib/format";
 import { DELIVERABLE_STATUS_LABEL } from "@/lib/runProgress";
 import type { ObservedRun } from "./researchRunState";
+import { ResearchPresentation } from "./ResearchPresentation";
 import { ResearchRing } from "./ResearchRing";
 import { AGENT_WORD, callStateWord } from "./researchRing";
 import { emptyObservation, ROOT_AGENT, rootStage, STAGES, stageCounts, useResearchObservation, type ObservedCall, type Observation, type StageKey } from "@/lib/researchObservation";
@@ -85,17 +86,19 @@ export function ResearchObservatory({ runId, title, onOpenFile, onObserved, stan
  * in the project yet (`actions`) the scene is also the page's recipe: what happens and the ways to begin.
  */
 function StandbyObservatory({ actions }: { actions?: ReactNode }) {
+  const [presenting, setPresenting] = useState(false);
   const idle = emptyObservation();
   return <section aria-label="研究观测" className="obs" data-observatory="empty">
     <header className="obs-head"><div className="obs-head-main"><span className="obs-live"><i aria-hidden="true" />STANDBY</span>
       <div className="min-w-0"><p className="obs-kicker">研究观测舱</p><h2 className="obs-title">等待研究启动</h2></div></div>
-      <span className="obs-clock" aria-hidden="true">{elapsedClock(null)}</span></header>
-    <ResearchPicture model={idle} counts={stageCounts(idle)} live={false} />
+      <div className="obs-head-side"><ResearchPresentation open={presenting} setOpen={setPresenting} title="研究光环预览" /><span className="obs-clock" aria-hidden="true">{elapsedClock(null)}</span></div></header>
+    {!presenting && <ResearchPicture model={idle} counts={stageCounts(idle)} live={false} />}
     {actions && <div className="obs-recipe"><p className="obs-recipe-line">写下研究目标，AI 会自己检索、阅读、分析、撰写，一轮轮推进直到完成。</p><div className="obs-recipe-actions">{actions}</div></div>}
   </section>;
 }
 
 function ObservatoryRun({ runId, title, onOpenFile, onObserved }: { runId: string; title?: string; onOpenFile?: (path: string, runId: string) => void; onObserved?: (observed: ObservedRun | null) => void }) {
+  const [presenting, setPresenting] = useState(false);
   const [agent, setAgent] = useState("all");
   const [selected, setSelected] = useState<string | null>(null);
   const [run, setRun] = useState<WebAgentRun | null>(null);
@@ -158,13 +161,20 @@ function ObservatoryRun({ runId, title, onOpenFile, onObserved }: { runId: strin
     setSelected(id);
   };
 
+  const renderFiles = (close?: () => void) => files.length > 0 && <div className="obs-files"><p className="obs-section-label">产出 · {files.length}</p><ul aria-label="研究产出">{files.map(file => <li key={file}>
+      {onOpenFile ? <button type="button" className="obs-file" data-text-action="view" onClick={() => { close?.(); onOpenFile(file, runId); }}>{file.split("/").pop() || file}</button> : <span className="obs-file">{file.split("/").pop() || file}</span>}
+    </li>)}</ul></div>;
+
   return <section aria-label="研究观测" className="obs" data-observatory={live ? "live" : ended ? "ended" : "waiting"}>
     <header className="obs-head">
       <div className="obs-head-main">
         <span className={live ? "obs-live on" : "obs-live"}><i aria-hidden="true" />{live ? "LIVE" : ended ? "END" : "SYNC"}</span>
         <div className="min-w-0"><p className="obs-kicker">研究观测舱</p><h2 className="obs-title">{heading}</h2></div>
       </div>
-      <div className="obs-head-side"><span className="obs-clock" aria-label={`运行时长 ${formatDuration(elapsed) || "未开始"}`}>{elapsedClock(elapsed)}</span><span className={`obs-status s-${live ? "live" : state ?? "wait"}`} role="status">{status}</span></div>
+      <div className="obs-head-side">
+        <ResearchPresentation open={presenting} setOpen={setPresenting} title={heading} model={model} ended={ended} active={live && connected && !waitingOnModel}
+          status={status} renderFiles={renderFiles} renderDetail={(call, who) => <div className="obs-halo-detail"><Inspector call={call} who={who} /></div>} />
+        <span className="obs-clock" aria-label={`运行时长 ${formatDuration(elapsed) || "未开始"}`}>{elapsedClock(elapsed)}</span><span className={`obs-status s-${live ? "live" : state ?? "wait"}`} role="status">{status}</span></div>
     </header>
     <dl className="obs-hud">
       <Metric label="模型调用" value={requests === null ? "—" : formatApproxCount(requests)} sub="次" />
@@ -174,13 +184,11 @@ function ObservatoryRun({ runId, title, onOpenFile, onObserved }: { runId: strin
       <Metric label="结论核对" value={claims ? `${claims.verified}/${claims.total}` : "—"} sub={claims ? "条已核对" : ""} />
       <Metric label="消耗" value={cost === null ? "—" : (formatLingdou(cost) || "—").replace(" 灵豆", "")} sub={cost === null ? "" : "灵豆"} />
     </dl>
-    <ResearchPicture model={model} counts={counts} live={live} onSelectCall={selectRingCall} onSelectMember={selectMember} />
+    {!presenting && <ResearchPicture model={model} counts={counts} live={live} onSelectCall={selectRingCall} onSelectMember={selectMember} />}
     {model.thought && live && <p className="obs-thought" aria-live="off"><span className="obs-thought-tag">思考</span><span className="obs-thought-text">{model.thought}</span><i aria-hidden="true" /></p>}
     {progress && progress.deliverables.length > 0 && <ul className="obs-tasks" aria-label="研究任务">{progress.deliverables.map(item => <li key={item.id} className={`t-${item.status}`}><span className="min-w-0 truncate">{item.title}</span><b>{DELIVERABLE_STATUS_LABEL[item.status]}</b></li>)}</ul>}
     <OperationsFeed model={model} live={live} agent={agent} selected={selected} onSelectMember={selectMember} onSelectCall={setSelected} />
-    {files.length > 0 && <div className="obs-files"><p className="obs-section-label">产出 · {files.length}</p><ul aria-label="研究产出">{files.map(file => <li key={file}>
-      {onOpenFile ? <button type="button" className="obs-file" data-text-action="view" onClick={() => onOpenFile(file, runId)}>{file.split("/").pop() || file}</button> : <span className="obs-file">{file.split("/").pop() || file}</span>}
-    </li>)}</ul></div>}
+    {renderFiles()}
   </section>;
 }
 

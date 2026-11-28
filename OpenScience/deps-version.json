@@ -12,6 +12,14 @@
     }
   ],
   "$comment": "The single definition of every version we track upstream. A Dockerfile ARG, a seam manifest, a peerDependency and a release manifest that each carried their own copy meant 'bump the pin' was four edits and one of them was always missed. Tests assert every derived copy equals the value here; the nightly compatibility matrix is one job that loops over these keys.",
+  "$visualizations": {
+    "haloflux": {
+      "repository": "https://github.com/Ryder191/haloflux",
+      "commit": "225e2b2862b3d64ae9f6e0b012b27ccbe004e3d0",
+      "source": "lab.html",
+      "license": "MIT"
+    }
+  },
   "$runtimeTools": {
     "pandoc": {
       "version": "2.17.1.1",

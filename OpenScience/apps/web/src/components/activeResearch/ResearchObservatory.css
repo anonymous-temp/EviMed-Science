@@ -281,3 +281,39 @@ button.obs-file:hover { border-color: var(--obs-cyan); color: var(--obs-cyan); b
 .rq-title { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 14px; font-weight: 600; line-height: 1.45; }
 .rq-meta { font: 12px "JetBrains Mono", ui-monospace, monospace; color: #7395ad; }
 @media (prefers-reduced-motion: reduce) { .rq-card, .rq-card * { animation: none !important; transition-duration: 0ms !important; } }
+
+.obs-halo-stage {
+  position: relative;
+  overflow: hidden;
+  background: #08090b;
+  border-radius: 8px;
+}
+.obs-halo-stage canvas {
+  display: block;
+  width: 100%;
+  height: clamp(150px, min(43vw, 52vh), 480px);
+}
+.obs-halo-stage p { position: absolute; inset: 0; display: grid; place-items: center; color: #e8f6ff; }
+.obs-halo-content {
+  --obs-line: var(--border);
+  --obs-text: var(--text);
+  --obs-text-2: var(--text-2);
+  --obs-text-3: var(--text-2);
+  --obs-cyan: var(--link);
+}
+.obs-halo-content .obs-inspector, .obs-halo-content .obs-file { background: var(--surface-2); }
+.obs-halo-content .obs-payload pre { color: var(--text); background: var(--surface); }
+.obs-halo-note {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  max-width: min(14rem, 44%);
+  padding: 5px 9px;
+  border: 1px solid #68717e;
+  background: #08090bf2;
+  color: #f1f2f5;
+  font-size: 14px;
+  line-height: 1.25;
+}
+.obs-halo-note b { display: block; color: #c4b8f6; font: 600 11px/1.3 ui-monospace, monospace; }

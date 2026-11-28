@@ -52,6 +52,37 @@ describe("research observatory", () => {
     expect(screen.queryByText("第一项研究")).not.toBeInTheDocument();
     expect(await screen.findByText("第二项研究")).toBeInTheDocument();
   });
+  it("shows the recorded calls in opening order and hands the selected file back from the presentation", async () => {
+    const user = userEvent.setup();
+    const openFile = vi.fn();
+    mocks.list.mockResolvedValue([record("one", "归档演示", { outputFiles: ["outputs/report.md"] })]);
+    const view = render(<ResearchObservatory runId="one" onOpenFile={openFile} />);
+    await screen.findByText("归档演示");
+    await flush([
+      frame(1, "run/event", { sessionId: "root", event: { type: "tool/call", callId: "a", tool: "web_search", input: { query: "first query" } } }),
+      frame(2, "run/event", { sessionId: "root", event: { type: "tool/call", callId: "b", tool: "web_read" } }),
+      frame(3, "run/event", { sessionId: "root", event: { type: "tool/result", callId: "a", tool: "web_search", output: "first result" } }),
+    ]);
+    const enter = screen.getByRole("button", { name: "研究光环演示" });
+    await user.click(enter);
+    expect(screen.queryByRole("img", { name: /研究流程/ })).not.toBeInTheDocument();
+    const dialog = within(screen.getByRole("dialog", { name: "归档演示" }));
+    expect(dialog.getByRole("combobox")).toHaveValue("root:a");
+    expect(dialog.getByText("first result")).toBeInTheDocument();
+    await user.selectOptions(dialog.getByRole("combobox"), "root:b");
+    expect(dialog.queryByText("first result")).not.toBeInTheDocument();
+    await user.click(dialog.getByRole("button", { name: "report.md" }));
+    expect(openFile).toHaveBeenCalledWith("outputs/report.md", "one");
+    expect(screen.getByRole("img", { name: /研究流程/ })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(enter);
+    view.rerender(<ResearchObservatory runId={null} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "预览研究光环" }));
+    expect(within(screen.getByRole("dialog")).getByText("效果预览 · 模拟纹理")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
   it("does not let an older initial record overwrite the terminal refresh", async () => {
     let resolveInitial: (value: unknown) => void = () => {};
     mocks.list.mockImplementationOnce(() => new Promise(resolve => { resolveInitial = resolve; })).mockResolvedValue([record("one", "已结束记录")]);

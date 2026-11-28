@@ -7,6 +7,10 @@ MIT License of this repository does not replace them.
 
 Code
 ----
+- The research observatory adapts the Canvas stage from HALOFLUX by RYDER CODE /
+  Ms MAIKEBAIs CAT (https://github.com/Ryder191/haloflux). The vendored revision
+  was distributed under MIT. Its full notice ships in
+  OpenScience/apps/web/public/licenses/HALOFLUX.txt.
 - OpenScience/ began as the Open Science workbench ("AI4S Workbench
   contributors", MIT). Its original notice is kept unchanged in
   OpenScience/LICENSE.
