@@ -1,0 +1,68 @@
+name: Research observatory Web release
+
+on:
+  push:
+    branches: [ops/web-release-1128a]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  web:
+    if: github.repository == 'anonymous-temp/EviMed-Science'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      PRODUCT_REVISION: 883d992491733f06ab47cb774838b900ca4b0b52
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Select the exact product source
+        shell: bash
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$(git rev-parse HEAD~1)" = "$PRODUCT_REVISION"
+          cp -a .github/ops/r1128a-web "$RUNNER_TEMP/r1128a-web"
+          git checkout --detach "$PRODUCT_REVISION"
+          test -z "$(git status --porcelain)"
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: OpenScience/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+          cache-dependency-path: OpenScience/pnpm-lock.yaml
+      - name: Install pinned dependencies
+        working-directory: OpenScience
+        run: pnpm install --frozen-lockfile
+      # The full web pipeline (lint, typecheck, every frontend test, the hosted build) ran on this exact revision in the pull request.
+      - name: Verify the full web pipeline already passed on this source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=46141947391
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" --jq '.head_sha')" = "$PRODUCT_REVISION"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs" \
+            | jq -e 'any(.jobs[]; .name == "web" and .conclusion == "success") and
+                     any(.jobs[].steps[]; .name == "Test frontend" and .conclusion == "success") and
+                     any(.jobs[].steps[]; .name == "Build hosted frontend" and .conclusion == "success")'
+      - name: Build the release assets
+        working-directory: OpenScience
+        env:
+          VITE_OPEN_SCIENCE_API_URL: /api
+        run: pnpm --filter @ai4s/web build
+      - name: Build and smoke the Web delta on the serving image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash "$RUNNER_TEMP/r1128a-web/build-web.sh"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evimed-web-delta-${{ env.PRODUCT_REVISION }}
+          path: ${{ runner.temp }}/evimed-web-delta/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
