@@ -16,8 +16,9 @@
     "haloflux": {
       "repository": "https://github.com/Ryder191/haloflux",
       "commit": "225e2b2862b3d64ae9f6e0b012b27ccbe004e3d0",
-      "source": "lab.html",
-      "license": "MIT"
+      "source": "lab.html (stage, panels, styles), mobile.html (portrait rotation, particle load), audio/sw421k.mp3 (CC0)",
+      "license": "MIT",
+      "regenerate": "node scripts/dev/vendor-haloflux.mjs <checkout at commit> rewrites apps/web/src/vendor/haloflux/stage.js; every edit is asserted, so an upstream move fails there"
     }
   },
   "$runtimeTools": {

@@ -22,7 +22,7 @@ vi.mock("@/components/charts/ring/RingCanvas", async () => {
   }
   return { default: StandIn };
 });
-vi.mock("@/vendor/haloflux/stage.js", () => ({ createHaloFlux: () => ({ resize() {}, draw() {}, signal() {} }) }));
+vi.mock("@/vendor/haloflux/stage.js", () => ({ createHaloFlux: () => ({ resize() {}, draw() {}, setEnergy() {}, setWords() {}, pulse() {} }) }));
 vi.mock("@/lib/apiClient", () => ({ listWebAgentRuns: mocks.list }));
 vi.mock("@/lib/runEvents", () => ({ subscribeRunEvents: mocks.subscribe }));
 const frame = (seq: number, type: string, fields: Record<string, unknown> = {}): RunStreamEvent => ({ seq, type, time: `2026-10-28T01:${String(seq).padStart(2, "0")}:00Z`, ...fields });
@@ -53,74 +53,59 @@ describe("research observatory", () => {
     expect(screen.queryByText("第一项研究")).not.toBeInTheDocument();
     expect(await screen.findByText("第二项研究")).toBeInTheDocument();
   });
-  it("keeps the same operation through the flow, inline halo, fullscreen inspector and file visit", async () => {
+  it("watches the round in the HaloFlux console, inline and full screen, and keeps the reader's place for a file", async () => {
     const user = userEvent.setup();
     const openFile = vi.fn();
-    mocks.list.mockResolvedValue([record("one", "归档演示", { outputFiles: ["outputs/report.md"] })]);
-    const view = render(<ResearchObservatory runId="one" onOpenFile={openFile} />);
+    mocks.list.mockResolvedValue([record("one", "归档演示", { outputFiles: ["outputs/report.md"], presentedFiles: ["outputs/report.md"] })]);
+    render(<ResearchObservatory runId="one" onOpenFile={openFile} />);
     await screen.findByText("归档演示");
     await flush([
       frame(1, "run/event", { sessionId: "root", event: { type: "tool/call", callId: "a", tool: "web_search", input: { query: "first query" } } }),
       frame(2, "run/event", { sessionId: "root", event: { type: "tool/call", callId: "b", tool: "web_read" } }),
       frame(3, "run/event", { sessionId: "root", event: { type: "tool/result", callId: "a", tool: "web_search", output: "first result" } }),
     ]);
-    const feed = within(screen.getByRole("region", { name: "实时动态" }));
-    await user.click(feed.getByRole("button", { name: /first query/ }));
+    await user.click(within(screen.getByRole("region", { name: "实时动态" })).getByRole("button", { name: /first query/ }));
     await user.click(screen.getByRole("tab", { name: "研究光环" }));
-    expect(screen.getByRole("slider", { name: "浏览操作" })).toHaveValue("1");
-    expect(screen.getByText("first result")).toBeInTheDocument();
-    expect(screen.getByText("检索词")).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: /研究流程/ })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "下一个操作" }));
-    expect(screen.getByRole("slider")).toHaveValue("2");
+    const console_ = within(screen.getByRole("group", { name: "研究光环" }));
+    // The flow view's feed gives way to the console's own panels, all read from the round, in the reader's words.
+    expect(screen.queryByRole("region", { name: "实时动态" })).not.toBeInTheDocument();
+    const feed = console_.getByRole("list", { name: "研究动态" });
+    expect(within(feed).getAllByRole("listitem").map(item => item.textContent)).toEqual(["001search网页搜索 “first query” · 主研究员", "002read阅读网页 · 主研究员"]);
+    expect(console_.getByText("网页搜索", { selector: ".fn" }).parentElement).toHaveTextContent("命中 = 网页搜索(“first query”) → first result");
+    expect(console_.getByText("SEARCH · 网页搜索")).toBeInTheDocument(); // the operation pinned in the flow view stays the callout
+    expect(console_.getByRole("list", { name: "成员调度" })).toHaveTextContent("主研究员");
+    expect(console_.getByLabelText("研究任务")).toHaveTextContent("report.md");
+    expect(screen.getByRole("group", { name: "研究光环" }).textContent).not.toMatch(/web_search|web_read/);
+    // Full screen is upstream's whole console: the title names the dialog, the counters lead, Escape returns.
     const expand = screen.getByRole("button", { name: "全屏观测" });
     await user.click(expand);
     const dialog = within(screen.getByRole("dialog", { name: "归档演示" }));
-    expect(document.querySelectorAll(".obs-halo-stage canvas")).toHaveLength(1);
-    expect(dialog.getByRole("combobox", { name: "操作记录" })).toHaveValue("root:b");
-    await user.selectOptions(dialog.getByRole("combobox"), "root:a");
+    expect(dialog.getByText("研究操作")).toBeInTheDocument();
+    expect(dialog.getByRole("button", { name: "退出全屏" })).toHaveFocus();
+    expect(document.querySelectorAll(".hf-stage canvas")).toHaveLength(1);
     await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(expand).toHaveFocus();
-    expect(within(screen.getByRole("region", { name: "实时动态" })).getByRole("button", { name: /first query/ })).toHaveAttribute("aria-pressed", "true");
-    await user.click(expand);
     await user.click(screen.getByRole("button", { name: "report.md" }));
-    expect(openFile).toHaveBeenCalledWith("outputs/report.md", "one", { view: "halo", expanded: true, member: "all", callId: "root:a" });
-    view.rerender(<ResearchObservatory runId={null} />);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "全屏观测" }));
-    expect(within(screen.getByRole("dialog")).getByText("示例动画")).toBeInTheDocument();
-    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
-    await user.keyboard("{Escape}");
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(openFile).toHaveBeenCalledWith("outputs/report.md", "one", { view: "halo", expanded: false, member: "all", callId: "root:a" });
   });
-  it("keeps a pinned live operation while newer calls arrive and resumes following on request", async () => {
+  it("stands by with an empty console, and keeps the panels when the ring cannot be drawn", async () => {
     const user = userEvent.setup();
-    mocks.list.mockResolvedValue([record("one", "实时研究", { status: "running", finishedAt: null })]);
-    render(<ResearchObservatory runId="one" />);
-    await user.click(await screen.findByRole("tab", { name: "研究光环" }));
+    const view = render(<ResearchObservatory runId={null} />);
+    await user.click(screen.getByRole("tab", { name: "研究光环" }));
+    expect(screen.getByText("研究开始后，每一步操作会出现在这里")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "研究动态" })).not.toBeInTheDocument();
+    mocks.list.mockResolvedValue([record("one", "实时研究", { status: "running", finishedAt: null, durationMs: undefined })]);
+    view.rerender(<ResearchObservatory runId="one" resume={{ view: "halo", expanded: false, member: "all", callId: null }} />);
+    await screen.findByText("实时研究");
     const call = (n: number) => frame(n, "run/event", { sessionId: "root", event: { type: "tool/call", callId: String(n), tool: "web_search", input: { query: `query ${n}` } } });
     await flush([call(1), call(2)]);
-    expect(screen.getByRole("slider")).toHaveValue("2");
-    await user.click(screen.getByRole("button", { name: "上一个操作" }));
-    await flush([call(3)]);
-    expect(screen.getByRole("slider")).toHaveValue("1");
-    const follow = screen.getByRole("button", { name: "跟随最新" });
-    expect(follow).toHaveAttribute("aria-pressed", "false");
-    await user.click(follow);
-    expect(follow).toHaveFocus();
-    expect(follow).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("slider")).toHaveValue("3");
-    await user.click(follow);
-    await flush([call(4)]);
-    expect(screen.getByRole("slider")).toHaveValue("3");
-    expect(screen.queryByRole("button", { name: "回放操作" })).not.toBeInTheDocument();
-    fireEvent.change(screen.getByRole("slider"), { target: { value: "2" } });
-    expect(within(screen.getByRole("region", { name: "操作详情" })).getByText(/query 2/)).toBeInTheDocument();
-    fireEvent(document.querySelector(".obs-halo-stage canvas")!, new Event("contextlost"));
-    expect(screen.getByText("研究光环暂时无法显示")).toBeVisible();
+    expect(within(screen.getByRole("list", { name: "研究动态" })).getAllByRole("listitem")).toHaveLength(2);
+    fireEvent(document.querySelector(".hf-stage canvas")!, new Event("contextlost"));
+    expect(await screen.findByText("研究光环暂时无法显示")).toBeVisible();
+    expect(screen.getByRole("list", { name: "研究动态" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重新加载光环" }));
-    expect(document.querySelector(".obs-halo-stage canvas")).toBeInTheDocument();
-    expect(screen.getByRole("slider")).toHaveValue("2");
+    expect(document.querySelector(".hf-stage canvas")).toBeInTheDocument();
   });
   it("does not let an older initial record overwrite the terminal refresh", async () => {
     let resolveInitial: (value: unknown) => void = () => {};

@@ -9,6 +9,7 @@ import { formatApproxCount, formatClock, formatDuration, formatLingdou } from "@
 import { DELIVERABLE_STATUS_LABEL } from "@/lib/runProgress";
 import type { ObservedRun } from "./researchRunState";
 import { ResearchPresentation, type ObservationView, type ObservationPosition } from "./ResearchPresentation";
+import { previewScene, researchScene } from "./haloflux/haloFluxScene";
 import { ResearchRing } from "./ResearchRing";
 import { AGENT_WORD, callStateWord } from "./researchRing";
 import { emptyObservation, ROOT_AGENT, rootStage, STAGES, stageCounts, useResearchObservation, type ObservedCall, type Observation, type StageKey } from "@/lib/researchObservation";
@@ -96,7 +97,7 @@ function StandbyObservatory({ actions, view, setView }: PictureChoice & { action
     <header className="obs-head"><div className="obs-head-main"><span className="obs-live"><i aria-hidden="true" />STANDBY</span>
       <div className="min-w-0"><p className="obs-kicker">研究观测舱</p><h2 className="obs-title">等待研究启动</h2></div></div>
       <div className="obs-head-side"><span className="obs-clock" aria-hidden="true">{elapsedClock(null)}</span></div></header>
-    <ResearchPresentation title="研究光环预览" view={view} setView={setView} expanded={presenting} setExpanded={setPresenting}>
+    <ResearchPresentation view={view} setView={setView} expanded={presenting} setExpanded={setPresenting} scene={previewScene()}>
       <ResearchPicture model={idle} counts={stageCounts(idle)} live={false} />
     </ResearchPresentation>
     {actions && <div className="obs-recipe"><p className="obs-recipe-line">写下研究目标，AI 会自己检索、阅读、分析、撰写，一轮轮推进直到完成。</p><div className="obs-recipe-actions">{actions}</div></div>}
@@ -171,13 +172,22 @@ function ObservatoryRun({ runId, title, onOpenFile, onObserved, view, setView, r
   const pinned = visible.find(call => call.id === selected);
   const chosen = pinned ?? visible[0] ?? null;
   const memberName = (id: string) => id === ROOT_AGENT ? "主研究员" : model.agents.get(id)?.label || "协作成员";
+  const presented = new Set([...(run?.presentedFiles ?? []), ...(run?.artifacts ?? [])]);
+  const scene = researchScene({
+    title: heading, status, clock: elapsedClock(elapsed), live, active: live && connected && !waitingOnModel, waiting: waitingOnModel,
+    model, counts, memberName,
+    metrics: { requests, tokensIn, tokensOut, toolTotal, sources: included, claims, cost },
+    deliverables: progress?.deliverables ?? [],
+    files: { written: files, presented: files.filter(file => presented.has(file)), unverified: files.filter(file => run?.unverifiedArtifacts?.includes(file)) },
+    pinned: pinned ?? null, startedMs: Number.isFinite(startedMs) ? startedMs : null, endedMs: Number.isFinite(finishedMs) ? finishedMs : null, now,
+  });
   const inspector = <Inspector call={chosen} who={chosen ? memberName(chosen.agent) : ""} />;
   const openOutput = (file: string) => {
     onOpenFile?.(file, runId, { view, expanded: presenting, member: agent, callId: pinned?.id ?? null });
     setPresenting(false);
   };
   const outputList = files.length > 0 && <div className="obs-files"><p className="obs-section-label">产出 · {files.length}</p><ul aria-label="研究产出">{files.map(file => <li key={file}>
-      {onOpenFile ? <button type="button" className="obs-file" data-text-action="view" title={file} onClick={() => openOutput(file)}>{file.split("/").pop() || file}</button> : <span className="obs-file">{file.split("/").pop() || file}</span>}
+      {onOpenFile ? <button type="button" className="obs-file" data-text-action="view" onClick={() => openOutput(file)}>{file.split("/").pop() || file}</button> : <span className="obs-file">{file.split("/").pop() || file}</span>}
     </li>)}</ul></div>;
 
   return <section aria-label="研究观测" className="obs" data-observatory={live ? "live" : ended ? "ended" : "waiting"}>
@@ -197,18 +207,14 @@ function ObservatoryRun({ runId, title, onOpenFile, onObserved, view, setView, r
       <Metric label="结论核对" value={claims ? `${claims.verified}/${claims.total}` : "—"} sub={claims ? "条已核对" : ""} />
       <Metric label="消耗" value={cost === null ? "—" : (formatLingdou(cost) || "—").replace(" 灵豆", "")} sub={cost === null ? "" : "灵豆"} />
     </dl>
-    <ResearchPresentation title={heading} view={view} setView={setView} expanded={presenting} setExpanded={setPresenting}
-      run={{ calls: visible, call: chosen, member: chosen ? memberName(chosen.agent) : "", pinned: !!pinned, select: setSelected,
-        ended, live, active: live && connected && !waitingOnModel, status, inspector, files: outputList }}>
+    <ResearchPresentation view={view} setView={setView} expanded={presenting} setExpanded={setPresenting} scene={scene}>
       <ResearchPicture model={model} counts={counts} live={live} onSelectCall={selectRingCall} onSelectMember={selectMember} />
     </ResearchPresentation>
-    {model.thought && live && <p className="obs-thought" aria-live="off"><span className="obs-thought-tag">思考</span><span className="obs-thought-text">{model.thought}</span><i aria-hidden="true" /></p>}
-    {progress && progress.deliverables.length > 0 && <ul className="obs-tasks" aria-label="研究任务">{progress.deliverables.map(item => <li key={item.id} className={`t-${item.status}`}><span className="min-w-0 truncate">{item.title}</span><b>{DELIVERABLE_STATUS_LABEL[item.status]}</b></li>)}</ul>}
-    {!presenting && <>
-      <OperationsFeed model={model} live={live} agent={agent} visible={visible} chosen={chosen} inspector={inspector}
-        memberName={memberName} onSelectMember={selectMember} onSelectCall={setSelected} />
-      {outputList}
-    </>}
+    {view === "flow" && model.thought && live && <p className="obs-thought" aria-live="off"><span className="obs-thought-tag">思考</span><span className="obs-thought-text">{model.thought}</span><i aria-hidden="true" /></p>}
+    {view === "flow" && progress && progress.deliverables.length > 0 && <ul className="obs-tasks" aria-label="研究任务">{progress.deliverables.map(item => <li key={item.id} className={`t-${item.status}`}><span className="min-w-0 truncate">{item.title}</span><b>{DELIVERABLE_STATUS_LABEL[item.status]}</b></li>)}</ul>}
+    {view === "flow" && <OperationsFeed model={model} live={live} agent={agent} visible={visible} chosen={chosen} inspector={inspector}
+        memberName={memberName} onSelectMember={selectMember} onSelectCall={setSelected} />}
+    {outputList}
   </section>;
 }
 

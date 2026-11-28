@@ -434,8 +434,8 @@ Adopted 2026-11-01 from the owner's review of a GEO project's conversation. Owne
 Verify **T**, AT59. A module projects its records onto one structure, and its list, preview, workbench and conversation read that one result: identity, stages, now, needs, activity, automation, results. No surface words a state or computes a next step of its own. Permissions are decided once, in the projection, and a person is never told of something they cannot act on.
 
 Active Research applies this rule to the observatory. Its local toolbar switches the graphic between 「研究流程」 and 「研究光环」.
-The operations feed, inline graphic and fullscreen inspector read the same run stream, member filter and operation selection.
-Stepping back in a live round pins the selected operation. The 「跟随最新」 toggle holds or resumes automatic following. Reading
+「研究流程」 holds the operations feed and its detail; 「研究光环」 is the HaloFlux lab console, whose panels read the same run stream
+and show the operation pinned in the flow view. 「全屏观测」 is the console's full layout as a dialog named by the run's title. Reading
 a file from the observatory and returning restores the same observation within its project. Fullscreen supports keyboard dismissal, focus return, narrow screens and reduced motion.
 
 ### DS23.2 One vocabulary

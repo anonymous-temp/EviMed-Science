@@ -1205,13 +1205,23 @@ The owner asked that the process picture of 主动科研 be the page's core and 
   flowing only while it works; a new operation sends a spark from its member to its cell; the sweep turns while the run is live,
   and an ended run is a still picture. A cell selects its operation in the feed and opens its detail; a cloud filters the feed to its
   member. Anywhere else — no GPU, a phone, less motion, a lost context — the line above is drawn, as before.
-- **The observatory offers two views of the same round (2026-11-28).** 「研究流程」 opens first. 「研究光环」 draws the
-  licensed HaloFlux stage in the same space. Both views use the selected member and operation from the feed. A live round follows
-  new activity until the reader selects a step. 「跟随最新」 resumes following. An ended round can be replayed in opening order.
-  「全屏观测」 places the graphic beside the inspector on a wide screen and above it on a phone. Escape returns focus to its opener.
-  Opening a file from the observatory keeps the goal, round, tab, view, member and pinned operation in the research history entry.
-  Reduced motion draws a still frame. A rendering failure leaves the operation and its files readable and offers a retry.
-  A project waiting for its first research labels the optional HaloFlux preview 「示例动画」.
+- **The observatory offers two views of the same round (2026-11-28).** 「研究流程」 opens first and is for reading the round: the
+  stage ring, the operations feed and each operation's detail. 「研究光环」 is for watching it: HALOFLUX's lab console (MIT), taken
+  whole — the light-ring stage with its callout and status line, and the eight instrument panels under it — with every panel fed by
+  the round instead of upstream's simulated data: 研究动态 (the operations, in the reader's words), 模型推理 (the particle field runs as
+  fast as the round works; 推理 / 操作 / 空闲 is the model's state), 操作工作区 (each operation written as `结果 = 操作(依据) → 结果`),
+  操作与结果 (a cell per operation, its result beside it, durations below), 研究任务 (the plan's tasks, else the files), 运行信号
+  (operations, time taken and failures over time), 成员调度 (each member's last six operations) and 阶段索引 (each stage over the
+  round). The ring's micro panels print the round's own stage codes and numbers. A running round beats at the author's tempo, every
+  operation adds a beat and a delivered file a burst; a waiting or ended round slows to the wallpaper edition's calm tempo. The
+  callout turns through the newest operations, or holds the one pinned in 「研究流程」. 「全屏观测」 is upstream's whole layout: the
+  header with the title and the six counters, the stage, the panels; a portrait phone draws the ring turned, as upstream's mobile
+  edition does, with the counters and panels in swipe rows. Its title names the dialog, 「退出全屏」 takes focus, Escape returns it.
+  The music (CC0) stays off until pressed. Opening a file keeps the goal, round, tab, view, member and pinned operation. Reduced
+  motion or the toolbar switch draws stills; a machine too slow for the animation steps down to fewer pixels and frames, then to
+  stills redrawn on each change, so the page keeps answering. A rendering failure keeps every panel and offers a retry. A project
+  waiting for its first research shows the console switched on with no signal. The stage is generated from the pinned upstream
+  revision by `scripts/dev/vendor-haloflux.mjs`; the panels are lab.html's drawing code with the data swapped.
 - **Motion has an off switch.** Flowing track, packets, rings, ripples, the sweep and blinking cursors stop under reduced
   motion; positions still change, without travel. Under 760 px the line keeps its size and scrolls sideways.
 - **The page opens on the scene (owner, 2026-11-01).** 主动科研 is what the AI is researching, not a form: it opens on the running

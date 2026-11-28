@@ -7,10 +7,13 @@ MIT License of this repository does not replace them.
 
 Code
 ----
-- The research observatory adapts the Canvas stage from HALOFLUX by RYDER CODE /
-  Ms MAIKEBAIs CAT (https://github.com/Ryder191/haloflux). The vendored revision
-  was distributed under MIT. Its full notice ships in
-  OpenScience/apps/web/public/licenses/HALOFLUX.txt.
+- The research observatory's 研究光环 adapts the lab console of HALOFLUX by RYDER CODE /
+  Ms MAIKEBAIs CAT (https://github.com/Ryder191/haloflux): the Canvas stage of lab.html
+  and mobile.html, its panels and its styles. The vendored revision was distributed
+  under MIT. Its full notice ships in OpenScience/apps/web/public/licenses/HALOFLUX.txt.
+- OpenScience/apps/web/public/static/haloflux/sw421k.mp3 is "Synthwave 421k" by The
+  Cynic Project (cynicmusic), from the Pixelsphere soundtrack, released under CC0 on
+  OpenGameArt (https://opengameart.org/users/cynicmusic) and bundled with HALOFLUX.
 - OpenScience/ began as the Open Science workbench ("AI4S Workbench
   contributors", MIT). Its original notice is kept unchanged in
   OpenScience/LICENSE.
