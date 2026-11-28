@@ -433,6 +433,11 @@ Adopted 2026-11-01 from the owner's review of a GEO project's conversation. Owne
 
 Verify **T**, AT59. A module projects its records onto one structure, and its list, preview, workbench and conversation read that one result: identity, stages, now, needs, activity, automation, results. No surface words a state or computes a next step of its own. Permissions are decided once, in the projection, and a person is never told of something they cannot act on.
 
+Active Research applies this rule to the observatory. Its local toolbar switches the graphic between 「研究流程」 and 「研究光环」.
+The operations feed, inline graphic and fullscreen inspector read the same run stream, member filter and operation selection.
+Stepping back in a live round pins the selected operation. The 「跟随最新」 toggle holds or resumes automatic following. Reading
+a file from the observatory and returning restores the same observation within its project. Fullscreen supports keyboard dismissal, focus return, narrow screens and reduced motion.
+
 ### DS23.2 One vocabulary
 
 Verify **L/T**, AT60. A work state is one of `@evimed/domain` `WORK_STATES`, in its one word: 待开始, 排队中, 进行中, 等你 (followed by what: 等你设预算), 简版已完成, 已完成, 未完成, 已过期, 已停止, 已暂停. Work outside what was asked for has **no state and says only its name**; it is not 未开始 or 未请求. A dependency that will run is 待开始. 未完成 keeps what was computed; failure is not worded otherwise. Connection, parsing, editorial and calendar states are not work states and keep their own words, without borrowing these.

@@ -18,7 +18,7 @@ export function HaloFluxCanvas({ preview, moving, signal, label, caption }: {
   useEffect(() => {
     const element = canvas.current;
     const annotation = callout.current;
-    if (!element || !annotation) return;
+    if (failed || !element || !annotation) return;
     let closed = false, visible = true, sized = false, dirty = true;
     let painter: ReturnType<typeof createHaloFlux> | undefined;
     let pending = 0, previous = 0, lastSignal = "";
@@ -53,6 +53,7 @@ export function HaloFluxCanvas({ preview, moving, signal, label, caption }: {
     const viewport = typeof IntersectionObserver === "function" ? new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; schedule(); }) : null;
     viewport?.observe(element);
     document.addEventListener("visibilitychange", schedule);
+    element.addEventListener("contextlost", fail);
     controls.current = schedule;
     void import("@/vendor/haloflux/stage.js").then(({ createHaloFlux }) => {
       if (closed) return;
@@ -63,12 +64,17 @@ export function HaloFluxCanvas({ preview, moving, signal, label, caption }: {
       closed = true; stop(); controls.current = null;
       resize.disconnect(); viewport?.disconnect();
       document.removeEventListener("visibilitychange", schedule);
+      element.removeEventListener("contextlost", fail);
     };
-  }, [preview]);
+  }, [preview, failed]);
+
+  if (failed) return <div className="obs-halo-fallback">
+    <p role="status">研究光环暂时无法显示</p>
+    <button type="button" className="obs-back" onClick={() => setFailed(false)}>重新加载光环</button>
+  </div>;
 
   return <div className="obs-halo-stage">
-    <canvas ref={canvas} aria-hidden="true" className={failed ? "invisible" : undefined} />
-    <div ref={callout} hidden={failed || !caption} className="obs-halo-note" aria-hidden="true"><b>{label}</b><span>{caption}</span></div>
-    {failed && <p role="status">当前设备无法绘制光环</p>}
+    <canvas ref={canvas} aria-hidden="true" />
+    <div ref={callout} hidden={!caption} className="obs-halo-note" aria-hidden="true"><b>{label}</b><span>{caption}</span></div>
   </div>;
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { cancelWebAgentRun, getWebProjectId, listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
 import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
 import { newResearchGoalRequest, startResearchGoal, type ResearchGoalRequest } from "@/lib/dispatch";
@@ -19,6 +19,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import type { PageActionPlan } from "@/components/layout/HeaderActions";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { ResearchDatabaseDialog } from "@/components/activeResearch/ResearchDatabaseDialog";
+import type { ObservationPosition } from "@/components/activeResearch/ResearchPresentation";
 import { ResearchObservatory } from "@/components/activeResearch/ResearchObservatory";
 import { QUEUE_MODE_WORD, ResearchQueue, type QueueEntry, type QueueMode } from "@/components/activeResearch/ResearchQueue";
 import { roundModeOf, streamEnded, type ObservedRun } from "@/components/activeResearch/researchRunState";
@@ -115,15 +116,31 @@ export function ActiveResearchPage() {
   return <ResearchWorkspace key={projectId} projectId={projectId} />;
 }
 
+/** A file visit keeps this research history entry. It contains navigation identifiers only. */
+function observationReturn(state: unknown, projectId: string) {
+  const saved = (state as { researchReturn?: Record<string, unknown> } | null)?.researchReturn;
+  if (!saved || saved.projectId !== projectId || typeof saved.goal !== "string" || typeof saved.run !== "string" || !SAFE_RUN.test(saved.run)) return null;
+  const position: ObservationPosition = {
+    view: saved.view === "halo" ? "halo" : "flow",
+    expanded: saved.expanded === true && saved.view === "halo",
+    member: typeof saved.member === "string" ? saved.member : "all",
+    callId: typeof saved.callId === "string" ? saved.callId : null,
+  };
+  const tab: ResearchTab = saved.tab === "records" || saved.tab === "conversation" ? saved.tab : "results";
+  return { goal: saved.goal, run: saved.run, position, tab };
+}
+
 function ResearchWorkspace({ projectId }: { projectId: string }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [returned, setReturned] = useState(() => observationReturn(location.state, projectId));
   const [goalRuns, setGoalRuns] = useState<WebAgentRun[] | null>(null);
   const [goalError, setGoalError] = useState(false);
   const [goalStates, setGoalStates] = useState<ResearchGoalList | null>(null);
-  const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
+  const [selectedGoal, setSelectedGoal] = useState<string | null>(returned?.goal ?? null);
   const [chosen, setChosen] = useState(false);
-  const [selectedRound, setSelectedRound] = useState<string | null>(null);
-  const [tab, setTab] = useState<ResearchTab>("results");
+  const [selectedRound, setSelectedRound] = useState<string | null>(returned?.run ?? null);
+  const [tab, setTab] = useState<ResearchTab>(returned?.tab ?? "results");
   const [observed, setObserved] = useState<ObservedRun | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -219,7 +236,12 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   const resumeGoal = (sessionId: string) => void operation(async () => { await resumeResearchGoal(projectId, sessionId); await loadGoals(true); });
   /** Stopping the round that is going stops the goal (the control plane writes that down when the round ends). */
   const stopRound = (runId: string) => void operation(async () => { await cancelWebAgentRun(runId); await loadGoals(true); });
-  const openFile = (path: string, runId: string) => { if (safeWorkspacePath(path) && SAFE_RUN.test(runId)) navigate(snapshotHref(runId, path)); };
+  const openFile = (path: string, runId: string, position: ObservationPosition) => {
+    if (!safeWorkspacePath(path) || !SAFE_RUN.test(runId) || !goal) return;
+    const researchReturn = { projectId, goal: goal.key, run: runId, tab, ...position };
+    navigate({ pathname: location.pathname, search: location.search, hash: location.hash }, { replace: true, state: { ...location.state, researchReturn } });
+    navigate(snapshotHref(runId, path), { state: { researchOriginRun: runId } });
+  };
   const onResearchStarted = (run: WebAgentRun) => {
     goalRequest.current = null;
     setStarting(false); setChosen(true); setSelectedRound(null); setTab("results");
@@ -229,7 +251,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   };
   const choose = (key: string) => {
     if (operating.current) return;
-    setChosen(true); setSelectedRound(null); setTab("results");
+    setReturned(null); setChosen(true); setSelectedRound(null); setTab("results");
     if (key.startsWith("goal:")) setSelectedGoal(key.slice(5));
   };
 
@@ -273,7 +295,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
 
   const body = !showViews || !goal ? null
     : tab === "conversation" ? <NativeResearchPane key={`${projectId}:${goal.sessionId}`} projectId={projectId} sessionId={goal.sessionId} onClose={() => setTab("results")} />
-      : tab === "records" ? <GoalRounds goal={goal} round={round} busy={busy} onRound={setSelectedRound} />
+      : tab === "records" ? <GoalRounds goal={goal} round={round} busy={busy} onRound={id => { setReturned(null); setSelectedRound(id); }} />
         : <ResultsPanel files={goalFiles} />;
 
   // The observatory leads the page (owner, 2026-10-28); the rest of the research is its views under the tabs.
@@ -287,7 +309,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
     {!reading && (!goalError || shown) && <div className="space-y-2">
       {queue.length > 0 && <ResearchQueue entries={queue} selected={queueSelected} disabled={busy} onSelect={choose} />}
       {subjectRow}
-      <ResearchObservatory runId={runId} title={observedTitle} onOpenFile={openFile} onObserved={setObserved} standbyActions={nothing ? <>
+      <ResearchObservatory runId={runId} resume={returned && runId === returned.run ? returned.position : undefined} title={observedTitle} onOpenFile={openFile} onObserved={setObserved} standbyActions={nothing ? <>
         <Button disabled={!canStart} onClick={() => setStarting(true)}>发起研究</Button>
         <Button variant="secondary" actionKind="set" disabled={busy} onClick={connectData}>接入数据</Button>
       </> : undefined} />

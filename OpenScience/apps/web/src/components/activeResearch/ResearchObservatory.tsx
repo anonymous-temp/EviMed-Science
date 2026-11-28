@@ -8,7 +8,7 @@ import { safeWorkspacePath } from "@/lib/claimCitations";
 import { formatApproxCount, formatClock, formatDuration, formatLingdou } from "@/lib/format";
 import { DELIVERABLE_STATUS_LABEL } from "@/lib/runProgress";
 import type { ObservedRun } from "./researchRunState";
-import { ResearchPresentation } from "./ResearchPresentation";
+import { ResearchPresentation, type ObservationView, type ObservationPosition } from "./ResearchPresentation";
 import { ResearchRing } from "./ResearchRing";
 import { AGENT_WORD, callStateWord } from "./researchRing";
 import { emptyObservation, ROOT_AGENT, rootStage, STAGES, stageCounts, useResearchObservation, type ObservedCall, type Observation, type StageKey } from "@/lib/researchObservation";
@@ -67,8 +67,8 @@ async function readRun(runId: string): Promise<WebAgentRun | null> {
  * Responsive: the picture scales with its width, and under 760 px it keeps its size and scrolls sideways (the scene is a tab stop then); the feed and the inspector stack under 1024 px.
  * Verification: ResearchObservatory.test.tsx, researchObservation.test.ts.
  */
-export function ResearchObservatory({ runId, title, onOpenFile, onObserved, standbyActions }: {
-  runId: string | null; title?: string; onOpenFile?: (path: string, runId: string) => void;
+export function ResearchObservatory({ runId, title, onOpenFile, onObserved, standbyActions, resume }: {
+  runId: string | null; title?: string; onOpenFile?: (path: string, runId: string, position: ObservationPosition) => void;
   /**
    * What the run's stream says about it, whenever that changes, and null once the stream is gone (the run on screen changed, or the
    * observatory left): the page's one account of whether the run is going is the stream's while it is open (`runLive`).
@@ -76,31 +76,37 @@ export function ResearchObservatory({ runId, title, onOpenFile, onObserved, stan
   onObserved?: (observed: ObservedRun | null) => void;
   /** The ways to begin, shown on the standby scene (no research in the project yet). */
   standbyActions?: ReactNode;
+  resume?: ObservationPosition;
 }) {
-  if (!runId) return <StandbyObservatory actions={standbyActions} />;
-  return <ObservatoryRun key={runId} runId={runId} title={title} onOpenFile={onOpenFile} onObserved={onObserved} />;
+  const [view, setView] = useState<ObservationView>(resume?.view ?? "flow");
+  if (!runId) return <StandbyObservatory actions={standbyActions} view={view} setView={setView} />;
+  return <ObservatoryRun key={runId} runId={runId} title={title} view={view} setView={setView} resume={resume} onOpenFile={onOpenFile} onObserved={onObserved} />;
 }
 
 /**
  * No run to watch: the console stands by with the picture still, so the page still shows what will happen here. With no research
  * in the project yet (`actions`) the scene is also the page's recipe: what happens and the ways to begin.
  */
-function StandbyObservatory({ actions }: { actions?: ReactNode }) {
+interface PictureChoice { view: ObservationView; setView: (value: ObservationView) => void }
+
+function StandbyObservatory({ actions, view, setView }: PictureChoice & { actions?: ReactNode }) {
   const [presenting, setPresenting] = useState(false);
   const idle = emptyObservation();
   return <section aria-label="研究观测" className="obs" data-observatory="empty">
     <header className="obs-head"><div className="obs-head-main"><span className="obs-live"><i aria-hidden="true" />STANDBY</span>
       <div className="min-w-0"><p className="obs-kicker">研究观测舱</p><h2 className="obs-title">等待研究启动</h2></div></div>
-      <div className="obs-head-side"><ResearchPresentation open={presenting} setOpen={setPresenting} title="研究光环预览" /><span className="obs-clock" aria-hidden="true">{elapsedClock(null)}</span></div></header>
-    {!presenting && <ResearchPicture model={idle} counts={stageCounts(idle)} live={false} />}
+      <div className="obs-head-side"><span className="obs-clock" aria-hidden="true">{elapsedClock(null)}</span></div></header>
+    <ResearchPresentation title="研究光环预览" view={view} setView={setView} expanded={presenting} setExpanded={setPresenting}>
+      <ResearchPicture model={idle} counts={stageCounts(idle)} live={false} />
+    </ResearchPresentation>
     {actions && <div className="obs-recipe"><p className="obs-recipe-line">写下研究目标，AI 会自己检索、阅读、分析、撰写，一轮轮推进直到完成。</p><div className="obs-recipe-actions">{actions}</div></div>}
   </section>;
 }
 
-function ObservatoryRun({ runId, title, onOpenFile, onObserved }: { runId: string; title?: string; onOpenFile?: (path: string, runId: string) => void; onObserved?: (observed: ObservedRun | null) => void }) {
-  const [presenting, setPresenting] = useState(false);
-  const [agent, setAgent] = useState("all");
-  const [selected, setSelected] = useState<string | null>(null);
+function ObservatoryRun({ runId, title, onOpenFile, onObserved, view, setView, resume }: PictureChoice & { resume?: ObservationPosition; runId: string; title?: string; onOpenFile?: (path: string, runId: string, position: ObservationPosition) => void; onObserved?: (observed: ObservedRun | null) => void }) {
+  const [presenting, setPresenting] = useState(resume?.expanded === true && view === "halo");
+  const [agent, setAgent] = useState(resume?.member ?? "all");
+  const [selected, setSelected] = useState<string | null>(resume?.callId ?? null);
   const [run, setRun] = useState<WebAgentRun | null>(null);
   const [recordRead, setRecordRead] = useState<"loading" | "loaded" | "unavailable">("loading");
   const { model, connected } = useResearchObservation(runId, run?.progress ?? null);
@@ -161,8 +167,17 @@ function ObservatoryRun({ runId, title, onOpenFile, onObserved }: { runId: strin
     setSelected(id);
   };
 
-  const renderFiles = (close?: () => void) => files.length > 0 && <div className="obs-files"><p className="obs-section-label">产出 · {files.length}</p><ul aria-label="研究产出">{files.map(file => <li key={file}>
-      {onOpenFile ? <button type="button" className="obs-file" data-text-action="view" onClick={() => { close?.(); onOpenFile(file, runId); }}>{file.split("/").pop() || file}</button> : <span className="obs-file">{file.split("/").pop() || file}</span>}
+  const visible = agent === "all" ? model.calls : model.calls.filter(call => call.agent === agent);
+  const pinned = visible.find(call => call.id === selected);
+  const chosen = pinned ?? visible[0] ?? null;
+  const memberName = (id: string) => id === ROOT_AGENT ? "主研究员" : model.agents.get(id)?.label || "协作成员";
+  const inspector = <Inspector call={chosen} who={chosen ? memberName(chosen.agent) : ""} />;
+  const openOutput = (file: string) => {
+    onOpenFile?.(file, runId, { view, expanded: presenting, member: agent, callId: pinned?.id ?? null });
+    setPresenting(false);
+  };
+  const outputList = files.length > 0 && <div className="obs-files"><p className="obs-section-label">产出 · {files.length}</p><ul aria-label="研究产出">{files.map(file => <li key={file}>
+      {onOpenFile ? <button type="button" className="obs-file" data-text-action="view" title={file} onClick={() => openOutput(file)}>{file.split("/").pop() || file}</button> : <span className="obs-file">{file.split("/").pop() || file}</span>}
     </li>)}</ul></div>;
 
   return <section aria-label="研究观测" className="obs" data-observatory={live ? "live" : ended ? "ended" : "waiting"}>
@@ -172,8 +187,6 @@ function ObservatoryRun({ runId, title, onOpenFile, onObserved }: { runId: strin
         <div className="min-w-0"><p className="obs-kicker">研究观测舱</p><h2 className="obs-title">{heading}</h2></div>
       </div>
       <div className="obs-head-side">
-        <ResearchPresentation open={presenting} setOpen={setPresenting} title={heading} model={model} ended={ended} active={live && connected && !waitingOnModel}
-          status={status} renderFiles={renderFiles} renderDetail={(call, who) => <div className="obs-halo-detail"><Inspector call={call} who={who} /></div>} />
         <span className="obs-clock" aria-label={`运行时长 ${formatDuration(elapsed) || "未开始"}`}>{elapsedClock(elapsed)}</span><span className={`obs-status s-${live ? "live" : state ?? "wait"}`} role="status">{status}</span></div>
     </header>
     <dl className="obs-hud">
@@ -184,11 +197,18 @@ function ObservatoryRun({ runId, title, onOpenFile, onObserved }: { runId: strin
       <Metric label="结论核对" value={claims ? `${claims.verified}/${claims.total}` : "—"} sub={claims ? "条已核对" : ""} />
       <Metric label="消耗" value={cost === null ? "—" : (formatLingdou(cost) || "—").replace(" 灵豆", "")} sub={cost === null ? "" : "灵豆"} />
     </dl>
-    {!presenting && <ResearchPicture model={model} counts={counts} live={live} onSelectCall={selectRingCall} onSelectMember={selectMember} />}
+    <ResearchPresentation title={heading} view={view} setView={setView} expanded={presenting} setExpanded={setPresenting}
+      run={{ calls: visible, call: chosen, member: chosen ? memberName(chosen.agent) : "", pinned: !!pinned, select: setSelected,
+        ended, live, active: live && connected && !waitingOnModel, status, inspector, files: outputList }}>
+      <ResearchPicture model={model} counts={counts} live={live} onSelectCall={selectRingCall} onSelectMember={selectMember} />
+    </ResearchPresentation>
     {model.thought && live && <p className="obs-thought" aria-live="off"><span className="obs-thought-tag">思考</span><span className="obs-thought-text">{model.thought}</span><i aria-hidden="true" /></p>}
     {progress && progress.deliverables.length > 0 && <ul className="obs-tasks" aria-label="研究任务">{progress.deliverables.map(item => <li key={item.id} className={`t-${item.status}`}><span className="min-w-0 truncate">{item.title}</span><b>{DELIVERABLE_STATUS_LABEL[item.status]}</b></li>)}</ul>}
-    <OperationsFeed model={model} live={live} agent={agent} selected={selected} onSelectMember={selectMember} onSelectCall={setSelected} />
-    {renderFiles()}
+    {!presenting && <>
+      <OperationsFeed model={model} live={live} agent={agent} visible={visible} chosen={chosen} inspector={inspector}
+        memberName={memberName} onSelectMember={selectMember} onSelectCall={setSelected} />
+      {outputList}
+    </>}
   </section>;
 }
 
@@ -286,17 +306,15 @@ function ResearchLine({ model, counts, live }: { model: Observation; counts: Rec
   </div>;
 }
 
-function OperationsFeed({ model, live, agent, selected, onSelectMember, onSelectCall }: {
-  model: Observation; live: boolean; agent: string; selected: string | null;
+function OperationsFeed({ model, live, agent, visible, chosen, inspector, memberName, onSelectMember, onSelectCall }: {
+  model: Observation; live: boolean; agent: string; visible: ObservedCall[]; chosen: ObservedCall | null;
+  inspector: ReactNode; memberName: (id: string) => string;
   onSelectMember: (id: string) => void; onSelectCall: (id: string) => void;
 }) {
   const members = [...model.agents.values()].filter(item => !item.root);
-  const visible = model.calls.filter(call => agent === "all" || call.agent === agent);
-  const chosen = visible.find(call => call.id === selected) ?? visible[0] ?? null;
   // Keep a cell selected from the ring visible even when it is older than the feed's usual window.
   const rows = visible.slice(0, 40);
   if (chosen && !rows.includes(chosen)) rows[rows.length - 1] = chosen;
-  const memberName = (id: string) => id === ROOT_AGENT ? "主研究员" : model.agents.get(id)?.label || "协作成员";
   return <div className="obs-feed-grid">
     <section aria-label="实时动态" className="obs-panel">
       <div className="obs-panel-head">
@@ -319,19 +337,34 @@ function OperationsFeed({ model, live, agent, selected, onSelectMember, onSelect
         </button>
       </li>)}</ol> : <p className="obs-quiet">{live ? "等待第一个研究操作" : "这次执行没有研究操作"}</p>}
     </section>
-    <Inspector call={chosen} who={chosen ? memberName(chosen.agent) : ""} />
+    {inspector}
   </div>;
+}
+
+const INPUT_FIELDS = new Map([["query", "检索词"], ["url", "网页地址"], ["path", "文件路径"], ["title", "标题"]]);
+
+/** A single familiar field can be read directly. Complex inputs keep every field in the structured view. */
+function callInput(input: unknown) {
+  if (input && typeof input === "object" && !Array.isArray(input)) {
+    const fields = Object.entries(input);
+    if (fields.length === 1) {
+      const [key, value] = fields[0];
+      const label = INPUT_FIELDS.get(key);
+      if (label && typeof value === "string") return { title: label, text: value };
+    }
+  }
+  return { title: "输入", text: payloadText(input) };
 }
 
 function Inspector({ call, who }: { call: ObservedCall | null; who: string }) {
   if (!call) return <section aria-label="操作详情" className="obs-panel obs-inspector"><p className="obs-section-label">操作详情</p><p className="obs-quiet">选择一条动态查看输入与结果</p></section>;
-  const input = payloadText(call.input); const output = payloadText(call.output);
+  const input = callInput(call.input);
   return <section aria-label="操作详情" className="obs-panel obs-inspector">
     <p className="obs-section-label">操作详情</p>
     <p className="obs-inspect-title">{call.label}</p>
     <p className="obs-inspect-meta">{who} · {callStateWord(call.state)}{call.durationMs !== undefined ? ` · ${formatDuration(call.durationMs)}` : ""}</p>
-    <Payload title="输入" text={input} pending="—" />
-    <Payload title="结果" text={output} pending={call.state === "running" ? "等待结果" : "—"} />
+    <Payload title={input.title} text={input.text} pending="—" />
+    <Payload title="结果" text={payloadText(call.output)} pending={call.state === "running" ? "等待结果" : "—"} />
   </section>;
 }
 

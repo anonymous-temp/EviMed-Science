@@ -1,6 +1,9 @@
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes } from "react-router";
+import type { ComponentProps } from "react";
+import type { ResearchObservatory } from "@/components/activeResearch/ResearchObservatory";
+import { RunFilePage } from "./RunFilePage";
 import { useTaskPane } from "@/lib/taskPane";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
@@ -19,12 +22,14 @@ const mocks = vi.hoisted(() => ({ listWebAgentRuns: vi.fn(), cancelWebAgentRun: 
 vi.mock("@/lib/apiClient", async (original) => ({ ...(await original<object>()), getWebProjectId: () => identity.projectId, listWebAgentRuns: mocks.listWebAgentRuns, cancelWebAgentRun: mocks.cancelWebAgentRun }));
 vi.mock("@/lib/backend", async (original) => ({ ...(await original<object>()), pickFiles: mocks.pickFiles, uploadFilesToWorkspace: mocks.uploadFilesToWorkspace }));
 vi.mock("@/lib/knowledgeBaseFiles", async (original) => ({ ...(await original<object>()), partitionKnowledgeBaseFiles: mocks.partition }));
-// The observatory is drawn elsewhere; what the page needs of it is the run it is shown, what its stream says of that run, and the ways to begin it stands by with.
-vi.mock("@/components/activeResearch/ResearchObservatory", () => ({ ResearchObservatory: ({ runId, onObserved, standbyActions }: { runId: string | null; onObserved?: (observed: unknown) => void; standbyActions?: React.ReactNode }) => <>
+// The real observatory owns its drawing and operation selection. Exercise its navigation contract through both routed pages.
+vi.mock("@/components/activeResearch/ResearchObservatory", () => ({ ResearchObservatory: ({ runId, onObserved, standbyActions, onOpenFile, resume }: ComponentProps<typeof ResearchObservatory>) => <>
   <p data-testid="observatory">{runId ?? "no-run"}</p>
+  {resume && <output aria-label="restored observation">{JSON.stringify(resume)}</output>}
+  {runId && <button onClick={() => onOpenFile?.("outputs/report.md", runId, { view: "halo", expanded: true, member: "member-1", callId: "member-1:search" })}>Open observed file</button>}
   {standbyActions}<p>{standbyActions ? "写下研究目标" : ""}</p>
-  <button onClick={() => onObserved?.({ runId, state: "succeeded", connected: true })}>stream: ended</button>
-  <button onClick={() => onObserved?.({ runId, state: "running", connected: true })}>stream: running</button>
+  <button onClick={() => runId && onObserved?.({ runId, state: "succeeded", connected: true })}>stream: ended</button>
+  <button onClick={() => runId && onObserved?.({ runId, state: "running", connected: true })}>stream: running</button>
   <button onClick={() => onObserved?.(null)}>stream: closed</button>
 </> }));
 function PaneProbe() { const pane = useTaskPane(); return <><p data-testid="native-pane">{pane ? `${pane.projectId}:${pane.sessionId}` : "none"}</p></>; }
@@ -288,6 +293,24 @@ describe("active research workspace", () => {
       cleanup();
       const second = await showGoal(resting, goalState("active"));
       expect(second.row.getByText("长期研究 · 已推进 2 轮")).toBeInTheDocument();
+    });
+    it("returns from the file reader to the selected earlier round and its observation", async () => {
+      const user = userEvent.setup();
+      mocks.listWebAgentRuns.mockResolvedValue(resting);
+      render(<MemoryRouter initialEntries={["/app/active-research"]}><Routes>
+        <Route path="/app/active-research" element={<ActiveResearchPage />} />
+        <Route path="/app/runs/:runId/files/*" element={<RunFilePage />} />
+      </Routes></MemoryRouter>);
+      await user.click(await screen.findByRole("tab", { name: "记录" }));
+      await user.click(within(screen.getByLabelText("推进记录")).getByRole("button", { name: /第 1 轮/ }));
+      expect(screen.getByTestId("observatory")).toHaveTextContent("anchor-run");
+      await user.click(screen.getByRole("button", { name: "Open observed file" }));
+      await user.click(await screen.findByRole("link", { name: "研究观测舱" }));
+      expect(await screen.findByTestId("observatory")).toHaveTextContent("anchor-run");
+      expect(screen.getByRole("tab", { name: "记录" })).toHaveAttribute("aria-selected", "true");
+      expect(JSON.parse(screen.getByLabelText("restored observation").textContent!)).toEqual({
+        view: "halo", expanded: true, member: "member-1", callId: "member-1:search",
+      });
     });
     it("lists a file one round after round rewrote once, from the newest round", async () => {
       const user = userEvent.setup();

@@ -1205,6 +1205,13 @@ The owner asked that the process picture of 主动科研 be the page's core and 
   flowing only while it works; a new operation sends a spark from its member to its cell; the sweep turns while the run is live,
   and an ended run is a still picture. A cell selects its operation in the feed and opens its detail; a cloud filters the feed to its
   member. Anywhere else — no GPU, a phone, less motion, a lost context — the line above is drawn, as before.
+- **The observatory offers two views of the same round (2026-11-28).** 「研究流程」 opens first. 「研究光环」 draws the
+  licensed HaloFlux stage in the same space. Both views use the selected member and operation from the feed. A live round follows
+  new activity until the reader selects a step. 「跟随最新」 resumes following. An ended round can be replayed in opening order.
+  「全屏观测」 places the graphic beside the inspector on a wide screen and above it on a phone. Escape returns focus to its opener.
+  Opening a file from the observatory keeps the goal, round, tab, view, member and pinned operation in the research history entry.
+  Reduced motion draws a still frame. A rendering failure leaves the operation and its files readable and offers a retry.
+  A project waiting for its first research labels the optional HaloFlux preview 「示例动画」.
 - **Motion has an off switch.** Flowing track, packets, rings, ripples, the sweep and blinking cursors stop under reduced
   motion; positions still change, without travel. Under 760 px the line keeps its size and scrolls sideways.
 - **The page opens on the scene (owner, 2026-11-01).** 主动科研 is what the AI is researching, not a form: it opens on the running

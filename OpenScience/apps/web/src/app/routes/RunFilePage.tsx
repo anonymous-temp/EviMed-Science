@@ -155,6 +155,7 @@ function OwnedRunFilePage() {
   // is in. A bare `/app/chat` (what this fell back to) resumes the last conversation, not this run's (2026-11-01 audit D12).
   const backTo = run?.sessionId ? chatPath(run.sessionId) : runId ? `/app/runs?run=${encodeURIComponent(runId)}` : chatPath();
   const title = path ? artifactDisplayName(path) : "文件";
+  const fromResearch = Boolean(runId && location.state?.researchOriginRun === runId);
 
   return (
     <ReportRunContext.Provider value={runId ? { runId: run?.id ?? runId, run } : null}>
@@ -164,7 +165,7 @@ function OwnedRunFilePage() {
         documentTitle={title}
         meta={run ? runTitle(run) : undefined}
         width="wide"
-        back={<FrontierBack to={backTo} label="对话" />}
+        back={fromResearch ? <FrontierBack historyBack to="/app/active-research" label="研究观测舱" /> : <FrontierBack to={backTo} label="对话" />}
         actionPlan={path ? {
           primary: { id: "save", label: "存入知识库", kind: "set", loading: saving, onSelect: () => void saveToLibrary(path) },
           secondary: [{ id: "versions", label: showVersions ? "查看当前文件" : "结果版本", onSelect: () => setShowVersions((current) => !current) }],
